@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(AyayaEngine VERSION 0.1.0 LANGUAGES CXX C)
 
-# 1. C++ 标准设置
+# 1. C++ 标准设置 (EnTT 强依赖 C++17 或更高版本，这里已经满足)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -17,16 +17,22 @@ set(ENGINE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/Engine")
 set(VENDOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor")
 set(VENDOR_INCLUDE "${VENDOR_DIR}/include")
 set(VENDOR_LIB "${VENDOR_DIR}/lib")
-# 新增 ImGui 路径
+
+# ImGui 路径
 set(IMGUI_DIR "${VENDOR_DIR}/include/imgui")
+
+# --- 新增：EnTT 路径 ---
+# 假设你将 entt 文件夹放在了 vendor/include/entt 下
+set(ENTT_DIR "${VENDOR_INCLUDE}/entt")
 
 # 4. 收集源文件
 file(GLOB CORE_SOURCES "${ENGINE_DIR}/Core/*.cpp")
 file(GLOB RENDERER_SOURCES "${ENGINE_DIR}/Renderer/*.cpp")
 file(GLOB OPENGL_SOURCES "${ENGINE_DIR}/Platform/OpenGL/*.cpp")
+file(GLOB SCENE_SOURCES "${ENGINE_DIR}/Scene/*.cpp")
 set(GLAD_SOURCE "${ENGINE_DIR}/Platform/OpenGL/glad.c")
 
-# --- 新增：收集 ImGui 源文件 ---
+# 收集 ImGui 源文件
 set(IMGUI_SOURCES
     "${IMGUI_DIR}/imgui.cpp"
     "${IMGUI_DIR}/imgui_draw.cpp"
@@ -41,6 +47,7 @@ set(AYAYA_SOURCES
     ${CORE_SOURCES} 
     ${RENDERER_SOURCES} 
     ${OPENGL_SOURCES}
+    ${SCENE_SOURCES}
     ${GLAD_SOURCE}
     ${IMGUI_SOURCES} # 加入 ImGui
 )
@@ -62,6 +69,7 @@ target_include_directories(Ayaya PUBLIC
     "${VENDOR_INCLUDE}"
     "${IMGUI_DIR}"           # 允许 #include <imgui.h>
     "${IMGUI_DIR}/backends"  # 允许 #include <imgui_impl_glfw.h>
+    "${ENTT_DIR}"            # 新增：允许包含 EnTT 头文件
 )
 
 # 7. 链接第三方库
