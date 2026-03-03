@@ -10,6 +10,9 @@ namespace Ayaya {
     public:
         // 初始化渲染器（比如设置 OpenGL 状态）
         static void Init();
+        // 清理渲染器资源
+        static void Shutdown(); 
+        
         // 窗口大小改变时通知渲染器
         static void OnWindowResize(uint32_t width, uint32_t height);
 

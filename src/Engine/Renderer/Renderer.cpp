@@ -10,6 +10,11 @@ namespace Ayaya {
         RenderCommand::Init();
     }
 
+    void Renderer::Shutdown() {
+        // 释放静态分配的场景数据，防止内存泄漏
+        delete m_SceneData;
+    }
+
     void Renderer::OnWindowResize(uint32_t width, uint32_t height) {
         // 转发视口调整指令
         RenderCommand::SetViewport(0, 0, width, height);
