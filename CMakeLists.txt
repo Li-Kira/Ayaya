@@ -20,10 +20,10 @@ set(VENDOR_LIB "${VENDOR_DIR}/lib")
 
 # ImGui 路径
 set(IMGUI_DIR "${VENDOR_DIR}/include/imgui")
-
-# --- 新增：EnTT 路径 ---
-# 假设你将 entt 文件夹放在了 vendor/include/entt 下
+# EnTT 路径
 set(ENTT_DIR "${VENDOR_INCLUDE}/entt")
+# 新增：ImGuizmo 路径定义
+set(IMGUIZMO_DIR "${VENDOR_INCLUDE}/ImGuizmo")
 
 # 4. 收集源文件
 file(GLOB CORE_SOURCES "${ENGINE_DIR}/Core/*.cpp")
@@ -43,6 +43,11 @@ set(IMGUI_SOURCES
     "${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp"
 )
 
+# 新增：收集 ImGuizmo 源文件
+set(IMGUIZMO_SOURCES
+    "${IMGUIZMO_DIR}/ImGuizmo.cpp"
+)
+
 set(AYAYA_SOURCES 
     ${CORE_SOURCES} 
     ${RENDERER_SOURCES} 
@@ -50,6 +55,7 @@ set(AYAYA_SOURCES
     ${SCENE_SOURCES}
     ${GLAD_SOURCE}
     ${IMGUI_SOURCES} # 加入 ImGui
+    ${IMGUIZMO_SOURCES} # 新增：加入 ImGuizmo
 )
 
 # 5. 定义引擎静态库
@@ -70,6 +76,7 @@ target_include_directories(Ayaya PUBLIC
     "${IMGUI_DIR}"           # 允许 #include <imgui.h>
     "${IMGUI_DIR}/backends"  # 允许 #include <imgui_impl_glfw.h>
     "${ENTT_DIR}"            # 新增：允许包含 EnTT 头文件
+    "${IMGUIZMO_DIR}"        # 新增：允许直接 #include <ImGuizmo.h>
 )
 
 # 7. 链接第三方库

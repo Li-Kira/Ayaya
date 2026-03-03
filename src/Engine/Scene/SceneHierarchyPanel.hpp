@@ -14,6 +14,11 @@ namespace Ayaya {
         void SetContext(const std::shared_ptr<Scene>& context);
         void OnImGuiRender();
 
+        // ==========================================
+        // 新增：向外暴露当前选中的实体
+        // ==========================================
+        Entity GetSelectedEntity() const { return m_SelectionContext; }
+
     private:
         void DrawEntityNode(Entity entity);
         void DrawComponents(Entity entity);

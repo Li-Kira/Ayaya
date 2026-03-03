@@ -17,6 +17,7 @@
 
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <ImGuizmo.h>
 #include <glm/gtc/type_ptr.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
@@ -77,10 +78,8 @@ public:
         // ==========================================
         // 建立父子层级关系测试
         // ==========================================
-        // 1. 创建一个空节点 (没有 SpriteRendererComponent，所以在画面中不可见)
         Ayaya::Entity parentNode = m_ActiveScene->CreateEntity("Parent Empty Node");
         
-        // 2. 创建两个子方块
         Ayaya::Entity square1 = m_ActiveScene->CreateEntity("Left Square");
         square1.GetComponent<Ayaya::TransformComponent>().Translation = { -1.5f, 0.0f, 0.0f };
         square1.AddComponent<Ayaya::SpriteRendererComponent>(glm::vec4{0.2f, 0.8f, 0.3f, 1.0f});
@@ -89,13 +88,24 @@ public:
         square2.GetComponent<Ayaya::TransformComponent>().Translation = { 1.5f, 0.0f, 0.0f };
         square2.AddComponent<Ayaya::SpriteRendererComponent>(glm::vec4{0.8f, 0.2f, 0.3f, 1.0f});
 
-        // 3. 将方块设置为 parentNode 的子节点！
-        square1.SetParent(parentNode); //
+        square1.SetParent(parentNode); 
         
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
     }
 
     virtual void OnUpdate(Ayaya::Timestep ts) override {
+        // ==========================================
+        // 优化：仅当视口被聚焦、有物体被选中，且未按住右键漫游时，才响应快捷键
+        // 这防止了在属性面板改名字时意外触发 QWER
+        // ==========================================
+        Ayaya::Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
+        if (selectedEntity && !Ayaya::Input::IsMouseButtonPressed(1)) {
+            if (Ayaya::Input::IsKeyPressed(Ayaya::Key::Q)) m_GizmoType = -1;
+            if (Ayaya::Input::IsKeyPressed(Ayaya::Key::W)) m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
+            if (Ayaya::Input::IsKeyPressed(Ayaya::Key::E)) m_GizmoType = ImGuizmo::OPERATION::ROTATE;
+            if (Ayaya::Input::IsKeyPressed(Ayaya::Key::R)) m_GizmoType = ImGuizmo::OPERATION::SCALE;
+        }
+
         // 准备渲染环境
         m_Framebuffer->Bind();
         Ayaya::RenderCommand::SetClearColor({ 0.12f, 0.12f, 0.14f, 1.0f });
@@ -104,9 +114,7 @@ public:
         glm::mat4 cameraViewProj = glm::mat4(1.0f);
         bool hasPrimaryCamera = false;
 
-        // ==========================================
-        // ECS 阶段 1：查询主相机，更新逻辑并获取矩阵
-        // ==========================================
+        // ECS 阶段 1：查询主相机
         auto cameraView = m_ActiveScene->Reg().view<Ayaya::TransformComponent, Ayaya::CameraComponent>();
         for (auto entityID : cameraView) {
             Ayaya::Entity entity{ entityID, m_ActiveScene.get() };
@@ -116,8 +124,6 @@ public:
             if (camera.Primary) {
                 hasPrimaryCamera = true;
                 ProcessCameraInput(ts, transform);
-
-                // 直接调用 Entity 内置的方法
                 glm::mat4 worldTransform = entity.GetWorldTransform();
                 glm::mat4 view = glm::inverse(worldTransform);
                 cameraViewProj = camera.Camera.GetProjection() * view;
@@ -125,9 +131,7 @@ public:
             }
         }
 
-        // ==========================================
         // ECS 阶段 2：提交渲染
-        // ==========================================
         if (hasPrimaryCamera) {
             Ayaya::Renderer::BeginScene(cameraViewProj);
             auto shader = m_ShaderLibrary.Get("default");
@@ -141,8 +145,6 @@ public:
                 auto& sprite = entity.GetComponent<Ayaya::SpriteRendererComponent>();
                 
                 shader->SetFloat3("u_ColorModifier", glm::vec3(sprite.Color)); 
-                
-                // 直接使用 Entity 内置方法，不用自己递归了
                 Ayaya::Renderer::Submit(shader, m_VertexArray, entity.GetWorldTransform());
             }
             Ayaya::Renderer::EndScene();
@@ -229,7 +231,6 @@ public:
                 m_Framebuffer->Resize((uint32_t)viewportPanelSize.x, (uint32_t)viewportPanelSize.y);
                 m_ViewportSize = { viewportPanelSize.x, viewportPanelSize.y };
 
-                // 当视口大小改变时，更新 ECS 中所有的相机投影矩阵
                 auto view = m_ActiveScene->Reg().view<Ayaya::CameraComponent>();
                 for (auto entity : view) {
                     auto& cameraComp = view.get<Ayaya::CameraComponent>(entity);
@@ -245,6 +246,74 @@ public:
                      ImVec2{ m_ViewportSize.x, m_ViewportSize.y }, 
                      ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
 
+        // ==========================================
+        // ImGuizmo 渲染与交互逻辑
+        // ==========================================
+        Ayaya::Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
+
+        if (selectedEntity && m_GizmoType != -1) {
+            // 修复 1：必须调用 BeginFrame，否则 ImGuizmo 无法读取鼠标点击事件！
+            ImGuizmo::BeginFrame(); 
+            
+            ImGuizmo::SetOrthographic(false);
+            ImGuizmo::SetDrawlist();
+
+            // 修复 2：剔除 Title Bar 和 Tab 栏带来的坐标偏移！
+            ImVec2 windowPos = ImGui::GetWindowPos();
+            ImVec2 minBound = ImGui::GetWindowContentRegionMin();
+            ImGuizmo::SetRect(windowPos.x + minBound.x, windowPos.y + minBound.y, m_ViewportSize.x, m_ViewportSize.y);
+
+            auto cameraView = m_ActiveScene->Reg().view<Ayaya::TransformComponent, Ayaya::CameraComponent>();
+            glm::mat4 cameraProjection;
+            glm::mat4 cameraViewMatrix;
+            bool hasCamera = false;
+
+            for (auto entityID : cameraView) {
+                Ayaya::Entity cameraEntity{ entityID, m_ActiveScene.get() };
+                auto& cameraComp = cameraEntity.GetComponent<Ayaya::CameraComponent>();
+                if (cameraComp.Primary) {
+                    cameraProjection = cameraComp.Camera.GetProjection();
+                    cameraViewMatrix = glm::inverse(cameraEntity.GetWorldTransform());
+                    hasCamera = true;
+                    break;
+                }
+            }
+
+            if (hasCamera) {
+                auto& tc = selectedEntity.GetComponent<Ayaya::TransformComponent>();
+                glm::mat4 transform = selectedEntity.GetWorldTransform();
+
+                bool snap = Ayaya::Input::IsKeyPressed(Ayaya::Key::LeftControl);
+                float snapValue = 0.5f; 
+                if (m_GizmoType == ImGuizmo::OPERATION::ROTATE) snapValue = 45.0f; 
+                float snapValues[3] = { snapValue, snapValue, snapValue };
+
+                ImGuizmo::Manipulate(glm::value_ptr(cameraViewMatrix), glm::value_ptr(cameraProjection),
+                    (ImGuizmo::OPERATION)m_GizmoType, ImGuizmo::LOCAL, glm::value_ptr(transform),
+                    nullptr, snap ? snapValues : nullptr);
+
+                if (ImGuizmo::IsUsing()) {
+                    auto& rel = selectedEntity.GetComponent<Ayaya::RelationshipComponent>();
+                    glm::mat4 localTransform = transform;
+                    
+                    if (rel.Parent != entt::null) {
+                        Ayaya::Entity parent{ rel.Parent, m_ActiveScene.get() };
+                        glm::mat4 parentWorld = parent.GetWorldTransform();
+                        localTransform = glm::inverse(parentWorld) * transform;
+                    }
+
+                    glm::vec3 scale, translation, skew;
+                    glm::quat rotation;
+                    glm::vec4 perspective;
+                    glm::decompose(localTransform, scale, rotation, translation, skew, perspective);
+                    
+                    tc.Translation = translation;
+                    tc.Rotation = glm::eulerAngles(rotation);
+                    tc.Scale = scale;
+                }
+            }
+        }
+
         ImGui::End();
         ImGui::PopStyleVar();
 
@@ -254,19 +323,14 @@ public:
     virtual void OnEvent(Ayaya::Event& event) override {}
 
 private:
-    // ==========================================
-    // 独立的相机逻辑封装
-    // ==========================================
     void ProcessCameraInput(Ayaya::Timestep ts, Ayaya::TransformComponent& transform) {
         if (!m_ViewportFocused) return;
 
         if (Ayaya::Input::IsMouseButtonPressed(1)) {
-            // 计算鼠标增量
             glm::vec2 currentMousePos = { Ayaya::Input::GetMouseX(), Ayaya::Input::GetMouseY() };
             glm::vec2 delta = (currentMousePos - m_InitialMousePos) * 0.2f;
             m_InitialMousePos = currentMousePos;
 
-            // 处理旋转 (Pitch & Yaw)
             glm::vec3 rotationDegrees = glm::degrees(transform.Rotation);
             rotationDegrees.x -= delta.y;
             rotationDegrees.y -= delta.x;
@@ -274,7 +338,6 @@ private:
             if (rotationDegrees.x < -89.0f) rotationDegrees.x = -89.0f;
             transform.Rotation = glm::radians(rotationDegrees);
 
-            // 处理位移 (WASD QE)
             glm::quat orientation = glm::quat(transform.Rotation);
             glm::vec3 forward = glm::rotate(orientation, glm::vec3(0.0f, 0.0f, -1.0f));
             glm::vec3 right   = glm::rotate(orientation, glm::vec3(1.0f, 0.0f, 0.0f));
@@ -287,7 +350,6 @@ private:
             if (Ayaya::Input::IsKeyPressed(Ayaya::Key::E)) transform.Translation.y += velocity;
             if (Ayaya::Input::IsKeyPressed(Ayaya::Key::Q)) transform.Translation.y -= velocity;
         } else {
-            // 未按住右键时也要更新初始坐标，防止视角瞬间跳跃
             m_InitialMousePos = { Ayaya::Input::GetMouseX(), Ayaya::Input::GetMouseY() };
         }
     }
@@ -306,4 +368,6 @@ private:
     bool m_ViewportFocused = false;
     bool m_ViewportHovered = false;
     glm::vec2 m_InitialMousePos = { 0.0f, 0.0f };
+
+    int m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
 };
