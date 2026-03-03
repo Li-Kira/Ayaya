@@ -9,7 +9,8 @@
 #include <Events/KeyEvent.hpp>
 #include <Events/MouseEvent.hpp>
 
-// --- ECS 头文件 ---
+#include <glad/glad.h>
+
 #include <Scene/Scene.hpp>
 #include <Scene/Entity.hpp>
 #include <Scene/Components.hpp>
@@ -27,17 +28,16 @@ public:
     ExampleLayer() : Layer("ExampleLayer") {}
 
     virtual void OnAttach() override {
-        // 1. 初始化 Framebuffer
         Ayaya::FramebufferSpecification fbSpec;
         fbSpec.Width = 1280;
         fbSpec.Height = 720;
         m_Framebuffer = Ayaya::Framebuffer::Create(fbSpec);
 
-        // 2. 加载渲染资源
         m_ShaderLibrary.Load("assets/shaders/default.vert", "assets/shaders/default.frag");
+        m_ShaderLibrary.Load("assets/shaders/outline.vert", "assets/shaders/outline.frag");
+
         m_Texture = Ayaya::Texture2D::Create("assets/textures/bricks2.jpg");
 
-        // 3. 构建立方体几何数据
         m_VertexArray.reset(Ayaya::VertexArray::Create());
         float vertices[] = {
             -0.5f, -0.5f,  0.5f,  1.0f, 1.0f, 1.0f,  0.0f, 0.0f,
@@ -56,17 +56,10 @@ public:
             { Ayaya::ShaderDataType::Float2, "a_TexCoord" }
         });
         m_VertexArray->AddVertexBuffer(vbo);
-
-        uint32_t indices[] = {
-            0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 7, 6, 5, 5, 4, 7,
-            4, 0, 3, 3, 7, 4, 3, 2, 6, 6, 7, 3, 4, 5, 1, 1, 0, 4
-        };
+        uint32_t indices[] = { 0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 7, 6, 5, 5, 4, 7, 4, 0, 3, 3, 7, 4, 3, 2, 6, 6, 7, 3, 4, 5, 1, 1, 0, 4 };
         auto ibo = std::shared_ptr<Ayaya::IndexBuffer>(Ayaya::IndexBuffer::Create(indices, 36));
         m_VertexArray->SetIndexBuffer(ibo);
 
-        // ==========================================
-        // 4. ECS 核心：初始化场景与实体
-        // ==========================================
         m_ActiveScene = std::make_shared<Ayaya::Scene>();
 
         Ayaya::Entity cameraEntity = m_ActiveScene->CreateEntity("Main Camera");
@@ -75,11 +68,7 @@ public:
         cameraComp.Camera.SetViewportSize(1280, 720);
         cameraEntity.GetComponent<Ayaya::TransformComponent>().Translation = { 0.0f, 0.0f, 5.0f };
 
-        // ==========================================
-        // 建立父子层级关系测试
-        // ==========================================
         Ayaya::Entity parentNode = m_ActiveScene->CreateEntity("Parent Empty Node");
-        
         Ayaya::Entity square1 = m_ActiveScene->CreateEntity("Left Square");
         square1.GetComponent<Ayaya::TransformComponent>().Translation = { -1.5f, 0.0f, 0.0f };
         square1.AddComponent<Ayaya::SpriteRendererComponent>(glm::vec4{0.2f, 0.8f, 0.3f, 1.0f});
@@ -89,38 +78,31 @@ public:
         square2.AddComponent<Ayaya::SpriteRendererComponent>(glm::vec4{0.8f, 0.2f, 0.3f, 1.0f});
 
         square1.SetParent(parentNode); 
-        
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
     }
 
     virtual void OnUpdate(Ayaya::Timestep ts) override {
-        // ==========================================
-        // 优化：仅当视口被聚焦、有物体被选中，且未按住右键漫游时，才响应快捷键
-        // 这防止了在属性面板改名字时意外触发 QWER
-        // ==========================================
         Ayaya::Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
-        if (selectedEntity && !Ayaya::Input::IsMouseButtonPressed(1)) {
+        if (m_ViewportFocused && selectedEntity && !Ayaya::Input::IsMouseButtonPressed(1)) {
             if (Ayaya::Input::IsKeyPressed(Ayaya::Key::Q)) m_GizmoType = -1;
             if (Ayaya::Input::IsKeyPressed(Ayaya::Key::W)) m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
             if (Ayaya::Input::IsKeyPressed(Ayaya::Key::E)) m_GizmoType = ImGuizmo::OPERATION::ROTATE;
             if (Ayaya::Input::IsKeyPressed(Ayaya::Key::R)) m_GizmoType = ImGuizmo::OPERATION::SCALE;
         }
 
-        // 准备渲染环境
         m_Framebuffer->Bind();
         Ayaya::RenderCommand::SetClearColor({ 0.12f, 0.12f, 0.14f, 1.0f });
         Ayaya::RenderCommand::Clear();
+        glClear(GL_STENCIL_BUFFER_BIT); 
 
         glm::mat4 cameraViewProj = glm::mat4(1.0f);
         bool hasPrimaryCamera = false;
 
-        // ECS 阶段 1：查询主相机
         auto cameraView = m_ActiveScene->Reg().view<Ayaya::TransformComponent, Ayaya::CameraComponent>();
         for (auto entityID : cameraView) {
             Ayaya::Entity entity{ entityID, m_ActiveScene.get() };
             auto& camera = entity.GetComponent<Ayaya::CameraComponent>();
             auto& transform = entity.GetComponent<Ayaya::TransformComponent>();
-
             if (camera.Primary) {
                 hasPrimaryCamera = true;
                 ProcessCameraInput(ts, transform);
@@ -131,34 +113,74 @@ public:
             }
         }
 
-        // ECS 阶段 2：提交渲染
         if (hasPrimaryCamera) {
             Ayaya::Renderer::BeginScene(cameraViewProj);
-            auto shader = m_ShaderLibrary.Get("default");
+            
+            // ==========================================
+            // Pass 1: 正常渲染，获取完美 2D 遮罩
+            // ==========================================
+            auto defaultShader = m_ShaderLibrary.Get("default");
             m_Texture->Bind(0);
-            shader->Bind();
-            shader->SetInt("u_Texture", 0);
+            defaultShader->Bind();
+            defaultShader->SetInt("u_Texture", 0);
+
+            glEnable(GL_DEPTH_TEST);
+            glEnable(GL_STENCIL_TEST);
+            
+            // 【核心修复】：将第二个参数改为 GL_REPLACE！
+            // 无论物体是否被挡住（深度测试失败），都强行将它的影子刻印在模板缓冲里。
+            glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
 
             auto renderGroup = m_ActiveScene->Reg().view<Ayaya::TransformComponent, Ayaya::SpriteRendererComponent>();
             for (auto entityID : renderGroup) {
                 Ayaya::Entity entity{ entityID, m_ActiveScene.get() };
                 auto& sprite = entity.GetComponent<Ayaya::SpriteRendererComponent>();
                 
-                shader->SetFloat3("u_ColorModifier", glm::vec3(sprite.Color)); 
-                Ayaya::Renderer::Submit(shader, m_VertexArray, entity.GetWorldTransform());
+                if (m_HoveredEntity && m_HoveredEntity == entity) {
+                    glStencilFunc(GL_ALWAYS, 1, 0xFF);
+                    glStencilMask(0xFF); 
+                } else {
+                    glStencilFunc(GL_ALWAYS, 0, 0xFF);
+                    glStencilMask(0x00); 
+                }
+
+                defaultShader->SetFloat3("u_ColorModifier", glm::vec3(sprite.Color)); 
+                Ayaya::Renderer::Submit(defaultShader, m_VertexArray, entity.GetWorldTransform());
             }
+
+            // ==========================================
+            // Pass 2: 轮廓描边 (X-Ray 效果)
+            // ==========================================
+            if (m_HoveredEntity && m_HoveredEntity.HasComponent<Ayaya::SpriteRendererComponent>()) {
+                glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+                glStencilMask(0x00);      
+                glDisable(GL_DEPTH_TEST); 
+
+                auto outlineShader = m_ShaderLibrary.Get("outline");
+                outlineShader->Bind();
+                outlineShader->SetFloat3("u_Color", glm::vec3(1.0f, 0.65f, 0.0f)); 
+                
+                glm::mat4 transform = m_HoveredEntity.GetWorldTransform();
+                transform = transform * glm::scale(glm::mat4(1.0f), glm::vec3(1.05f)); 
+                
+                Ayaya::Renderer::Submit(outlineShader, m_VertexArray, transform);
+
+                glStencilMask(0xFF);
+                glStencilFunc(GL_ALWAYS, 1, 0xFF);
+                glEnable(GL_DEPTH_TEST);
+                glDisable(GL_STENCIL_TEST);
+            }
+
             Ayaya::Renderer::EndScene();
         }
 
         m_Framebuffer->Unbind();
 
-        // 清理系统主窗口
         Ayaya::RenderCommand::SetClearColor({ 0.1f, 0.1f, 0.1f, 1.0f });
         Ayaya::RenderCommand::Clear();
     }
 
     virtual void OnImGuiRender() override {
-        // --- 1. DockSpace 全屏停靠容器 ---
         static bool dockspaceOpen = true;
         static bool opt_fullscreen = true;
         static bool opt_padding = false;
@@ -184,7 +206,6 @@ public:
         ImGuiIO& io = ImGui::GetIO();
         if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable) {
             ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-            
             static bool first_time = true;
             if (first_time) {
                 first_time = false;
@@ -215,15 +236,19 @@ public:
             ImGui::EndMenuBar();
         }
 
-        // --- 2. 绘制大纲与属性面板 ---
         m_SceneHierarchyPanel.OnImGuiRender();
 
-        // --- 3. 绘制 Viewport ---
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{ 0.0f, 0.0f });
         ImGui::Begin("Viewport");
 
         m_ViewportFocused = ImGui::IsWindowFocused();
         m_ViewportHovered = ImGui::IsWindowHovered();
+
+        auto viewportMinRegion = ImGui::GetWindowContentRegionMin();
+        auto viewportMaxRegion = ImGui::GetWindowContentRegionMax();
+        auto viewportOffset = ImGui::GetWindowPos();
+        m_ViewportBounds[0] = { viewportMinRegion.x + viewportOffset.x, viewportMinRegion.y + viewportOffset.y };
+        m_ViewportBounds[1] = { viewportMaxRegion.x + viewportOffset.x, viewportMaxRegion.y + viewportOffset.y };
 
         ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
         if (m_ViewportSize.x != viewportPanelSize.x || m_ViewportSize.y != viewportPanelSize.y) {
@@ -246,78 +271,124 @@ public:
                      ImVec2{ m_ViewportSize.x, m_ViewportSize.y }, 
                      ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
 
-        // ==========================================
-        // ImGuizmo 渲染与交互逻辑
-        // ==========================================
         Ayaya::Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
 
-        if (selectedEntity && m_GizmoType != -1) {
-            // 修复 1：必须调用 BeginFrame，否则 ImGuizmo 无法读取鼠标点击事件！
+        auto cameraView = m_ActiveScene->Reg().view<Ayaya::TransformComponent, Ayaya::CameraComponent>();
+        glm::mat4 cameraProjection;
+        glm::mat4 cameraViewMatrix;
+        bool hasCamera = false;
+
+        for (auto entityID : cameraView) {
+            Ayaya::Entity cameraEntity{ entityID, m_ActiveScene.get() };
+            auto& cameraComp = cameraEntity.GetComponent<Ayaya::CameraComponent>();
+            if (cameraComp.Primary) {
+                cameraProjection = cameraComp.Camera.GetProjection();
+                cameraViewMatrix = glm::inverse(cameraEntity.GetWorldTransform());
+                hasCamera = true;
+                break;
+            }
+        }
+
+        m_HoveredEntity = {}; 
+        
+        if (hasCamera && m_ViewportHovered && !ImGuizmo::IsOver()) {
+            ImVec2 mousePos = ImGui::GetMousePos();
+            float mx = mousePos.x - m_ViewportBounds[0].x;
+            float my = mousePos.y - m_ViewportBounds[0].y;
+            float viewportWidth = m_ViewportBounds[1].x - m_ViewportBounds[0].x;
+            float viewportHeight = m_ViewportBounds[1].y - m_ViewportBounds[0].y;
+
+            if (mx >= 0 && mx <= viewportWidth && my >= 0 && my <= viewportHeight) {
+                my = viewportHeight - my; 
+                float nx = (mx / viewportWidth) * 2.0f - 1.0f;
+                float ny = (my / viewportHeight) * 2.0f - 1.0f;
+
+                glm::vec4 clipCoords = glm::vec4(nx, ny, -1.0f, 1.0f);
+                glm::vec4 eyeCoords = glm::inverse(cameraProjection) * clipCoords;
+                eyeCoords = glm::vec4(eyeCoords.x, eyeCoords.y, -1.0f, 0.0f);
+                glm::vec3 rayWorldDir = glm::normalize(glm::vec3(glm::inverse(cameraViewMatrix) * eyeCoords));
+                glm::vec3 rayOrigin = glm::vec3(glm::inverse(cameraViewMatrix)[3]);
+
+                float closestT = std::numeric_limits<float>::max();
+                auto renderGroup = m_ActiveScene->Reg().view<Ayaya::TransformComponent, Ayaya::SpriteRendererComponent>();
+
+                for (auto entityID : renderGroup) {
+                    Ayaya::Entity entity{ entityID, m_ActiveScene.get() };
+                    glm::mat4 inverseTransform = glm::inverse(entity.GetWorldTransform());
+
+                    glm::vec3 localRayOrigin = glm::vec3(inverseTransform * glm::vec4(rayOrigin, 1.0f));
+                    glm::vec3 localRayDir = glm::normalize(glm::vec3(inverseTransform * glm::vec4(rayWorldDir, 0.0f)));
+
+                    glm::vec3 invDir = 1.0f / localRayDir;
+                    glm::vec3 t0 = (-0.5f - localRayOrigin) * invDir; 
+                    glm::vec3 t1 = (0.5f - localRayOrigin) * invDir;
+
+                    glm::vec3 tmin = glm::min(t0, t1);
+                    glm::vec3 tmax = glm::max(t0, t1);
+
+                    float tNear = glm::max(glm::max(tmin.x, tmin.y), tmin.z);
+                    float tFar = glm::min(glm::min(tmax.x, tmax.y), tmax.z);
+
+                    if (tNear <= tFar && tFar >= 0.0f) {
+                        if (tNear < closestT) {
+                            closestT = tNear;
+                            m_HoveredEntity = entity;
+                        }
+                    }
+                }
+
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                    m_SceneHierarchyPanel.SetSelectedEntity(m_HoveredEntity);
+                }
+            }
+        }
+
+        if (selectedEntity && m_GizmoType != -1 && hasCamera) {
             ImGuizmo::BeginFrame(); 
-            
             ImGuizmo::SetOrthographic(false);
             ImGuizmo::SetDrawlist();
 
-            // 修复 2：剔除 Title Bar 和 Tab 栏带来的坐标偏移！
-            ImVec2 windowPos = ImGui::GetWindowPos();
-            ImVec2 minBound = ImGui::GetWindowContentRegionMin();
-            ImGuizmo::SetRect(windowPos.x + minBound.x, windowPos.y + minBound.y, m_ViewportSize.x, m_ViewportSize.y);
+            ImGuizmo::SetRect(m_ViewportBounds[0].x, m_ViewportBounds[0].y, 
+                              m_ViewportBounds[1].x - m_ViewportBounds[0].x, 
+                              m_ViewportBounds[1].y - m_ViewportBounds[0].y);
 
-            auto cameraView = m_ActiveScene->Reg().view<Ayaya::TransformComponent, Ayaya::CameraComponent>();
-            glm::mat4 cameraProjection;
-            glm::mat4 cameraViewMatrix;
-            bool hasCamera = false;
+            auto& tc = selectedEntity.GetComponent<Ayaya::TransformComponent>();
+            glm::mat4 transform = selectedEntity.GetWorldTransform();
 
-            for (auto entityID : cameraView) {
-                Ayaya::Entity cameraEntity{ entityID, m_ActiveScene.get() };
-                auto& cameraComp = cameraEntity.GetComponent<Ayaya::CameraComponent>();
-                if (cameraComp.Primary) {
-                    cameraProjection = cameraComp.Camera.GetProjection();
-                    cameraViewMatrix = glm::inverse(cameraEntity.GetWorldTransform());
-                    hasCamera = true;
-                    break;
+            bool snap = Ayaya::Input::IsKeyPressed(Ayaya::Key::LeftControl);
+            float snapValue = 0.5f; 
+            if (m_GizmoType == ImGuizmo::OPERATION::ROTATE) snapValue = 45.0f; 
+            float snapValues[3] = { snapValue, snapValue, snapValue };
+
+            ImGuizmo::Manipulate(glm::value_ptr(cameraViewMatrix), glm::value_ptr(cameraProjection),
+                (ImGuizmo::OPERATION)m_GizmoType, ImGuizmo::LOCAL, glm::value_ptr(transform),
+                nullptr, snap ? snapValues : nullptr);
+
+            if (ImGuizmo::IsUsing()) {
+                auto& rel = selectedEntity.GetComponent<Ayaya::RelationshipComponent>();
+                glm::mat4 localTransform = transform;
+                
+                if (rel.Parent != entt::null) {
+                    Ayaya::Entity parent{ rel.Parent, m_ActiveScene.get() };
+                    glm::mat4 parentWorld = parent.GetWorldTransform();
+                    localTransform = glm::inverse(parentWorld) * transform;
                 }
-            }
 
-            if (hasCamera) {
-                auto& tc = selectedEntity.GetComponent<Ayaya::TransformComponent>();
-                glm::mat4 transform = selectedEntity.GetWorldTransform();
-
-                bool snap = Ayaya::Input::IsKeyPressed(Ayaya::Key::LeftControl);
-                float snapValue = 0.5f; 
-                if (m_GizmoType == ImGuizmo::OPERATION::ROTATE) snapValue = 45.0f; 
-                float snapValues[3] = { snapValue, snapValue, snapValue };
-
-                ImGuizmo::Manipulate(glm::value_ptr(cameraViewMatrix), glm::value_ptr(cameraProjection),
-                    (ImGuizmo::OPERATION)m_GizmoType, ImGuizmo::LOCAL, glm::value_ptr(transform),
-                    nullptr, snap ? snapValues : nullptr);
-
-                if (ImGuizmo::IsUsing()) {
-                    auto& rel = selectedEntity.GetComponent<Ayaya::RelationshipComponent>();
-                    glm::mat4 localTransform = transform;
-                    
-                    if (rel.Parent != entt::null) {
-                        Ayaya::Entity parent{ rel.Parent, m_ActiveScene.get() };
-                        glm::mat4 parentWorld = parent.GetWorldTransform();
-                        localTransform = glm::inverse(parentWorld) * transform;
-                    }
-
-                    glm::vec3 scale, translation, skew;
-                    glm::quat rotation;
-                    glm::vec4 perspective;
-                    glm::decompose(localTransform, scale, rotation, translation, skew, perspective);
-                    
-                    tc.Translation = translation;
-                    tc.Rotation = glm::eulerAngles(rotation);
-                    tc.Scale = scale;
-                }
+                glm::vec3 scale, translation, skew;
+                glm::quat rotation;
+                glm::vec4 perspective;
+                glm::decompose(localTransform, scale, rotation, translation, skew, perspective);
+                
+                tc.Translation = translation;
+                tc.Rotation = glm::eulerAngles(rotation);
+                tc.Scale = scale;
             }
         }
 
         ImGui::End();
         ImGui::PopStyleVar();
 
-        ImGui::End(); // End DockSpace
+        ImGui::End(); 
     }
 
     virtual void OnEvent(Ayaya::Event& event) override {}
@@ -358,9 +429,11 @@ private:
     Ayaya::ShaderLibrary m_ShaderLibrary; 
     std::shared_ptr<Ayaya::Texture2D> m_Texture;
     std::shared_ptr<Ayaya::VertexArray> m_VertexArray;
-
+    
     std::shared_ptr<Ayaya::Framebuffer> m_Framebuffer; 
+
     glm::vec2 m_ViewportSize = { 0.0f, 0.0f };         
+    ImVec2 m_ViewportBounds[2]; 
 
     std::shared_ptr<Ayaya::Scene> m_ActiveScene;
     Ayaya::SceneHierarchyPanel m_SceneHierarchyPanel;
@@ -370,4 +443,5 @@ private:
     glm::vec2 m_InitialMousePos = { 0.0f, 0.0f };
 
     int m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
+    Ayaya::Entity m_HoveredEntity = {}; 
 };

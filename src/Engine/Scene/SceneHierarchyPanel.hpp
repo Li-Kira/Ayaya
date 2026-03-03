@@ -19,6 +19,11 @@ namespace Ayaya {
         // ==========================================
         Entity GetSelectedEntity() const { return m_SelectionContext; }
 
+        // ==========================================
+        // 新增：允许外部（如视口鼠标点击）设置当前选中物体
+        // ==========================================
+        void SetSelectedEntity(Entity entity) { m_SelectionContext = entity; }
+
     private:
         void DrawEntityNode(Entity entity);
         void DrawComponents(Entity entity);
