@@ -24,20 +24,17 @@ namespace Ayaya {
         ImGui::Begin("Scene Hierarchy");
 
         if (m_Context) {
-            // 1. 正常遍历根节点渲染树
-            auto view = m_Context->Reg().view<TagComponent, RelationshipComponent>();
-            for (auto entityID : view) {
-                auto& rel = view.get<RelationshipComponent>(entityID);
-                if (rel.Parent == entt::null) {
-                    Entity entity{ entityID, m_Context.get() };
-                    DrawEntityNode(entity);
-                }
+            // ========================================================
+            // 修复 1：必须使用我们自己维护的有序 RootEntities 列表！
+            // 注意：必须拷贝一份 (auto rootEntities = ...)，因为拖拽过程中会修改原数组，
+            // 如果直接引用遍历，会导致 C++ 迭代器失效崩溃。
+            // ========================================================
+            auto rootEntities = m_Context->GetRootEntities();
+            for (auto entityID : rootEntities) {
+                Entity entity{ entityID, m_Context.get() };
+                DrawEntityNode(entity);
             }
 
-            // ========================================================
-            // 核心修复：处理空白区域的所有交互（左键取消、右键新建、拖拽解绑）
-            // ========================================================
-            
             // 计算剩余空白区域大小，并创建一个填满它的隐形按钮
             ImVec2 remainSize = ImGui::GetContentRegionAvail();
             if (remainSize.y < 50.0f) remainSize.y = 50.0f; 
@@ -113,15 +110,57 @@ namespace Ayaya {
             ImGui::EndDragDropSource();
         }
 
-        // 拖放目标 (放置到别的物体上)
+        // =======================================================
+        // 核心交互：带有拖拽重排 (Reorder) 指示线的 DropTarget 逻辑
+        // =======================================================
         if (ImGui::BeginDragDropTarget()) {
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_PAYLOAD")) {
-                entt::entity droppedID = *(entt::entity*)payload->Data;
-                Entity droppedEntity{ droppedID, m_Context.get() };
-                droppedEntity.SetParent(entity);
+            // 使用 AcceptBeforeDelivery 让我们在鼠标松开前就能计算反馈并画线
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_PAYLOAD", ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect)) {
+                
+                float mouseY = ImGui::GetMousePos().y;
+                float itemMinY = ImGui::GetItemRectMin().y;
+                float itemMaxY = ImGui::GetItemRectMax().y;
+                float itemHeight = itemMaxY - itemMinY;
+
+                // 判断拖拽落点属于上侧、下侧还是中间
+                bool insertBefore = mouseY < itemMinY + itemHeight * 0.25f;
+                bool insertAfter  = mouseY > itemMaxY - itemHeight * 0.25f;
+                bool reparent     = !insertBefore && !insertAfter;
+
+                // 画出黄色的提示线
+                ImDrawList* drawList = ImGui::GetWindowDrawList();
+                ImVec2 minRect = ImGui::GetItemRectMin();
+                ImVec2 maxRect = ImGui::GetItemRectMax();
+                
+                if (insertBefore) {
+                    drawList->AddLine(ImVec2(minRect.x, itemMinY), ImVec2(maxRect.x, itemMinY), IM_COL32(255, 215, 0, 255), 2.0f);
+                } else if (insertAfter) {
+                    drawList->AddLine(ImVec2(minRect.x, itemMaxY), ImVec2(maxRect.x, itemMaxY), IM_COL32(255, 215, 0, 255), 2.0f);
+                } else {
+                    drawList->AddRect(minRect, maxRect, IM_COL32(255, 215, 0, 255), 0.0f, 0, 2.0f); // 画边框表示成为子节点
+                }
+
+                // 鼠标真正松开时 (IsDelivery) 触发换爹与排序
+                if (payload->IsDelivery()) {
+                    entt::entity droppedID = *(entt::entity*)payload->Data;
+                    Entity droppedEntity{ droppedID, m_Context.get() };
+
+                    if (insertBefore) {
+                        Entity parent{ entity.GetComponent<RelationshipComponent>().Parent, m_Context.get() };
+                        droppedEntity.SetParent(parent);
+                        droppedEntity.MoveTo(entity, true);  // 移到前面
+                    } else if (insertAfter) {
+                        Entity parent{ entity.GetComponent<RelationshipComponent>().Parent, m_Context.get() };
+                        droppedEntity.SetParent(parent);
+                        droppedEntity.MoveTo(entity, false); // 移到后面
+                    } else {
+                        droppedEntity.SetParent(entity);     // 变成子节点
+                    }
+                }
             }
             ImGui::EndDragDropTarget();
         }
+        // 修复 2：删除了下方多余的旧 BeginDragDropTarget() 块，防止冲突覆盖。
 
         // 右键菜单
         if (ImGui::BeginPopupContextItem()) {
@@ -149,17 +188,12 @@ namespace Ayaya {
 
     void SceneHierarchyPanel::DrawComponents(Entity entity) {
         // --- 绘制 Tag 组件 ---
-        if (entity.HasComponent<TagComponent>()) {
+       if (entity.HasComponent<TagComponent>()) {
             auto& tag = entity.GetComponent<TagComponent>().Tag;
-            
-            // ImGui InputText 需要一个 char 数组
             char buffer[256];
             memset(buffer, 0, sizeof(buffer));
             strncpy(buffer, tag.c_str(), sizeof(buffer) - 1);
-            
-            if (ImGui::InputText("Tag", buffer, sizeof(buffer))) {
-                tag = std::string(buffer); // 回写修改后的名字
-            }
+            if (ImGui::InputText("Tag", buffer, sizeof(buffer))) tag = std::string(buffer);
         }
 
         ImGui::Separator();

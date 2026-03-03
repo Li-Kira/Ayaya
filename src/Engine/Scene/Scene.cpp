@@ -11,16 +11,35 @@ namespace Ayaya {
 
     Entity Scene::CreateEntity(const std::string& name) {
         Entity entity = { m_Registry.create(), this };
-        
         entity.AddComponent<TransformComponent>();
         
+        // ==============================================
+        // 核心升级：自动检测重名并添加序号 (如 Cube (1))
+        // ==============================================
+        std::string baseName = name.empty() ? "Entity" : name;
+        std::string uniqueName = baseName;
+        int counter = 1;
+        while (true) {
+            bool nameExists = false;
+            auto view = m_Registry.view<TagComponent>();
+            for (auto e : view) {
+                if (view.get<TagComponent>(e).Tag == uniqueName) {
+                    nameExists = true;
+                    break;
+                }
+            }
+            if (!nameExists) break; // 名字不重复，跳出循环
+            uniqueName = baseName + " (" + std::to_string(counter) + ")";
+            counter++;
+        }
+
         auto& tag = entity.AddComponent<TagComponent>();
-        tag.Tag = name.empty() ? "Entity" : name;
+        tag.Tag = uniqueName;
         
-        // ==============================================
-        // 新增：默认挂载关系组件，让它能参与层级树
-        // ==============================================
         entity.AddComponent<RelationshipComponent>();
+
+        // 所有刚创建的实体默认都是根节点
+        m_RootEntities.push_back(entity.m_EntityHandle);
 
         return entity;
     }
@@ -28,17 +47,20 @@ namespace Ayaya {
     void Scene::DestroyEntity(Entity entity) {
         auto& rel = entity.GetComponent<RelationshipComponent>();
 
-        // 1. 递归销毁所有子节点 (级联删除)
-        // 注意：必须拷贝一份 Children 数组，因为 DestroyEntity 会修改原数组
+        // 递归销毁子节点
         std::vector<entt::entity> childrenCopy = rel.Children;
         for (auto childID : childrenCopy) {
             DestroyEntity({ childID, this });
         }
 
-        // 2. 从当前父亲的列表中解绑自己
-        entity.SetParent({}); // 传入空实体，自动执行脱离逻辑
+        entity.SetParent({}); // 解绑父子关系
 
-        // 3. 彻底从 EnTT 注册表中抹除
+        // ==============================================
+        // 核心维护：从根节点列表中彻底移除
+        // ==============================================
+        auto it = std::find(m_RootEntities.begin(), m_RootEntities.end(), entity.m_EntityHandle);
+        if (it != m_RootEntities.end()) m_RootEntities.erase(it);
+
         m_Registry.destroy(entity);
     }
 }
