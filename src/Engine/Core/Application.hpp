@@ -2,6 +2,9 @@
 
 #include "Window.hpp"
 #include "LayerStack.hpp"
+#include "Events/Event.hpp"            
+#include "Events/ApplicationEvent.hpp" 
+#include "Events/KeyEvent.hpp"
 #include <memory>
 
 namespace Ayaya {
@@ -12,13 +15,22 @@ namespace Ayaya {
         virtual ~Application();
 
         void Run();
+        void OnEvent(Event& e);
 
-        // 单例访问器
         inline static Application& Get() { return *s_Instance; }
         inline Window& GetWindow() { return *m_Window; }
 
         void PushLayer(Layer* layer);
         void PushOverlay(Layer* overlay);
+
+    private:
+        bool OnWindowClose(WindowCloseEvent& e);
+        bool OnWindowResize(WindowResizeEvent& e);
+        bool OnKeyPressed(KeyPressedEvent& e);
+        bool OnMouseButtonPressed(MouseButtonPressedEvent& e);
+        bool OnMouseMoved(MouseMovedEvent& e);
+        bool OnMouseScrolled(MouseScrolledEvent& e);
+
     private:
         std::unique_ptr<Window> m_Window;
         bool m_Running = true;

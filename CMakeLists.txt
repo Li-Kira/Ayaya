@@ -39,6 +39,7 @@ set(AYAYA_SOURCES
 # 5. 定义引擎静态库
 add_library(Ayaya STATIC ${AYAYA_SOURCES})
 
+
 # 强制将 glad.c 识别为 C 语言
 set_source_files_properties(${GLAD_SOURCE} PROPERTIES LANGUAGE C)
 

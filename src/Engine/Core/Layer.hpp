@@ -1,7 +1,8 @@
 #pragma once
 
 #include <string>
-#include "Timestep.hpp" // 用于处理帧间隔时间
+#include "Core/Timestep.hpp"
+#include "Events/Event.hpp" // 必须包含事件基类
 
 namespace Ayaya {
 
@@ -10,10 +11,13 @@ namespace Ayaya {
         Layer(const std::string& name = "Layer");
         virtual ~Layer();
 
-        virtual void OnAttach() {}    // 当层被推入栈时调用
-        virtual void OnDetach() {}    // 当层被移除时调用
-        virtual void OnUpdate(Timestep ts) {}    // 每帧更新
-        virtual void OnImGuiRender() {} // 专门用于渲染 UI
+        virtual void OnAttach() {}
+        virtual void OnDetach() {}
+        virtual void OnUpdate(Timestep ts) {}
+        virtual void OnImGuiRender() {}
+        
+        // 新增：事件处理接口
+        virtual void OnEvent(Event& event) {}
 
         inline const std::string& GetName() const { return m_DebugName; }
     protected:

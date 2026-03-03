@@ -1,26 +1,26 @@
-#include "Input.hpp"
-#include "Application.hpp"
+#include "Core/Input.hpp"
+#include "Core/Application.hpp"
 #include <GLFW/glfw3.h>
 
 namespace Ayaya {
 
-    // 这里定义具体的 OpenGL 平台实现
     class OpenGLInput : public Input {
     protected:
         virtual bool IsKeyPressedImpl(KeyCode key) override {
-            auto window = static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow());
+            // 通过 Application 单例获取原生窗口句柄
+            auto* window = static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow());
             int state = glfwGetKey(window, key);
             return state == GLFW_PRESS || state == GLFW_REPEAT;
         }
 
         virtual bool IsMouseButtonPressedImpl(MouseCode button) override {
-            auto window = static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow());
+            auto* window = static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow());
             int state = glfwGetMouseButton(window, button);
             return state == GLFW_PRESS;
         }
 
         virtual std::pair<float, float> GetMousePositionImpl() override {
-            auto window = static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow());
+            auto* window = static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow());
             double xpos, ypos;
             glfwGetCursorPos(window, &xpos, &ypos);
             return { (float)xpos, (float)ypos };
@@ -30,7 +30,7 @@ namespace Ayaya {
         virtual float GetMouseYImpl() override { return GetMousePositionImpl().second; }
     };
 
-    // 初始化 Input 类的静态单例指针，指向具体的实现类
+    // 初始化静态单例实例
     Input* Input::s_Instance = new OpenGLInput();
 
 }
