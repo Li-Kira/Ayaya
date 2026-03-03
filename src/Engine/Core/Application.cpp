@@ -102,10 +102,10 @@ namespace Ayaya {
 
     // 实现按键处理逻辑
     bool Application::OnKeyPressed(KeyPressedEvent& e) {
-        if (e.GetKeyCode() == Key::Escape) {
-            m_Running = false;
-            return true;
-        }
+        // if (e.GetKeyCode() == Key::Escape) {
+        //     m_Running = false;
+        //     return true;
+        // }
 
         if (e.GetKeyCode() == Key::Enter) {
             AYAYA_CORE_INFO("Enter key pressed! [Verified by Event System]");

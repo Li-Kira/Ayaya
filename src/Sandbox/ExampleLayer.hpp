@@ -108,19 +108,20 @@ public:
         // ECS 阶段 1：查询主相机，更新逻辑并获取矩阵
         // ==========================================
         auto cameraView = m_ActiveScene->Reg().view<Ayaya::TransformComponent, Ayaya::CameraComponent>();
-        for (auto entity : cameraView) {
-            auto [transform, camera] = cameraView.get<Ayaya::TransformComponent, Ayaya::CameraComponent>(entity);
+        for (auto entityID : cameraView) {
+            Ayaya::Entity entity{ entityID, m_ActiveScene.get() };
+            auto& camera = entity.GetComponent<Ayaya::CameraComponent>();
+            auto& transform = entity.GetComponent<Ayaya::TransformComponent>();
+
             if (camera.Primary) {
                 hasPrimaryCamera = true;
-                
-                // 将脏乱的漫游逻辑封装进独立函数
                 ProcessCameraInput(ts, transform);
 
-                // glm::mat4 view = glm::inverse(transform.GetTransform());
-                glm::mat4 worldTransform = GetWorldTransform(Ayaya::Entity{ entity, m_ActiveScene.get() });
+                // 直接调用 Entity 内置的方法
+                glm::mat4 worldTransform = entity.GetWorldTransform();
                 glm::mat4 view = glm::inverse(worldTransform);
                 cameraViewProj = camera.Camera.GetProjection() * view;
-                break; // 找到主相机即可
+                break; 
             }
         }
 
@@ -134,7 +135,6 @@ public:
             shader->Bind();
             shader->SetInt("u_Texture", 0);
 
-            // 查询所有拥有 Transform 和 SpriteRenderer 的实体
             auto renderGroup = m_ActiveScene->Reg().view<Ayaya::TransformComponent, Ayaya::SpriteRendererComponent>();
             for (auto entityID : renderGroup) {
                 Ayaya::Entity entity{ entityID, m_ActiveScene.get() };
@@ -142,8 +142,8 @@ public:
                 
                 shader->SetFloat3("u_ColorModifier", glm::vec3(sprite.Color)); 
                 
-                // 核心修改：这里使用递归算出来的世界矩阵进行渲染！
-                Ayaya::Renderer::Submit(shader, m_VertexArray, GetWorldTransform(entity));
+                // 直接使用 Entity 内置方法，不用自己递归了
+                Ayaya::Renderer::Submit(shader, m_VertexArray, entity.GetWorldTransform());
             }
             Ayaya::Renderer::EndScene();
         }
@@ -207,7 +207,7 @@ public:
 
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("File")) {
-                if (ImGui::MenuItem("Exit")) { Ayaya::Application::Get().GetWindow().ShouldClose(); }
+                if (ImGui::MenuItem("Exit")) { Ayaya::Application::Get().Close(); }
                 ImGui::EndMenu();
             }
             ImGui::EndMenuBar();
@@ -254,22 +254,6 @@ public:
     virtual void OnEvent(Ayaya::Event& event) override {}
 
 private:
-
-    // 计算实体的绝对世界矩阵 (父矩阵 * 子局部矩阵)
-    glm::mat4 GetWorldTransform(Ayaya::Entity entity) {
-        auto& transform = entity.GetComponent<Ayaya::TransformComponent>();
-        auto& rel = entity.GetComponent<Ayaya::RelationshipComponent>();
-        
-        glm::mat4 localTransform = transform.GetTransform();
-
-        // 如果有父节点，递归获取父节点的世界矩阵，并与之相乘
-        if (rel.Parent != entt::null) {
-            Ayaya::Entity parentEntity{ rel.Parent, m_ActiveScene.get() };
-            return GetWorldTransform(parentEntity) * localTransform;
-        }
-        return localTransform;
-    }
-
     // ==========================================
     // 独立的相机逻辑封装
     // ==========================================
