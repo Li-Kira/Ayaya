@@ -24,60 +24,124 @@ namespace Ayaya {
         ImGui::Begin("Scene Hierarchy");
 
         if (m_Context) {
-            // 核心修改：只遍历根节点（Parent 为 null 的实体）
+            // 1. 正常遍历根节点渲染树
             auto view = m_Context->Reg().view<TagComponent, RelationshipComponent>();
             for (auto entityID : view) {
                 auto& rel = view.get<RelationshipComponent>(entityID);
-                
-                if (rel.Parent == entt::null) { // 如果是根节点，才从这里开始绘制
+                if (rel.Parent == entt::null) {
                     Entity entity{ entityID, m_Context.get() };
                     DrawEntityNode(entity);
                 }
             }
 
-            if (ImGui::IsMouseDown(0) && ImGui::IsWindowHovered()) {
+            // ========================================================
+            // 核心修复：处理空白区域的所有交互（左键取消、右键新建、拖拽解绑）
+            // ========================================================
+            
+            // 计算剩余空白区域大小，并创建一个填满它的隐形按钮
+            ImVec2 remainSize = ImGui::GetContentRegionAvail();
+            if (remainSize.y < 50.0f) remainSize.y = 50.0f; 
+            ImGui::InvisibleButton("##HierarchyEmptyArea", remainSize);
+
+            // [交互 1]：左键点击这个隐形按钮 -> 取消选中
+            if (ImGui::IsItemClicked(0)) {
                 m_SelectionContext = {};
+            }
+
+            // [交互 2]：右键点击这个隐形按钮 -> 弹出新建菜单！
+            if (ImGui::BeginPopupContextItem("HierarchySpacePopup")) {
+                if (ImGui::MenuItem("Create Empty Entity")) {
+                    m_Context->CreateEntity("Empty Entity");
+                }
+                ImGui::EndPopup();
+            }
+
+            // [交互 3]：将实体拖放到隐形按钮上 -> 解除父子关系 (回到根目录)
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_PAYLOAD")) {
+                    entt::entity droppedID = *(entt::entity*)payload->Data;
+                    m_EntityToUnparent = { droppedID, m_Context.get() }; 
+                }
+                ImGui::EndDragDropTarget();
             }
         }
         ImGui::End();
-
+        
         ImGui::Begin("Properties");
         if (m_SelectionContext) DrawComponents(m_SelectionContext);
         ImGui::End();
+
+        // 处理删除
+        if (m_EntityToDestroy) {
+            if (m_SelectionContext == m_EntityToDestroy) m_SelectionContext = {};
+            m_Context->DestroyEntity(m_EntityToDestroy);
+            m_EntityToDestroy = {};
+        }
+
+        // 处理解绑 (Unparent)
+        if (m_EntityToUnparent) {
+            m_EntityToUnparent.SetParent({}); 
+            m_EntityToUnparent = {};
+        }
     }
 
     void SceneHierarchyPanel::DrawEntityNode(Entity entity) {
         auto& tag = entity.GetComponent<TagComponent>().Tag;
         
-        // 动态图标逻辑
         std::string icon = ICON_FA_CUBE; 
         if (entity.HasComponent<CameraComponent>()) icon = ICON_FA_VIDEO; 
         else if (entity.HasComponent<SpriteRendererComponent>()) icon = ICON_FA_PAINT_BRUSH; 
+        
         std::string displayString = icon + " " + tag;
 
         ImGuiTreeNodeFlags flags = ((m_SelectionContext == entity) ? ImGuiTreeNodeFlags_Selected : 0) 
                                  | ImGuiTreeNodeFlags_OpenOnArrow 
                                  | ImGuiTreeNodeFlags_SpanAvailWidth;
         
-        // 核心修改：通过 RelationshipComponent 判断是否有子节点
         auto& rel = entity.GetComponent<RelationshipComponent>();
-        bool hasChildren = !rel.Children.empty(); 
-        
-        if (!hasChildren) {
-            flags |= ImGuiTreeNodeFlags_Leaf; // 如果没有子节点，隐藏箭头
-        }
+        if (rel.Children.empty()) flags |= ImGuiTreeNodeFlags_Leaf;
 
         bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, "%s", displayString.c_str());
 
-        if (ImGui::IsItemClicked()) {
-            m_SelectionContext = entity;
+        if (ImGui::IsItemClicked()) m_SelectionContext = entity;
+
+        // 拖放源
+        if (ImGui::BeginDragDropSource()) {
+            entt::entity entityID = entity;
+            ImGui::SetDragDropPayload("ENTITY_PAYLOAD", &entityID, sizeof(entt::entity));
+            ImGui::Text("%s", tag.c_str());
+            ImGui::EndDragDropSource();
+        }
+
+        // 拖放目标 (放置到别的物体上)
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_PAYLOAD")) {
+                entt::entity droppedID = *(entt::entity*)payload->Data;
+                Entity droppedEntity{ droppedID, m_Context.get() };
+                droppedEntity.SetParent(entity);
+            }
+            ImGui::EndDragDropTarget();
+        }
+
+        // 右键菜单
+        if (ImGui::BeginPopupContextItem()) {
+            if (ImGui::MenuItem("Delete Entity")) {
+                m_EntityToDestroy = entity; // 标记延迟删除
+            }
+            if (ImGui::MenuItem("Unparent (Move to Root)")) {
+                m_EntityToUnparent = entity; // 标记延迟解绑
+            }
+            ImGui::EndPopup();
         }
 
         if (opened) {
-            // 核心修改：如果有子节点，递归绘制它们！
-            for (auto childID : rel.Children) {
-                Entity childEntity{ childID, m_Context.get() };
-                DrawEntityNode(childEntity);
+            // 注意：这里需要再次检查 entity 是否被删，防止在该帧后续递归中崩溃
+            if (m_EntityToDestroy != entity) {
+                // 必须拷贝一份 Children，防止在循环中由于 SetParent 改变 Children 导致迭代器失效
+                std::vector<entt::entity> children = rel.Children;
+                for (auto childID : children) {
+                    DrawEntityNode({ childID, m_Context.get() });
+                }
             }
             ImGui::TreePop();
         }

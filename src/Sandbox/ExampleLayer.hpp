@@ -90,9 +90,8 @@ public:
         square2.AddComponent<Ayaya::SpriteRendererComponent>(glm::vec4{0.8f, 0.2f, 0.3f, 1.0f});
 
         // 3. 将方块设置为 parentNode 的子节点！
-        parentNode.AddChild(square1);
-        // parentNode.AddChild(square2);
-
+        square1.SetParent(parentNode); //
+        
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
     }
 

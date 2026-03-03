@@ -21,6 +21,9 @@ namespace Ayaya {
     private:
         std::shared_ptr<Scene> m_Context;
         Entity m_SelectionContext; // 当前在大纲中被选中的实体
+
+        Entity m_EntityToDestroy = {};  // 延迟删除标记
+        Entity m_EntityToUnparent = {}; // 新增：延迟解绑标记
     };
 
 }

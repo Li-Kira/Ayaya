@@ -14,6 +14,8 @@ namespace Ayaya {
 
         // 创建一个实体
         Entity CreateEntity(const std::string& name = std::string());
+        
+        void DestroyEntity(Entity entity);
 
         // 预留给未来的系统更新（比如渲染系统、物理系统）
         // void OnUpdate(Timestep ts);

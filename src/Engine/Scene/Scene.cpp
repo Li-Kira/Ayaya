@@ -25,4 +25,20 @@ namespace Ayaya {
         return entity;
     }
 
+    void Scene::DestroyEntity(Entity entity) {
+        auto& rel = entity.GetComponent<RelationshipComponent>();
+
+        // 1. 递归销毁所有子节点 (级联删除)
+        // 注意：必须拷贝一份 Children 数组，因为 DestroyEntity 会修改原数组
+        std::vector<entt::entity> childrenCopy = rel.Children;
+        for (auto childID : childrenCopy) {
+            DestroyEntity({ childID, this });
+        }
+
+        // 2. 从当前父亲的列表中解绑自己
+        entity.SetParent({}); // 传入空实体，自动执行脱离逻辑
+
+        // 3. 彻底从 EnTT 注册表中抹除
+        m_Registry.destroy(entity);
+    }
 }
