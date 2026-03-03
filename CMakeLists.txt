@@ -5,40 +5,51 @@ project(AyayaEngine VERSION 0.1.0 LANGUAGES CXX C)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 2. 针对 macOS 的特定设置与 Frameworks 链接
+# 2. 平台特定设置
 if(APPLE)
     set(CMAKE_MACOSX_RPATH 1)
-    # macOS 运行 OpenGL/GLFW 必须的系统级框架
     set(APPLE_FRAMEWORKS "-framework Cocoa -framework IOKit -framework CoreVideo -framework OpenGL -framework QuartzCore")
-    
-    # 针对 GLM 的优化：在 Mac 上强制使用浮点数精度定义（可选）
     add_definitions(-DGLM_FORCE_DEPTH_ZERO_TO_ONE) 
 endif()
 
 # 3. 定义路径变量
+set(ENGINE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/Engine")
 set(VENDOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor")
 set(VENDOR_INCLUDE "${VENDOR_DIR}/include")
 set(VENDOR_LIB "${VENDOR_DIR}/lib")
 
-# 4. 定义引擎静态库 (Ayaya)
-file(GLOB_RECURSE ENGINE_SOURCES 
-    "src/Engine/*.cpp" 
-    "src/Engine/*.hpp" 
-    "src/Engine/*.c"
+# 4. 收集源文件 (按模块划分，结构更清晰)
+# 核心层
+file(GLOB CORE_SOURCES "${ENGINE_DIR}/Core/*.cpp")
+# 渲染抽象层
+file(GLOB RENDERER_SOURCES "${ENGINE_DIR}/Renderer/*.cpp")
+# 平台实现层 (目前仅 OpenGL)
+file(GLOB OPENGL_SOURCES "${ENGINE_DIR}/Platform/OpenGL/*.cpp")
+# C 文件 (Glad)
+set(GLAD_SOURCE "${ENGINE_DIR}/Platform/OpenGL/glad.c")
+
+# 整合所有源文件
+set(AYAYA_SOURCES 
+    ${CORE_SOURCES} 
+    ${RENDERER_SOURCES} 
+    ${OPENGL_SOURCES}
+    ${GLAD_SOURCE}
 )
 
-add_library(Ayaya STATIC ${ENGINE_SOURCES})
+# 5. 定义引擎静态库
+add_library(Ayaya STATIC ${AYAYA_SOURCES})
 
-# 强制将 glad.c 识别为 C 语言编译
-set_source_files_properties(src/Engine/Renderer/glad.c PROPERTIES LANGUAGE C)
+# 强制将 glad.c 识别为 C 语言
+set_source_files_properties(${GLAD_SOURCE} PROPERTIES LANGUAGE C)
 
-# 5. 设置包含路径 (重点：这里涵盖了 spdlog, glad, glfw 和 glm)
+# 6. 设置包含路径
+# PUBLIC 确保 Sandbox 也能自动获得这些包含路径
 target_include_directories(Ayaya PUBLIC 
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/Engine"
-    "${VENDOR_INCLUDE}"
+    "${ENGINE_DIR}"      # 允许 #include "Core/Log.hpp"
+    "${VENDOR_INCLUDE}"   # 允许 #include <glm/glm.hpp>
 )
 
-# 6. 链接第三方库
+# 7. 链接第三方库
 find_library(GLFW_LIB NAMES glfw glfw3 PATHS ${VENDOR_LIB} NO_DEFAULT_PATH)
 
 target_link_libraries(Ayaya PUBLIC 
@@ -46,14 +57,16 @@ target_link_libraries(Ayaya PUBLIC
     ${APPLE_FRAMEWORKS}
 )
 
-# 7. 定义可执行文件 (Sandbox)
-add_executable(Sandbox src/Sandbox/Main.cpp)
+# 8. 定义可执行文件 (Sandbox)
+# 自动收集 Sandbox 目录下所有的源文件（包括 Main.cpp 和层文件）
+file(GLOB SANDBOX_SOURCES "src/Sandbox/*.cpp" "src/Sandbox/*.hpp")
+add_executable(Sandbox ${SANDBOX_SOURCES})
 target_link_libraries(Sandbox PRIVATE Ayaya)
 
-# 8. 资源文件处理
+# 9. 资源文件处理 (创建符号链接)
 add_custom_command(TARGET Sandbox POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E create_symlink
-    ${CMAKE_CURRENT_SOURCE_DIR}/assets
-    $<TARGET_FILE_DIR:Sandbox>/assets
-    COMMENT "Creating symlink to assets directory for Ayaya"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+    "$<TARGET_FILE_DIR:Sandbox>/assets"
+    COMMENT "Creating symlink to assets directory for Sandbox"
 )
