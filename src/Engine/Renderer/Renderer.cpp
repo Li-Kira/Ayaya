@@ -25,6 +25,10 @@ namespace Ayaya {
         m_SceneData->ViewProjectionMatrix = cameraController.GetViewProjection();
     }
 
+    void Renderer::BeginScene(const glm::mat4& viewProjection) {
+        m_SceneData->ViewProjectionMatrix = viewProjection;
+    }
+
     void Renderer::EndScene() {
         // 场景渲染结束
     }

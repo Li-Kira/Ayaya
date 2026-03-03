@@ -4,6 +4,10 @@
 #include "Core/Log.hpp"
 #include <entt/entt.hpp>
 
+// 注意：如果直接在头文件里实现 AddChild，需要稍微延迟或包含 Components.hpp 
+// 为了防止循环依赖，我们在调用 GetComponent 时只要确保编译器能看到它的定义即可
+#include "Components.hpp" 
+
 namespace Ayaya {
 
     class Entity {
@@ -41,6 +45,19 @@ namespace Ayaya {
                 AYAYA_CORE_WARN("Entity does not have component!");
             }
             m_Scene->m_Registry.remove<T>(m_EntityHandle);
+        }
+
+        // ==============================================
+        // 新增：建立父子关系的方法
+        // ==============================================
+        void AddChild(Entity child) {
+            auto& ourRel = GetComponent<RelationshipComponent>();
+            auto& childRel = child.GetComponent<RelationshipComponent>();
+            
+            // 将子节点的 Parent 指向自己
+            childRel.Parent = m_EntityHandle;
+            // 将子节点加入自己的 Children 列表
+            ourRel.Children.push_back(child.m_EntityHandle);
         }
 
         // --- 运算符重载，让 Entity 更好用 ---

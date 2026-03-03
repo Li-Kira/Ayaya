@@ -18,6 +18,7 @@ namespace Ayaya {
 
         // 开始场景：上传相机矩阵
         static void BeginScene(CameraController& cameraController);
+        static void BeginScene(const glm::mat4& viewProjection);
         // 结束场景：目前预留，未来可用于后期处理
         static void EndScene();
 

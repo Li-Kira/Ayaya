@@ -10,15 +10,17 @@ namespace Ayaya {
     Scene::~Scene() {}
 
     Entity Scene::CreateEntity(const std::string& name) {
-        // 在 EnTT 中创建一个实体 ID
         Entity entity = { m_Registry.create(), this };
         
-        // 任何被创建的实体，默认都自带 Transform（变换）组件
         entity.AddComponent<TransformComponent>();
         
-        // 给实体打上名字标签，如果不传名字，就默认叫 "Entity"
         auto& tag = entity.AddComponent<TagComponent>();
         tag.Tag = name.empty() ? "Entity" : name;
+        
+        // ==============================================
+        // 新增：默认挂载关系组件，让它能参与层级树
+        // ==============================================
+        entity.AddComponent<RelationshipComponent>();
 
         return entity;
     }

@@ -7,6 +7,7 @@
 #include <backends/imgui_impl_opengl3.h>
 
 #include "Engine/Core/Application.hpp"
+#include <backends/IconsFontAwesome5.h>
 
 namespace Ayaya {
 
@@ -29,6 +30,22 @@ namespace Ayaya {
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // 开启多视口（可拖出主窗口）
 
         ImGui::StyleColorsDark();
+        
+        // ==========================================
+        // 新增：加载默认字体，并合并 FontAwesome 图标
+        // ==========================================
+        io.Fonts->AddFontDefault(); // 先加载 ImGui 默认的像素字体
+        ImFontConfig icons_config;
+        icons_config.MergeMode = true;  // 开启合并模式，将图标拼接到默认字体后面
+        icons_config.PixelSnapH = true; // 像素对齐，让图标更清晰
+
+        // 定义我们需要加载的图标 Unicode 范围 (从 FontAwesome 头文件获取)
+        static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_16_FA, 0 };
+        
+        // 加载 TTF 字体文件 (请确保 assets/fonts/fa-solid-900.ttf 路径正确！)
+        // 大小设置为 13.0f (与默认字体大小基准匹配，会被 io.FontGlobalScale 放大)
+        io.Fonts->AddFontFromFileTTF("assets/fonts/fa-solid-900.ttf", 13.0f, &icons_config, icons_ranges);
+        // ==========================================
 
         // 2. 绑定后端
         Application& app = Application::Get();
