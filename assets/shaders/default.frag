@@ -1,7 +1,8 @@
 #version 410 core
 
-out vec4 color;
+layout(location = 0) out vec4 color;
+uniform vec4 u_Color; // 接收来自 C++ 的颜色
 
 void main() {
-    color = vec4(0.8, 0.2, 0.3, 1.0); // Ayaya 红
+    color = u_Color;
 }

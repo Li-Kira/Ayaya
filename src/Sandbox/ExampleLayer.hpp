@@ -1,72 +1,77 @@
 #include <Ayaya.hpp>
-#include <Renderer/Shader.hpp>
-#include <glad/glad.h>
+#include <Renderer/Buffer.hpp>
+#include <Renderer/VertexArray.hpp>
 
 class ExampleLayer : public Ayaya::Layer {
 public:
     ExampleLayer() : Layer("ExampleLayer") {}
 
-    // 当 Layer 被推入 LayerStack 时执行初始化
     virtual void OnAttach() override {
-        AYAYA_CORE_INFO("ExampleLayer Attached");
+        AYAYA_CORE_INFO("ExampleLayer Attached: Setting up Square...");
 
-        // 1. 创建 Shader
-        // 注意：路径相对于 build 目录下的 assets 符号链接
-        m_Shader = std::make_unique<Ayaya::Shader>("assets/shaders/default.vert", "assets/shaders/default.frag");
+        // 1. 创建 VAO (顶点数组)
+        m_VertexArray.reset(Ayaya::VertexArray::Create());
 
-        // 2. 定义三角形顶点数据 (X, Y, Z)
-        float vertices[] = {
-            -0.5f, -0.5f, 0.0f, // 左下
-             0.5f, -0.5f, 0.0f, // 右下
-             0.0f,  0.5f, 0.0f  // 顶部
+        // 2. 创建 VBO (顶点缓冲区)
+        // 矩形的 4 个顶点: X, Y, Z
+        float vertices[4 * 3] = {
+            -0.5f, -0.5f, 0.0f,  // 0: 左下
+             0.5f, -0.5f, 0.0f,  // 1: 右下
+             0.5f,  0.5f, 0.0f,  // 2: 右上
+            -0.5f,  0.5f, 0.0f   // 3: 左上
         };
 
-        // 3. 创建并绑定顶点数组对象 (VAO)
-        // VAO 会记录 VBO 的布局信息
-        glGenVertexArrays(1, &m_VertexArray);
-        glBindVertexArray(m_VertexArray);
+        // 注意：这里使用智能指针管理
+        std::shared_ptr<Ayaya::VertexBuffer> vbo;
+        vbo.reset(Ayaya::VertexBuffer::Create(vertices, sizeof(vertices)));
 
-        // 4. 创建并绑定顶点缓冲区对象 (VBO)
-        glGenBuffers(1, &m_VertexBuffer);
-        glBindBuffer(GL_ARRAY_BUFFER, m_VertexBuffer);
-        // 将数据上传至显存
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+        // 3. 设置布局 (Layout)
+        // 这会自动计算 Stride 和 Offset
+        vbo->SetLayout({
+            { Ayaya::ShaderDataType::Float3, "a_Position" }
+        });
 
-        // 5. 设置顶点属性指针 (告诉 OpenGL 如何解释数据)
-        // 对应 Shader 中的 layout(location = 0)
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+        // 将 VBO 加入 VAO
+        m_VertexArray->AddVertexBuffer(vbo);
 
-        // 解绑，防止后续意外修改
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindVertexArray(0);
-    }
+        // 4. 创建 IBO (索引缓冲区)
+        // 两个三角形拼成一个矩形
+        uint32_t indices[6] = { 
+            0, 1, 2, // 第一个三角形
+            2, 3, 0  // 第二个三角形
+        };
+        std::shared_ptr<Ayaya::IndexBuffer> ibo;
+        ibo.reset(Ayaya::IndexBuffer::Create(indices, 6));
 
-    virtual void OnDetach() override {
-        glDeleteVertexArrays(1, &m_VertexArray);
-        glDeleteBuffers(1, &m_VertexBuffer);
+        // 将 IBO 加入 VAO
+        m_VertexArray->SetIndexBuffer(ibo);
+
+        // 5. 加载 Shader
+        m_Shader = std::make_unique<Ayaya::Shader>("assets/shaders/default.vert", "assets/shaders/default.frag");
     }
 
     virtual void OnUpdate(Ayaya::Timestep ts) override {
-        // 每帧检测输入
-        if (Ayaya::Input::IsKeyPressed(Ayaya::Key::Escape)) {
-            // 这里可以通过 Application::Get().Close() 来关闭，目前先打日志
-            AYAYA_INFO("ESC pressed in Layer!");
-        }
+        float time = (float)glfwGetTime();
+        float red = sin(time) * 0.5f + 0.5f;
+        float green = cos(time) * 0.5f + 0.5f;
 
-        // 渲染逻辑
+        // 渲染背景
+        glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        // 使用封装后的 API 进行渲染
         m_Shader->Bind();
-        glBindVertexArray(m_VertexArray);
-        
-        // 执行绘制：画 3 个顶点
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        // 通过 Uniform 动态更新颜色
+        m_Shader->SetFloat4("u_Color", { red, green, 0.8f, 1.0f });
 
-        glBindVertexArray(0);
+        m_VertexArray->Bind();
+        glDrawElements(GL_TRIANGLES, m_VertexArray->GetIndexBuffer()->GetCount(), GL_UNSIGNED_INT, nullptr);
+
+        m_VertexArray->Unbind();
         m_Shader->Unbind();
     }
 
 private:
     std::unique_ptr<Ayaya::Shader> m_Shader;
-    uint32_t m_VertexArray = 0;
-    uint32_t m_VertexBuffer = 0;
+    std::shared_ptr<Ayaya::VertexArray> m_VertexArray;
 };

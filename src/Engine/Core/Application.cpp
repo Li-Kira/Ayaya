@@ -37,10 +37,6 @@ namespace Ayaya {
             Timestep timestep = time - m_LastFrameTime;
             m_LastFrameTime = time;
 
-            // 渲染指令 (暂时写在这里，之后会移入 Renderer 类)
-            glClearColor(0.1f, 0.1f, 0.12f, 1.0f); // 深色背景
-            glClear(GL_COLOR_BUFFER_BIT);
-
             // --- 输入检测测试 ---
             if (Input::IsKeyPressed(Key::Escape)) {
                 AYAYA_CORE_WARN("Escape key pressed! Closing application...");
@@ -52,6 +48,7 @@ namespace Ayaya {
                 AYAYA_CORE_TRACE("Mouse Left Clicked at: {0}, {1}", x, y);
             }
 
+            // 2. 对每个层应用时间
             for (Layer* layer : m_LayerStack)
                 layer->OnUpdate(timestep);
 
