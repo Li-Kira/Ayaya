@@ -68,6 +68,14 @@ namespace Ayaya {
         if (m_SelectionContext) DrawComponents(m_SelectionContext);
         ImGui::End();
 
+        // 处理复制
+        if (m_EntityToDuplicate) {
+            Entity newEntity = m_Context->DuplicateEntity(m_EntityToDuplicate);
+            // 复制完成后，自动选中新生成的物体，提升体验
+            m_SelectionContext = newEntity; 
+            m_EntityToDuplicate = {};
+        }
+
         // 处理删除
         if (m_EntityToDestroy) {
             if (m_SelectionContext == m_EntityToDestroy) m_SelectionContext = {};
@@ -164,11 +172,14 @@ namespace Ayaya {
 
         // 右键菜单
         if (ImGui::BeginPopupContextItem()) {
-            if (ImGui::MenuItem("Delete Entity")) {
-                m_EntityToDestroy = entity; // 标记延迟删除
+            if (ImGui::MenuItem("Duplicate Entity")) {
+                m_EntityToDuplicate = entity; // 标记延迟复制
             }
-            if (ImGui::MenuItem("Unparent (Move to Root)")) {
-                m_EntityToUnparent = entity; // 标记延迟解绑
+            if (ImGui::MenuItem("Delete Entity")) {
+                m_EntityToDestroy = entity;
+            }
+            if (ImGui::MenuItem("Unparent")) {
+                m_EntityToUnparent = entity; 
             }
             ImGui::EndPopup();
         }
@@ -230,7 +241,20 @@ namespace Ayaya {
         if (entity.HasComponent<CameraComponent>()) {
             if (ImGui::TreeNodeEx((void*)typeid(CameraComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Camera")) {
                 auto& cameraComp = entity.GetComponent<CameraComponent>();
-                ImGui::Checkbox("Primary Camera", &cameraComp.Primary);
+                
+                // 【核心修改】：监听 Checkbox 的变化，保证全局只有一个 Primary Camera
+                if (ImGui::Checkbox("Primary Camera", &cameraComp.Primary)) {
+                    if (cameraComp.Primary) {
+                        // 如果勾选了这个相机，把场景里其他所有相机的 Primary 都设为 false
+                        auto view = m_Context->Reg().view<CameraComponent>();
+                        for (auto entityID : view) {
+                            if (entityID != (entt::entity)entity) {
+                                view.get<CameraComponent>(entityID).Primary = false;
+                            }
+                        }
+                    }
+                }
+                
                 ImGui::Checkbox("Fixed Aspect Ratio", &cameraComp.FixedAspectRatio);
                 ImGui::TreePop();
             }

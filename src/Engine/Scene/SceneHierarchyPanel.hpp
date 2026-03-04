@@ -34,6 +34,7 @@ namespace Ayaya {
 
         Entity m_EntityToDestroy = {};  // 延迟删除标记
         Entity m_EntityToUnparent = {}; // 新增：延迟解绑标记
+        Entity m_EntityToDuplicate = {};// 新增：延迟复制标记
     };
 
 }

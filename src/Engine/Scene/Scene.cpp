@@ -13,9 +13,6 @@ namespace Ayaya {
         Entity entity = { m_Registry.create(), this };
         entity.AddComponent<TransformComponent>();
         
-        // ==============================================
-        // 核心升级：自动检测重名并添加序号 (如 Cube (1))
-        // ==============================================
         std::string baseName = name.empty() ? "Entity" : name;
         std::string uniqueName = baseName;
         int counter = 1;
@@ -28,7 +25,7 @@ namespace Ayaya {
                     break;
                 }
             }
-            if (!nameExists) break; // 名字不重复，跳出循环
+            if (!nameExists) break; 
             uniqueName = baseName + " (" + std::to_string(counter) + ")";
             counter++;
         }
@@ -47,20 +44,55 @@ namespace Ayaya {
     void Scene::DestroyEntity(Entity entity) {
         auto& rel = entity.GetComponent<RelationshipComponent>();
 
-        // 递归销毁子节点
         std::vector<entt::entity> childrenCopy = rel.Children;
         for (auto childID : childrenCopy) {
             DestroyEntity({ childID, this });
         }
 
-        entity.SetParent({}); // 解绑父子关系
+        entity.SetParent({}); 
 
-        // ==============================================
-        // 核心维护：从根节点列表中彻底移除
-        // ==============================================
         auto it = std::find(m_RootEntities.begin(), m_RootEntities.end(), entity.m_EntityHandle);
         if (it != m_RootEntities.end()) m_RootEntities.erase(it);
 
         m_Registry.destroy(entity);
+    }
+
+    // ============================================================
+    // 实现复制逻辑
+    // ============================================================
+    Entity Scene::DuplicateEntity(Entity entity) {
+        std::string name = entity.GetComponent<TagComponent>().Tag;
+        Entity newEntity = CreateEntity(name);
+
+        newEntity.GetComponent<TransformComponent>() = entity.GetComponent<TransformComponent>();
+
+        if (entity.HasComponent<SpriteRendererComponent>()) {
+            newEntity.AddComponent<SpriteRendererComponent>(entity.GetComponent<SpriteRendererComponent>());
+        }
+        if (entity.HasComponent<CameraComponent>()) {
+            auto& cameraComp = newEntity.AddComponent<CameraComponent>(entity.GetComponent<CameraComponent>());
+            cameraComp.Primary = false; 
+        }
+
+        // =========================================================
+        // 【核心修复】：必须预先拷贝被复制物体的父节点和子节点数组！
+        // 因为后续的 DuplicateEntity 递归会调用 CreateEntity，
+        // 可能会引发 EnTT 底层内存重分配，导致直接引用原组件失效闪退。
+        // =========================================================
+        entt::entity parentHandle = entity.GetComponent<RelationshipComponent>().Parent;
+        std::vector<entt::entity> childrenCopy = entity.GetComponent<RelationshipComponent>().Children;
+        
+        if (parentHandle != entt::null) {
+            Entity parent{ parentHandle, this };
+            newEntity.SetParent(parent, false); 
+        }
+
+        for (auto childID : childrenCopy) {
+            Entity child{ childID, this };
+            Entity newChild = DuplicateEntity(child);
+            newChild.SetParent(newEntity, false);
+        }
+
+        return newEntity;
     }
 }
