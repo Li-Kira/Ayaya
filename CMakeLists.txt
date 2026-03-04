@@ -22,10 +22,12 @@ set(VENDOR_LIB "${VENDOR_DIR}/lib")
 set(IMGUI_DIR "${VENDOR_DIR}/include/imgui")
 # EnTT 路径
 set(ENTT_DIR "${VENDOR_INCLUDE}/entt")
-# 新增：ImGuizmo 路径定义
+# ImGuizmo 路径
 set(IMGUIZMO_DIR "${VENDOR_INCLUDE}/ImGuizmo")
 
-# 4. 收集源文件
+# 4. 收集底层引擎核心源文件 (Ayaya Library)
+# 注意：SCENE_SOURCES 现在只会收集 Engine/Scene 里的文件，
+# 我们的 SceneHierarchyPanel 已经被移到了 AyayaEditor/Panels 下，所以不会被编译进核心库里
 file(GLOB CORE_SOURCES "${ENGINE_DIR}/Core/*.cpp")
 file(GLOB RENDERER_SOURCES "${ENGINE_DIR}/Renderer/*.cpp")
 file(GLOB OPENGL_SOURCES "${ENGINE_DIR}/Platform/OpenGL/*.cpp")
@@ -43,7 +45,7 @@ set(IMGUI_SOURCES
     "${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp"
 )
 
-# 新增：收集 ImGuizmo 源文件
+# 收集 ImGuizmo 源文件
 set(IMGUIZMO_SOURCES
     "${IMGUIZMO_DIR}/ImGuizmo.cpp"
 )
@@ -54,11 +56,11 @@ set(AYAYA_SOURCES
     ${OPENGL_SOURCES}
     ${SCENE_SOURCES}
     ${GLAD_SOURCE}
-    ${IMGUI_SOURCES} # 加入 ImGui
-    ${IMGUIZMO_SOURCES} # 新增：加入 ImGuizmo
+    ${IMGUI_SOURCES} 
+    ${IMGUIZMO_SOURCES} 
 )
 
-# 5. 定义引擎静态库
+# 5. 定义引擎静态库 (Engine Core)
 add_library(Ayaya STATIC ${AYAYA_SOURCES})
 target_compile_definitions(Ayaya PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
 set_source_files_properties(${GLAD_SOURCE} PROPERTIES LANGUAGE C)
@@ -75,23 +77,45 @@ target_include_directories(Ayaya PUBLIC
     "${VENDOR_INCLUDE}"
     "${IMGUI_DIR}"           # 允许 #include <imgui.h>
     "${IMGUI_DIR}/backends"  # 允许 #include <imgui_impl_glfw.h>
-    "${ENTT_DIR}"            # 新增：允许包含 EnTT 头文件
-    "${IMGUIZMO_DIR}"        # 新增：允许直接 #include <ImGuizmo.h>
+    "${ENTT_DIR}"            # 允许包含 EnTT 头文件
+    "${IMGUIZMO_DIR}"        # 允许直接 #include <ImGuizmo.h>
 )
 
 # 7. 链接第三方库
 find_library(GLFW_LIB NAMES glfw glfw3 PATHS ${VENDOR_LIB} NO_DEFAULT_PATH)
 target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${APPLE_FRAMEWORKS})
 
-# 8. 定义 Sandbox
+# =========================================================================
+# 8. 定义 AyayaEditor (编辑器应用程序 - 面向开发者)
+# =========================================================================
+file(GLOB EDITOR_SOURCES 
+    "src/AyayaEditor/*.cpp" 
+    "src/AyayaEditor/*.hpp"
+    "src/AyayaEditor/Panels/*.cpp"  # 确保面板代码被编译进编辑器
+    "src/AyayaEditor/Panels/*.hpp"
+)
+add_executable(AyayaEditor ${EDITOR_SOURCES})
+target_link_libraries(AyayaEditor PRIVATE Ayaya)
+
+# 复制资源到 Editor 的输出目录
+add_custom_command(TARGET AyayaEditor POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E create_symlink
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+    "$<TARGET_FILE_DIR:AyayaEditor>/assets"
+    COMMENT "Creating symlink to assets for AyayaEditor"
+)
+
+# =========================================================================
+# 9. 定义 Sandbox (游戏运行端程序 - 面向玩家)
+# =========================================================================
 file(GLOB SANDBOX_SOURCES "src/Sandbox/*.cpp" "src/Sandbox/*.hpp")
 add_executable(Sandbox ${SANDBOX_SOURCES})
 target_link_libraries(Sandbox PRIVATE Ayaya)
 
-# 9. 资源文件处理
+# 复制资源到 Sandbox 的输出目录
 add_custom_command(TARGET Sandbox POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E create_symlink
     "${CMAKE_CURRENT_SOURCE_DIR}/assets"
     "$<TARGET_FILE_DIR:Sandbox>/assets"
-    COMMENT "Creating symlink to assets directory"
+    COMMENT "Creating symlink to assets for Sandbox"
 )
