@@ -5,6 +5,8 @@
 #include <vector>
 #include <string>
 
+#include "Engine/Core/UUID.hpp"
+
 namespace Ayaya {
 
     class Entity; // 前向声明，解决循环依赖
@@ -14,8 +16,11 @@ namespace Ayaya {
         Scene();
         ~Scene();
 
-        // 创建一个实体
+        // 创建一个实体 (自动分配新 UUID)
         Entity CreateEntity(const std::string& name = std::string());
+        
+        // --- 新增：使用指定的 UUID 创建实体 (用于反序列化读取文件时) ---
+        Entity CreateEntityWithUUID(UUID uuid, const std::string& name = std::string());
 
         // 销毁一个实体
         void DestroyEntity(Entity entity);

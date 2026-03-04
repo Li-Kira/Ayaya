@@ -6,8 +6,13 @@
 #include <Renderer/Shader.hpp>
 #include <Renderer/Texture.hpp>
 #include <Renderer/Framebuffer.hpp>
+// --- 新增：引入场景序列化器 ---
+#include "Scene/SceneSerializer.hpp"
+#include "Utils/PlatformUtils.hpp"
 
 #include <imgui.h>
+
+
 
 namespace Ayaya {
 
@@ -24,6 +29,16 @@ namespace Ayaya {
     private:
         void SetupGeometry();
         void SetupScene();
+
+        // =====================================
+        // 场景操作逻辑抽象
+        // =====================================
+        void NewScene();
+        void OpenScene();
+        void SaveScene();
+        void SaveSceneAs();
+
+        bool OnKeyPressed(KeyPressedEvent& e);
         
         void HandleShortcuts();
         bool GetPrimaryCamera(glm::mat4& outView, glm::mat4& outProjection, Timestep ts = 0.0f);
@@ -55,6 +70,11 @@ namespace Ayaya {
 
         int m_GizmoType = 7; // ImGuizmo::OPERATION::TRANSLATE 的值
         Entity m_HoveredEntity = {}; 
+
+        // ==========================================
+        // 新增：记录当前打开的场景路径
+        // ==========================================
+        std::string m_CurrentScenePath = std::string();
     };
 
 }

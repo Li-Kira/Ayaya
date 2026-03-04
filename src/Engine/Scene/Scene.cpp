@@ -9,10 +9,21 @@ namespace Ayaya {
 
     Scene::~Scene() {}
 
+    // 原来的 CreateEntity 现在直接调用带有随机 UUID 的版本
     Entity Scene::CreateEntity(const std::string& name) {
+        return CreateEntityWithUUID(UUID(), name);
+    }
+
+    // 将原来 CreateEntity 里的逻辑全部移到这里
+    Entity Scene::CreateEntityWithUUID(UUID uuid, const std::string& name) {
         Entity entity = { m_Registry.create(), this };
+        
+        // --- 核心：给实体挂载唯一的 ID 组件 ---
+        entity.AddComponent<IDComponent>(uuid);
+        
         entity.AddComponent<TransformComponent>();
         
+        // 处理重名逻辑...
         std::string baseName = name.empty() ? "Entity" : name;
         std::string uniqueName = baseName;
         int counter = 1;
@@ -34,8 +45,6 @@ namespace Ayaya {
         tag.Tag = uniqueName;
         
         entity.AddComponent<RelationshipComponent>();
-
-        // 所有刚创建的实体默认都是根节点
         m_RootEntities.push_back(entity.m_EntityHandle);
 
         return entity;

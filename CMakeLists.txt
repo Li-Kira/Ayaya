@@ -17,6 +17,14 @@ set(ENGINE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/Engine")
 set(VENDOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor")
 set(VENDOR_INCLUDE "${VENDOR_DIR}/include")
 set(VENDOR_LIB "${VENDOR_DIR}/lib")
+set(YAML_CPP_DIR "${VENDOR_DIR}/yaml-cpp") # <--- 新增 yaml-cpp 路径
+
+# 强制关闭 yaml-cpp 自带的测试、工具和额外组件的编译，只编译核心库！
+set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "Disable yaml-cpp tests" FORCE)
+set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "Disable yaml-cpp tools" FORCE)
+set(YAML_CPP_BUILD_CONTRIB OFF CACHE BOOL "Disable yaml-cpp contrib" FORCE)
+
+add_subdirectory(${YAML_CPP_DIR})
 
 # ImGui 路径
 set(IMGUI_DIR "${VENDOR_DIR}/include/imgui")
@@ -32,6 +40,7 @@ file(GLOB CORE_SOURCES "${ENGINE_DIR}/Core/*.cpp")
 file(GLOB RENDERER_SOURCES "${ENGINE_DIR}/Renderer/*.cpp")
 file(GLOB OPENGL_SOURCES "${ENGINE_DIR}/Platform/OpenGL/*.cpp")
 file(GLOB SCENE_SOURCES "${ENGINE_DIR}/Scene/*.cpp")
+file(GLOB UTILS_SOURCES "${ENGINE_DIR}/Utils/*.cpp")
 set(GLAD_SOURCE "${ENGINE_DIR}/Platform/OpenGL/glad.c")
 
 # 收集 ImGui 源文件
@@ -55,6 +64,7 @@ set(AYAYA_SOURCES
     ${RENDERER_SOURCES} 
     ${OPENGL_SOURCES}
     ${SCENE_SOURCES}
+    ${UTILS_SOURCES}
     ${GLAD_SOURCE}
     ${IMGUI_SOURCES} 
     ${IMGUIZMO_SOURCES} 
@@ -79,11 +89,12 @@ target_include_directories(Ayaya PUBLIC
     "${IMGUI_DIR}/backends"  # 允许 #include <imgui_impl_glfw.h>
     "${ENTT_DIR}"            # 允许包含 EnTT 头文件
     "${IMGUIZMO_DIR}"        # 允许直接 #include <ImGuizmo.h>
+    "${YAML_CPP_DIR}/include" # <--- 新增：让引擎能找到 <yaml-cpp/yaml.h>
 )
 
 # 7. 链接第三方库
 find_library(GLFW_LIB NAMES glfw glfw3 PATHS ${VENDOR_LIB} NO_DEFAULT_PATH)
-target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${APPLE_FRAMEWORKS})
+target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${APPLE_FRAMEWORKS} yaml-cpp)
 
 # =========================================================================
 # 8. 定义 AyayaEditor (编辑器应用程序 - 面向开发者)

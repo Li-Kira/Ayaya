@@ -10,8 +10,21 @@
 
 #include "Renderer/SceneCamera.hpp"
 
+// --- 新增：引入 UUID ---
+#include "Engine/Core/UUID.hpp"
+
 namespace Ayaya {
     // 数据层
+
+    // ==========================================
+    // 新增：ID 组件 (用于序列化时的唯一身份识别)
+    // ==========================================
+    struct IDComponent {
+        UUID ID;
+        IDComponent() = default;
+        IDComponent(const IDComponent&) = default;
+        IDComponent(UUID id) : ID(id) {}
+    };
 
     // 用来在大纲里显示名字
     struct TagComponent {

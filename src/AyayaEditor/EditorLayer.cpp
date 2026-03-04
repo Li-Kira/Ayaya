@@ -105,13 +105,137 @@ namespace Ayaya {
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
     }
 
+    // =====================================================================
+    // 智能保存逻辑
+    // =====================================================================
+    void EditorLayer::SaveScene() {
+        // 如果当前路径不为空，直接静默保存覆写
+        if (!m_CurrentScenePath.empty()) {
+            SceneSerializer serializer(m_ActiveScene);
+            serializer.Serialize(m_CurrentScenePath);
+            AYAYA_CORE_INFO("Scene strictly saved to {0}", m_CurrentScenePath);
+        } 
+        // 否则（这是一个新建的未保存场景），转为“另存为”逻辑
+        else {
+            SaveSceneAs();
+        }
+    }
+
+    void EditorLayer::SaveSceneAs() {
+        std::string defaultName = "Untitled.ayaya";
+        
+        // 如果当前场景已经有路径，提取它的文件名作为默认名字
+        if (!m_CurrentScenePath.empty()) {
+            size_t pos = m_CurrentScenePath.find_last_of("/\\");
+            defaultName = pos != std::string::npos ? m_CurrentScenePath.substr(pos + 1) : m_CurrentScenePath;
+        }
+
+        // 呼出带默认名字的原生保存弹窗
+        std::string filepath = FileDialogs::SaveFile("ayaya", defaultName);
+        
+        if (!filepath.empty()) { 
+            SceneSerializer serializer(m_ActiveScene);
+            serializer.Serialize(filepath);
+            m_CurrentScenePath = filepath; // 更新当前工作路径
+            AYAYA_CORE_INFO("Scene saved as to {0}", filepath);
+        }
+    }
+
+    void EditorLayer::NewScene() {
+        m_ActiveScene = std::make_shared<Scene>();
+        m_SceneHierarchyPanel.SetContext(m_ActiveScene);
+        m_CurrentScenePath = std::string(); 
+        m_HoveredEntity = {};
+        m_SceneHierarchyPanel.SetSelectedEntity({});
+        AYAYA_CORE_INFO("Created a new empty scene.");
+    }
+
+    void EditorLayer::OpenScene() {
+        std::string filepath = FileDialogs::OpenFile("ayaya"); 
+        if (!filepath.empty()) { 
+            std::shared_ptr<Scene> newScene = std::make_shared<Scene>();
+            SceneSerializer serializer(newScene);
+            if (serializer.Deserialize(filepath)) {
+                m_ActiveScene = newScene;
+                
+                auto view = m_ActiveScene->Reg().view<CameraComponent>();
+                for (auto entityID : view) {
+                    auto& cameraComp = view.get<CameraComponent>(entityID);
+                    cameraComp.Camera.SetProjectionType(SceneCamera::ProjectionType::Perspective);
+                    if (!cameraComp.FixedAspectRatio) {
+                        cameraComp.Camera.SetViewportSize((uint32_t)m_ViewportSize.x, (uint32_t)m_ViewportSize.y);
+                    }
+                }
+
+                m_SceneHierarchyPanel.SetContext(m_ActiveScene);
+                m_CurrentScenePath = filepath;
+                m_HoveredEntity = {};
+                m_SceneHierarchyPanel.SetSelectedEntity({});
+                AYAYA_CORE_INFO("Scene loaded successfully from {0}!", filepath);
+            }
+        }
+    }
+
     void EditorLayer::HandleShortcuts() {
+        // =====================================
+        // 1. 视口焦点相关的快捷键 (Gizmo 等)
+        // =====================================
         Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
         if (m_ViewportFocused && selectedEntity && !Input::IsMouseButtonPressed(1)) {
             if (Input::IsKeyPressed(Key::Q)) m_GizmoType = -1;
             if (Input::IsKeyPressed(Key::W)) m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
             if (Input::IsKeyPressed(Key::E)) m_GizmoType = ImGuizmo::OPERATION::ROTATE;
             if (Input::IsKeyPressed(Key::R)) m_GizmoType = ImGuizmo::OPERATION::SCALE;
+        }
+
+        // =====================================
+        // 2. 全局场景快捷键 (绕过 ImGui 事件拦截)
+        // =====================================
+        bool control = Input::IsKeyPressed(Key::LeftControl) || Input::IsKeyPressed(Key::RightControl) ||
+                       Input::IsKeyPressed(Key::LeftSuper)   || Input::IsKeyPressed(Key::RightSuper);
+        bool shift   = Input::IsKeyPressed(Key::LeftShift)   || Input::IsKeyPressed(Key::RightShift);
+
+        // 使用静态变量记录上一帧的按键状态，实现“按下瞬间”单次触发 (Edge Detection)
+        static bool s_N_Pressed = false;
+        static bool s_O_Pressed = false;
+        static bool s_S_Pressed = false;
+
+        // --- New Scene (Cmd + N) ---
+        if (Input::IsKeyPressed(Key::N)) {
+            if (!s_N_Pressed && control) {
+                AYAYA_CORE_INFO("👉 Shortcut Triggered: New Scene");
+                NewScene();
+            }
+            s_N_Pressed = true; // 锁定，只要不松手就不会再次触发
+        } else {
+            s_N_Pressed = false; // 松手后解锁
+        }
+
+        // --- Open Scene (Cmd + O) ---
+        if (Input::IsKeyPressed(Key::O)) {
+            if (!s_O_Pressed && control) {
+                AYAYA_CORE_INFO("👉 Shortcut Triggered: Open Scene");
+                OpenScene();
+            }
+            s_O_Pressed = true;
+        } else {
+            s_O_Pressed = false;
+        }
+
+        // --- Save / Save As (Cmd + S / Cmd + Shift + S) ---
+        if (Input::IsKeyPressed(Key::S)) {
+            if (!s_S_Pressed && control) {
+                if (shift) {
+                    AYAYA_CORE_INFO("👉 Shortcut Triggered: Save Scene As...");
+                    SaveSceneAs();
+                } else {
+                    AYAYA_CORE_INFO("👉 Shortcut Triggered: Save Scene");
+                    SaveScene();
+                }
+            }
+            s_S_Pressed = true;
+        } else {
+            s_S_Pressed = false;
         }
     }
 
@@ -260,9 +384,54 @@ namespace Ayaya {
     void EditorLayer::UIRenderMenuBar() {
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("File")) {
+                
+                // ==========================================
+                // 1. 新建场景 (New Scene)
+                // ==========================================
+                if (ImGui::MenuItem("New Scene", "Ctrl+N")) {
+                    NewScene();
+                }
+
+                // ==========================================
+                // 2. 保存与读取 (同步更新 m_CurrentScenePath)
+                // ==========================================
+                if (ImGui::MenuItem("Save Scene", "Ctrl+S")) {
+                    SaveScene();
+                }
+                
+                // 新增：另存为按钮
+                if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S")) {
+                    SaveSceneAs();
+                }
+                
+                if (ImGui::MenuItem("Load Scene", "Ctrl+O")) {
+                    OpenScene();
+                }
+
+                ImGui::Separator();
                 if (ImGui::MenuItem("Exit")) Application::Get().Close(); 
+                
                 ImGui::EndMenu();
             }
+
+            // ==========================================
+            // 3. 在菜单栏最右侧显示当前场景名称！
+            // ==========================================
+            std::string sceneName = "Untitled";
+            if (!m_CurrentScenePath.empty()) {
+                // 从完整路径中提取文件名 (例如 /Users/xxx/assets/level.ayaya -> level.ayaya)
+                size_t pos = m_CurrentScenePath.find_last_of("/\\");
+                sceneName = pos != std::string::npos ? m_CurrentScenePath.substr(pos + 1) : m_CurrentScenePath;
+            }
+            std::string displayTitle = "Scene: " + sceneName;
+            
+            // 计算这段文字的宽度
+            float textWidth = ImGui::CalcTextSize(displayTitle.c_str()).x;
+            // 将鼠标光标强行推到菜单栏的最右侧
+            ImGui::SetCursorPosX(ImGui::GetWindowWidth() - textWidth - 20.0f);
+            // 使用系统禁用的暗淡颜色渲染文字，看起来更专业
+            ImGui::TextDisabled("%s", displayTitle.c_str());
+
             ImGui::EndMenuBar();
         }
     }
