@@ -18,7 +18,7 @@ def generate_tree(data_path, prefix=""):
         
         # 如果是目录且名字不是 'vendor'，则递归进入
         if item.is_dir():
-            if item.name.lower() == "vendor":
+            if item.name.lower() == "vendor" or item.name.lower() == "build" or item.name.lower() == "assets" or item.name.lower() == "documents":
                 # 如果是 vendor 目录，打印一行提示表示已跳过
                 skipped_prefix = prefix + ("    " if is_last else "│   ")
                 print(f"{skipped_prefix}└── (skipped contents)")
