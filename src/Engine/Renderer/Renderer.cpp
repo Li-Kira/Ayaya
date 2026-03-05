@@ -5,6 +5,9 @@ namespace Ayaya {
     // 分配静态内存
     Renderer::SceneData* Renderer::m_SceneData = new Renderer::SceneData();
 
+    // --- 新增：在这里定义并初始化 RendererAPI 的静态变量 ---
+    RendererAPI::API RendererAPI::s_API = RendererAPI::API::OpenGL;
+
     void Renderer::Init() {
         // 调用渲染指令代理，彻底去 OpenGL 化
         RenderCommand::Init();

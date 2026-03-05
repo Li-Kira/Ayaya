@@ -2,6 +2,7 @@
 
 #include <Ayaya.hpp>
 #include "Panels/SceneHierarchyPanel.hpp"
+#include "Panels/ContentBrowserPanel.hpp"
 #include <Renderer/Renderer.hpp>
 #include <Renderer/Shader.hpp>
 #include <Renderer/Texture.hpp>
@@ -9,10 +10,9 @@
 // --- 新增：引入场景序列化器 ---
 #include "Scene/SceneSerializer.hpp"
 #include "Utils/PlatformUtils.hpp"
+#include "Asset/AssetManager.hpp"
 
 #include <imgui.h>
-
-
 
 namespace Ayaya {
 
@@ -53,8 +53,8 @@ namespace Ayaya {
         void HandleGizmo(const glm::mat4& cameraViewMatrix, const glm::mat4& cameraProjectionMatrix);
 
     private:
-        ShaderLibrary m_ShaderLibrary; 
-        std::shared_ptr<Texture2D> m_Texture;
+        ShaderLibrary m_ShaderLibrary;
+        std::shared_ptr<Texture2D> m_WhiteTexture; // 全局默认白底贴图
         std::shared_ptr<VertexArray> m_VertexArray;
         std::shared_ptr<Framebuffer> m_Framebuffer; 
 
@@ -63,6 +63,7 @@ namespace Ayaya {
 
         std::shared_ptr<Scene> m_ActiveScene;
         SceneHierarchyPanel m_SceneHierarchyPanel;
+        ContentBrowserPanel m_ContentBrowserPanel;
 
         bool m_ViewportFocused = false;
         bool m_ViewportHovered = false;

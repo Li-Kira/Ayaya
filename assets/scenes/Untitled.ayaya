@@ -1,17 +1,18 @@
 Scene: Untitled
 Entities:
-  - Entity: 18201956485503861736
+  - Entity: 10653751066256800441
     TagComponent:
-      Tag: Right Square
+      Tag: Main Camera
     TransformComponent:
-      Translation: [0.78689575, 0.8495178, 0]
-      Rotation: [0, -0, 0]
+      Translation: [-2.7545474, 2.1177837e-10, 3.2108188]
+      Rotation: [-0.03768819, -0.7717499, 0]
       Scale: [1, 1, 1]
-    SpriteRendererComponent:
-      Color: [0.8, 0.2, 0.3, 1]
+    CameraComponent:
+      Primary: true
+      FixedAspectRatio: false
     RelationshipComponent:
       Parent: 0
-  - Entity: 1195289196835170214
+  - Entity: 9061149661897834375
     TagComponent:
       Tag: Parent Empty Node
     TransformComponent:
@@ -20,7 +21,7 @@ Entities:
       Scale: [1, 1, 1]
     RelationshipComponent:
       Parent: 0
-  - Entity: 10225130583494279763
+  - Entity: 11882961845940958427
     TagComponent:
       Tag: Left Square
     TransformComponent:
@@ -29,17 +30,18 @@ Entities:
       Scale: [1, 1, 1]
     SpriteRendererComponent:
       Color: [0.2, 0.8, 0.3, 1]
+      TextureHandle: 2661707628446602832
     RelationshipComponent:
-      Parent: 1195289196835170214
-  - Entity: 5193084296815688529
+      Parent: 9061149661897834375
+  - Entity: 4885580945789898929
     TagComponent:
-      Tag: Main Camera
+      Tag: Right Square
     TransformComponent:
-      Translation: [-3.239588, 0.217362, 5.645798]
-      Rotation: [-0.075280964, -0.55652857, 0]
+      Translation: [1.5, 0, 0]
+      Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
-    CameraComponent:
-      Primary: true
-      FixedAspectRatio: false
+    SpriteRendererComponent:
+      Color: [0.8, 0.2, 0.3, 1]
+      TextureHandle: 0
     RelationshipComponent:
       Parent: 0

@@ -13,14 +13,25 @@ namespace Ayaya {
     EditorLayer::EditorLayer() : Layer("EditorLayer") {}
 
     void EditorLayer::OnAttach() {
+        // ==========================================
+        // 启动时读取资产注册表
+        // ==========================================
+        AssetManager::DeserializeRegistry("assets/AssetRegistry.yaml");
+
         FramebufferSpecification fbSpec;
         fbSpec.Width = 1280;
         fbSpec.Height = 720;
         m_Framebuffer = Framebuffer::Create(fbSpec);
 
+        // ==========================================
+        // 初始化纯白贴图 (1x1 像素)
+        // ==========================================
+        m_WhiteTexture = Texture2D::Create(1, 1);
+        uint32_t whiteTextureData = 0xffffffff; // 16进制表示：RGBA全部拉满 (255, 255, 255, 255)
+        m_WhiteTexture->SetData(&whiteTextureData, sizeof(uint32_t));
+
         m_ShaderLibrary.Load("assets/shaders/default.vert", "assets/shaders/default.frag");
         m_ShaderLibrary.Load("assets/shaders/outline.vert", "assets/shaders/outline.frag");
-        m_Texture = Texture2D::Create("assets/textures/bricks2.jpg");
 
         SetupGeometry();
         SetupScene();
@@ -51,6 +62,7 @@ namespace Ayaya {
         UIRenderMenuBar();
 
         m_SceneHierarchyPanel.OnImGuiRender();
+        m_ContentBrowserPanel.OnImGuiRender();
 
         UIRenderViewport();
 
@@ -86,6 +98,12 @@ namespace Ayaya {
     void EditorLayer::SetupScene() {
         m_ActiveScene = std::make_shared<Scene>();
 
+        // ==========================================
+        // 核心修复：不要直接 Create 和 AddAsset，
+        // 必须调用 ImportAsset 让它登记进硬盘账本！
+        // ==========================================
+        UUID bricksHandle = AssetManager::ImportAsset("assets/textures/bricks2.jpg");
+
         Entity cameraEntity = m_ActiveScene->CreateEntity("Main Camera");
         auto& cameraComp = cameraEntity.AddComponent<CameraComponent>();
         cameraComp.Camera.SetProjectionType(SceneCamera::ProjectionType::Perspective);
@@ -96,10 +114,12 @@ namespace Ayaya {
         Entity square1 = m_ActiveScene->CreateEntity("Left Square");
         square1.GetComponent<TransformComponent>().Translation = { -1.5f, 0.0f, 0.0f };
         square1.AddComponent<SpriteRendererComponent>(glm::vec4{0.2f, 0.8f, 0.3f, 1.0f});
+        square1.GetComponent<SpriteRendererComponent>().TextureHandle = bricksHandle;
 
         Entity square2 = m_ActiveScene->CreateEntity("Right Square");
         square2.GetComponent<TransformComponent>().Translation = { 1.5f, 0.0f, 0.0f };
         square2.AddComponent<SpriteRendererComponent>(glm::vec4{0.8f, 0.2f, 0.3f, 1.0f});
+        // square2.GetComponent<SpriteRendererComponent>().TextureHandle = bricksTexture->Handle;
 
         square1.SetParent(parentNode); 
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
@@ -291,7 +311,6 @@ namespace Ayaya {
         Renderer::BeginScene(cameraViewProj);
         
         auto defaultShader = m_ShaderLibrary.Get("default");
-        m_Texture->Bind(0);
         defaultShader->Bind();
         defaultShader->SetInt("u_Texture", 0);
 
@@ -310,6 +329,18 @@ namespace Ayaya {
             } else {
                 glStencilFunc(GL_ALWAYS, 0, 0xFF);
                 glStencilMask(0x00); 
+            }
+
+            // ==========================================
+            // 核心魔法：根据 UUID 向仓库要贴图！
+            // ==========================================
+            if (sprite.TextureHandle != 0 && AssetManager::IsAssetHandleValid(sprite.TextureHandle)) {
+                auto tex = AssetManager::GetAsset<Texture2D>(sprite.TextureHandle);
+                tex->Bind(0);
+            } else {
+                // 【核心修复】：如果物体没有绑定贴图，强行绑定我们的 1x1 纯白贴图！
+                // 这样 OpenGL 状态机就被重置了，右边的方块绝不会再变成砖块。
+                m_WhiteTexture->Bind(0);
             }
 
             defaultShader->SetFloat3("u_ColorModifier", glm::vec3(sprite.Color)); 
@@ -370,10 +401,12 @@ namespace Ayaya {
                 ImGuiID dock_main_id = dockspace_id;
                 ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.25f, nullptr, &dock_main_id);
                 ImGuiID dock_id_right_bottom = ImGui::DockBuilderSplitNode(dock_id_right, ImGuiDir_Down, 0.5f, nullptr, &dock_id_right);
+                ImGuiID dock_id_bottom = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.30f, NULL, &dock_main_id);
 
                 ImGui::DockBuilderDockWindow("Viewport", dock_main_id);
                 ImGui::DockBuilderDockWindow("Scene Hierarchy", dock_id_right);
                 ImGui::DockBuilderDockWindow("Properties", dock_id_right_bottom);
+                ImGui::DockBuilderDockWindow("Content Browser", dock_id_bottom);
                 
                 ImGui::DockBuilderFinish(dockspace_id);
             }

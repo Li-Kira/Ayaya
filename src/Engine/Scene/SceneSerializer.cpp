@@ -105,10 +105,13 @@ namespace Ayaya {
 
         if (entity.HasComponent<SpriteRendererComponent>()) {
             out << YAML::Key << "SpriteRendererComponent";
-            out << YAML::BeginMap;
+            out << YAML::BeginMap; // 开始组件 Map
+            
             auto& src = entity.GetComponent<SpriteRendererComponent>();
             out << YAML::Key << "Color" << YAML::Value << src.Color;
-            out << YAML::EndMap;
+            out << YAML::Key << "TextureHandle" << YAML::Value << (uint64_t)src.TextureHandle;
+            
+            out << YAML::EndMap; // 结束组件 Map
         }
 
         // --- 核心：保存父子层级关系 UUID ---
@@ -131,6 +134,7 @@ namespace Ayaya {
     }
 
     // --- 新增：深度优先递归保存 ---
+    // --- 新增：深度优先递归保存 ---
     static void SerializeEntityRecursively(YAML::Emitter& out, Entity entity, Scene* scene) {
         if (!entity) return;
         
@@ -140,8 +144,9 @@ namespace Ayaya {
         // 2. 按照顺序递归保存所有的子节点
         if (entity.HasComponent<RelationshipComponent>()) {
             auto& rel = entity.GetComponent<RelationshipComponent>();
+            // 遍历所有子节点的 ID，递归调用
             for (auto childID : rel.Children) {
-                Entity child{ childID, scene };
+                Entity child = { childID, scene };
                 SerializeEntityRecursively(out, child, scene);
             }
         }
@@ -232,6 +237,9 @@ namespace Ayaya {
             if (spriteRendererComponent) {
                 auto& src = deserializedEntity.AddComponent<SpriteRendererComponent>();
                 src.Color = spriteRendererComponent["Color"].as<glm::vec4>();
+                if (spriteRendererComponent["TextureHandle"]) { // <-- 新增
+                    src.TextureHandle = spriteRendererComponent["TextureHandle"].as<uint64_t>();
+                }
             }
 
             auto relationshipComponent = entity["RelationshipComponent"];

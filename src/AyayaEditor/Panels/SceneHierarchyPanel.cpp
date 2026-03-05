@@ -1,6 +1,8 @@
 #include "ayapch.h"
 #include "SceneHierarchyPanel.hpp"
 #include "Engine/Scene/Components.hpp"
+#include "Asset/AssetManager.hpp"
+#include "Renderer/Texture.hpp"
 
 #include <imgui.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -233,6 +235,55 @@ namespace Ayaya {
             if (ImGui::TreeNodeEx((void*)typeid(SpriteRendererComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Sprite Renderer")) {
                 auto& src = entity.GetComponent<SpriteRendererComponent>();
                 ImGui::ColorEdit4("Color", glm::value_ptr(src.Color));
+
+                // ==========================================
+                // 贴图槽位 UI 与拖拽接收 (Drop Target) 逻辑
+                // ==========================================
+                ImGui::Spacing();
+                ImGui::Text("Texture");
+
+                ImVec2 textureSlotSize = { 64.0f, 64.0f };
+                
+                // 1. 绘制展示框：有贴图就画贴图，没贴图就画个空按钮框
+                if (src.TextureHandle != 0 && AssetManager::IsAssetHandleValid(src.TextureHandle)) {
+                    auto tex = AssetManager::GetAsset<Texture2D>(src.TextureHandle);
+                    // 注意 UV 的翻转：{0, 1}, {1, 0}
+                    ImGui::Image((ImTextureID)(intptr_t)tex->GetRendererID(), textureSlotSize, {0, 1}, {1, 0});
+                } else {
+                    ImGui::Button("Empty", textureSlotSize);
+                }
+
+                // 2. 核心魔法：声明刚刚画的展示框是一个可以接收“拖拽包裹”的坑！
+                if (ImGui::BeginDragDropTarget()) { // <==== 【务必加上这一行！】开启接收坑
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                        const char* pathStr = (const char*)payload->Data;
+                        std::filesystem::path texturePath = std::filesystem::path("assets") / pathStr;
+
+                        if (texturePath.extension() == ".png" || texturePath.extension() == ".jpg") {
+                            // 一行代码搞定：导入资产、写入账本、返回全局唯一 UUID
+                            UUID importedHandle = AssetManager::ImportAsset(texturePath);
+                            
+                            if (importedHandle != 0) {
+                                src.TextureHandle = importedHandle;
+                                AYAYA_CORE_INFO("Successfully imported and applied texture: {0}", texturePath.string());
+                            }
+                        } else {
+                            AYAYA_CORE_WARN("Dropped file is not a supported image format!");
+                        }
+                    }
+                    ImGui::EndDragDropTarget(); // <==== 【务必加上这一行！】结束接收坑
+                }
+
+                // 3. 卸载贴图的小功能
+                if (src.TextureHandle != 0) {
+                    ImGui::SameLine();
+                    // 稍微算一下坐标，让 Remove 按钮和 64x64 的图片垂直居中对齐
+                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textureSlotSize.y * 0.5f - 10.0f);
+                    if (ImGui::Button("Remove")) {
+                        src.TextureHandle = 0; // 只要把 UUID 设为 0，渲染器就会自动用白底替代
+                    }
+                }
+
                 ImGui::TreePop();
             }
         }

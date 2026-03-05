@@ -58,6 +58,9 @@ namespace Ayaya {
     struct SpriteRendererComponent {
         glm::vec4 Color{ 1.0f, 1.0f, 1.0f, 1.0f };
 
+        // --- 新增：存储贴图的 UUID ---
+        UUID TextureHandle = 0;
+
         SpriteRendererComponent() = default;
         SpriteRendererComponent(const SpriteRendererComponent&) = default;
         SpriteRendererComponent(const glm::vec4& color) : Color(color) {}
