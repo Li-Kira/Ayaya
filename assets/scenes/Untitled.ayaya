@@ -1,18 +1,18 @@
 Scene: Untitled
 Entities:
-  - Entity: 10653751066256800441
+  - Entity: 420459674548425204
     TagComponent:
       Tag: Main Camera
     TransformComponent:
-      Translation: [-2.7545474, 2.1177837e-10, 3.2108188]
-      Rotation: [-0.03768819, -0.7717499, 0]
+      Translation: [-4.255, 2.3, 5.245]
+      Rotation: [-0.3855956, -0.5919982, 0]
       Scale: [1, 1, 1]
     CameraComponent:
       Primary: true
       FixedAspectRatio: false
     RelationshipComponent:
       Parent: 0
-  - Entity: 9061149661897834375
+  - Entity: 10268594968763063328
     TagComponent:
       Tag: Parent Empty Node
     TransformComponent:
@@ -21,7 +21,7 @@ Entities:
       Scale: [1, 1, 1]
     RelationshipComponent:
       Parent: 0
-  - Entity: 11882961845940958427
+  - Entity: 16977514834481394519
     TagComponent:
       Tag: Left Square
     TransformComponent:
@@ -32,8 +32,8 @@ Entities:
       Color: [0.2, 0.8, 0.3, 1]
       TextureHandle: 2661707628446602832
     RelationshipComponent:
-      Parent: 9061149661897834375
-  - Entity: 4885580945789898929
+      Parent: 10268594968763063328
+  - Entity: 9440902438403124620
     TagComponent:
       Tag: Right Square
     TransformComponent:

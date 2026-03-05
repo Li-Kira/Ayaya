@@ -1,4 +1,5 @@
 #include "EditorLayer.hpp"
+#include "Renderer/Mesh.hpp"
 
 #include <glad/glad.h>
 #include <imgui.h>
@@ -73,27 +74,11 @@ namespace Ayaya {
     void EditorLayer::OnEvent(Event& event) {}
 
     void EditorLayer::SetupGeometry() {
-        m_VertexArray.reset(VertexArray::Create());
-        float vertices[] = {
-            -0.5f, -0.5f,  0.5f,  1.0f, 1.0f, 1.0f,  0.0f, 0.0f,
-             0.5f, -0.5f,  0.5f,  1.0f, 1.0f, 1.0f,  1.0f, 0.0f,
-             0.5f,  0.5f,  0.5f,  1.0f, 1.0f, 1.0f,  1.0f, 1.0f,
-            -0.5f,  0.5f,  0.5f,  1.0f, 1.0f, 1.0f,  0.0f, 1.0f,
-            -0.5f, -0.5f, -0.5f,  1.0f, 1.0f, 1.0f,  1.0f, 0.0f,
-             0.5f, -0.5f, -0.5f,  1.0f, 1.0f, 1.0f,  0.0f, 0.0f,
-             0.5f,  0.5f, -0.5f,  1.0f, 1.0f, 1.0f,  0.0f, 1.0f,
-            -0.5f,  0.5f, -0.5f,  1.0f, 1.0f, 1.0f,  1.1f, 1.0f
-        };
-        auto vbo = std::shared_ptr<VertexBuffer>(VertexBuffer::Create(vertices, sizeof(vertices)));
-        vbo->SetLayout({
-            { ShaderDataType::Float3, "a_Position" },
-            { ShaderDataType::Float3, "a_Color"    },
-            { ShaderDataType::Float2, "a_TexCoord" }
-        });
-        m_VertexArray->AddVertexBuffer(vbo);
-        uint32_t indices[] = { 0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 7, 6, 5, 5, 4, 7, 4, 0, 3, 3, 7, 4, 3, 2, 6, 6, 7, 3, 4, 5, 1, 1, 0, 4 };
-        auto ibo = std::shared_ptr<IndexBuffer>(IndexBuffer::Create(indices, 36));
-        m_VertexArray->SetIndexBuffer(ibo);
+        // ==========================================
+        // 清爽！直接向 Mesh 类要一个正方体的顶点数组
+        // ==========================================
+        std::shared_ptr<Mesh> cubeMesh = Mesh::CreateCube(1.0f);
+        m_VertexArray = cubeMesh->GetVertexArray();
     }
 
     void EditorLayer::SetupScene() {
@@ -114,17 +99,24 @@ namespace Ayaya {
         cameraTransform.Rotation = glm::radians(glm::vec3(-22.093f, -33.919f, 0.0f));
 
         Entity parentNode = m_ActiveScene->CreateEntity("Parent Empty Node");
+
+        // --- 左边的方块 (带砖块贴图) ---
         Entity square1 = m_ActiveScene->CreateEntity("Left Square");
         square1.GetComponent<TransformComponent>().Translation = { -1.5f, 0.0f, 0.0f };
-        square1.AddComponent<SpriteRendererComponent>(glm::vec4{0.2f, 0.8f, 0.3f, 1.0f});
-        square1.GetComponent<SpriteRendererComponent>().TextureHandle = bricksHandle;
+        
+        auto& mrc1 = square1.AddComponent<MeshRendererComponent>(); // 添加 3D 网格组件
+        mrc1.Color = glm::vec4{0.2f, 0.8f, 0.3f, 1.0f};             // 设置绿色混合
+        mrc1.TextureHandle = bricksHandle;                          // 赋予砖块贴图
+        
+        square1.SetParent(parentNode); 
 
+        // --- 右边的方块 (纯色) ---
         Entity square2 = m_ActiveScene->CreateEntity("Right Square");
         square2.GetComponent<TransformComponent>().Translation = { 1.5f, 0.0f, 0.0f };
-        square2.AddComponent<SpriteRendererComponent>(glm::vec4{0.8f, 0.2f, 0.3f, 1.0f});
-        // square2.GetComponent<SpriteRendererComponent>().TextureHandle = bricksTexture->Handle;
+        
+        auto& mrc2 = square2.AddComponent<MeshRendererComponent>(); // 添加 3D 网格组件
+        mrc2.Color = glm::vec4{0.8f, 0.2f, 0.3f, 1.0f};             // 设置红色
 
-        square1.SetParent(parentNode); 
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
     }
 
@@ -166,11 +158,23 @@ namespace Ayaya {
 
     void EditorLayer::NewScene() {
         m_ActiveScene = std::make_shared<Scene>();
+
+        Entity cameraEntity = m_ActiveScene->CreateEntity("Main Camera");
+        auto& cameraComp = cameraEntity.AddComponent<CameraComponent>();
+        cameraComp.Camera.SetProjectionType(SceneCamera::ProjectionType::Perspective);
+        if (m_ViewportSize.x > 0.0f && m_ViewportSize.y > 0.0f) {
+            cameraComp.Camera.SetViewportSize((uint32_t)m_ViewportSize.x, (uint32_t)m_ViewportSize.y);
+        }
+        
+        auto& cameraTransform = cameraEntity.GetComponent<TransformComponent>();
+        cameraTransform.Translation = { -4.255f, 2.300f, 5.245f };
+        cameraTransform.Rotation = glm::radians(glm::vec3(-22.093f, -33.919f, 0.0f));
+
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
         m_CurrentScenePath = std::string(); 
         m_HoveredEntity = {};
         m_SceneHierarchyPanel.SetSelectedEntity({});
-        AYAYA_CORE_INFO("Created a new empty scene.");
+        AYAYA_CORE_INFO("Created a new empty scene with default camera.");
     }
 
     void EditorLayer::OpenScene() {
@@ -345,11 +349,15 @@ namespace Ayaya {
         glEnable(GL_STENCIL_TEST);
         glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
 
-        auto renderGroup = m_ActiveScene->Reg().view<TransformComponent, SpriteRendererComponent>();
-        for (auto entityID : renderGroup) {
+        // ==========================================
+        // 渲染 3D 网格组件 (Mesh Renderer)
+        // ==========================================
+        auto meshGroup = m_ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
+        for (auto entityID : meshGroup) {
             Entity entity{ entityID, m_ActiveScene.get() };
-            auto& sprite = entity.GetComponent<SpriteRendererComponent>();
+            auto& meshComp = entity.GetComponent<MeshRendererComponent>();
             
+            // 处理描边遮罩
             if (m_HoveredEntity && m_HoveredEntity == entity) {
                 glStencilFunc(GL_ALWAYS, 1, 0xFF);
                 glStencilMask(0xFF); 
@@ -358,23 +366,26 @@ namespace Ayaya {
                 glStencilMask(0x00); 
             }
 
-            // ==========================================
-            // 核心魔法：根据 UUID 向仓库要贴图！
-            // ==========================================
-            if (sprite.TextureHandle != 0 && AssetManager::IsAssetHandleValid(sprite.TextureHandle)) {
-                auto tex = AssetManager::GetAsset<Texture2D>(sprite.TextureHandle);
+            // 绑定贴图
+            if (meshComp.TextureHandle != 0 && AssetManager::IsAssetHandleValid(meshComp.TextureHandle)) {
+                auto tex = AssetManager::GetAsset<Texture2D>(meshComp.TextureHandle);
                 tex->Bind(0);
             } else {
-                // 【核心修复】：如果物体没有绑定贴图，强行绑定我们的 1x1 纯白贴图！
-                // 这样 OpenGL 状态机就被重置了，右边的方块绝不会再变成砖块。
                 m_WhiteTexture->Bind(0);
             }
 
-            defaultShader->SetFloat3("u_ColorModifier", glm::vec3(sprite.Color)); 
-            Renderer::Submit(defaultShader, m_VertexArray, entity.GetWorldTransform());
+            defaultShader->SetFloat3("u_ColorModifier", glm::vec3(meshComp.Color)); 
+            
+            // 提交网格渲染！
+            if (meshComp.MeshGeometry) {
+                Renderer::Submit(defaultShader, meshComp.MeshGeometry->GetVertexArray(), entity.GetWorldTransform());
+            }
         }
 
-        if (m_HoveredEntity && m_HoveredEntity.HasComponent<SpriteRendererComponent>()) {
+        // ==========================================
+        // 核心修复：描边判断也换成 MeshRendererComponent
+        // ==========================================
+        if (m_HoveredEntity && m_HoveredEntity.HasComponent<MeshRendererComponent>()) {
             glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
             glStencilMask(0x00);      
             glDisable(GL_DEPTH_TEST); 
@@ -386,7 +397,11 @@ namespace Ayaya {
             glm::mat4 transform = m_HoveredEntity.GetWorldTransform();
             transform = transform * glm::scale(glm::mat4(1.0f), glm::vec3(1.05f)); 
             
-            Renderer::Submit(outlineShader, m_VertexArray, transform);
+            // 提交模型也要获取它真正的几何体，而不是用写死的 m_VertexArray
+            auto& meshComp = m_HoveredEntity.GetComponent<MeshRendererComponent>();
+            if (meshComp.MeshGeometry) {
+                Renderer::Submit(outlineShader, meshComp.MeshGeometry->GetVertexArray(), transform);
+            }
 
             glStencilMask(0xFF);
             glStencilFunc(GL_ALWAYS, 1, 0xFF);
@@ -573,7 +588,10 @@ namespace Ayaya {
             glm::vec3 rayOrigin = glm::vec3(glm::inverse(cameraViewMatrix)[3]);
 
             float closestT = std::numeric_limits<float>::max();
-            auto renderGroup = m_ActiveScene->Reg().view<TransformComponent, SpriteRendererComponent>();
+            // ==========================================
+            // 核心修复：把 SpriteRendererComponent 换成 MeshRendererComponent！
+            // ==========================================
+            auto renderGroup = m_ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
 
             for (auto entityID : renderGroup) {
                 Entity entity{ entityID, m_ActiveScene.get() };

@@ -9,6 +9,7 @@
 #include <glm/gtx/quaternion.hpp>
 
 #include "Renderer/SceneCamera.hpp"
+#include "Renderer/Mesh.hpp"
 
 // --- 新增：引入 UUID ---
 #include "Engine/Core/UUID.hpp"
@@ -76,15 +77,28 @@ namespace Ayaya {
         CameraComponent(const CameraComponent&) = default;
     };
 
-    // ==============================================
-    // 新增：关系组件 (存储父子层级数据)
-    // ==============================================
     struct RelationshipComponent {
         entt::entity Parent = entt::null;           // 指向父节点的 ID
         std::vector<entt::entity> Children;         // 存储所有子节点的 ID
 
         RelationshipComponent() = default;
         RelationshipComponent(const RelationshipComponent&) = default;
+    };
+
+    // ==========================================
+    // 新增：3D 网格渲染组件
+    // ==========================================
+    struct MeshRendererComponent {
+        glm::vec4 Color{1.0f, 1.0f, 1.0f, 1.0f};
+        UUID TextureHandle = 0;
+        
+        // 目前先默认给它塞一个正方体，未来这里会改成网格资产的 UUID
+        std::shared_ptr<Mesh> MeshGeometry; 
+
+        MeshRendererComponent() {
+            MeshGeometry = Mesh::CreateCube(1.0f);
+        }
+        MeshRendererComponent(const MeshRendererComponent&) = default;
     };
 
 }

@@ -200,6 +200,10 @@ namespace Ayaya {
     }
 
     void SceneHierarchyPanel::DrawComponents(Entity entity) {
+        // ==========================================
+        // 绘制组件
+        // ==========================================
+
         // --- 绘制 Tag 组件 ---
        if (entity.HasComponent<TagComponent>()) {
             auto& tag = entity.GetComponent<TagComponent>().Tag;
@@ -309,6 +313,86 @@ namespace Ayaya {
                 ImGui::Checkbox("Fixed Aspect Ratio", &cameraComp.FixedAspectRatio);
                 ImGui::TreePop();
             }
+        }
+
+        // --- 绘制 Mesh Renderer 组件 ---
+        if (entity.HasComponent<MeshRendererComponent>()) {
+            if (ImGui::TreeNodeEx((void*)typeid(MeshRendererComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Mesh Renderer")) {
+                auto& mrc = entity.GetComponent<MeshRendererComponent>();
+                ImGui::ColorEdit4("Color", glm::value_ptr(mrc.Color));
+
+                ImGui::Spacing();
+                ImGui::Text("Texture");
+
+                ImVec2 textureSlotSize = { 64.0f, 64.0f };
+                if (mrc.TextureHandle != 0 && AssetManager::IsAssetHandleValid(mrc.TextureHandle)) {
+                    auto tex = AssetManager::GetAsset<Texture2D>(mrc.TextureHandle);
+                    ImGui::Image((ImTextureID)(intptr_t)tex->GetRendererID(), textureSlotSize, {0, 1}, {1, 0});
+                } else {
+                    ImGui::Button("Empty", textureSlotSize);
+                }
+
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                        const char* pathStr = (const char*)payload->Data;
+                        std::filesystem::path texturePath = std::filesystem::path("assets") / pathStr;
+                        if (texturePath.extension() == ".png" || texturePath.extension() == ".jpg") {
+                            UUID importedHandle = AssetManager::ImportAsset(texturePath);
+                            if (importedHandle != 0) {
+                                mrc.TextureHandle = importedHandle;
+                            }
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+
+                if (mrc.TextureHandle != 0) {
+                    ImGui::SameLine();
+                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textureSlotSize.y * 0.5f - 10.0f);
+                    if (ImGui::Button("Remove")) mrc.TextureHandle = 0;
+                }
+                ImGui::TreePop();
+            }
+        }
+
+        // ==========================================
+        // “添加组件” 按钮与下拉菜单
+        // ==========================================
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // 按钮居中魔法
+        ImVec2 contentRegionAvailable = ImGui::GetContentRegionAvail();
+        ImGui::SetCursorPosX(contentRegionAvailable.x * 0.5f - 60.0f);
+        
+        if (ImGui::Button("Add Component", ImVec2(120, 25))) {
+            ImGui::OpenPopup("AddComponentPopup");
+        }
+
+        if (ImGui::BeginPopup("AddComponentPopup")) {
+            // 如果没有相机组件，才显示添加相机
+            if (!entity.HasComponent<CameraComponent>()) {
+                if (ImGui::MenuItem("Camera")) {
+                    entity.AddComponent<CameraComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            // 如果没有 MeshRenderer，才显示添加 MeshRenderer
+            if (!entity.HasComponent<MeshRendererComponent>()) {
+                if (ImGui::MenuItem("Mesh Renderer")) {
+                    entity.AddComponent<MeshRendererComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            // 之前的 SpriteRenderer 也可以留着做 2D 用
+            if (!entity.HasComponent<SpriteRendererComponent>()) {
+                if (ImGui::MenuItem("Sprite Renderer")) {
+                    entity.AddComponent<SpriteRendererComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            ImGui::EndPopup();
         }
     }
 
