@@ -76,6 +76,8 @@ namespace Ayaya {
         // 新增：记录当前打开的场景路径
         // ==========================================
         std::string m_CurrentScenePath = std::string();
+
+        bool m_ShowGrid = true; // 默认开启网格
     };
 
 }

@@ -32,6 +32,7 @@ namespace Ayaya {
 
         m_ShaderLibrary.Load("assets/shaders/default.vert", "assets/shaders/default.frag");
         m_ShaderLibrary.Load("assets/shaders/outline.vert", "assets/shaders/outline.frag");
+        m_ShaderLibrary.Load("assets/shaders/grid.vert", "assets/shaders/grid.frag");
 
         SetupGeometry();
         SetupScene();
@@ -108,7 +109,9 @@ namespace Ayaya {
         auto& cameraComp = cameraEntity.AddComponent<CameraComponent>();
         cameraComp.Camera.SetProjectionType(SceneCamera::ProjectionType::Perspective);
         cameraComp.Camera.SetViewportSize(1280, 720);
-        cameraEntity.GetComponent<TransformComponent>().Translation = { 0.0f, 0.0f, 5.0f };
+        auto& cameraTransform = cameraEntity.GetComponent<TransformComponent>();
+        cameraTransform.Translation = { -4.255f, 2.300f, 5.245f };
+        cameraTransform.Rotation = glm::radians(glm::vec3(-22.093f, -33.919f, 0.0f));
 
         Entity parentNode = m_ActiveScene->CreateEntity("Parent Empty Node");
         Entity square1 = m_ActiveScene->CreateEntity("Left Square");
@@ -309,7 +312,31 @@ namespace Ayaya {
 
     void EditorLayer::RenderScene(const glm::mat4& cameraViewProj) {
         Renderer::BeginScene(cameraViewProj);
-        
+
+        // ==========================================
+        // 核心：在所有物体之前渲染背景网格
+        // ==========================================
+        if (m_ShowGrid) {
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glEnable(GL_DEPTH_TEST);
+            
+            // 关闭深度写入，防止半透明的网格遮挡后面的物体
+            glDepthMask(GL_FALSE);
+
+            auto gridShader = m_ShaderLibrary.Get("grid");
+            gridShader->Bind();
+            
+            // 魔法：把我们之前的 Cube (正方体) 强行拍扁成 Y=0 的厚度！
+            // 并在 X 和 Z 方向各放大 100 倍，铺成一张无限大平原
+            glm::mat4 gridTransform = glm::scale(glm::mat4(1.0f), glm::vec3(100.0f, 0.0f, 100.0f));
+                                    
+            Renderer::Submit(gridShader, m_VertexArray, gridTransform);
+            
+            // 恢复深度写入，准备渲染正常的游戏物体
+            glDepthMask(GL_TRUE); 
+        }
+
         auto defaultShader = m_ShaderLibrary.Get("default");
         defaultShader->Bind();
         defaultShader->SetInt("u_Texture", 0);
@@ -448,6 +475,14 @@ namespace Ayaya {
             }
 
             // ==========================================
+            // 新增 View 菜单
+            // ==========================================
+            if (ImGui::BeginMenu("View")) {
+                ImGui::MenuItem("Show Grid", nullptr, &m_ShowGrid);
+                ImGui::EndMenu();
+            }
+
+            // ==========================================
             // 3. 在菜单栏最右侧显示当前场景名称！
             // ==========================================
             std::string sceneName = "Untitled";
@@ -467,6 +502,8 @@ namespace Ayaya {
 
             ImGui::EndMenuBar();
         }
+
+        
     }
 
     void EditorLayer::UIRenderViewport() {
