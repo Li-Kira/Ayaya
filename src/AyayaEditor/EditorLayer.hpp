@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Ayaya.hpp>
+#include "EditorCamera.hpp"
 #include "Panels/SceneHierarchyPanel.hpp"
 #include "Panels/ContentBrowserPanel.hpp"
 #include <Renderer/Renderer.hpp>
@@ -41,8 +42,6 @@ namespace Ayaya {
         bool OnKeyPressed(KeyPressedEvent& e);
         
         void HandleShortcuts();
-        bool GetPrimaryCamera(glm::mat4& outView, glm::mat4& outProjection, Timestep ts = 0.0f);
-        void ProcessCameraInput(Timestep ts, TransformComponent& transform);
         void RenderScene(const glm::mat4& cameraViewProj);
         
         void UIRenderDockspace();
@@ -53,6 +52,8 @@ namespace Ayaya {
         void HandleGizmo(const glm::mat4& cameraViewMatrix, const glm::mat4& cameraProjectionMatrix);
 
     private:
+        EditorCamera m_EditorCamera;
+
         ShaderLibrary m_ShaderLibrary;
         std::shared_ptr<Texture2D> m_WhiteTexture; // 全局默认白底贴图
         std::shared_ptr<VertexArray> m_VertexArray;

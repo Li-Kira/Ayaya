@@ -1,18 +1,30 @@
 Scene: Untitled
 Entities:
-  - Entity: 420459674548425204
+  - Entity: 9939929218850049954
     TagComponent:
       Tag: Main Camera
     TransformComponent:
-      Translation: [-4.255, 2.3, 5.245]
-      Rotation: [-0.3855956, -0.5919982, 0]
+      Translation: [-3.9192479, 1.409877, 1.8467792]
+      Rotation: [-0.24232872, -1.0142459, 0]
       Scale: [1, 1, 1]
     CameraComponent:
       Primary: true
       FixedAspectRatio: false
     RelationshipComponent:
       Parent: 0
-  - Entity: 10268594968763063328
+  - Entity: 6663938595482544983
+    TagComponent:
+      Tag: Directional Light
+    TransformComponent:
+      Translation: [-3.7252903e-09, 0, -3.7252903e-09]
+      Rotation: [-0.98328596, 0.9263891, -0.26076418]
+      Scale: [1, 0.9999999, 0.99999994]
+    DirectionalLightComponent:
+      Color: [1, 1, 1]
+      AmbientStrength: 0.3
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 15686300496985444637
     TagComponent:
       Tag: Parent Empty Node
     TransformComponent:
@@ -21,26 +33,26 @@ Entities:
       Scale: [1, 1, 1]
     RelationshipComponent:
       Parent: 0
-  - Entity: 16977514834481394519
+  - Entity: 7766556285159235484
     TagComponent:
       Tag: Left Square
     TransformComponent:
       Translation: [-1.5, 0, 0]
       Rotation: [0, -0, 0]
       Scale: [1, 1, 1]
-    SpriteRendererComponent:
+    MeshRendererComponent:
       Color: [0.2, 0.8, 0.3, 1]
       TextureHandle: 2661707628446602832
     RelationshipComponent:
-      Parent: 10268594968763063328
-  - Entity: 9440902438403124620
+      Parent: 15686300496985444637
+  - Entity: 4442621146628939436
     TagComponent:
       Tag: Right Square
     TransformComponent:
       Translation: [1.5, 0, 0]
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
-    SpriteRendererComponent:
+    MeshRendererComponent:
       Color: [0.8, 0.2, 0.3, 1]
       TextureHandle: 0
     RelationshipComponent:

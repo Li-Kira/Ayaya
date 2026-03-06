@@ -101,4 +101,18 @@ namespace Ayaya {
         MeshRendererComponent(const MeshRendererComponent&) = default;
     };
 
+    // ==========================================
+    // 新增：平行光组件 (太阳光)
+    // ==========================================
+    struct DirectionalLightComponent {
+        glm::vec3 Color{ 1.0f, 1.0f, 1.0f }; // 默认纯白光
+        float AmbientStrength = 0.3f;        // 默认环境光强度
+
+        // 注意：我们不需要在这里定义光的方向 (Direction)，
+        // 因为光的方向将直接从这个实体自带的 TransformComponent (Rotation) 中计算得出！
+        
+        DirectionalLightComponent() = default;
+        DirectionalLightComponent(const DirectionalLightComponent&) = default;
+    };
+
 }

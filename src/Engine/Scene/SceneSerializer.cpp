@@ -114,6 +114,29 @@ namespace Ayaya {
             out << YAML::EndMap; // 结束组件 Map
         }
 
+        // ==========================================
+        // 保存 3D 网格组件
+        // ==========================================
+        if (entity.HasComponent<MeshRendererComponent>()) {
+            out << YAML::Key << "MeshRendererComponent";
+            out << YAML::BeginMap; 
+            
+            auto& mrc = entity.GetComponent<MeshRendererComponent>();
+            out << YAML::Key << "Color" << YAML::Value << mrc.Color;
+            out << YAML::Key << "TextureHandle" << YAML::Value << (uint64_t)mrc.TextureHandle;
+            
+            out << YAML::EndMap; 
+        }
+
+        if (entity.HasComponent<DirectionalLightComponent>()) {
+            out << YAML::Key << "DirectionalLightComponent";
+            out << YAML::BeginMap;
+            auto& dlc = entity.GetComponent<DirectionalLightComponent>();
+            out << YAML::Key << "Color" << YAML::Value << dlc.Color;
+            out << YAML::Key << "AmbientStrength" << YAML::Value << dlc.AmbientStrength;
+            out << YAML::EndMap;
+        }
+
         // --- 核心：保存父子层级关系 UUID ---
         if (entity.HasComponent<RelationshipComponent>()) {
             out << YAML::Key << "RelationshipComponent";
@@ -248,6 +271,25 @@ namespace Ayaya {
                 if (parentUUID != 0) {
                     relationshipsToResolve.push_back({ deserializedEntity, parentUUID });
                 }
+            }
+
+            // ==========================================
+            // 读取 3D 网格组件
+            // ==========================================
+            auto meshRendererComponent = entity["MeshRendererComponent"];
+            if (meshRendererComponent) {
+                auto& mrc = deserializedEntity.AddComponent<MeshRendererComponent>();
+                mrc.Color = meshRendererComponent["Color"].as<glm::vec4>();
+                if (meshRendererComponent["TextureHandle"]) { 
+                    mrc.TextureHandle = meshRendererComponent["TextureHandle"].as<uint64_t>();
+                }
+            }
+
+            auto dirLightComponent = entity["DirectionalLightComponent"];
+            if (dirLightComponent) {
+                auto& dlc = deserializedEntity.AddComponent<DirectionalLightComponent>();
+                dlc.Color = dirLightComponent["Color"].as<glm::vec3>();
+                dlc.AmbientStrength = dirLightComponent["AmbientStrength"].as<float>();
             }
         }
 

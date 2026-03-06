@@ -97,7 +97,10 @@ namespace Ayaya {
         
         std::string icon = ICON_FA_CUBE; 
         if (entity.HasComponent<CameraComponent>()) icon = ICON_FA_VIDEO; 
-        else if (entity.HasComponent<SpriteRendererComponent>()) icon = ICON_FA_PAINT_BRUSH; 
+        else if (entity.HasComponent<SpriteRendererComponent>()) icon = ICON_FA_PAINT_BRUSH;
+        else if (entity.HasComponent<MeshRendererComponent>()) icon = ICON_FA_PAINT_BRUSH;
+        else if (entity.HasComponent<DirectionalLightComponent>()) icon = ICON_FA_LIGHTBULB; 
+
         
         std::string displayString = icon + " " + tag;
 
@@ -355,6 +358,18 @@ namespace Ayaya {
             }
         }
 
+        // --- 绘制 Directional Light 组件 ---
+        if (entity.HasComponent<DirectionalLightComponent>()) {
+            if (ImGui::TreeNodeEx((void*)typeid(DirectionalLightComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Directional Light")) {
+                auto& dlc = entity.GetComponent<DirectionalLightComponent>();
+                
+                ImGui::ColorEdit3("Light Color", glm::value_ptr(dlc.Color));
+                ImGui::DragFloat("Ambient Strength", &dlc.AmbientStrength, 0.01f, 0.0f, 1.0f);
+                
+                ImGui::TreePop();
+            }
+        }
+
         // ==========================================
         // “添加组件” 按钮与下拉菜单
         // ==========================================
@@ -389,6 +404,13 @@ namespace Ayaya {
             if (!entity.HasComponent<SpriteRendererComponent>()) {
                 if (ImGui::MenuItem("Sprite Renderer")) {
                     entity.AddComponent<SpriteRendererComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            // 如果没有平行光，才显示添加平行光
+            if (!entity.HasComponent<DirectionalLightComponent>()) {
+                if (ImGui::MenuItem("Directional Light")) {
+                    entity.AddComponent<DirectionalLightComponent>();
                     ImGui::CloseCurrentPopup();
                 }
             }

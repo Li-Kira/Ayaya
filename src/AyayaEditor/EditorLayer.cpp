@@ -34,6 +34,7 @@ namespace Ayaya {
         m_ShaderLibrary.Load("assets/shaders/default.vert", "assets/shaders/default.frag");
         m_ShaderLibrary.Load("assets/shaders/outline.vert", "assets/shaders/outline.frag");
         m_ShaderLibrary.Load("assets/shaders/grid.vert", "assets/shaders/grid.frag");
+        m_ShaderLibrary.Load("assets/shaders/lighting.vert", "assets/shaders/lighting.frag");
 
         SetupGeometry();
         SetupScene();
@@ -42,16 +43,36 @@ namespace Ayaya {
     void EditorLayer::OnUpdate(Timestep ts) {
         HandleShortcuts();
 
+        // ==========================================
+        // 核心修复 2：在一切渲染开始前，检查并处理 Resize
+        // 这样新建的 Framebuffer 马上就会在下面的代码中被渲染塞满，绝对不会黑屏！
+        // ==========================================
+        static glm::vec2 s_LastViewportSize = { 0.0f, 0.0f };
+        if (m_ViewportSize.x > 0.0f && m_ViewportSize.y > 0.0f && 
+           (s_LastViewportSize.x != m_ViewportSize.x || s_LastViewportSize.y != m_ViewportSize.y)) {
+            
+            m_Framebuffer->Resize((uint32_t)m_ViewportSize.x, (uint32_t)m_ViewportSize.y);
+            m_EditorCamera.OnResize(m_ViewportSize.x, m_ViewportSize.y);
+            
+            auto view = m_ActiveScene->Reg().view<CameraComponent>();
+            for (auto entityID : view) {
+                auto& cameraComp = view.get<CameraComponent>(entityID);
+                if (!cameraComp.FixedAspectRatio) {
+                    cameraComp.Camera.SetViewportSize((uint32_t)m_ViewportSize.x, (uint32_t)m_ViewportSize.y);
+                }
+            }
+            s_LastViewportSize = m_ViewportSize;
+        }
+
+        m_EditorCamera.OnUpdate(ts, m_ViewportFocused);
+
         m_Framebuffer->Bind();
         RenderCommand::SetClearColor({ 0.12f, 0.12f, 0.14f, 1.0f });
         RenderCommand::Clear();
         glClear(GL_STENCIL_BUFFER_BIT); 
 
-        glm::mat4 cameraViewMatrix, cameraProjectionMatrix;
-        if (GetPrimaryCamera(cameraViewMatrix, cameraProjectionMatrix, ts)) {
-            glm::mat4 cameraViewProj = cameraProjectionMatrix * cameraViewMatrix;
-            RenderScene(cameraViewProj);
-        }
+        // 2. 直接拿它的矩阵去渲染世界！
+        RenderScene(m_EditorCamera.GetViewProjection());
 
         m_Framebuffer->Unbind();
 
@@ -90,14 +111,21 @@ namespace Ayaya {
         // ==========================================
         UUID bricksHandle = AssetManager::ImportAsset("assets/textures/bricks2.jpg");
 
+        // 创造摄像机
         Entity cameraEntity = m_ActiveScene->CreateEntity("Main Camera");
         auto& cameraComp = cameraEntity.AddComponent<CameraComponent>();
         cameraComp.Camera.SetProjectionType(SceneCamera::ProjectionType::Perspective);
         cameraComp.Camera.SetViewportSize(1280, 720);
         auto& cameraTransform = cameraEntity.GetComponent<TransformComponent>();
-        cameraTransform.Translation = { -4.255f, 2.300f, 5.245f };
-        cameraTransform.Rotation = glm::radians(glm::vec3(-22.093f, -33.919f, 0.0f));
+        cameraTransform.Translation = { 0.0f, 0.0f, 5.0f };
 
+        // 创造太阳光
+        Entity dirLight = m_ActiveScene->CreateEntity("Directional Light");
+        auto& lightTransform = dirLight.GetComponent<TransformComponent>();
+        lightTransform.Rotation = glm::radians(glm::vec3(-45.0f, 45.0f, 0.0f));
+        dirLight.AddComponent<DirectionalLightComponent>();
+
+        // 创造场景物体
         Entity parentNode = m_ActiveScene->CreateEntity("Parent Empty Node");
 
         // --- 左边的方块 (带砖块贴图) ---
@@ -167,8 +195,7 @@ namespace Ayaya {
         }
         
         auto& cameraTransform = cameraEntity.GetComponent<TransformComponent>();
-        cameraTransform.Translation = { -4.255f, 2.300f, 5.245f };
-        cameraTransform.Rotation = glm::radians(glm::vec3(-22.093f, -33.919f, 0.0f));
+        cameraTransform.Translation = { 0.0f, 0.0f, 5.0f };
 
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
         m_CurrentScenePath = std::string(); 
@@ -208,7 +235,7 @@ namespace Ayaya {
         // 1. 视口焦点相关的快捷键 (Gizmo 等)
         // =====================================
         Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
-        if (m_ViewportFocused && selectedEntity && !Input::IsMouseButtonPressed(1)) {
+        if (selectedEntity && !Input::IsMouseButtonPressed(1)) {
             if (Input::IsKeyPressed(Key::Q)) m_GizmoType = -1;
             if (Input::IsKeyPressed(Key::W)) m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
             if (Input::IsKeyPressed(Key::E)) m_GizmoType = ImGuizmo::OPERATION::ROTATE;
@@ -266,54 +293,6 @@ namespace Ayaya {
         }
     }
 
-    bool EditorLayer::GetPrimaryCamera(glm::mat4& outView, glm::mat4& outProjection, Timestep ts) {
-        auto cameraView = m_ActiveScene->Reg().view<TransformComponent, CameraComponent>();
-        for (auto entityID : cameraView) {
-            Entity entity{ entityID, m_ActiveScene.get() };
-            auto& camera = entity.GetComponent<CameraComponent>();
-            auto& transform = entity.GetComponent<TransformComponent>();
-            
-            if (camera.Primary) {
-                if (ts > 0.0f) ProcessCameraInput(ts, transform); 
-                outProjection = camera.Camera.GetProjection();
-                outView = glm::inverse(entity.GetWorldTransform());
-                return true; 
-            }
-        }
-        return false;
-    }
-
-    void EditorLayer::ProcessCameraInput(Timestep ts, TransformComponent& transform) {
-        if (!m_ViewportFocused) return;
-
-        if (Input::IsMouseButtonPressed(1)) {
-            glm::vec2 currentMousePos = { Input::GetMouseX(), Input::GetMouseY() };
-            glm::vec2 delta = (currentMousePos - m_InitialMousePos) * 0.2f;
-            m_InitialMousePos = currentMousePos;
-
-            glm::vec3 rotationDegrees = glm::degrees(transform.Rotation);
-            rotationDegrees.x -= delta.y;
-            rotationDegrees.y -= delta.x;
-            if (rotationDegrees.x > 89.0f) rotationDegrees.x = 89.0f;
-            if (rotationDegrees.x < -89.0f) rotationDegrees.x = -89.0f;
-            transform.Rotation = glm::radians(rotationDegrees);
-
-            glm::quat orientation = glm::quat(transform.Rotation);
-            glm::vec3 forward = glm::rotate(orientation, glm::vec3(0.0f, 0.0f, -1.0f));
-            glm::vec3 right   = glm::rotate(orientation, glm::vec3(1.0f, 0.0f, 0.0f));
-            float velocity = 5.0f * (float)ts;
-
-            if (Input::IsKeyPressed(Key::W)) transform.Translation += forward * velocity;
-            if (Input::IsKeyPressed(Key::S)) transform.Translation -= forward * velocity;
-            if (Input::IsKeyPressed(Key::A)) transform.Translation -= right * velocity;
-            if (Input::IsKeyPressed(Key::D)) transform.Translation += right * velocity;
-            if (Input::IsKeyPressed(Key::E)) transform.Translation.y += velocity;
-            if (Input::IsKeyPressed(Key::Q)) transform.Translation.y -= velocity;
-        } else {
-            m_InitialMousePos = { Input::GetMouseX(), Input::GetMouseY() };
-        }
-    }
-
     void EditorLayer::RenderScene(const glm::mat4& cameraViewProj) {
         Renderer::BeginScene(cameraViewProj);
 
@@ -341,9 +320,46 @@ namespace Ayaya {
             glDepthMask(GL_TRUE); 
         }
 
-        auto defaultShader = m_ShaderLibrary.Get("default");
-        defaultShader->Bind();
-        defaultShader->SetInt("u_Texture", 0);
+        // auto defaultShader = m_ShaderLibrary.Get("default");
+        // defaultShader->Bind();
+        // defaultShader->SetInt("u_Texture", 0);
+
+        auto lightingShader = m_ShaderLibrary.Get("lighting");
+        lightingShader->Bind();
+        lightingShader->SetInt("u_Texture", 0);
+        // ==========================================
+        // 核心魔法：上帝说，要有光！
+        // ==========================================
+        // ==========================================
+        // 核心魔法：从 ECS 场景中寻找平行光！
+        // ==========================================
+        // 先设置一个默认的后备光源（防止场景里一盏灯都没有时变全黑）
+        glm::vec3 lightDir = { -0.2f, -1.0f, -0.3f }; 
+        glm::vec3 lightColor = { 1.0f, 1.0f, 1.0f };
+        float ambientStrength = 0.3f;
+
+        // 在注册表里寻找所有同时拥有 Transform 和 DirectionalLight 的实体
+        auto lightGroup = m_ActiveScene->Reg().view<TransformComponent, DirectionalLightComponent>();
+        for (auto entityID : lightGroup) {
+            Entity lightEntity{ entityID, m_ActiveScene.get() };
+            auto& transform = lightEntity.GetComponent<TransformComponent>();
+            auto& dlc = lightEntity.GetComponent<DirectionalLightComponent>();
+
+            // 数学魔法：将实体的欧拉角旋转 (Rotation) 转换成一个向前的方向向量！
+            // 假设光的默认发射方向是沿着 -Z 轴，通过乘以实体的旋转四元数，得出真实方向。
+            glm::quat orientation = glm::quat(transform.Rotation);
+            lightDir = glm::rotate(orientation, glm::vec3(0.0f, 0.0f, -1.0f));
+            
+            lightColor = dlc.Color;
+            ambientStrength = dlc.AmbientStrength;
+            
+            break; // 目前我们的 Shader 只支持一盏主平行光，找到第一个就跳出循环
+        }
+        // 设置一盏平行光（太阳光），从右前上方斜射下来
+        lightingShader->SetFloat3("u_LightDir", lightDir); 
+        lightingShader->SetFloat3("u_LightColor", lightColor);
+        lightingShader->SetFloat("u_AmbientStrength", ambientStrength);
+
 
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_STENCIL_TEST);
@@ -374,11 +390,12 @@ namespace Ayaya {
                 m_WhiteTexture->Bind(0);
             }
 
-            defaultShader->SetFloat3("u_ColorModifier", glm::vec3(meshComp.Color)); 
+            // defaultShader->SetFloat3("u_ColorModifier", glm::vec3(meshComp.Color)); 
+            lightingShader->SetFloat3("u_ColorModifier", glm::vec3(meshComp.Color)); 
             
             // 提交网格渲染！
             if (meshComp.MeshGeometry) {
-                Renderer::Submit(defaultShader, meshComp.MeshGeometry->GetVertexArray(), entity.GetWorldTransform());
+                Renderer::Submit(lightingShader, meshComp.MeshGeometry->GetVertexArray(), entity.GetWorldTransform());
             }
         }
 
@@ -535,31 +552,20 @@ namespace Ayaya {
         m_ViewportBounds[1] = { viewportMaxRegion.x + viewportOffset.x, viewportMaxRegion.y + viewportOffset.y };
 
         ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
-        if (m_ViewportSize.x != viewportPanelSize.x || m_ViewportSize.y != viewportPanelSize.y) {
-            if (viewportPanelSize.x > 0.0f && viewportPanelSize.y > 0.0f) {
-                m_Framebuffer->Resize((uint32_t)viewportPanelSize.x, (uint32_t)viewportPanelSize.y);
-                m_ViewportSize = { viewportPanelSize.x, viewportPanelSize.y };
-
-                auto view = m_ActiveScene->Reg().view<CameraComponent>();
-                for (auto entity : view) {
-                    auto& cameraComp = view.get<CameraComponent>(entity);
-                    if (!cameraComp.FixedAspectRatio) {
-                        cameraComp.Camera.SetViewportSize((uint32_t)viewportPanelSize.x, (uint32_t)viewportPanelSize.y);
-                    }
-                }
-            }
-        }
+        
+        // ==========================================
+        // 核心修复 1：这里绝对不能调用 m_Framebuffer->Resize!
+        // 只静默更新 m_ViewportSize 供下一帧使用
+        // ==========================================
+        m_ViewportSize = { viewportPanelSize.x, viewportPanelSize.y };
 
         uint32_t textureID = m_Framebuffer->GetColorAttachmentRendererID();
         ImGui::Image(reinterpret_cast<void*>((intptr_t)textureID), 
                      ImVec2{ m_ViewportSize.x, m_ViewportSize.y }, 
                      ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
 
-        glm::mat4 cameraViewMatrix, cameraProjectionMatrix;
-        if (GetPrimaryCamera(cameraViewMatrix, cameraProjectionMatrix)) {
-            HandleMousePicking(cameraViewMatrix, cameraProjectionMatrix);
-            HandleGizmo(cameraViewMatrix, cameraProjectionMatrix);
-        }
+        HandleMousePicking(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
+        HandleGizmo(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
 
         ImGui::End();
         ImGui::PopStyleVar();

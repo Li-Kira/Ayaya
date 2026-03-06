@@ -41,6 +41,7 @@ namespace Ayaya {
             std::string filenameString = relativePath.filename().string();
 
             if (filenameString.empty() || filenameString[0] == '.') continue;
+            if (path.extension() == ".yaml") continue;
 
             // ==========================================
             // 1. 根据后缀名精准分配图标
