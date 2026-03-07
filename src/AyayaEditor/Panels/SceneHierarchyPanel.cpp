@@ -324,6 +324,34 @@ namespace Ayaya {
                 auto& mrc = entity.GetComponent<MeshRendererComponent>();
                 ImGui::ColorEdit4("Color", glm::value_ptr(mrc.Color));
 
+                // ==========================================
+                // 新增：模型资产拖拽插槽 (Drag & Drop Target)
+                // ==========================================
+                ImGui::Spacing();
+                ImGui::Text("Model Asset");
+                
+                // 画一个占满整行的按钮作为“接收区”
+                ImGui::Button("Drop .obj / .fbx here", ImVec2(-1.0f, 30.0f));
+
+                // 当有东西拖拽到这个按钮上时...
+                if (ImGui::BeginDragDropTarget()) {
+                    // 检查载荷类型是否为 CONTENT_BROWSER_ITEM (我们在 Content Browser 里定义的名字)
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                        const char* pathStr = (const char*)payload->Data;
+                        std::filesystem::path modelPath = std::filesystem::path("assets") / pathStr;
+                        
+                        // 校验后缀名：只接收常见的 3D 模型格式
+                        if (modelPath.extension() == ".obj" || modelPath.extension() == ".fbx" || modelPath.extension() == ".gltf") {
+                            AYAYA_CORE_INFO("Loading model: {0}", modelPath.string());
+                            // 动态替换模型！
+                            mrc.ModelAsset = std::make_shared<Model>(modelPath.string());
+                        } else {
+                            AYAYA_CORE_WARN("Unsupported model format!");
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+
                 ImGui::Spacing();
                 ImGui::Text("Texture");
 

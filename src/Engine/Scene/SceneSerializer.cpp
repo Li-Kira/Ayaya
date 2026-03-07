@@ -125,6 +125,12 @@ namespace Ayaya {
             out << YAML::Key << "Color" << YAML::Value << mrc.Color;
             out << YAML::Key << "TextureHandle" << YAML::Value << (uint64_t)mrc.TextureHandle;
             
+            // ==========================================
+            // 新增：如果模型有路径（不是默认生成的基础几何体），则保存路径
+            // ==========================================
+            if (mrc.ModelAsset && !mrc.ModelAsset->GetPath().empty()) {
+                out << YAML::Key << "ModelPath" << YAML::Value << mrc.ModelAsset->GetPath();
+            }
             out << YAML::EndMap; 
         }
 
@@ -282,6 +288,14 @@ namespace Ayaya {
                 mrc.Color = meshRendererComponent["Color"].as<glm::vec4>();
                 if (meshRendererComponent["TextureHandle"]) { 
                     mrc.TextureHandle = meshRendererComponent["TextureHandle"].as<uint64_t>();
+                }
+
+                // ==========================================
+                // 新增：如果读到了模型路径，立刻让 Assimp 重新加载它！
+                // ==========================================
+                if (meshRendererComponent["ModelPath"]) {
+                    std::string modelPath = meshRendererComponent["ModelPath"].as<std::string>();
+                    mrc.ModelAsset = std::make_shared<Model>(modelPath);
                 }
             }
 

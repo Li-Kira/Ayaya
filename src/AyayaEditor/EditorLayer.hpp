@@ -5,7 +5,6 @@
 #include "Panels/SceneHierarchyPanel.hpp"
 #include "Panels/ContentBrowserPanel.hpp"
 #include <Renderer/Renderer.hpp>
-#include <Renderer/Shader.hpp>
 #include <Renderer/Texture.hpp>
 #include <Renderer/Framebuffer.hpp>
 // --- 新增：引入场景序列化器 ---
@@ -28,12 +27,7 @@ namespace Ayaya {
         virtual void OnEvent(Event& event) override;
 
     private:
-        void SetupGeometry();
         void SetupScene();
-
-        // =====================================
-        // 场景操作逻辑抽象
-        // =====================================
         void NewScene();
         void OpenScene();
         void SaveScene();
@@ -42,7 +36,6 @@ namespace Ayaya {
         bool OnKeyPressed(KeyPressedEvent& e);
         
         void HandleShortcuts();
-        void RenderScene(const glm::mat4& cameraViewProj);
         
         void UIRenderDockspace();
         void UIRenderMenuBar();
@@ -53,16 +46,14 @@ namespace Ayaya {
 
     private:
         EditorCamera m_EditorCamera;
-
-        ShaderLibrary m_ShaderLibrary;
-        std::shared_ptr<Texture2D> m_WhiteTexture; // 全局默认白底贴图
-        std::shared_ptr<VertexArray> m_VertexArray;
         std::shared_ptr<Framebuffer> m_Framebuffer; 
+        std::shared_ptr<Scene> m_ActiveScene;
+        std::string m_CurrentScenePath = std::string();
 
         glm::vec2 m_ViewportSize = { 0.0f, 0.0f };         
         ImVec2 m_ViewportBounds[2]; 
 
-        std::shared_ptr<Scene> m_ActiveScene;
+        
         SceneHierarchyPanel m_SceneHierarchyPanel;
         ContentBrowserPanel m_ContentBrowserPanel;
 
@@ -72,11 +63,6 @@ namespace Ayaya {
 
         int m_GizmoType = 7; // ImGuizmo::OPERATION::TRANSLATE 的值
         Entity m_HoveredEntity = {}; 
-
-        // ==========================================
-        // 新增：记录当前打开的场景路径
-        // ==========================================
-        std::string m_CurrentScenePath = std::string();
 
         bool m_ShowGrid = true; // 默认开启网格
     };

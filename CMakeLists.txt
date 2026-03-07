@@ -83,6 +83,8 @@ target_precompile_headers(Ayaya PRIVATE
 )
 
 # 6. 设置包含路径
+find_path(ASSIMP_INCLUDE_DIR NAMES assimp/Importer.hpp PATHS /opt/homebrew/include /usr/local/include /usr/include)
+
 target_include_directories(Ayaya PUBLIC 
     "${CMAKE_CURRENT_SOURCE_DIR}/src" 
     "${ENGINE_DIR}"                   
@@ -92,11 +94,13 @@ target_include_directories(Ayaya PUBLIC
     "${ENTT_DIR}"            # 允许包含 EnTT 头文件
     "${IMGUIZMO_DIR}"        # 允许直接 #include <ImGuizmo.h>
     "${YAML_CPP_DIR}/include" # <--- 新增：让引擎能找到 <yaml-cpp/yaml.h>
+    ${ASSIMP_INCLUDE_DIR}    # <--- 新增：让引擎能找到 Assimp 的头文件
 )
 
 # 7. 链接第三方库
 find_library(GLFW_LIB NAMES glfw glfw3 PATHS ${VENDOR_LIB} NO_DEFAULT_PATH)
-target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${APPLE_FRAMEWORKS} yaml-cpp)
+find_library(ASSIMP_LIB NAMES assimp PATHS /opt/homebrew/lib /usr/local/lib /usr/lib)
+target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${APPLE_FRAMEWORKS} yaml-cpp ${ASSIMP_LIB})
 
 # =========================================================================
 # 8. 定义 AyayaEditor (编辑器应用程序 - 面向开发者)

@@ -1,5 +1,6 @@
 #include "EditorLayer.hpp"
 #include "Renderer/Mesh.hpp"
+#include "Renderer/SceneRenderer.hpp"
 
 #include <glad/glad.h>
 #include <imgui.h>
@@ -24,27 +25,18 @@ namespace Ayaya {
         fbSpec.Height = 720;
         m_Framebuffer = Framebuffer::Create(fbSpec);
 
-        // ==========================================
-        // 初始化纯白贴图 (1x1 像素)
-        // ==========================================
-        m_WhiteTexture = Texture2D::Create(1, 1);
-        uint32_t whiteTextureData = 0xffffffff; // 16进制表示：RGBA全部拉满 (255, 255, 255, 255)
-        m_WhiteTexture->SetData(&whiteTextureData, sizeof(uint32_t));
+        SceneRenderer::Init();
 
-        m_ShaderLibrary.Load("assets/shaders/default.vert", "assets/shaders/default.frag");
-        m_ShaderLibrary.Load("assets/shaders/outline.vert", "assets/shaders/outline.frag");
-        m_ShaderLibrary.Load("assets/shaders/grid.vert", "assets/shaders/grid.frag");
-        m_ShaderLibrary.Load("assets/shaders/lighting.vert", "assets/shaders/lighting.frag");
-
-        SetupGeometry();
         SetupScene();
     }
 
     void EditorLayer::OnUpdate(Timestep ts) {
+        // 1.处理输入
         HandleShortcuts();
 
         // ==========================================
-        // 核心修复 2：在一切渲染开始前，检查并处理 Resize
+        // 2.处理相机和视口
+        // 在一切渲染开始前，检查并处理 Resize
         // 这样新建的 Framebuffer 马上就会在下面的代码中被渲染塞满，绝对不会黑屏！
         // ==========================================
         static glm::vec2 s_LastViewportSize = { 0.0f, 0.0f };
@@ -71,8 +63,12 @@ namespace Ayaya {
         RenderCommand::Clear();
         glClear(GL_STENCIL_BUFFER_BIT); 
 
-        // 2. 直接拿它的矩阵去渲染世界！
-        RenderScene(m_EditorCamera.GetViewProjection());
+        // ==========================================
+        // 3.渲染管线调用
+        // ==========================================
+        SceneRenderer::BeginScene(m_EditorCamera.GetViewProjection());
+        SceneRenderer::RenderScene(m_ActiveScene, m_HoveredEntity, m_ShowGrid);
+        SceneRenderer::EndScene();
 
         m_Framebuffer->Unbind();
 
@@ -93,14 +89,6 @@ namespace Ayaya {
     }
 
     void EditorLayer::OnEvent(Event& event) {}
-
-    void EditorLayer::SetupGeometry() {
-        // ==========================================
-        // 清爽！直接向 Mesh 类要一个正方体的顶点数组
-        // ==========================================
-        std::shared_ptr<Mesh> cubeMesh = Mesh::CreateCube(1.0f);
-        m_VertexArray = cubeMesh->GetVertexArray();
-    }
 
     void EditorLayer::SetupScene() {
         m_ActiveScene = std::make_shared<Scene>();
@@ -138,12 +126,12 @@ namespace Ayaya {
         
         square1.SetParent(parentNode); 
 
-        // --- 右边的方块 (纯色) ---
-        Entity square2 = m_ActiveScene->CreateEntity("Right Square");
-        square2.GetComponent<TransformComponent>().Translation = { 1.5f, 0.0f, 0.0f };
-        
-        auto& mrc2 = square2.AddComponent<MeshRendererComponent>(); // 添加 3D 网格组件
-        mrc2.Color = glm::vec4{0.8f, 0.2f, 0.3f, 1.0f};             // 设置红色
+        Entity modelEntity = m_ActiveScene->CreateEntity("Assimp Model");
+        modelEntity.GetComponent<TransformComponent>().Scale = { 1.0f, 1.0f, 1.0f };
+        modelEntity.GetComponent<TransformComponent>().Translation = { 1.5f, 0.0f, 0.0f };
+        auto& mrc2 = modelEntity.AddComponent<MeshRendererComponent>(); 
+        mrc2.ModelAsset = std::make_shared<Model>("assets/models/backpack.obj"); 
+        mrc2.Color = glm::vec4{0.9f, 0.7f, 0.2f, 1.0f};
 
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
     }
@@ -291,142 +279,6 @@ namespace Ayaya {
         } else {
             s_S_Pressed = false;
         }
-    }
-
-    void EditorLayer::RenderScene(const glm::mat4& cameraViewProj) {
-        Renderer::BeginScene(cameraViewProj);
-
-        // ==========================================
-        // 核心：在所有物体之前渲染背景网格
-        // ==========================================
-        if (m_ShowGrid) {
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            glEnable(GL_DEPTH_TEST);
-            
-            // 关闭深度写入，防止半透明的网格遮挡后面的物体
-            glDepthMask(GL_FALSE);
-
-            auto gridShader = m_ShaderLibrary.Get("grid");
-            gridShader->Bind();
-            
-            // 魔法：把我们之前的 Cube (正方体) 强行拍扁成 Y=0 的厚度！
-            // 并在 X 和 Z 方向各放大 100 倍，铺成一张无限大平原
-            glm::mat4 gridTransform = glm::scale(glm::mat4(1.0f), glm::vec3(100.0f, 0.0f, 100.0f));
-                                    
-            Renderer::Submit(gridShader, m_VertexArray, gridTransform);
-            
-            // 恢复深度写入，准备渲染正常的游戏物体
-            glDepthMask(GL_TRUE); 
-        }
-
-        // auto defaultShader = m_ShaderLibrary.Get("default");
-        // defaultShader->Bind();
-        // defaultShader->SetInt("u_Texture", 0);
-
-        auto lightingShader = m_ShaderLibrary.Get("lighting");
-        lightingShader->Bind();
-        lightingShader->SetInt("u_Texture", 0);
-        // ==========================================
-        // 核心魔法：上帝说，要有光！
-        // ==========================================
-        // ==========================================
-        // 核心魔法：从 ECS 场景中寻找平行光！
-        // ==========================================
-        // 先设置一个默认的后备光源（防止场景里一盏灯都没有时变全黑）
-        glm::vec3 lightDir = { -0.2f, -1.0f, -0.3f }; 
-        glm::vec3 lightColor = { 1.0f, 1.0f, 1.0f };
-        float ambientStrength = 0.3f;
-
-        // 在注册表里寻找所有同时拥有 Transform 和 DirectionalLight 的实体
-        auto lightGroup = m_ActiveScene->Reg().view<TransformComponent, DirectionalLightComponent>();
-        for (auto entityID : lightGroup) {
-            Entity lightEntity{ entityID, m_ActiveScene.get() };
-            auto& transform = lightEntity.GetComponent<TransformComponent>();
-            auto& dlc = lightEntity.GetComponent<DirectionalLightComponent>();
-
-            // 数学魔法：将实体的欧拉角旋转 (Rotation) 转换成一个向前的方向向量！
-            // 假设光的默认发射方向是沿着 -Z 轴，通过乘以实体的旋转四元数，得出真实方向。
-            glm::quat orientation = glm::quat(transform.Rotation);
-            lightDir = glm::rotate(orientation, glm::vec3(0.0f, 0.0f, -1.0f));
-            
-            lightColor = dlc.Color;
-            ambientStrength = dlc.AmbientStrength;
-            
-            break; // 目前我们的 Shader 只支持一盏主平行光，找到第一个就跳出循环
-        }
-        // 设置一盏平行光（太阳光），从右前上方斜射下来
-        lightingShader->SetFloat3("u_LightDir", lightDir); 
-        lightingShader->SetFloat3("u_LightColor", lightColor);
-        lightingShader->SetFloat("u_AmbientStrength", ambientStrength);
-
-
-        glEnable(GL_DEPTH_TEST);
-        glEnable(GL_STENCIL_TEST);
-        glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
-
-        // ==========================================
-        // 渲染 3D 网格组件 (Mesh Renderer)
-        // ==========================================
-        auto meshGroup = m_ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
-        for (auto entityID : meshGroup) {
-            Entity entity{ entityID, m_ActiveScene.get() };
-            auto& meshComp = entity.GetComponent<MeshRendererComponent>();
-            
-            // 处理描边遮罩
-            if (m_HoveredEntity && m_HoveredEntity == entity) {
-                glStencilFunc(GL_ALWAYS, 1, 0xFF);
-                glStencilMask(0xFF); 
-            } else {
-                glStencilFunc(GL_ALWAYS, 0, 0xFF);
-                glStencilMask(0x00); 
-            }
-
-            // 绑定贴图
-            if (meshComp.TextureHandle != 0 && AssetManager::IsAssetHandleValid(meshComp.TextureHandle)) {
-                auto tex = AssetManager::GetAsset<Texture2D>(meshComp.TextureHandle);
-                tex->Bind(0);
-            } else {
-                m_WhiteTexture->Bind(0);
-            }
-
-            // defaultShader->SetFloat3("u_ColorModifier", glm::vec3(meshComp.Color)); 
-            lightingShader->SetFloat3("u_ColorModifier", glm::vec3(meshComp.Color)); 
-            
-            // 提交网格渲染！
-            if (meshComp.MeshGeometry) {
-                Renderer::Submit(lightingShader, meshComp.MeshGeometry->GetVertexArray(), entity.GetWorldTransform());
-            }
-        }
-
-        // ==========================================
-        // 核心修复：描边判断也换成 MeshRendererComponent
-        // ==========================================
-        if (m_HoveredEntity && m_HoveredEntity.HasComponent<MeshRendererComponent>()) {
-            glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
-            glStencilMask(0x00);      
-            glDisable(GL_DEPTH_TEST); 
-
-            auto outlineShader = m_ShaderLibrary.Get("outline");
-            outlineShader->Bind();
-            outlineShader->SetFloat3("u_Color", glm::vec3(1.0f, 0.65f, 0.0f)); 
-            
-            glm::mat4 transform = m_HoveredEntity.GetWorldTransform();
-            transform = transform * glm::scale(glm::mat4(1.0f), glm::vec3(1.05f)); 
-            
-            // 提交模型也要获取它真正的几何体，而不是用写死的 m_VertexArray
-            auto& meshComp = m_HoveredEntity.GetComponent<MeshRendererComponent>();
-            if (meshComp.MeshGeometry) {
-                Renderer::Submit(outlineShader, meshComp.MeshGeometry->GetVertexArray(), transform);
-            }
-
-            glStencilMask(0xFF);
-            glStencilFunc(GL_ALWAYS, 1, 0xFF);
-            glEnable(GL_DEPTH_TEST);
-            glDisable(GL_STENCIL_TEST);
-        }
-
-        Renderer::EndScene();
     }
 
     void EditorLayer::UIRenderDockspace() {

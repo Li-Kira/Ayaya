@@ -9,9 +9,7 @@
 #include <glm/gtx/quaternion.hpp>
 
 #include "Renderer/SceneCamera.hpp"
-#include "Renderer/Mesh.hpp"
-
-// --- 新增：引入 UUID ---
+#include "Renderer/Model.hpp"
 #include "Engine/Core/UUID.hpp"
 
 namespace Ayaya {
@@ -92,11 +90,14 @@ namespace Ayaya {
         glm::vec4 Color{1.0f, 1.0f, 1.0f, 1.0f};
         UUID TextureHandle = 0;
         
-        // 目前先默认给它塞一个正方体，未来这里会改成网格资产的 UUID
-        std::shared_ptr<Mesh> MeshGeometry; 
+        // ==========================================
+        // 升级：现在我们持有的是一个完整的 Model 容器！
+        // ==========================================
+        std::shared_ptr<Model> ModelAsset; 
 
         MeshRendererComponent() {
-            MeshGeometry = Mesh::CreateCube(1.0f);
+            // 默认依然给它塞一个我们引擎自带的 1x1 正方体，确保不会空指针
+            ModelAsset = std::make_shared<Model>(Mesh::CreateCube(1.0f));
         }
         MeshRendererComponent(const MeshRendererComponent&) = default;
     };
