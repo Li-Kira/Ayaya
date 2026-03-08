@@ -10,6 +10,7 @@
 
 #include "Renderer/SceneCamera.hpp"
 #include "Renderer/Model.hpp"
+#include "Renderer/Material.hpp"
 #include "Engine/Core/UUID.hpp"
 
 namespace Ayaya {
@@ -87,17 +88,17 @@ namespace Ayaya {
     // 新增：3D 网格渲染组件
     // ==========================================
     struct MeshRendererComponent {
-        glm::vec4 Color{1.0f, 1.0f, 1.0f, 1.0f};
-        UUID TextureHandle = 0;
+        std::shared_ptr<Model> ModelAsset; 
         
         // ==========================================
-        // 升级：现在我们持有的是一个完整的 Model 容器！
+        // 升级：组件不再直接持有颜色，而是持有一个材质资产！
         // ==========================================
-        std::shared_ptr<Model> ModelAsset; 
+        std::shared_ptr<Material> MaterialAsset;
 
         MeshRendererComponent() {
             // 默认依然给它塞一个我们引擎自带的 1x1 正方体，确保不会空指针
             ModelAsset = std::make_shared<Model>(Mesh::CreateCube(1.0f));
+            MaterialAsset = std::make_shared<Material>();
         }
         MeshRendererComponent(const MeshRendererComponent&) = default;
     };

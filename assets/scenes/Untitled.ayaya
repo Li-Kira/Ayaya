@@ -1,6 +1,6 @@
 Scene: Untitled
 Entities:
-  - Entity: 3709786432398593576
+  - Entity: 12442606272999176973
     TagComponent:
       Tag: Main Camera
     TransformComponent:
@@ -12,7 +12,7 @@ Entities:
       FixedAspectRatio: false
     RelationshipComponent:
       Parent: 0
-  - Entity: 402191658848871868
+  - Entity: 16042443432994920142
     TagComponent:
       Tag: Directional Light
     TransformComponent:
@@ -24,7 +24,7 @@ Entities:
       AmbientStrength: 0.3
     RelationshipComponent:
       Parent: 0
-  - Entity: 3877204156148712352
+  - Entity: 1632496428642565814
     TagComponent:
       Tag: Parent Empty Node
     TransformComponent:
@@ -33,19 +33,18 @@ Entities:
       Scale: [1, 1, 1]
     RelationshipComponent:
       Parent: 0
-  - Entity: 9753022905219182255
+  - Entity: 5601512864109361069
     TagComponent:
-      Tag: Left Square
+      Tag: Assimp Model (1)
     TransformComponent:
       Translation: [-1.5, 0, 0]
       Rotation: [0, -0, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
-      Color: [0.2, 0.8, 0.3, 1]
-      TextureHandle: 2661707628446602832
+      MaterialPath: assets/materials/NewMaterial.mat
     RelationshipComponent:
-      Parent: 3877204156148712352
-  - Entity: 9673367895740595264
+      Parent: 1632496428642565814
+  - Entity: 13681955513636480702
     TagComponent:
       Tag: Assimp Model
     TransformComponent:
@@ -53,8 +52,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
-      Color: [0.9, 0.7, 0.2, 1]
-      TextureHandle: 0
       ModelPath: assets/models/backpack.obj
+      MaterialPath: assets/materials/NewMaterial (1).mat
     RelationshipComponent:
       Parent: 0

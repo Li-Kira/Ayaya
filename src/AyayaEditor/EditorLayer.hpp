@@ -9,6 +9,7 @@
 #include <Renderer/Framebuffer.hpp>
 // --- 新增：引入场景序列化器 ---
 #include "Scene/SceneSerializer.hpp"
+#include "Renderer/MaterialSerializer.hpp"
 #include "Utils/PlatformUtils.hpp"
 #include "Asset/AssetManager.hpp"
 

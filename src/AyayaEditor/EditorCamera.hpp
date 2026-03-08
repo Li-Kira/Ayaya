@@ -16,6 +16,7 @@ namespace Ayaya {
         const glm::mat4& GetProjection() const { return m_Projection; }
         const glm::mat4& GetViewMatrix() const { return m_ViewMatrix; }
         glm::mat4 GetViewProjection() const { return m_Projection * m_ViewMatrix; }
+        const glm::vec3& GetPosition() const { return m_Position; }
 
     private:
         void RecalculateView();

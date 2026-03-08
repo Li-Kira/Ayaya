@@ -66,7 +66,7 @@ namespace Ayaya {
         // ==========================================
         // 3.渲染管线调用
         // ==========================================
-        SceneRenderer::BeginScene(m_EditorCamera.GetViewProjection());
+        SceneRenderer::BeginScene(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection(), m_EditorCamera.GetPosition());
         SceneRenderer::RenderScene(m_ActiveScene, m_HoveredEntity, m_ShowGrid);
         SceneRenderer::EndScene();
 
@@ -97,7 +97,7 @@ namespace Ayaya {
         // 核心修复：不要直接 Create 和 AddAsset，
         // 必须调用 ImportAsset 让它登记进硬盘账本！
         // ==========================================
-        UUID bricksHandle = AssetManager::ImportAsset("assets/textures/bricks2.jpg");
+        // UUID bricksHandle = AssetManager::ImportAsset("assets/textures/bricks2.jpg");
 
         // 创造摄像机
         Entity cameraEntity = m_ActiveScene->CreateEntity("Main Camera");
@@ -116,22 +116,66 @@ namespace Ayaya {
         // 创造场景物体
         Entity parentNode = m_ActiveScene->CreateEntity("Parent Empty Node");
 
-        // --- 左边的方块 (带砖块贴图) ---
-        Entity square1 = m_ActiveScene->CreateEntity("Left Square");
-        square1.GetComponent<TransformComponent>().Translation = { -1.5f, 0.0f, 0.0f };
+        // // --- 左边的方块 (带砖块贴图) ---
+        // Entity square1 = m_ActiveScene->CreateEntity("Left Square");
+        // square1.GetComponent<TransformComponent>().Translation = { -1.5f, 0.0f, 0.0f };
+        // auto& mrc1 = square1.AddComponent<MeshRendererComponent>(); // 添加 3D 网格组件
+        // mrc1.MaterialAsset = std::make_shared<Material>();
+        // MaterialSerializer::Deserialize(mrc1.MaterialAsset, "assets/materials/DefaultPBR.mat");
         
-        auto& mrc1 = square1.AddComponent<MeshRendererComponent>(); // 添加 3D 网格组件
-        mrc1.Color = glm::vec4{0.2f, 0.8f, 0.3f, 1.0f};             // 设置绿色混合
-        mrc1.TextureHandle = bricksHandle;                          // 赋予砖块贴图
-        
-        square1.SetParent(parentNode); 
+        // square1.SetParent(parentNode); 
 
+        // Entity modelEntity = m_ActiveScene->CreateEntity("Assimp Model");
+        // modelEntity.GetComponent<TransformComponent>().Scale = { 1.0f, 1.0f, 1.0f };
+        // modelEntity.GetComponent<TransformComponent>().Translation = { 1.5f, 0.0f, 0.0f };
+        // auto& mrc2 = modelEntity.AddComponent<MeshRendererComponent>(); 
+        // mrc2.ModelAsset = std::make_shared<Model>("assets/models/backpack.obj"); 
+        // mrc2.MaterialAsset = std::make_shared<Material>();
+        // MaterialSerializer::Deserialize(mrc2.MaterialAsset, "assets/materials/DefaultPBR.mat");
+        // mrc2.Color = glm::vec4{0.9f, 0.7f, 0.2f, 1.0f};
+
+        
         Entity modelEntity = m_ActiveScene->CreateEntity("Assimp Model");
         modelEntity.GetComponent<TransformComponent>().Scale = { 1.0f, 1.0f, 1.0f };
         modelEntity.GetComponent<TransformComponent>().Translation = { 1.5f, 0.0f, 0.0f };
-        auto& mrc2 = modelEntity.AddComponent<MeshRendererComponent>(); 
-        mrc2.ModelAsset = std::make_shared<Model>("assets/models/backpack.obj"); 
-        mrc2.Color = glm::vec4{0.9f, 0.7f, 0.2f, 1.0f};
+        auto& mrc = modelEntity.AddComponent<MeshRendererComponent>(); 
+        mrc.ModelAsset = std::make_shared<Model>("assets/models/backpack.obj"); 
+        
+        Entity cubeEntity = m_ActiveScene->CreateEntity("Cube");
+        cubeEntity.SetParent(parentNode); 
+        cubeEntity.GetComponent<TransformComponent>().Scale = { 1.0f, 1.0f, 1.0f };
+        cubeEntity.GetComponent<TransformComponent>().Translation = { -1.5f, 0.0f, 0.0f };
+        auto& mrc2 = cubeEntity.AddComponent<MeshRendererComponent>(); 
+
+        auto DefaultMat = std::make_shared<Material>();
+        bool success = MaterialSerializer::Deserialize(DefaultMat, "assets/Editor/materials/DefaultPBR.mat");
+
+        if (success) {
+            // 给物体分配一个克隆体！
+            mrc.MaterialAsset = DefaultMat->Clone();
+            mrc2.MaterialAsset = DefaultMat->Clone();
+        } else {
+            AYAYA_CORE_WARN("Failed to load DefaultPBR.mat!");
+            // 如果连母材质都没找到，只能给一个空材质，管线会自动走 Fallback(品红色)
+            mrc.MaterialAsset = std::make_shared<Material>(); 
+            mrc2.MaterialAsset = std::make_shared<Material>(); 
+        }
+
+        // ==========================================
+        // 2. 创建 3D 模型并赋予默认 PBR 材质
+        // ==========================================
+        // Entity modelEntity = m_ActiveScene->CreateEntity("Assimp Model");
+        
+        // auto& mrc = modelEntity.AddComponent<MeshRendererComponent>(); 
+        // mrc.ModelAsset = std::make_shared<Model>("assets/models/bunny.obj"); 
+        // mrc.MaterialAsset = std::make_shared<Material>();
+        // bool success = MaterialSerializer::Deserialize(mrc.MaterialAsset, "assets/materials/default_pbr.mat");
+        // if (!success) {
+        //     AYAYA_CORE_WARN("Failed to load default_pbr.mat! Falling back to engine default.");
+        //     // 如果文件读取失败，UI 会显示空面板，渲染管线会自动走那套“品红色”的 Fallback 逻辑
+        // } else {
+        //     AYAYA_CORE_INFO("Successfully loaded default PBR material for the model.");
+        // }
 
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
     }

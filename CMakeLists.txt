@@ -32,6 +32,8 @@ set(IMGUI_DIR "${VENDOR_DIR}/include/imgui")
 set(ENTT_DIR "${VENDOR_INCLUDE}/entt")
 # ImGuizmo 路径
 set(IMGUIZMO_DIR "${VENDOR_INCLUDE}/ImGuizmo")
+# stb 路径
+set(STB_DIR "${VENDOR_INCLUDE}/stb")
 
 # 4. 收集底层引擎核心源文件 (Ayaya Library)
 # 注意：SCENE_SOURCES 现在只会收集 Engine/Scene 里的文件，
@@ -91,6 +93,7 @@ target_include_directories(Ayaya PUBLIC
     "${VENDOR_INCLUDE}"
     "${IMGUI_DIR}"           # 允许 #include <imgui.h>
     "${IMGUI_DIR}/backends"  # 允许 #include <imgui_impl_glfw.h>
+    "${STB_DIR}"             # 允许 #include <stb_image.h>
     "${ENTT_DIR}"            # 允许包含 EnTT 头文件
     "${IMGUIZMO_DIR}"        # 允许直接 #include <ImGuizmo.h>
     "${YAML_CPP_DIR}/include" # <--- 新增：让引擎能找到 <yaml-cpp/yaml.h>

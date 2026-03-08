@@ -21,6 +21,7 @@ namespace Ayaya {
         const std::string& GetName() const { return m_Name; }
 
         // --- Uniform 支持 ---
+        void SetBool(const std::string& name, bool value);
         void SetInt(const std::string& name, int value);
         void SetIntArray(const std::string& name, int* values, uint32_t count);
         void SetFloat(const std::string& name, float value);

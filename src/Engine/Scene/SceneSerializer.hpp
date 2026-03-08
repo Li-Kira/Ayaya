@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Scene.hpp"
+#include "Renderer/MaterialSerializer.hpp"
 #include <memory>
 #include <string>
 

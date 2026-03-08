@@ -1,4 +1,19 @@
 AssetRegistry:
+  - Handle: 14915401512423198094
+    FilePath: assets/textures/rock.png
+    Type: 2
+  - Handle: 2783685059859484093
+    FilePath: assets/textures/backpack/ao.jpg
+    Type: 2
+  - Handle: 6418777240669007164
+    FilePath: assets/textures/backpack/roughness.jpg
+    Type: 2
+  - Handle: 12930492451311854402
+    FilePath: assets/textures/backpack/diffuse.jpg
+    Type: 2
   - Handle: 2661707628446602832
     FilePath: assets/textures/bricks2.jpg
+    Type: 2
+  - Handle: 5461735850262010926
+    FilePath: assets/textures/backpack/specular.jpg
     Type: 2

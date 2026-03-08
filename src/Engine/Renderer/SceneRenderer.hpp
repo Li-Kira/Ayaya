@@ -13,7 +13,7 @@ namespace Ayaya {
         static void Init();
 
         // 开始一帧的渲染准备
-        static void BeginScene(const glm::mat4& viewProjection);
+        static void BeginScene(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, const glm::vec3& cameraPosition);
         
         // 渲染整个 3D 场景的核心管线
         static void RenderScene(const std::shared_ptr<Scene>& scene, Entity hoveredEntity, bool showGrid);

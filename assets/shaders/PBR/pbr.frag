@@ -11,6 +11,19 @@ uniform float u_Metallic;   // 金属度 (0 = 绝缘体/塑料, 1 = 纯金属)
 uniform float u_Roughness;  // 粗糙度 (0 = 光滑镜面, 1 = 极度粗糙)
 uniform float u_AO;         // 环境光遮蔽
 
+// 新增贴图支持
+uniform sampler2D u_AlbedoMap;
+uniform bool u_UseAlbedoMap;
+
+uniform sampler2D u_MetallicMap;
+uniform bool u_UseMetallicMap;
+
+uniform sampler2D u_RoughnessMap;
+uniform bool u_UseRoughnessMap;
+
+uniform sampler2D u_AOMap;
+uniform bool u_UseAOMap;
+
 // 光源与相机参数
 uniform vec3 u_LightDir;
 uniform vec3 u_LightColor;
@@ -55,41 +68,61 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0) {
 }
 
 void main() {
+    // 1. 漫反射颜色 (Albedo)
+    vec3 albedo = u_Albedo;
+    if (u_UseAlbedoMap) {
+        albedo *= pow(texture(u_AlbedoMap, v_TexCoord).rgb, vec3(2.2));
+    }
+
+    // 2. 金属度 (Metallic)
+    float metallic = u_Metallic;
+    if (u_UseMetallicMap) {
+        metallic *= texture(u_MetallicMap, v_TexCoord).r; // 通常读取 R 通道
+    }
+
+    // 3. 粗糙度 (Roughness)
+    float roughness = u_Roughness;
+    if (u_UseRoughnessMap) {
+        roughness *= texture(u_RoughnessMap, v_TexCoord).r;
+    }
+
+    // 4. 环境光遮蔽 (AO)
+    float ao = u_AO;
+    if (u_UseAOMap) {
+        ao *= texture(u_AOMap, v_TexCoord).r;
+    }
+
+    // ==========================================
+    // 接下来使用全新的物理变量进行计算
+    // ==========================================
     vec3 N = normalize(v_Normal);
     vec3 V = normalize(u_CameraPos - v_FragPos);
     vec3 L = normalize(-u_LightDir);
-    vec3 H = normalize(V + L); // 半程向量
+    vec3 H = normalize(V + L); 
 
-    // 绝缘体的基础反射率一般是 0.04，金属会使用它自己的颜色作为反射率
     vec3 F0 = vec3(0.04); 
-    F0 = mix(F0, u_Albedo, u_Metallic);
+    F0 = mix(F0, albedo, metallic); // 注意这里用新的 albedo 和 metallic
 
-    // 计算 Cook-Torrance BRDF 的三个核心部分
-    float NDF = DistributionGGX(N, H, u_Roughness);   
-    float G   = GeometrySmith(N, V, L, u_Roughness);      
+    float NDF = DistributionGGX(N, H, roughness);   // 注意这里用 roughness
+    float G   = GeometrySmith(N, V, L, roughness);      
     vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);       
 
-    // 能量守恒：Specular(镜面反射) + Diffuse(漫反射) = 1.0
     vec3 kS = F;
     vec3 kD = vec3(1.0) - kS;
-    kD *= 1.0 - u_Metallic; // 纯金属没有漫反射，光线全被吸收或反射了！
+    kD *= 1.0 - metallic;
 
-    // 合并高光项
     vec3 numerator    = NDF * G * F;
     float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
     vec3 specular     = numerator / denominator;
 
-    // 算出平行光的最终贡献
     float NdotL = max(dot(N, L), 0.0);        
-    vec3 Lo = (kD * u_Albedo / PI + specular) * u_LightColor * NdotL;
+    vec3 Lo = (kD * albedo / PI + specular) * u_LightColor * NdotL;
 
-    // 极其基础的环境光 (以后可以升级为 IBL 基于图像的照明)
-    vec3 ambient = vec3(0.03) * u_Albedo * u_AO;
+    vec3 ambient = vec3(0.03) * albedo * ao; // 注意这里用 ao
     vec3 color = ambient + Lo;
 
-    // PBR 必须在真实的线性物理空间计算，最后要进行 HDR 曝光映射和 Gamma 校正！
-    color = color / (color + vec3(1.0)); // 简单的 Tone mapping
-    color = pow(color, vec3(1.0/2.2));   // Gamma 校正
+    color = color / (color + vec3(1.0)); 
+    color = pow(color, vec3(1.0/2.2));   
 
     FragColor = vec4(color, 1.0);
 }

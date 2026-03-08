@@ -2,6 +2,7 @@
 #include "SceneSerializer.hpp"
 #include "Entity.hpp"
 #include "Components.hpp"
+#include "Renderer/MaterialSerializer.hpp"
 
 #include <yaml-cpp/yaml.h>
 #include <fstream>
@@ -122,15 +123,56 @@ namespace Ayaya {
             out << YAML::BeginMap; 
             
             auto& mrc = entity.GetComponent<MeshRendererComponent>();
-            out << YAML::Key << "Color" << YAML::Value << mrc.Color;
-            out << YAML::Key << "TextureHandle" << YAML::Value << (uint64_t)mrc.TextureHandle;
             
-            // ==========================================
-            // 新增：如果模型有路径（不是默认生成的基础几何体），则保存路径
-            // ==========================================
+            // 1. 记录模型路径
             if (mrc.ModelAsset && !mrc.ModelAsset->GetPath().empty()) {
                 out << YAML::Key << "ModelPath" << YAML::Value << mrc.ModelAsset->GetPath();
             }
+
+            // ==========================================
+            // 2. 核心：在保存场景时，级联保存材质！
+            // ==========================================
+            if (mrc.MaterialAsset) {
+                auto& mat = mrc.MaterialAsset;
+                
+                // 检查：如果这是一个没有路径的游离材质，或者是编辑器内置的只读模板
+                if (mat->AssetPath.empty() || mat->AssetPath.find("assets/Editor/") != std::string::npos) {
+                    
+                    if (!std::filesystem::exists("assets/materials")) {
+                        std::filesystem::create_directories("assets/materials");
+                    }
+                    
+                    std::string baseName = mat->Name;
+                    if (baseName == "Empty Material" || baseName.empty() || baseName.find("(Instance)") != std::string::npos) {
+                        baseName = "NewMaterial";
+                    }
+                    
+                    std::string finalPath = "assets/materials/" + baseName + ".mat";
+                    int index = 1;
+                    
+                    // 查重并追加序号
+                    while (std::filesystem::exists(finalPath)) {
+                        finalPath = "assets/materials/" + baseName + " (" + std::to_string(index) + ").mat";
+                        index++;
+                    }
+                    
+                    mat->AssetPath = finalPath;
+                    mat->Name = std::filesystem::path(finalPath).stem().string();
+                    
+                    // 落地保存为新文件
+                    MaterialSerializer::Serialize(mat, mat->AssetPath);
+                    AYAYA_CORE_INFO("Auto-saved new material to {0}", mat->AssetPath);
+                } 
+                else {
+                    // 如果它已经是一个存在的用户材质，顺手覆盖保存它的最新参数！
+                    // 这样就算用户在面板上调了颜色忘记点 Save，保存场景时也会一并把材质文件更新
+                    MaterialSerializer::Serialize(mat, mat->AssetPath);
+                }
+
+                // 3. 将最终确定的合法路径写入场景文件
+                out << YAML::Key << "MaterialPath" << YAML::Value << mat->AssetPath;
+            }
+            
             out << YAML::EndMap; 
         }
 
@@ -285,17 +327,21 @@ namespace Ayaya {
             auto meshRendererComponent = entity["MeshRendererComponent"];
             if (meshRendererComponent) {
                 auto& mrc = deserializedEntity.AddComponent<MeshRendererComponent>();
-                mrc.Color = meshRendererComponent["Color"].as<glm::vec4>();
-                if (meshRendererComponent["TextureHandle"]) { 
-                    mrc.TextureHandle = meshRendererComponent["TextureHandle"].as<uint64_t>();
-                }
-
-                // ==========================================
-                // 新增：如果读到了模型路径，立刻让 Assimp 重新加载它！
-                // ==========================================
+                
+                // 1. 读取并加载模型
                 if (meshRendererComponent["ModelPath"]) {
                     std::string modelPath = meshRendererComponent["ModelPath"].as<std::string>();
                     mrc.ModelAsset = std::make_shared<Model>(modelPath);
+                }
+
+                // 2. 读取并加载材质资产
+                if (meshRendererComponent["MaterialPath"]) {
+                    std::string matPath = meshRendererComponent["MaterialPath"].as<std::string>();
+                    mrc.MaterialAsset = std::make_shared<Material>();
+                    MaterialSerializer::Deserialize(mrc.MaterialAsset, matPath);
+                } else {
+                    // 保底机制：如果没找到材质路径，给它分配一个空的默认材质，防止崩溃
+                    mrc.MaterialAsset = std::make_shared<Material>();
                 }
             }
 

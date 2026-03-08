@@ -70,14 +70,14 @@ namespace Ayaya {
 
         float fontSize = 18.0f; // 基础字体大小
         // 建议加载你下载的高清 TTF 字体，不要用 AddFontDefault()
-        io.Fonts->AddFontFromFileTTF("assets/fonts/Roboto-Regular.ttf", fontSize);
+        io.Fonts->AddFontFromFileTTF("assets/Editor/fonts/Roboto-Regular.ttf", fontSize);
 
         // 加载并合并 FontAwesome 图标
         ImFontConfig icons_config;
         icons_config.MergeMode = true;  
         icons_config.PixelSnapH = true; 
         static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_16_FA, 0 };
-        io.Fonts->AddFontFromFileTTF("assets/fonts/fa-solid-900.ttf", 14.0f, &icons_config, icons_ranges);
+        io.Fonts->AddFontFromFileTTF("assets/Editor/fonts/fa-solid-900.ttf", 14.0f, &icons_config, icons_ranges);
 
         // =========================================================
         // 2. 几何样式配置 (现代化圆角与间距)

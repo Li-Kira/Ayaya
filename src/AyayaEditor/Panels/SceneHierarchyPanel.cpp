@@ -3,6 +3,7 @@
 #include "Engine/Scene/Components.hpp"
 #include "Asset/AssetManager.hpp"
 #include "Renderer/Texture.hpp"
+#include "Renderer/MaterialSerializer.hpp"
 
 #include <imgui.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -320,69 +321,205 @@ namespace Ayaya {
 
         // --- 绘制 Mesh Renderer 组件 ---
         if (entity.HasComponent<MeshRendererComponent>()) {
-            if (ImGui::TreeNodeEx((void*)typeid(MeshRendererComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Mesh Renderer")) {
-                auto& mrc = entity.GetComponent<MeshRendererComponent>();
-                ImGui::ColorEdit4("Color", glm::value_ptr(mrc.Color));
+            
+            bool opened = ImGui::TreeNodeEx((void*)typeid(MeshRendererComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Mesh Renderer");
+            
+            bool removeComponent = false;
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Remove Component")) {
+                    removeComponent = true;
+                }
+                ImGui::EndPopup();
+            }
 
-                // ==========================================
-                // 新增：模型资产拖拽插槽 (Drag & Drop Target)
-                // ==========================================
+            if (opened) {
+                auto& mrc = entity.GetComponent<MeshRendererComponent>();
+
+                // --- 1. 模型资产拖拽 ---
                 ImGui::Spacing();
                 ImGui::Text("Model Asset");
-                
-                // 画一个占满整行的按钮作为“接收区”
-                ImGui::Button("Drop .obj / .fbx here", ImVec2(-1.0f, 30.0f));
+                std::string modelDisplay = (mrc.ModelAsset && !mrc.ModelAsset->GetPath().empty()) 
+                                            ? mrc.ModelAsset->GetPath() : "Drop .obj / .fbx here";
+                ImGui::Button(modelDisplay.c_str(), ImVec2(-1.0f, 30.0f));
 
-                // 当有东西拖拽到这个按钮上时...
                 if (ImGui::BeginDragDropTarget()) {
-                    // 检查载荷类型是否为 CONTENT_BROWSER_ITEM (我们在 Content Browser 里定义的名字)
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                         const char* pathStr = (const char*)payload->Data;
                         std::filesystem::path modelPath = std::filesystem::path("assets") / pathStr;
-                        
-                        // 校验后缀名：只接收常见的 3D 模型格式
                         if (modelPath.extension() == ".obj" || modelPath.extension() == ".fbx" || modelPath.extension() == ".gltf") {
-                            AYAYA_CORE_INFO("Loading model: {0}", modelPath.string());
-                            // 动态替换模型！
                             mrc.ModelAsset = std::make_shared<Model>(modelPath.string());
-                        } else {
-                            AYAYA_CORE_WARN("Unsupported model format!");
                         }
                     }
                     ImGui::EndDragDropTarget();
                 }
 
+                // --- 2. 材质资产管理 ---
                 ImGui::Spacing();
-                ImGui::Text("Texture");
+                if (ImGui::TreeNodeEx("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    
+                    if (mrc.MaterialAsset) {
+                        auto& mat = mrc.MaterialAsset;
+                        
+                        ImGui::Text("Material Asset (.mat)");
+                        std::string matDisplay = (!mat->AssetPath.empty()) ? mat->AssetPath : "Default / Internal";
+                        ImGui::Button(matDisplay.c_str(), ImVec2(-1.0f, 30.0f));
 
-                ImVec2 textureSlotSize = { 64.0f, 64.0f };
-                if (mrc.TextureHandle != 0 && AssetManager::IsAssetHandleValid(mrc.TextureHandle)) {
-                    auto tex = AssetManager::GetAsset<Texture2D>(mrc.TextureHandle);
-                    ImGui::Image((ImTextureID)(intptr_t)tex->GetRendererID(), textureSlotSize, {0, 1}, {1, 0});
-                } else {
-                    ImGui::Button("Empty", textureSlotSize);
-                }
+                        // 接收外部拖拽进来的 .mat 文件
+                        if (ImGui::BeginDragDropTarget()) {
+                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                                const char* pathStr = (const char*)payload->Data;
+                                std::filesystem::path matPath = std::filesystem::path("assets") / pathStr;
+                                if (matPath.extension() == ".mat") {
+                                    // ==========================================
+                                    // 核心修复 1：创建全新指针！
+                                    // 不要去修改原有的 mat，而是创建一个新的 Material 实例赋给物体。
+                                    // 这样即使别的物体还在用旧材质，也不会被意外篡改！
+                                    // ==========================================
+                                    auto newMat = std::make_shared<Material>();
+                                    if (MaterialSerializer::Deserialize(newMat, matPath.string())) {
+                                        mrc.MaterialAsset = newMat; 
+                                    }
+                                }
+                            }
+                            ImGui::EndDragDropTarget();
+                        }
 
-                if (ImGui::BeginDragDropTarget()) {
-                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                        const char* pathStr = (const char*)payload->Data;
-                        std::filesystem::path texturePath = std::filesystem::path("assets") / pathStr;
-                        if (texturePath.extension() == ".png" || texturePath.extension() == ".jpg") {
-                            UUID importedHandle = AssetManager::ImportAsset(texturePath);
-                            if (importedHandle != 0) {
-                                mrc.TextureHandle = importedHandle;
+                        // 保存当前材质到硬盘
+                        // ==========================================
+                        // 保存当前材质到硬盘 (带查重防覆盖机制)
+                        // ==========================================
+                        if (ImGui::Button("Save to .mat")) {
+                            // 如果是新材质，或者是从内置模板克隆来的，才需要分配新路径
+                            // (如果是已经保存在硬盘里的普通材质，直接覆盖它自己的原文件即可)
+                            if (mat->AssetPath.empty() || mat->AssetPath.find("assets/Editor/") != std::string::npos) {
+                                
+                                if (!std::filesystem::exists("assets/materials")) {
+                                    std::filesystem::create_directories("assets/materials");
+                                }
+                                
+                                std::string baseName = mat->Name;
+                                // 净化默认名字：如果名字带 Instance，或者为空，统称为 NewMaterial
+                                if (baseName == "Empty Material" || baseName.empty() || baseName.find("(Instance)") != std::string::npos) {
+                                    baseName = "NewMaterial";
+                                }
+                                
+                                std::string finalPath = "assets/materials/" + baseName + ".mat";
+                                int index = 1;
+                                
+                                // 核心修复：循环检查文件是否存在，存在则递增序号！
+                                while (std::filesystem::exists(finalPath)) {
+                                    finalPath = "assets/materials/" + baseName + " (" + std::to_string(index) + ").mat";
+                                    index++;
+                                }
+                                
+                                mat->AssetPath = finalPath;
+                                // 顺便把内存里材质的名字也更新为最终的文件名 (去掉 .mat 后缀)
+                                mat->Name = std::filesystem::path(finalPath).stem().string();
+                            }
+                            
+                            // 执行序列化保存
+                            MaterialSerializer::Serialize(mat, mat->AssetPath);
+                            AYAYA_CORE_INFO("Material saved to {0}", mat->AssetPath);
+                        }
+                        
+                        ImGui::SameLine();
+                        if (ImGui::Button("Remove Material")) {
+                            mrc.MaterialAsset = nullptr; 
+                        }
+
+                        // ==========================================
+                        // 核心修复 2：完整补回丢失的属性渲染 for 循环！
+                        // ==========================================
+                        if (mrc.MaterialAsset) { 
+                            ImGui::Text("Shader: %s", mrc.MaterialAsset->ShaderName.c_str());
+                            ImGui::Separator();
+
+                            for (auto& prop : mrc.MaterialAsset->Properties) {
+                                ImGui::PushID(prop.UniformName.c_str()); 
+                                
+                                switch (prop.Type) {
+                                    case MaterialPropertyType::Float:
+                                        ImGui::SliderFloat(prop.DisplayName.c_str(), &prop.FloatValue, 0.0f, 1.0f);
+                                        break;
+                                    case MaterialPropertyType::Int:
+                                        ImGui::InputInt(prop.DisplayName.c_str(), &prop.IntValue);
+                                        break;
+                                    case MaterialPropertyType::Bool:
+                                        ImGui::Checkbox(prop.DisplayName.c_str(), &prop.BoolValue);
+                                        break;
+                                    case MaterialPropertyType::Vec2:
+                                        ImGui::DragFloat2(prop.DisplayName.c_str(), glm::value_ptr(prop.Vec2Value), 0.05f);
+                                        break;
+                                    case MaterialPropertyType::Vec3:
+                                        ImGui::ColorEdit3(prop.DisplayName.c_str(), glm::value_ptr(prop.Vec3Value));
+                                        break;
+                                    case MaterialPropertyType::Vec4:
+                                        ImGui::ColorEdit4(prop.DisplayName.c_str(), glm::value_ptr(prop.Vec4Value));
+                                        break;
+                                    case MaterialPropertyType::Texture2D:
+                                    {
+                                        ImGui::Text("%s", prop.DisplayName.c_str());
+                                        ImVec2 textureSlotSize = { 64.0f, 64.0f };
+                                        
+                                        if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
+                                            auto tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
+                                            ImGui::Image((ImTextureID)(intptr_t)tex->GetRendererID(), textureSlotSize, {0, 1}, {1, 0});
+                                        } else {
+                                            ImGui::Button("Empty", textureSlotSize);
+                                        }
+
+                                        // 贴图拖拽
+                                        if (ImGui::BeginDragDropTarget()) {
+                                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                                                const char* pathStr = (const char*)payload->Data;
+                                                std::filesystem::path texturePath = std::filesystem::path("assets") / pathStr;
+                                                if (texturePath.extension() == ".png" || texturePath.extension() == ".jpg") {
+                                                    UUID importedHandle = AssetManager::ImportAsset(texturePath);
+                                                    if (importedHandle != 0) {
+                                                        prop.TextureHandle = importedHandle;
+                                                        prop.TexturePath = texturePath.string(); 
+                                                    }
+                                                }
+                                            }
+                                            ImGui::EndDragDropTarget();
+                                        }
+
+                                        if (prop.TextureHandle != 0) {
+                                            ImGui::SameLine();
+                                            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textureSlotSize.y * 0.5f - 10.0f);
+                                            if (ImGui::Button("Remove")) {
+                                                prop.TextureHandle = 0;
+                                                prop.TexturePath = "";
+                                            }
+                                        }
+                                        break;
+                                    }
+                                    default:
+                                        break;
+                                }
+                                ImGui::PopID();
+                            }
+                        }
+                    } 
+                    else {
+                        // 材质为空时的兜底逻辑
+                        ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "Warning: No Material Assigned!");
+                        if (ImGui::Button("Add Default Material", ImVec2(-1.0f, 30.0f))) {
+                            auto templateMat = std::make_shared<Material>();
+                            if (MaterialSerializer::Deserialize(templateMat, "assets/Editor/materials/DefaultPBR.mat")) {
+                                mrc.MaterialAsset = templateMat->Clone();
+                            } else {
+                                mrc.MaterialAsset = std::make_shared<Material>();
                             }
                         }
                     }
-                    ImGui::EndDragDropTarget();
-                }
-
-                if (mrc.TextureHandle != 0) {
-                    ImGui::SameLine();
-                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textureSlotSize.y * 0.5f - 10.0f);
-                    if (ImGui::Button("Remove")) mrc.TextureHandle = 0;
+                    ImGui::TreePop(); 
                 }
                 ImGui::TreePop();
+            }
+
+            if (removeComponent) {
+                entity.RemoveComponent<MeshRendererComponent>();
             }
         }
 
@@ -424,9 +561,23 @@ namespace Ayaya {
             // 如果没有 MeshRenderer，才显示添加 MeshRenderer
             if (!entity.HasComponent<MeshRendererComponent>()) {
                 if (ImGui::MenuItem("Mesh Renderer")) {
-                    entity.AddComponent<MeshRendererComponent>();
-                    ImGui::CloseCurrentPopup();
+                auto& mrc = entity.AddComponent<MeshRendererComponent>();
+                
+                // ==========================================
+                // 核心：读取编辑器内置模板，并分配克隆体！
+                // ==========================================
+                auto templateMat = std::make_shared<Material>();
+                bool success = MaterialSerializer::Deserialize(templateMat, "assets/Editor/materials/DefaultPBR.mat");
+                
+                if (success) {
+                    mrc.MaterialAsset = templateMat->Clone(); // Clone() 会自动清空 AssetPath
+                } else {
+                    AYAYA_CORE_WARN("Failed to load Editor DefaultPBR.mat");
+                    mrc.MaterialAsset = std::make_shared<Material>();
                 }
+                
+                ImGui::CloseCurrentPopup();
+            }
             }
             // 之前的 SpriteRenderer 也可以留着做 2D 用
             if (!entity.HasComponent<SpriteRendererComponent>()) {
