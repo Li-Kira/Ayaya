@@ -15,6 +15,11 @@ namespace Ayaya {
         glm::vec3 Position;
         glm::vec3 Normal;
         glm::vec2 TexCoord;
+
+        // ==========================================
+        // 新增：切线向量，用于法线贴图的 TBN 矩阵计算
+        // ==========================================
+        glm::vec3 Tangent;
     };
 
     class Mesh {

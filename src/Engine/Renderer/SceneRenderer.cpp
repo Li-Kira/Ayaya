@@ -96,29 +96,16 @@ namespace Ayaya {
     }
 
     void SceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene, Entity hoveredEntity, bool showGrid) {
-        
-        // // ==========================================
-        // // Pass 1: Background Grid Pass (渲染无限网格)
-        // // ==========================================
-        // if (showGrid) {
-        //     glEnable(GL_BLEND);
-        //     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        //     glEnable(GL_DEPTH_TEST);
-        //     glDepthMask(GL_FALSE);
 
-        //     s_Data.GridShader->Bind();
-        //     glm::mat4 gridTransform = glm::scale(glm::mat4(1.0f), glm::vec3(100.0f, 0.0f, 100.0f));
-        //     Renderer::Submit(s_Data.GridShader, s_Data.GridMesh->GetVertexArray(), gridTransform);
-            
-        //     glDepthMask(GL_TRUE); 
-        // }
-
+        // ==========================================
+        // Pass 1: Lighting Setup Pass (收集场景灯光)
+        // ==========================================
         // ==========================================
         // Pass 2: Lighting Setup Pass (收集场景灯光)
         // ==========================================
         glm::vec3 lightDir = { -0.2f, -1.0f, -0.3f }; 
         glm::vec3 lightColor = { 1.0f, 1.0f, 1.0f };
-        float ambientStrength = 0.3f;
+        float lightIntensity = 3.0f; // PBR 中光照强度需要大于 1 才能看出明亮的高光！
 
         auto lightGroup = scene->Reg().view<TransformComponent, DirectionalLightComponent>();
         for (auto entityID : lightGroup) {
@@ -129,22 +116,19 @@ namespace Ayaya {
             glm::quat orientation = glm::quat(transform.Rotation);
             lightDir = glm::rotate(orientation, glm::vec3(0.0f, 0.0f, -1.0f));
             lightColor = dlc.Color;
-            ambientStrength = dlc.AmbientStrength;
-            break; // 暂只支持一盏主平行光
+            break; 
         }
 
         s_Data.DefaultShader->Bind();
-        // s_Data.DefaultShader->SetInt("u_Texture", 0);
         s_Data.DefaultShader->SetFloat3("u_LightDir", lightDir); 
-        s_Data.DefaultShader->SetFloat3("u_LightColor", lightColor);
-        // s_Data.DefaultShader->SetFloat("u_AmbientStrength", ambientStrength);
+        s_Data.DefaultShader->SetFloat3("u_LightColor", lightColor * lightIntensity);
 
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_STENCIL_TEST);
         glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
 
         // ==========================================
-        // Pass 3: Geometry Pass (渲染所有 3D 网格)
+        // Pass 2: Geometry Pass (渲染所有 3D 网格)
         // ==========================================
         auto meshGroup = scene->Reg().view<TransformComponent, MeshRendererComponent>();
         for (auto entityID : meshGroup) {
@@ -236,7 +220,7 @@ namespace Ayaya {
         glDisable(GL_STENCIL_TEST);
 
         // ==========================================
-        // Pass 4: Skybox Pass (极其优雅的最后渲染)
+        // Pass 3: Skybox Pass (极其优雅的最后渲染)
         // ==========================================
         glDepthFunc(GL_LEQUAL);  
         
@@ -257,6 +241,9 @@ namespace Ayaya {
 
         glDepthFunc(GL_LESS);
 
+        // ==========================================
+        // Pass 4: Background Grid Pass (渲染无限网格)
+        // ==========================================
         if (showGrid) {
             // 1. 开启混合
             glEnable(GL_BLEND);
@@ -286,6 +273,7 @@ namespace Ayaya {
         // Pass 5: Outline Post-Pass (渲染描边高亮)
         // ==========================================
         if (hoveredEntity && hoveredEntity.HasComponent<MeshRendererComponent>()) {
+            glEnable(GL_STENCIL_TEST);
             glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
             glStencilMask(0x00);      
             glDisable(GL_DEPTH_TEST); 
@@ -293,8 +281,8 @@ namespace Ayaya {
             s_Data.OutlineShader->Bind();
             s_Data.OutlineShader->SetFloat3("u_Color", glm::vec3(1.0f, 0.65f, 0.0f)); 
             
-            glm::mat4 transform = hoveredEntity.GetWorldTransform();
-            transform = transform * glm::scale(glm::mat4(1.0f), glm::vec3(1.05f)); 
+            glm::mat4 baseTransform = hoveredEntity.GetWorldTransform();
+            glm::mat4 transform = baseTransform * glm::scale(glm::mat4(1.0f), glm::vec3(1.05f)); 
             
             auto& meshComp = hoveredEntity.GetComponent<MeshRendererComponent>();
             if (meshComp.ModelAsset) {

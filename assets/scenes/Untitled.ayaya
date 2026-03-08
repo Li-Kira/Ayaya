@@ -1,6 +1,6 @@
 Scene: Untitled
 Entities:
-  - Entity: 12442606272999176973
+  - Entity: 9207422813788464392
     TagComponent:
       Tag: Main Camera
     TransformComponent:
@@ -12,7 +12,7 @@ Entities:
       FixedAspectRatio: false
     RelationshipComponent:
       Parent: 0
-  - Entity: 16042443432994920142
+  - Entity: 7648224349506625606
     TagComponent:
       Tag: Directional Light
     TransformComponent:
@@ -24,7 +24,7 @@ Entities:
       AmbientStrength: 0.3
     RelationshipComponent:
       Parent: 0
-  - Entity: 1632496428642565814
+  - Entity: 941355425607113630
     TagComponent:
       Tag: Parent Empty Node
     TransformComponent:
@@ -33,23 +33,23 @@ Entities:
       Scale: [1, 1, 1]
     RelationshipComponent:
       Parent: 0
-  - Entity: 5601512864109361069
+  - Entity: 6123212960334515091
     TagComponent:
-      Tag: Assimp Model (1)
+      Tag: Cube
     TransformComponent:
-      Translation: [-1.5, 0, 0]
+      Translation: [-1.5, 0, -7.450581e-09]
       Rotation: [0, -0, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
       MaterialPath: assets/materials/NewMaterial.mat
     RelationshipComponent:
-      Parent: 1632496428642565814
-  - Entity: 13681955513636480702
+      Parent: 941355425607113630
+  - Entity: 2260445115966781348
     TagComponent:
       Tag: Assimp Model
     TransformComponent:
-      Translation: [1.5, 0, 0]
-      Rotation: [0, 0, 0]
+      Translation: [1.5, 0, -1.4901161e-08]
+      Rotation: [0, -0, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
       ModelPath: assets/models/backpack.obj

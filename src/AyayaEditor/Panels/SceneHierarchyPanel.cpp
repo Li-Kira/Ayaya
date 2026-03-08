@@ -332,28 +332,43 @@ namespace Ayaya {
                 ImGui::EndPopup();
             }
 
+            // ==========================================
+            // --- MeshRendererComponent 展开 ---
+            // ==========================================
             if (opened) {
                 auto& mrc = entity.GetComponent<MeshRendererComponent>();
 
-                // --- 1. 模型资产拖拽 ---
+                // ==========================================
+                // --- 1. 模型资产管理 (放入 TreeNode) ---
+                // ==========================================
                 ImGui::Spacing();
-                ImGui::Text("Model Asset");
-                std::string modelDisplay = (mrc.ModelAsset && !mrc.ModelAsset->GetPath().empty()) 
-                                            ? mrc.ModelAsset->GetPath() : "Drop .obj / .fbx here";
-                ImGui::Button(modelDisplay.c_str(), ImVec2(-1.0f, 30.0f));
+                if (ImGui::TreeNodeEx("Model", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    
+                    ImGui::Text("Mesh Source");
+                    std::string modelDisplay = (mrc.ModelAsset && !mrc.ModelAsset->GetPath().empty()) 
+                                                ? mrc.ModelAsset->GetPath() : "Drop .obj / .fbx here";
+                    
+                    // 让按钮宽度填满可用空间
+                    ImGui::Button(modelDisplay.c_str(), ImVec2(-1.0f, 30.0f));
 
-                if (ImGui::BeginDragDropTarget()) {
-                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                        const char* pathStr = (const char*)payload->Data;
-                        std::filesystem::path modelPath = std::filesystem::path("assets") / pathStr;
-                        if (modelPath.extension() == ".obj" || modelPath.extension() == ".fbx" || modelPath.extension() == ".gltf") {
-                            mrc.ModelAsset = std::make_shared<Model>(modelPath.string());
+                    // 接收外部拖拽进来的 3D 模型文件
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                            const char* pathStr = (const char*)payload->Data;
+                            std::filesystem::path modelPath = std::filesystem::path("assets") / pathStr;
+                            if (modelPath.extension() == ".obj" || modelPath.extension() == ".fbx" || modelPath.extension() == ".gltf") {
+                                mrc.ModelAsset = std::make_shared<Model>(modelPath.string());
+                            }
                         }
+                        ImGui::EndDragDropTarget();
                     }
-                    ImGui::EndDragDropTarget();
+                    
+                    ImGui::TreePop();
                 }
 
+                // ==========================================
                 // --- 2. 材质资产管理 ---
+                // ==========================================
                 ImGui::Spacing();
                 if (ImGui::TreeNodeEx("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
                     
@@ -427,48 +442,78 @@ namespace Ayaya {
                             mrc.MaterialAsset = nullptr; 
                         }
 
-                        // ==========================================
-                        // 核心修复 2：完整补回丢失的属性渲染 for 循环！
-                        // ==========================================
                         if (mrc.MaterialAsset) { 
                             ImGui::Text("Shader: %s", mrc.MaterialAsset->ShaderName.c_str());
                             ImGui::Separator();
 
+                            // ==========================================
+                            // UI 升级：开启双列排版布局 + 智能分组分割线
+                            // ==========================================
+                            ImGui::Columns(2, "MaterialProperties", false);
+                            ImGui::SetColumnWidth(0, 140.0f); 
+
+                            std::string lastCategory = ""; // 用于记录上一个属性的大类
+
                             for (auto& prop : mrc.MaterialAsset->Properties) {
+                                
+                                // --- 1. 智能推断当前属性属于哪个大组 ---
+                                std::string currentCategory = "Other";
+                                if (prop.UniformName.find("Albedo") != std::string::npos) currentCategory = "Albedo";
+                                else if (prop.UniformName.find("Metallic") != std::string::npos) currentCategory = "Metallic";
+                                else if (prop.UniformName.find("Roughness") != std::string::npos) currentCategory = "Roughness";
+                                else if (prop.UniformName.find("Normal") != std::string::npos) currentCategory = "Normal";
+                                else if (prop.UniformName.find("Emission") != std::string::npos || prop.UniformName.find("Emissive") != std::string::npos) currentCategory = "Emission";
+                                else if (prop.UniformName.find("AO") != std::string::npos || prop.UniformName.find("Ambient") != std::string::npos) currentCategory = "AO";
+
+                                // --- 2. 组别切换时，插入贯穿双列的分割线 ---
+                                if (currentCategory != lastCategory) {
+                                    if (!lastCategory.empty()) {
+                                        // 结束上一行，画一条分割线
+                                        ImGui::Separator();
+                                    }
+                                    lastCategory = currentCategory;
+                                }
+
                                 ImGui::PushID(prop.UniformName.c_str()); 
+                                
+                                // --- 左列：属性名称 ---
+                                ImGui::AlignTextToFramePadding(); 
+                                ImGui::Text("%s", prop.DisplayName.c_str());
+                                ImGui::NextColumn();
+
+                                // --- 右列：操作控件 ---
+                                ImGui::SetNextItemWidth(-1.0f); 
                                 
                                 switch (prop.Type) {
                                     case MaterialPropertyType::Float:
-                                        ImGui::SliderFloat(prop.DisplayName.c_str(), &prop.FloatValue, 0.0f, 1.0f);
+                                        ImGui::SliderFloat("##val", &prop.FloatValue, 0.0f, 1.0f);
                                         break;
                                     case MaterialPropertyType::Int:
-                                        ImGui::InputInt(prop.DisplayName.c_str(), &prop.IntValue);
+                                        ImGui::InputInt("##val", &prop.IntValue);
                                         break;
                                     case MaterialPropertyType::Bool:
-                                        ImGui::Checkbox(prop.DisplayName.c_str(), &prop.BoolValue);
+                                        ImGui::Checkbox("##val", &prop.BoolValue);
                                         break;
                                     case MaterialPropertyType::Vec2:
-                                        ImGui::DragFloat2(prop.DisplayName.c_str(), glm::value_ptr(prop.Vec2Value), 0.05f);
+                                        ImGui::DragFloat2("##val", glm::value_ptr(prop.Vec2Value), 0.05f);
                                         break;
                                     case MaterialPropertyType::Vec3:
-                                        ImGui::ColorEdit3(prop.DisplayName.c_str(), glm::value_ptr(prop.Vec3Value));
+                                        ImGui::ColorEdit3("##val", glm::value_ptr(prop.Vec3Value), ImGuiColorEditFlags_NoInputs);
                                         break;
                                     case MaterialPropertyType::Vec4:
-                                        ImGui::ColorEdit4(prop.DisplayName.c_str(), glm::value_ptr(prop.Vec4Value));
+                                        ImGui::ColorEdit4("##val", glm::value_ptr(prop.Vec4Value), ImGuiColorEditFlags_NoInputs);
                                         break;
                                     case MaterialPropertyType::Texture2D:
                                     {
-                                        ImGui::Text("%s", prop.DisplayName.c_str());
-                                        ImVec2 textureSlotSize = { 64.0f, 64.0f };
+                                        ImVec2 textureSlotSize = { 64.0f, 64.0f }; 
                                         
                                         if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
                                             auto tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
                                             ImGui::Image((ImTextureID)(intptr_t)tex->GetRendererID(), textureSlotSize, {0, 1}, {1, 0});
                                         } else {
-                                            ImGui::Button("Empty", textureSlotSize);
+                                            ImGui::Button("Null", textureSlotSize);
                                         }
 
-                                        // 贴图拖拽
                                         if (ImGui::BeginDragDropTarget()) {
                                             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                                                 const char* pathStr = (const char*)payload->Data;
@@ -486,8 +531,8 @@ namespace Ayaya {
 
                                         if (prop.TextureHandle != 0) {
                                             ImGui::SameLine();
-                                            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textureSlotSize.y * 0.5f - 10.0f);
-                                            if (ImGui::Button("Remove")) {
+                                            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textureSlotSize.y * 0.5f - 12.0f);
+                                            if (ImGui::Button("X##Remove")) {
                                                 prop.TextureHandle = 0;
                                                 prop.TexturePath = "";
                                             }
@@ -497,8 +542,12 @@ namespace Ayaya {
                                     default:
                                         break;
                                 }
+                                
+                                ImGui::NextColumn(); 
                                 ImGui::PopID();
                             }
+                            
+                            ImGui::Columns(1);
                         }
                     } 
                     else {

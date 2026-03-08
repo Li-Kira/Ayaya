@@ -13,7 +13,8 @@ namespace Ayaya {
         vbo->SetLayout({
             { ShaderDataType::Float3, "a_Position" },
             { ShaderDataType::Float3, "a_Normal"   },
-            { ShaderDataType::Float2, "a_TexCoord" }
+            { ShaderDataType::Float2, "a_TexCoord" },
+            { ShaderDataType::Float3, "a_Tangent"  } // <--- 新增
         });
         m_VertexArray->AddVertexBuffer(vbo);
 
@@ -24,43 +25,43 @@ namespace Ayaya {
     std::shared_ptr<Mesh> Mesh::CreateCube(float size) {
         float half = size / 2.0f;
 
-        // 24 个顶点：6个面，每个面4个顶点，各自拥有独立的法线和UV
+        // 24 个顶点：现在每个顶点包含 Position, Normal, TexCoord, Tangent
         std::vector<Vertex> vertices = {
-            // Front face (Z = +half) -> 法线 (0, 0, 1)
-            { {-half, -half,  half}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f} },
-            { { half, -half,  half}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f} },
-            { { half,  half,  half}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f} },
-            { {-half,  half,  half}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f} },
+            // Front face (Z = +half) -> 法线 (0, 0, 1), 切线沿 +X 方向 (1, 0, 0)
+            { {-half, -half,  half}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}, {1.0f, 0.0f, 0.0f} },
+            { { half, -half,  half}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}, {1.0f, 0.0f, 0.0f} },
+            { { half,  half,  half}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 0.0f, 0.0f} },
+            { {-half,  half,  half}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, {1.0f, 0.0f, 0.0f} },
 
-            // Back face (Z = -half) -> 法线 (0, 0, -1)
-            { { half, -half, -half}, {0.0f, 0.0f, -1.0f}, {0.0f, 0.0f} },
-            { {-half, -half, -half}, {0.0f, 0.0f, -1.0f}, {1.0f, 0.0f} },
-            { {-half,  half, -half}, {0.0f, 0.0f, -1.0f}, {1.0f, 1.0f} },
-            { { half,  half, -half}, {0.0f, 0.0f, -1.0f}, {0.0f, 1.0f} },
+            // Back face (Z = -half) -> 法线 (0, 0, -1), 切线沿 -X 方向 (-1, 0, 0)
+            { { half, -half, -half}, {0.0f, 0.0f, -1.0f}, {0.0f, 0.0f}, {-1.0f, 0.0f, 0.0f} },
+            { {-half, -half, -half}, {0.0f, 0.0f, -1.0f}, {1.0f, 0.0f}, {-1.0f, 0.0f, 0.0f} },
+            { {-half,  half, -half}, {0.0f, 0.0f, -1.0f}, {1.0f, 1.0f}, {-1.0f, 0.0f, 0.0f} },
+            { { half,  half, -half}, {0.0f, 0.0f, -1.0f}, {0.0f, 1.0f}, {-1.0f, 0.0f, 0.0f} },
 
-            // Left face (X = -half) -> 法线 (-1, 0, 0)
-            { {-half, -half, -half}, {-1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} },
-            { {-half, -half,  half}, {-1.0f, 0.0f, 0.0f}, {1.0f, 0.0f} },
-            { {-half,  half,  half}, {-1.0f, 0.0f, 0.0f}, {1.0f, 1.0f} },
-            { {-half,  half, -half}, {-1.0f, 0.0f, 0.0f}, {0.0f, 1.0f} },
+            // Left face (X = -half) -> 法线 (-1, 0, 0), 切线沿 +Z 方向 (0, 0, 1)
+            { {-half, -half, -half}, {-1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f, 1.0f} },
+            { {-half, -half,  half}, {-1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, {0.0f, 0.0f, 1.0f} },
+            { {-half,  half,  half}, {-1.0f, 0.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 0.0f, 1.0f} },
+            { {-half,  half, -half}, {-1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}, {0.0f, 0.0f, 1.0f} },
 
-            // Right face (X = +half) -> 法线 (1, 0, 0)
-            { { half, -half,  half}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} },
-            { { half, -half, -half}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f} },
-            { { half,  half, -half}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f} },
-            { { half,  half,  half}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f} },
+            // Right face (X = +half) -> 法线 (1, 0, 0), 切线沿 -Z 方向 (0, 0, -1)
+            { { half, -half,  half}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f, -1.0f} },
+            { { half, -half, -half}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, {0.0f, 0.0f, -1.0f} },
+            { { half,  half, -half}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 0.0f, -1.0f} },
+            { { half,  half,  half}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}, {0.0f, 0.0f, -1.0f} },
 
-            // Top face (Y = +half) -> 法线 (0, 1, 0)
-            { {-half,  half,  half}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f} },
-            { { half,  half,  half}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f} },
-            { { half,  half, -half}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f} },
-            { {-half,  half, -half}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f} },
+            // Top face (Y = +half) -> 法线 (0, 1, 0), 切线沿 +X 方向 (1, 0, 0)
+            { {-half,  half,  half}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, {1.0f, 0.0f, 0.0f} },
+            { { half,  half,  half}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 0.0f, 0.0f} },
+            { { half,  half, -half}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}, {1.0f, 0.0f, 0.0f} },
+            { {-half,  half, -half}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f}, {1.0f, 0.0f, 0.0f} },
 
-            // Bottom face (Y = -half) -> 法线 (0, -1, 0)
-            { {-half, -half, -half}, {0.0f, -1.0f, 0.0f}, {0.0f, 0.0f} },
-            { { half, -half, -half}, {0.0f, -1.0f, 0.0f}, {1.0f, 0.0f} },
-            { { half, -half,  half}, {0.0f, -1.0f, 0.0f}, {1.0f, 1.0f} },
-            { {-half, -half,  half}, {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f} }
+            // Bottom face (Y = -half) -> 法线 (0, -1, 0), 切线沿 +X 方向 (1, 0, 0)
+            { {-half, -half, -half}, {0.0f, -1.0f, 0.0f}, {0.0f, 0.0f}, {1.0f, 0.0f, 0.0f} },
+            { { half, -half, -half}, {0.0f, -1.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 0.0f, 0.0f} },
+            { { half, -half,  half}, {0.0f, -1.0f, 0.0f}, {1.0f, 1.0f}, {1.0f, 0.0f, 0.0f} },
+            { {-half, -half,  half}, {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f}, {1.0f, 0.0f, 0.0f} }
         };
 
         std::vector<uint32_t> indices = {

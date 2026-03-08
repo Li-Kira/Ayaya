@@ -1,4 +1,4 @@
-MaterialName: NewMaterial (2)
+MaterialName: NewMaterial (6)
 ShaderName: PBR
 Properties:
   - UniformName: u_Albedo
@@ -8,11 +8,19 @@ Properties:
   - UniformName: u_UseAlbedoMap
     DisplayName: Enable Albedo Map
     Type: 2
-    BoolValue: false
+    BoolValue: true
   - UniformName: u_AlbedoMap
     DisplayName: Albedo Texture
     Type: 8
-    TexturePath: ""
+    TexturePath: assets/textures/backpack/diffuse.jpg
+  - UniformName: u_UseNormalMap
+    DisplayName: Enable Normal Map
+    Type: 2
+    BoolValue: true
+  - UniformName: u_NormalMap
+    DisplayName: Normal Map
+    Type: 8
+    TexturePath: assets/textures/backpack/normal.png
   - UniformName: u_Metallic
     DisplayName: Metallic
     Type: 0

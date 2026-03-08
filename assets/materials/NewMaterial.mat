@@ -4,13 +4,21 @@ Properties:
   - UniformName: u_Albedo
     DisplayName: Albedo Color
     Type: 4
-    Vec3Value: [0.93950176, 0.42795813, 0.42795813]
+    Vec3Value: [1, 1, 1]
   - UniformName: u_UseAlbedoMap
     DisplayName: Enable Albedo Map
     Type: 2
     BoolValue: false
   - UniformName: u_AlbedoMap
     DisplayName: Albedo Texture
+    Type: 8
+    TexturePath: ""
+  - UniformName: u_UseNormalMap
+    DisplayName: Enable Normal Map
+    Type: 2
+    BoolValue: false
+  - UniformName: u_NormalMap
+    DisplayName: Normal Map
     Type: 8
     TexturePath: ""
   - UniformName: u_Metallic

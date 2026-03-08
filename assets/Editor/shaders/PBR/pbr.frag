@@ -4,6 +4,7 @@ out vec4 FragColor;
 in vec2 v_TexCoord;
 in vec3 v_Normal;
 in vec3 v_FragPos;
+in mat3 v_TBN;
 
 // PBR 材质参数
 uniform vec3 u_Albedo;      // 基础颜色
@@ -29,41 +30,49 @@ uniform vec3 u_LightDir;
 uniform vec3 u_LightColor;
 uniform vec3 u_CameraPos;   // PBR 必须知道你的眼睛在哪！
 
+uniform sampler2D u_NormalMap;
+uniform bool u_UseNormalMap;
+
 const float PI = 3.14159265359;
 
-// 1. GGX 法线分布函数：计算微表面有多少比例的法线正好对准半程向量
-float DistributionGGX(vec3 N, vec3 H, float roughness) {
-    float a = roughness * roughness;
-    float a2 = a * a;
+// ----------------------------------------------------------------------------
+float DistributionGGX(vec3 N, vec3 H, float roughness)
+{
+    float a = roughness*roughness;
+    float a2 = a*a;
     float NdotH = max(dot(N, H), 0.0);
-    float NdotH2 = NdotH * NdotH;
+    float NdotH2 = NdotH*NdotH;
 
     float nom   = a2;
     float denom = (NdotH2 * (a2 - 1.0) + 1.0);
     denom = PI * denom * denom;
 
-    return nom / max(denom, 0.0000001); // 防止除以0
+    return nom / denom;
 }
-
-// 2. 几何遮蔽函数：计算微表面之间的相互遮挡导致的光线衰减
-float GeometrySchlickGGX(float NdotV, float roughness) {
+// ----------------------------------------------------------------------------
+float GeometrySchlickGGX(float NdotV, float roughness)
+{
     float r = (roughness + 1.0);
-    float k = (r * r) / 8.0;
+    float k = (r*r) / 8.0;
 
     float nom   = NdotV;
     float denom = NdotV * (1.0 - k) + k;
+
     return nom / denom;
 }
-float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
+// ----------------------------------------------------------------------------
+float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
+{
     float NdotV = max(dot(N, V), 0.0);
     float NdotL = max(dot(N, L), 0.0);
     float ggx2 = GeometrySchlickGGX(NdotV, roughness);
     float ggx1 = GeometrySchlickGGX(NdotL, roughness);
+
     return ggx1 * ggx2;
 }
-
-// 3. 菲涅尔方程：计算在不同观察角度下，表面反射光与折射光的比例
-vec3 fresnelSchlick(float cosTheta, vec3 F0) {
+// ----------------------------------------------------------------------------
+vec3 fresnelSchlick(float cosTheta, vec3 F0)
+{
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
@@ -95,7 +104,20 @@ void main() {
     // ==========================================
     // 接下来使用全新的物理变量进行计算
     // ==========================================
-    vec3 N = normalize(v_Normal);
+    vec3 N = normalize(v_TBN[2]); 
+
+    // 2. 如果开启了法线贴图，用贴图覆盖法线！
+    if (u_UseNormalMap) {
+        // 从贴图采样法线信息，默认是 [0, 1] 范围
+        vec3 normalMap = texture(u_NormalMap, v_TexCoord).rgb;
+        
+        // 将颜色值 [0, 1] 映射到方向向量 [-1, 1]
+        normalMap = normalMap * 2.0 - 1.0; 
+        
+        // 利用 TBN 矩阵，将切线空间的法线转换到世界空间！
+        N = normalize(v_TBN * normalMap); 
+    }
+
     vec3 V = normalize(u_CameraPos - v_FragPos);
     vec3 L = normalize(-u_LightDir);
     vec3 H = normalize(V + L); 

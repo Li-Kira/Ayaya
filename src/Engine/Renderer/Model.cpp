@@ -17,7 +17,10 @@ namespace Ayaya {
         Assimp::Importer importer;
         // 开启强大的后处理魔法：自动将多边形转为三角形、翻转 UV 的 Y 轴、自动计算缺失的法线
         const aiScene* scene = importer.ReadFile(path, 
-            aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals);
+            aiProcess_Triangulate | 
+            aiProcess_GenSmoothNormals | 
+            aiProcess_FlipUVs | 
+            aiProcess_CalcTangentSpace);
 
         if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
             AYAYA_CORE_ERROR("ERROR::ASSIMP:: {0}", importer.GetErrorString());
@@ -66,6 +69,13 @@ namespace Ayaya {
                 vertex.TexCoord = { mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y };
             } else {
                 vertex.TexCoord = { 0.0f, 0.0f };
+            }
+
+            // --- 提取切线 ---
+            if (mesh->HasTangentsAndBitangents()) {
+                vertex.Tangent = { mesh->mTangents[i].x, mesh->mTangents[i].y, mesh->mTangents[i].z };
+            } else {
+                vertex.Tangent = { 0.0f, 0.0f, 0.0f }; // 兜底
             }
 
             vertices.push_back(vertex);
