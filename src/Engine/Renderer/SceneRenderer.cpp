@@ -206,6 +206,9 @@ namespace Ayaya {
         // ------------------------------------------
         // 阶段 2.1：收集与剔除 (Collection & Culling)
         // ------------------------------------------
+        int totalMeshes = 0;
+        int drawnMeshes = 0;
+
         auto meshGroup = scene->Reg().view<TransformComponent, MeshRendererComponent>();
         for (auto entityID : meshGroup) {
             Entity entity{ entityID, scene.get() };
@@ -217,10 +220,14 @@ namespace Ayaya {
 
             // 视锥体剔除：只要有一个 SubMesh 可见，我们就把它加入队列
             bool isVisible = false;
-            for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
-                if (cameraFrustum.IsBoxVisible(mesh->GetAABB(), transform)) {
-                    isVisible = true;
-                    break;
+            if (meshComp.ModelAsset) {
+                for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
+                    totalMeshes++;
+                    if (cameraFrustum.IsBoxVisible(mesh->GetAABB(), transform)) {
+                        isVisible = true; // 只要模型里有一个网格可见，我们就渲染它
+                        drawnMeshes++;
+                        break;
+                    }
                 }
             }
             if (!isVisible) continue;
@@ -318,6 +325,8 @@ namespace Ayaya {
             Renderer::Submit(currentShader, cmd.MeshAsset->GetVertexArray(), cmd.Transform);
         }
 
+        // 剔除日志
+        AYAYA_CORE_TRACE("Culling: {0} / {1} meshes rendered", drawnMeshes, totalMeshes);
         // 恢复模板测试状态
         glStencilMask(0x00);
         glDisable(GL_STENCIL_TEST);

@@ -337,11 +337,18 @@ namespace Ayaya {
                 // 2. 读取并加载材质资产
                 if (meshRendererComponent["MaterialPath"]) {
                     std::string matPath = meshRendererComponent["MaterialPath"].as<std::string>();
+                    
                     mrc.MaterialAsset = std::make_shared<Material>();
-                    MaterialSerializer::Deserialize(mrc.MaterialAsset, matPath);
-                } else {
-                    // 保底机制：如果没找到材质路径，给它分配一个空的默认材质，防止崩溃
-                    mrc.MaterialAsset = std::make_shared<Material>();
+                    
+                    // ==========================================
+                    // 核心修复：如果材质文件读取失败，直接将指针置空！
+                    // ==========================================
+                    bool success = MaterialSerializer::Deserialize(mrc.MaterialAsset, matPath);
+                    if (!success) {
+                        AYAYA_CORE_WARN("Material file '{0}' is missing! Assigning Fallback Material.", matPath);
+                        // 置空指针。SceneRenderer 看到 nullptr 会自动使用品红色的 Fallback Shader
+                        mrc.MaterialAsset = nullptr; 
+                    }
                 }
             }
 

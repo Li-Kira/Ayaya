@@ -1,0 +1,38 @@
+Scene: Untitled
+Entities:
+  - Entity: 3605041423657451279
+    TagComponent:
+      Tag: Main Camera
+    TransformComponent:
+      Translation: [0, 0, 5]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    CameraComponent:
+      Primary: true
+      FixedAspectRatio: false
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 12244199376743892501
+    TagComponent:
+      Tag: Directional Light
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [-0.7853982, 0.7853982, 0]
+      Scale: [1, 1, 1]
+    DirectionalLightComponent:
+      Color: [1, 1, 1]
+      AmbientStrength: 0.3
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 3087155304286953667
+    TagComponent:
+      Tag: Cube
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelPath: assets/models/rock.obj
+      MaterialPath: assets/materials/NewMaterial (2).mat
+    RelationshipComponent:
+      Parent: 0

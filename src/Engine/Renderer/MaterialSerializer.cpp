@@ -63,7 +63,13 @@ namespace Ayaya {
         try {
             data = YAML::LoadFile(filepath);
         } catch (YAML::ParserException& e) {
-            AYAYA_CORE_ERROR("Failed to load .mat file: {0}", filepath);
+            AYAYA_CORE_ERROR("Failed to load .mat file '{0}' (Parser Error)\n     {1}", filepath, e.what());
+            return false;
+        } catch (YAML::BadFile& e) {
+            AYAYA_CORE_ERROR("Failed to load .mat file '{0}' (File not found or unreadable)\n     {1}", filepath, e.what());
+            return false;
+        } catch (std::exception& e) {
+            AYAYA_CORE_ERROR("Failed to load .mat file '{0}' (Unknown Error)\n     {1}", filepath, e.what());
             return false;
         }
 
