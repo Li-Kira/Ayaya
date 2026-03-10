@@ -38,6 +38,17 @@ namespace Ayaya {
         float _padding2;          // 4 bytes (凑齐 16 字节)
     };
 
+    // ==========================================
+    // 新增：渲染指令包 (用于收集和排序)
+    // ==========================================
+    struct RenderCommandData {
+        glm::mat4 Transform;
+        std::shared_ptr<Mesh> MeshAsset;
+        std::shared_ptr<Material> MaterialAsset;
+        std::shared_ptr<Shader> ShaderAsset;
+        Entity TargetEntity;
+    };
+
     // 使用静态结构体管理管线内部的资源，不对外暴露
     struct SceneRendererData {
         glm::mat4 ViewMatrix;
@@ -66,6 +77,11 @@ namespace Ayaya {
         struct_CameraData CameraData;
         std::shared_ptr<UniformBuffer> DirectionalLightUniformBuffer;
         struct_DirectionalLightData DirectionalLightData;
+
+        // ==========================================
+        // 新增：全局渲染队列
+        // ==========================================
+        std::vector<RenderCommandData> OpaqueDrawList;
     };
 
     static SceneRendererData s_Data;
@@ -179,41 +195,80 @@ namespace Ayaya {
         glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
 
         // ==========================================
-        // Pass 2: Geometry Pass (渲染所有 3D 网格)
+        // Pass 2: Geometry Pass (基于渲染队列的现代管线)
         // ==========================================
-        // 1. 根据当前相机的 ViewProjection 矩阵生成视锥体
-        Frustum cameraFrustum(s_Data.ViewProjectionMatrix);
-        // 2. 性能统计：记录剔除掉了多少个物体 (可选，可以用日志打印出来看看威力)
-        int totalMeshes = 0;
-        int drawnMeshes = 0;
+        // 每次渲染前清空上一帧的队列
+        s_Data.OpaqueDrawList.clear();
 
+        // 根据当前相机的 ViewProjection 矩阵生成视锥体 (你上一步实现的)
+        Frustum cameraFrustum(s_Data.ViewProjectionMatrix);
+
+        // ------------------------------------------
+        // 阶段 2.1：收集与剔除 (Collection & Culling)
+        // ------------------------------------------
         auto meshGroup = scene->Reg().view<TransformComponent, MeshRendererComponent>();
         for (auto entityID : meshGroup) {
             Entity entity{ entityID, scene.get() };
             auto& meshComp = entity.GetComponent<MeshRendererComponent>();
             glm::mat4 transform = entity.GetWorldTransform();
-            // ------------------------------------------
-            // 视锥体剔除检测 (Frustum Culling)
-            // ------------------------------------------
+
+            // 如果没有模型资产，直接跳过
+            if (!meshComp.ModelAsset) continue;
+
+            // 视锥体剔除：只要有一个 SubMesh 可见，我们就把它加入队列
             bool isVisible = false;
-            if (meshComp.ModelAsset) {
-                for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
-                    totalMeshes++;
-                    if (cameraFrustum.IsBoxVisible(mesh->GetAABB(), transform)) {
-                        isVisible = true; // 只要模型里有一个网格可见，我们就渲染它
-                        drawnMeshes++;
-                        break;
-                    }
+            for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
+                if (cameraFrustum.IsBoxVisible(mesh->GetAABB(), transform)) {
+                    isVisible = true;
+                    break;
                 }
             }
-            
-            // 如果不在视野内，直接跳过当前实体所有的渲染逻辑，节省海量 CPU 和 GPU 开销！
-            if (!isVisible) {
-                continue; 
+            if (!isVisible) continue;
+
+            // 判断使用的 Shader 和 Material
+            bool isFallback = (!meshComp.MaterialAsset || meshComp.MaterialAsset->Properties.empty());
+            std::shared_ptr<Shader> targetShader = isFallback ? s_Data.FallbackShader : s_Data.DefaultShader;
+            std::shared_ptr<Material> targetMaterial = isFallback ? nullptr : meshComp.MaterialAsset;
+
+            // 将模型中包含的所有网格拆解为独立的渲染指令，压入队列
+            for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
+                RenderCommandData cmd;
+                cmd.Transform = transform;
+                cmd.MeshAsset = mesh;
+                cmd.MaterialAsset = targetMaterial;
+                cmd.ShaderAsset = targetShader;
+                cmd.TargetEntity = entity;
+
+                s_Data.OpaqueDrawList.push_back(cmd);
             }
+        }
+
+        // ------------------------------------------
+        // 阶段 2.2：状态排序 (State Sorting)
+        // ------------------------------------------
+        // 排序优先级：Shader -> Material -> Mesh
+        // 我们直接比较智能指针的底层内存地址 (.get())，这是极其高效的 O(1) 比较！
+        std::sort(s_Data.OpaqueDrawList.begin(), s_Data.OpaqueDrawList.end(), [](const RenderCommandData& a, const RenderCommandData& b) {
+            if (a.ShaderAsset.get() != b.ShaderAsset.get())
+                return a.ShaderAsset.get() < b.ShaderAsset.get();
             
-            // 1. 处理悬停描边遮罩
-            if (hoveredEntity && hoveredEntity == entity) {
+            if (a.MaterialAsset.get() != b.MaterialAsset.get())
+                return a.MaterialAsset.get() < b.MaterialAsset.get();
+            
+            return a.MeshAsset.get() < b.MeshAsset.get();
+        });
+
+        // ------------------------------------------
+        // 阶段 2.3：批量执行 (Execution)
+        // ------------------------------------------
+        // 用于记录当前显卡的状态，避免重复切换
+        std::shared_ptr<Shader> currentShader = nullptr;
+        std::shared_ptr<Material> currentMaterial = nullptr;
+
+        for (const auto& cmd : s_Data.OpaqueDrawList) {
+            
+            // 1. 处理悬停描边遮罩 (每个物体的 EntityID 可能不同，必须每帧判断)
+            if (hoveredEntity && hoveredEntity == cmd.TargetEntity) {
                 glStencilFunc(GL_ALWAYS, 1, 0xFF);
                 glStencilMask(0xFF); 
             } else {
@@ -221,79 +276,49 @@ namespace Ayaya {
                 glStencilMask(0x00); 
             }
 
-            // ==========================================
-            // 2. 核心：双管线材质分流 (PBR vs Fallback)
-            // ==========================================
-            bool isFallback = (!meshComp.MaterialAsset || meshComp.MaterialAsset->Properties.empty());
-            
-            // 定义当前物体要用的 Shader
-            std::shared_ptr<Shader> activeShader;
+            // 2. 只有当 Shader 发生变化时，才调用昂贵的 Bind()
+            if (currentShader != cmd.ShaderAsset) {
+                currentShader = cmd.ShaderAsset;
+                currentShader->Bind();
+            }
 
-            if (isFallback) {
-                // 【错误路线】：使用极简着色器，没有任何 Uniform 绑定，性能拉满！
-                activeShader = s_Data.FallbackShader;
-                activeShader->Bind();
-            } 
-            else {
-                // 【正常路线】：使用 PBR 着色器并上传动态参数
-                activeShader = s_Data.DefaultShader;
-                activeShader->Bind(); // 确保先绑定 Shader 再传 Uniform
+            // 3. 只有当 Material 发生变化时，才重新上传 Uniform 和绑定贴图
+            if (currentMaterial != cmd.MaterialAsset) {
+                currentMaterial = cmd.MaterialAsset;
                 
-                int textureSlot = 0; 
-                for (auto& prop : meshComp.MaterialAsset->Properties) {
-                    switch (prop.Type) {
-                        case MaterialPropertyType::Float:
-                            activeShader->SetFloat(prop.UniformName, prop.FloatValue);
-                            break;
-                        case MaterialPropertyType::Int:
-                            activeShader->SetInt(prop.UniformName, prop.IntValue);
-                            break;
-                        case MaterialPropertyType::Bool:
-                            activeShader->SetBool(prop.UniformName, prop.BoolValue);
-                            break;
-                        case MaterialPropertyType::Vec2:
-                            activeShader->SetFloat2(prop.UniformName, prop.Vec2Value);
-                            break;
-                        case MaterialPropertyType::Vec3:
-                            activeShader->SetFloat3(prop.UniformName, prop.Vec3Value);
-                            break;
-                        case MaterialPropertyType::Vec4:
-                            activeShader->SetFloat4(prop.UniformName, prop.Vec4Value);
-                            break;
-                        case MaterialPropertyType::Texture2D:
-                        {
-                            // 只负责告诉显卡：这个纹理叫什么名字，用的是第几个槽位
-                            activeShader->SetInt(prop.UniformName, textureSlot);
-                            
-                            // 只负责绑定贴图，绝不干涉任何宏开关！
-                            if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
-                                auto tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
-                                tex->Bind(textureSlot);
-                            } else {
-                                s_Data.WhiteTexture->Bind(textureSlot);
+                if (currentMaterial) { // 如果不是 Fallback 空材质
+                    int textureSlot = 0; 
+                    for (auto& prop : currentMaterial->Properties) {
+                        switch (prop.Type) {
+                            case MaterialPropertyType::Float: currentShader->SetFloat(prop.UniformName, prop.FloatValue); break;
+                            case MaterialPropertyType::Int:   currentShader->SetInt(prop.UniformName, prop.IntValue); break;
+                            case MaterialPropertyType::Bool:  currentShader->SetBool(prop.UniformName, prop.BoolValue); break;
+                            case MaterialPropertyType::Vec2:  currentShader->SetFloat2(prop.UniformName, prop.Vec2Value); break;
+                            case MaterialPropertyType::Vec3:  currentShader->SetFloat3(prop.UniformName, prop.Vec3Value); break;
+                            case MaterialPropertyType::Vec4:  currentShader->SetFloat4(prop.UniformName, prop.Vec4Value); break;
+                            case MaterialPropertyType::Texture2D:
+                            {
+                                currentShader->SetInt(prop.UniformName, textureSlot);
+                                if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
+                                    auto tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
+                                    tex->Bind(textureSlot);
+                                } else {
+                                    s_Data.WhiteTexture->Bind(textureSlot); // 或者使用你定义的 DefaultNormalTexture
+                                }
+                                textureSlot++;
+                                break;
                             }
-                            textureSlot++;
-                            break;
+                            default: break;
                         }
-                        default:
-                            break;
                     }
                 }
             }
 
-            // ==========================================
-            // 3. 提交网格渲染 (传入对应的 Shader)
-            // ==========================================
-            if (meshComp.ModelAsset) {
-                for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
-                    // 这里的 Renderer::Submit 会自动负责传入 u_ViewProjection 和 u_Transform
-                    Renderer::Submit(activeShader, mesh->GetVertexArray(), entity.GetWorldTransform());
-                }
-            }
+            // 4. 提交绘制！(Renderer 会负责绑定 VAO 和上传 Transform 矩阵)
+            Renderer::Submit(currentShader, cmd.MeshAsset->GetVertexArray(), cmd.Transform);
         }
-        // 剔除日志
-        AYAYA_CORE_TRACE("Culling: {0} / {1} meshes rendered", drawnMeshes, totalMeshes);
 
+        // 恢复模板测试状态
         glStencilMask(0x00);
         glDisable(GL_STENCIL_TEST);
 
