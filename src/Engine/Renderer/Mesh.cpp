@@ -20,6 +20,19 @@ namespace Ayaya {
 
         auto ibo = std::shared_ptr<IndexBuffer>(IndexBuffer::Create((uint32_t*)indices.data(), indices.size()));
         m_VertexArray->SetIndexBuffer(ibo);
+
+        // ==========================================
+        // 核心：计算本地 AABB
+        // ==========================================
+        for (const auto& vertex : vertices) {
+            m_BoundingBox.Min.x = std::min(m_BoundingBox.Min.x, vertex.Position.x);
+            m_BoundingBox.Min.y = std::min(m_BoundingBox.Min.y, vertex.Position.y);
+            m_BoundingBox.Min.z = std::min(m_BoundingBox.Min.z, vertex.Position.z);
+
+            m_BoundingBox.Max.x = std::max(m_BoundingBox.Max.x, vertex.Position.x);
+            m_BoundingBox.Max.y = std::max(m_BoundingBox.Max.y, vertex.Position.y);
+            m_BoundingBox.Max.z = std::max(m_BoundingBox.Max.z, vertex.Position.z);
+        }
     }
 
     std::shared_ptr<Mesh> Mesh::CreateCube(float size) {

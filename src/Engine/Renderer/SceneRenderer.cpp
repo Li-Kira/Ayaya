@@ -1,12 +1,13 @@
 #include "ayapch.h"
-#include "SceneRenderer.hpp"
+#include "Renderer/SceneRenderer.hpp"
 #include "Renderer/Renderer.hpp"
 #include "Renderer/RenderCommand.hpp"
 #include "Renderer/Shader.hpp"
 #include "Renderer/Mesh.hpp"
 #include "Renderer/Texture.hpp"
 #include "Renderer/TextureCube.hpp"
-#include "Renderer/UniformBuffer.hpp" // 新增头文件
+#include "Renderer/UniformBuffer.hpp"
+#include "Renderer/Frustum.hpp"
 #include "Asset/AssetManager.hpp"
 #include "Engine/Scene/Components.hpp"
 
@@ -180,10 +181,36 @@ namespace Ayaya {
         // ==========================================
         // Pass 2: Geometry Pass (渲染所有 3D 网格)
         // ==========================================
+        // 1. 根据当前相机的 ViewProjection 矩阵生成视锥体
+        Frustum cameraFrustum(s_Data.ViewProjectionMatrix);
+        // 2. 性能统计：记录剔除掉了多少个物体 (可选，可以用日志打印出来看看威力)
+        int totalMeshes = 0;
+        int drawnMeshes = 0;
+
         auto meshGroup = scene->Reg().view<TransformComponent, MeshRendererComponent>();
         for (auto entityID : meshGroup) {
             Entity entity{ entityID, scene.get() };
             auto& meshComp = entity.GetComponent<MeshRendererComponent>();
+            glm::mat4 transform = entity.GetWorldTransform();
+            // ------------------------------------------
+            // 视锥体剔除检测 (Frustum Culling)
+            // ------------------------------------------
+            bool isVisible = false;
+            if (meshComp.ModelAsset) {
+                for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
+                    totalMeshes++;
+                    if (cameraFrustum.IsBoxVisible(mesh->GetAABB(), transform)) {
+                        isVisible = true; // 只要模型里有一个网格可见，我们就渲染它
+                        drawnMeshes++;
+                        break;
+                    }
+                }
+            }
+            
+            // 如果不在视野内，直接跳过当前实体所有的渲染逻辑，节省海量 CPU 和 GPU 开销！
+            if (!isVisible) {
+                continue; 
+            }
             
             // 1. 处理悬停描边遮罩
             if (hoveredEntity && hoveredEntity == entity) {
@@ -264,6 +291,9 @@ namespace Ayaya {
                 }
             }
         }
+        // 剔除日志
+        AYAYA_CORE_TRACE("Culling: {0} / {1} meshes rendered", drawnMeshes, totalMeshes);
+
         glStencilMask(0x00);
         glDisable(GL_STENCIL_TEST);
 

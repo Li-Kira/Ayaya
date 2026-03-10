@@ -9,7 +9,7 @@
 namespace Ayaya {
 
     // ==========================================
-    // 标准的 3D 顶点结构：位置、法线、UV
+    // 3D 顶点结构：位置、法线、UV、切线
     // ==========================================
     struct Vertex {
         glm::vec3 Position;
@@ -22,11 +22,18 @@ namespace Ayaya {
         glm::vec3 Tangent;
     };
 
+    struct AABB {
+        glm::vec3 Min = {  100000.0f,  100000.0f,  100000.0f };
+        glm::vec3 Max = { -100000.0f, -100000.0f, -100000.0f };
+    };
+    
     class Mesh {
     public:
         // 通过传入顶点数组和索引数组来构建网格
         Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
         ~Mesh() = default;
+
+        const AABB& GetAABB() const { return m_BoundingBox; }
 
         std::shared_ptr<VertexArray> GetVertexArray() const { return m_VertexArray; }
 
@@ -38,6 +45,7 @@ namespace Ayaya {
 
     private:
         std::shared_ptr<VertexArray> m_VertexArray;
+        AABB m_BoundingBox;
     };
 
 }
