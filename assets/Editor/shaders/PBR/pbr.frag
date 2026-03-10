@@ -26,9 +26,15 @@ uniform sampler2D u_AOMap;
 uniform bool u_UseAOMap;
 
 // 光源与相机参数
-uniform vec3 u_LightDir;
-uniform vec3 u_LightColor;
-uniform vec3 u_CameraPos;   // PBR 必须知道你的眼睛在哪！
+layout(std140) uniform DirectionalLight {
+    vec3 u_LightDir;
+    vec3 u_LightColor;
+};
+
+layout(std140) uniform Camera {
+    mat4 u_ViewProjection;
+    vec3 u_CameraPos;
+};
 
 uniform sampler2D u_NormalMap;
 uniform bool u_UseNormalMap;

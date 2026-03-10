@@ -23,6 +23,7 @@ namespace Ayaya {
         FramebufferSpecification fbSpec;
         fbSpec.Width = 1280;
         fbSpec.Height = 720;
+        fbSpec.Samples = m_EnableMSAA ? 4 : 1;
         m_Framebuffer = Framebuffer::Create(fbSpec);
 
         SceneRenderer::Init();
@@ -114,7 +115,7 @@ namespace Ayaya {
         dirLight.AddComponent<DirectionalLightComponent>();
 
         // 创造场景物体
-        Entity parentNode = m_ActiveScene->CreateEntity("Parent Empty Node");
+        // Entity parentNode = m_ActiveScene->CreateEntity("Parent Empty Node");
 
         // // --- 左边的方块 (带砖块贴图) ---
         // Entity square1 = m_ActiveScene->CreateEntity("Left Square");
@@ -135,16 +136,16 @@ namespace Ayaya {
         // mrc2.Color = glm::vec4{0.9f, 0.7f, 0.2f, 1.0f};
 
         
-        Entity modelEntity = m_ActiveScene->CreateEntity("Assimp Model");
-        modelEntity.GetComponent<TransformComponent>().Scale = { 1.0f, 1.0f, 1.0f };
-        modelEntity.GetComponent<TransformComponent>().Translation = { 1.5f, 0.0f, 0.0f };
-        auto& mrc = modelEntity.AddComponent<MeshRendererComponent>(); 
-        mrc.ModelAsset = std::make_shared<Model>("assets/models/backpack.obj"); 
+        // Entity modelEntity = m_ActiveScene->CreateEntity("Assimp Model");
+        // modelEntity.GetComponent<TransformComponent>().Scale = { 1.0f, 1.0f, 1.0f };
+        // modelEntity.GetComponent<TransformComponent>().Translation = { 1.5f, 0.0f, 0.0f };
+        // auto& mrc = modelEntity.AddComponent<MeshRendererComponent>(); 
+        // mrc.ModelAsset = std::make_shared<Model>("assets/models/backpack.obj"); 
         
         Entity cubeEntity = m_ActiveScene->CreateEntity("Cube");
-        cubeEntity.SetParent(parentNode); 
+        // cubeEntity.SetParent(parentNode); 
         cubeEntity.GetComponent<TransformComponent>().Scale = { 1.0f, 1.0f, 1.0f };
-        cubeEntity.GetComponent<TransformComponent>().Translation = { -1.5f, 0.0f, 0.0f };
+        cubeEntity.GetComponent<TransformComponent>().Translation = { 0.0f, 0.0f, 0.0f };
         auto& mrc2 = cubeEntity.AddComponent<MeshRendererComponent>(); 
 
         auto DefaultMat = std::make_shared<Material>();
@@ -152,12 +153,12 @@ namespace Ayaya {
 
         if (success) {
             // 给物体分配一个克隆体！
-            mrc.MaterialAsset = DefaultMat->Clone();
+            // mrc.MaterialAsset = DefaultMat->Clone();
             mrc2.MaterialAsset = DefaultMat->Clone();
         } else {
             AYAYA_CORE_WARN("Failed to load DefaultPBR.mat!");
             // 如果连母材质都没找到，只能给一个空材质，管线会自动走 Fallback(品红色)
-            mrc.MaterialAsset = std::make_shared<Material>(); 
+            // mrc.MaterialAsset = std::make_shared<Material>(); 
             mrc2.MaterialAsset = std::make_shared<Material>(); 
         }
 
@@ -407,6 +408,19 @@ namespace Ayaya {
             // ==========================================
             if (ImGui::BeginMenu("View")) {
                 ImGui::MenuItem("Show Grid", nullptr, &m_ShowGrid);
+
+                if (ImGui::MenuItem("Enable MSAA (4x)", nullptr, &m_EnableMSAA)) {
+                    // 当点击时，获取当前的 Framebuffer 配置（包含当前的长宽）
+                    FramebufferSpecification spec = m_Framebuffer->GetSpecification();
+                    spec.Samples = m_EnableMSAA ? 4 : 1;
+                    
+                    // 核心魔法：直接重新赋值！
+                    // std::shared_ptr 会自动调用旧 OpenGLFramebuffer 的析构函数清理显存，并创建全新的双缓冲/单缓冲结构！
+                    m_Framebuffer = Framebuffer::Create(spec);
+                    
+                    AYAYA_CORE_INFO("MSAA state changed: {0}", m_EnableMSAA ? "Enabled (4x)" : "Disabled");
+                }
+
                 ImGui::EndMenu();
             }
 

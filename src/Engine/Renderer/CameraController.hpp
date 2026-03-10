@@ -20,7 +20,7 @@ namespace Ayaya {
         void SetActive(bool active) { m_Active = active; }
         bool IsActive() const { return m_Active; }
         
-    private:
+    protected:
         SceneCamera m_Camera;
         float m_AspectRatio;
 

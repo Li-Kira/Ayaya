@@ -9,7 +9,10 @@ out vec3 v_FragPos;
 out vec2 v_TexCoord;
 out mat3 v_TBN; // <--- 传给片段着色器的 TBN 矩阵
 
-uniform mat4 u_ViewProjection;
+layout(std140) uniform Camera {
+    mat4 u_ViewProjection;
+    vec3 u_CameraPos;
+};
 uniform mat4 u_Transform;
 
 void main() {

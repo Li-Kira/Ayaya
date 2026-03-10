@@ -32,6 +32,9 @@ namespace Ayaya {
         void SetMat3(const std::string& name, const glm::mat3& matrix);
         void SetMat4(const std::string& name, const glm::mat4& matrix);
 
+        // 手动将 Shader 中的 Uniform Block 绑定到指定的槽位
+        void BindUniformBlock(const std::string& name, uint32_t bindingPoint);
+
         // 静态工厂方法
         static std::shared_ptr<Shader> Create(const std::string& vertexPath, const std::string& fragmentPath);
         static std::shared_ptr<Shader> Create(const std::string& name, const std::string& vertexPath, const std::string& fragmentPath);

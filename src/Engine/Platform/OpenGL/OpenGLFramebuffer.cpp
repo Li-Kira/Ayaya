@@ -1,5 +1,6 @@
 #include "ayapch.h"
 #include "OpenGLFramebuffer.hpp"
+#include "Renderer/Renderer.hpp"
 #include <glad/glad.h>
 
 namespace Ayaya {
@@ -10,9 +11,15 @@ namespace Ayaya {
     }
 
     OpenGLFramebuffer::~OpenGLFramebuffer() {
-        glDeleteFramebuffers(1, &m_RendererID);
-        glDeleteTextures(1, &m_ColorAttachment);
-        glDeleteTextures(1, &m_DepthAttachment);
+        if (m_RendererID) {
+            glDeleteFramebuffers(1, &m_RendererID);
+            glDeleteTextures(1, &m_ColorAttachment);
+            glDeleteTextures(1, &m_DepthAttachment);
+        }
+        if (m_ResolveFBO) {
+            glDeleteFramebuffers(1, &m_ResolveFBO);
+            glDeleteTextures(1, &m_ResolveColorAttachment);
+        }
     }
 
     void OpenGLFramebuffer::Invalidate() {
@@ -20,27 +27,68 @@ namespace Ayaya {
             glDeleteFramebuffers(1, &m_RendererID);
             glDeleteTextures(1, &m_ColorAttachment);
             glDeleteTextures(1, &m_DepthAttachment);
+            
+            if (m_ResolveFBO) {
+                glDeleteFramebuffers(1, &m_ResolveFBO);
+                glDeleteTextures(1, &m_ResolveColorAttachment);
+            }
         }
 
+        bool multisampled = m_Specification.Samples > 1;
+
+        // ==========================================
+        // A. 创建主渲染缓冲 (支持 MSAA)
+        // ==========================================
         glGenFramebuffers(1, &m_RendererID);
         glBindFramebuffer(GL_FRAMEBUFFER, m_RendererID);
 
-        // 创建颜色附件（我们渲染的彩色画面将存入这张贴图）
+        // 1. 创建颜色附件
         glGenTextures(1, &m_ColorAttachment);
-        glBindTexture(GL_TEXTURE_2D, m_ColorAttachment);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_Specification.Width, m_Specification.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_ColorAttachment, 0);
+        if (multisampled) {
+            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_ColorAttachment);
+            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_Specification.Samples, GL_RGBA8, m_Specification.Width, m_Specification.Height, GL_FALSE);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, m_ColorAttachment, 0);
+        } else {
+            glBindTexture(GL_TEXTURE_2D, m_ColorAttachment);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_Specification.Width, m_Specification.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_ColorAttachment, 0);
+        }
 
-        // 创建深度附件（用于深度测试，确保前面的物体遮挡后面的物体）
+        // 2. 创建深度附件
         glGenTextures(1, &m_DepthAttachment);
-        glBindTexture(GL_TEXTURE_2D, m_DepthAttachment);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, m_Specification.Width, m_Specification.Height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, m_DepthAttachment, 0);
+        if (multisampled) {
+            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_DepthAttachment);
+            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_Specification.Samples, GL_DEPTH24_STENCIL8, m_Specification.Width, m_Specification.Height, GL_FALSE);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, m_DepthAttachment, 0);
+        } else {
+            glBindTexture(GL_TEXTURE_2D, m_DepthAttachment);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, m_Specification.Width, m_Specification.Height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, m_DepthAttachment, 0);
+        }
 
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
             AYAYA_CORE_ERROR("Framebuffer is incomplete!");
+
+        // ==========================================
+        // B. 如果开启了 MSAA，额外创建一个普通的 Resolve 缓冲给 ImGui 用
+        // ==========================================
+        if (multisampled) {
+            glGenFramebuffers(1, &m_ResolveFBO);
+            glBindFramebuffer(GL_FRAMEBUFFER, m_ResolveFBO);
+
+            glGenTextures(1, &m_ResolveColorAttachment);
+            glBindTexture(GL_TEXTURE_2D, m_ResolveColorAttachment);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_Specification.Width, m_Specification.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_ResolveColorAttachment, 0);
+            
+            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+                AYAYA_CORE_ERROR("Resolve Framebuffer is incomplete!");
+        }
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
@@ -51,6 +99,22 @@ namespace Ayaya {
     }
 
     void OpenGLFramebuffer::Unbind() {
+        // ==========================================
+        // 核心步骤：硬件级 MSAA 降采样 (Blit)
+        // ==========================================
+        if (m_Specification.Samples > 1) {
+            // 指定读取源为 MSAA 缓冲
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, m_RendererID);
+            // 指定写入目标为普通缓冲
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_ResolveFBO);
+            
+            // 执行硬件拷贝与混合降采样
+            glBlitFramebuffer(0, 0, m_Specification.Width, m_Specification.Height, 
+                              0, 0, m_Specification.Width, m_Specification.Height, 
+                              GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        }
+        
+        // 恢复绑定到默认屏幕缓冲
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
@@ -64,8 +128,9 @@ namespace Ayaya {
         Invalidate();
     }
 
-    // 工厂方法实现 (如果你有单独的 Framebuffer.cpp，可以放在那里面)
+    // 工厂方法
     std::shared_ptr<Framebuffer> Framebuffer::Create(const FramebufferSpecification& spec) {
+        // 理想情况下这里应该有 switch(Renderer::GetAPI())，这里保持你原有的精简写法
         return std::make_shared<OpenGLFramebuffer>(spec);
     }
 }

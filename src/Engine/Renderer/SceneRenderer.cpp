@@ -4,10 +4,12 @@
 #include "Renderer/RenderCommand.hpp"
 #include "Renderer/Shader.hpp"
 #include "Renderer/Mesh.hpp"
-#include "Asset/AssetManager.hpp"
 #include "Renderer/Texture.hpp"
 #include "Renderer/TextureCube.hpp"
+#include "Renderer/UniformBuffer.hpp" // 新增头文件
+#include "Asset/AssetManager.hpp"
 #include "Engine/Scene/Components.hpp"
+
 
 #include <glad/glad.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -15,6 +17,25 @@
 #include <glm/gtx/quaternion.hpp>
 
 namespace Ayaya {
+
+    // 【极其重要的 C++ 内存对齐】：
+    // OpenGL 的 std140 布局要求极其严格。vec3 在显存中会被按 16 字节(vec4)对齐！
+    // 所以必须手动加上 float padding，否则数据会完全错位！
+    struct struct_CameraData {
+        glm::mat4 ViewProjection; // 64 bytes
+        glm::vec3 CameraPosition; // 12 bytes
+        float _padding;           // 4 bytes (凑齐 16 字节)
+    };
+
+    // ==========================================
+    // 新增：平行光 UBO 结构体 (严格遵循 std140)
+    // ==========================================
+    struct struct_DirectionalLightData {
+        glm::vec3 LightDir;       // 12 bytes
+        float _padding1;          // 4 bytes (凑齐 16 字节)
+        glm::vec3 LightColor;     // 12 bytes
+        float _padding2;          // 4 bytes (凑齐 16 字节)
+    };
 
     // 使用静态结构体管理管线内部的资源，不对外暴露
     struct SceneRendererData {
@@ -38,6 +59,12 @@ namespace Ayaya {
         std::shared_ptr<Shader> SkyboxShader;
         std::shared_ptr<TextureCube> EnvironmentCubemap; 
         std::shared_ptr<Mesh> SkyboxCubeMesh;
+
+        // 新增 UBO 相关的成员
+        std::shared_ptr<UniformBuffer> CameraUniformBuffer;
+        struct_CameraData CameraData;
+        std::shared_ptr<UniformBuffer> DirectionalLightUniformBuffer;
+        struct_DirectionalLightData DirectionalLightData;
     };
 
     static SceneRendererData s_Data;
@@ -79,6 +106,20 @@ namespace Ayaya {
         };
         s_Data.EnvironmentCubemap = std::make_shared<TextureCube>(faces);
         s_Data.SkyboxMesh = Mesh::CreateCube(1.0f);
+
+        // ==========================================
+        // 6. 初始化 UBO
+        // ==========================================
+        s_Data.CameraUniformBuffer = UniformBuffer::Create(sizeof(struct_CameraData), 0);
+        s_Data.DefaultShader->BindUniformBlock("Camera", 0);
+        s_Data.OutlineShader->BindUniformBlock("Camera", 0);
+        s_Data.GridShader->BindUniformBlock("Camera", 0);
+        s_Data.FallbackShader->BindUniformBlock("Camera", 0);
+        s_Data.SkyboxShader->BindUniformBlock("Camera", 0);
+
+        // 新增：初始化 LightData UBO，绑定到 1 号槽位
+        s_Data.DirectionalLightUniformBuffer = UniformBuffer::Create(sizeof(struct_DirectionalLightData), 1);
+        s_Data.DefaultShader->BindUniformBlock("DirectionalLight", 1);
     }
 
    void SceneRenderer::BeginScene(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, const glm::vec3& cameraPosition) {
@@ -88,6 +129,13 @@ namespace Ayaya {
         s_Data.ViewProjectionMatrix = projectionMatrix * viewMatrix; 
         s_Data.CameraPosition = cameraPosition;
         
+        // ==========================================
+        // 核心：ubo 每帧只在这里把相机数据传给显卡一次！
+        // ==========================================
+        s_Data.CameraData.ViewProjection = s_Data.ViewProjectionMatrix;
+        s_Data.CameraData.CameraPosition = s_Data.CameraPosition;
+        s_Data.CameraUniformBuffer->SetData(&s_Data.CameraData, sizeof(struct_CameraData));
+
         Renderer::BeginScene(s_Data.ViewProjectionMatrix);
     }
 
@@ -99,9 +147,6 @@ namespace Ayaya {
 
         // ==========================================
         // Pass 1: Lighting Setup Pass (收集场景灯光)
-        // ==========================================
-        // ==========================================
-        // Pass 2: Lighting Setup Pass (收集场景灯光)
         // ==========================================
         glm::vec3 lightDir = { -0.2f, -1.0f, -0.3f }; 
         glm::vec3 lightColor = { 1.0f, 1.0f, 1.0f };
@@ -119,9 +164,14 @@ namespace Ayaya {
             break; 
         }
 
-        s_Data.DefaultShader->Bind();
-        s_Data.DefaultShader->SetFloat3("u_LightDir", lightDir); 
-        s_Data.DefaultShader->SetFloat3("u_LightColor", lightColor * lightIntensity);
+        // ==========================================
+        // 核心优化：直接将整理好的灯光数据打包推入 UBO！
+        // ==========================================
+        s_Data.DirectionalLightData.LightDir = lightDir;
+        s_Data.DirectionalLightData.LightColor = lightColor * lightIntensity;
+        s_Data.DirectionalLightUniformBuffer->SetData(&s_Data.DirectionalLightData, sizeof(struct_DirectionalLightData));
+        // 注：这里彻底删掉了 s_Data.DefaultShader->Bind() 和 SetFloat3
+        // 因为 UBO 的更新完全不需要先绑定 Shader！它存在于独立显存中。
 
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_STENCIL_TEST);
@@ -161,8 +211,6 @@ namespace Ayaya {
                 // 【正常路线】：使用 PBR 着色器并上传动态参数
                 activeShader = s_Data.DefaultShader;
                 activeShader->Bind(); // 确保先绑定 Shader 再传 Uniform
-                
-                activeShader->SetFloat3("u_CameraPos", s_Data.CameraPosition);
                 
                 int textureSlot = 0; 
                 for (auto& prop : meshComp.MaterialAsset->Properties) {

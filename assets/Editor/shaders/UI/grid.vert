@@ -2,7 +2,10 @@
 
 layout(location = 0) in vec3 a_Position;
 
-uniform mat4 u_ViewProjection;
+layout(std140) uniform Camera {
+    mat4 u_ViewProjection;
+    vec3 u_CameraPos;
+};
 uniform mat4 u_Transform;
 
 out vec3 v_WorldPos;

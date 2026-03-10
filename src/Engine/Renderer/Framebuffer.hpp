@@ -6,9 +6,10 @@
 namespace Ayaya {
 
     struct FramebufferSpecification {
-        uint32_t Width = 0;
-        uint32_t Height = 0;
-        // 以后可以加更多配置，比如 MSAA 采样数、贴图格式等
+        uint32_t Width = 0, Height = 0;
+        // 核心：抗锯齿采样率 (默认为 1，即不开启)
+        uint32_t Samples = 1; 
+        bool SwapChainTarget = false;
     };
 
     class Framebuffer {
@@ -20,9 +21,8 @@ namespace Ayaya {
 
         virtual void Resize(uint32_t width, uint32_t height) = 0;
 
-        // 获取渲染好的那张“贴图”的 ID
+        // 纯虚函数，交由子类实现
         virtual uint32_t GetColorAttachmentRendererID() const = 0;
-
         virtual const FramebufferSpecification& GetSpecification() const = 0;
 
         static std::shared_ptr<Framebuffer> Create(const FramebufferSpecification& spec);

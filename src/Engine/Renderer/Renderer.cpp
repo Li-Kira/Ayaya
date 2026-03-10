@@ -42,9 +42,6 @@ namespace Ayaya {
         // 1. 绑定 Shader
         shader->Bind();
         
-        // 2. 上传由 Renderer 统一管理的全局 Uniform
-        shader->SetMat4("u_ViewProjection", m_SceneData->ViewProjectionMatrix);
-        
         // 3. 上传由物体自己管理的局部 Transform（Model 矩阵）
         shader->SetMat4("u_Transform", transform);
 

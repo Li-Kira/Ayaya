@@ -71,6 +71,19 @@ namespace Ayaya {
     void Shader::SetMat4(const std::string& name, const glm::mat4& matrix) { glUniformMatrix4fv(GetUniformLocation(name), 1, GL_FALSE, glm::value_ptr(matrix)); }
     // (其他 Mat2, Mat3 类似实现...)
 
+    void Shader::BindUniformBlock(const std::string& name, uint32_t bindingPoint) {
+        // 1. 查询这个 Uniform Block 在当前 Shader 中的索引 ID
+        uint32_t blockIndex = glGetUniformBlockIndex(m_RendererID, name.c_str());
+        
+        // 2. 如果找到了，就把它挂载到我们指定的槽位上（比如 0）
+        if (blockIndex != GL_INVALID_INDEX) {
+            glUniformBlockBinding(m_RendererID, blockIndex, bindingPoint);
+        } else {
+            // 可以选择打个警告，说明这个 Shader 没用到这个 Block
+            // AYAYA_CORE_WARN("Uniform block '{0}' not found in shader!", name);
+        }
+    }
+
     int Shader::GetUniformLocation(const std::string& name) const {
         if (m_UniformLocationCache.count(name)) return m_UniformLocationCache[name];
         int location = glGetUniformLocation(m_RendererID, name.c_str());
