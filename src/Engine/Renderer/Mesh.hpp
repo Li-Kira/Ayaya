@@ -32,6 +32,7 @@ namespace Ayaya {
         // 通过传入顶点数组和索引数组来构建网格
         Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
         ~Mesh() = default;
+        
 
         const AABB& GetAABB() const { return m_BoundingBox; }
 
@@ -41,7 +42,8 @@ namespace Ayaya {
         // 几何体工厂：一键生成标准图元
         // ==========================================
         static std::shared_ptr<Mesh> CreateCube(float size = 1.0f);
-        // 未来还可以加：CreateSphere, CreatePlane, CreateCylinder...
+        static std::shared_ptr<Mesh> CreatePlane(float width = 1.0f, float height = 1.0f);
+        static std::shared_ptr<Mesh> CreateSphere(float radius = 0.5f, uint32_t xSegments = 64, uint32_t ySegments = 64);
 
     private:
         std::shared_ptr<VertexArray> m_VertexArray;

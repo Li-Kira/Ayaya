@@ -53,6 +53,6 @@ Entities:
       Scale: [1, 1, 1]
     MeshRendererComponent:
       ModelPath: assets/models/backpack.obj
-      MaterialPath: assets/materials/NewMaterial (1).mat
+      MaterialPath: assets/materials/PBR.mat
     RelationshipComponent:
       Parent: 0

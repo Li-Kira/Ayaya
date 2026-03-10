@@ -326,7 +326,7 @@ namespace Ayaya {
         }
 
         // 剔除日志
-        AYAYA_CORE_TRACE("Culling: {0} / {1} meshes rendered", drawnMeshes, totalMeshes);
+        // AYAYA_CORE_TRACE("Culling: {0} / {1} meshes rendered", drawnMeshes, totalMeshes);
         // 恢复模板测试状态
         glStencilMask(0x00);
         glDisable(GL_STENCIL_TEST);

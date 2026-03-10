@@ -142,25 +142,25 @@ namespace Ayaya {
         // auto& mrc = modelEntity.AddComponent<MeshRendererComponent>(); 
         // mrc.ModelAsset = std::make_shared<Model>("assets/models/backpack.obj"); 
         
-        Entity cubeEntity = m_ActiveScene->CreateEntity("Cube");
-        // cubeEntity.SetParent(parentNode); 
-        cubeEntity.GetComponent<TransformComponent>().Scale = { 1.0f, 1.0f, 1.0f };
-        cubeEntity.GetComponent<TransformComponent>().Translation = { 0.0f, 0.0f, 0.0f };
-        auto& mrc2 = cubeEntity.AddComponent<MeshRendererComponent>(); 
+        // Entity cubeEntity = m_ActiveScene->CreateEntity("Cube");
+        // // cubeEntity.SetParent(parentNode); 
+        // cubeEntity.GetComponent<TransformComponent>().Scale = { 1.0f, 1.0f, 1.0f };
+        // cubeEntity.GetComponent<TransformComponent>().Translation = { 0.0f, 0.0f, 0.0f };
+        // auto& mrc2 = cubeEntity.AddComponent<MeshRendererComponent>(); 
 
-        auto DefaultMat = std::make_shared<Material>();
-        bool success = MaterialSerializer::Deserialize(DefaultMat, "assets/Editor/materials/DefaultPBR.mat");
+        // auto DefaultMat = std::make_shared<Material>();
+        // bool success = MaterialSerializer::Deserialize(DefaultMat, "assets/Editor/materials/DefaultPBR.mat");
 
-        if (success) {
-            // 给物体分配一个克隆体！
-            // mrc.MaterialAsset = DefaultMat->Clone();
-            mrc2.MaterialAsset = DefaultMat->Clone();
-        } else {
-            AYAYA_CORE_WARN("Failed to load DefaultPBR.mat!");
-            // 如果连母材质都没找到，只能给一个空材质，管线会自动走 Fallback(品红色)
-            // mrc.MaterialAsset = std::make_shared<Material>(); 
-            mrc2.MaterialAsset = std::make_shared<Material>(); 
-        }
+        // if (success) {
+        //     // 给物体分配一个克隆体！
+        //     // mrc.MaterialAsset = DefaultMat->Clone();
+        //     mrc2.MaterialAsset = DefaultMat->Clone();
+        // } else {
+        //     AYAYA_CORE_WARN("Failed to load DefaultPBR.mat!");
+        //     // 如果连母材质都没找到，只能给一个空材质，管线会自动走 Fallback(品红色)
+        //     // mrc.MaterialAsset = std::make_shared<Material>(); 
+        //     mrc2.MaterialAsset = std::make_shared<Material>(); 
+        // }
 
         // ==========================================
         // 2. 创建 3D 模型并赋予默认 PBR 材质
@@ -177,6 +177,76 @@ namespace Ayaya {
         // } else {
         //     AYAYA_CORE_INFO("Successfully loaded default PBR material for the model.");
         // }
+
+        // ==========================================
+        // 3. 准备共用的母模型和母材质
+        // ==========================================
+        // 创建一个包含完美球体的 ModelAsset
+        // 完美的修复方案：直接调用接收 Mesh 的构造函数！
+        auto sphereModel = std::make_shared<Model>(Mesh::CreateSphere(0.5f, 64, 64));
+
+        // 读取我们在编辑器里的默认 PBR 材质作为模板
+        auto templateMat = std::make_shared<Material>();
+        bool success = MaterialSerializer::Deserialize(templateMat, "assets/Editor/materials/DefaultPBR.mat");
+        if (!success) {
+            AYAYA_CORE_WARN("Failed to load DefaultPBR.mat for the sphere grid!");
+            templateMat = std::make_shared<Material>(); // 兜底
+        }
+
+        // ==========================================
+        // 4. 生成 7x7 的 PBR 金属度/粗糙度 测试球体矩阵
+        // ==========================================
+        int nrRows = 7;
+        int nrColumns = 7;
+        float spacing = 2.5f;
+
+        // 创建一个空的父节点，用来把这 49 个球组织在一起，保持大纲视图的整洁
+        Entity gridRoot = m_ActiveScene->CreateEntity("PBR Sphere Grid");
+
+        for (int row = 0; row < nrRows; ++row) {
+            // 金属度从下到上递增：0.0 -> 1.0
+            float metallic = (float)row / (float)(nrRows - 1);
+
+            for (int col = 0; col < nrColumns; ++col) {
+                // 粗糙度从左到右递增，限制在 0.05 到 1.0 之间
+                float roughness = glm::clamp((float)col / (float)(nrColumns - 1), 0.05f, 1.0f);
+                
+                // 计算每个球体的位置，使其居中对齐
+                glm::vec3 pos = glm::vec3(
+                    (col - (nrColumns / 2)) * spacing, 
+                    (row - (nrRows / 2)) * spacing, 
+                    0.0f
+                );
+
+                std::string entityName = "Sphere_M" + std::to_string((int)(metallic * 100)) + "_R" + std::to_string((int)(roughness * 100));
+                Entity sphereEntity = m_ActiveScene->CreateEntity(entityName);
+                sphereEntity.SetParent(gridRoot); // 设置父节点
+                
+                auto& tc = sphereEntity.GetComponent<TransformComponent>();
+                tc.Translation = pos;
+
+                auto& mrc = sphereEntity.AddComponent<MeshRendererComponent>();
+                mrc.ModelAsset = sphereModel; // 共享同一个球体网格内存
+                
+                // 核心：为每个球体克隆一份独立的材质，并修改其属性
+                mrc.MaterialAsset = templateMat->Clone();
+                mrc.MaterialAsset->Name = entityName + "_Mat";
+
+                // 遍历克隆出来的材质属性，覆写金属度、粗糙度和基础颜色
+                for (auto& prop : mrc.MaterialAsset->Properties) {
+                    if (prop.UniformName == "u_Metallic") {
+                        prop.FloatValue = metallic;
+                    } 
+                    else if (prop.UniformName == "u_Roughness") {
+                        prop.FloatValue = roughness;
+                    }
+                    else if (prop.UniformName == "u_AlbedoColor") {
+                        // 给一个显眼的暗红色，类似 LearnOpenGL 里的 rusted iron 基础色
+                        prop.Vec3Value = { 0.5f, 0.0f, 0.0f }; 
+                    }
+                }
+            }
+        }
 
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
     }
