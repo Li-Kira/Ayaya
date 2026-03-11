@@ -185,6 +185,20 @@ namespace Ayaya {
             out << YAML::EndMap;
         }
 
+        // ==========================================
+        // 新增：序列化 PointLightComponent
+        // ==========================================
+        if (entity.HasComponent<PointLightComponent>()) {
+            out << YAML::Key << "PointLightComponent";
+            out << YAML::BeginMap; // PointLightComponent
+            
+            auto& plc = entity.GetComponent<PointLightComponent>();
+            out << YAML::Key << "Color" << YAML::Value << plc.Color;
+            out << YAML::Key << "Intensity" << YAML::Value << plc.Intensity;
+            
+            out << YAML::EndMap; // PointLightComponent
+        }
+
         // --- 核心：保存父子层级关系 UUID ---
         if (entity.HasComponent<RelationshipComponent>()) {
             out << YAML::Key << "RelationshipComponent";
@@ -357,6 +371,17 @@ namespace Ayaya {
                 auto& dlc = deserializedEntity.AddComponent<DirectionalLightComponent>();
                 dlc.Color = dirLightComponent["Color"].as<glm::vec3>();
                 dlc.AmbientStrength = dirLightComponent["AmbientStrength"].as<float>();
+            }
+
+            // ==========================================
+            // 新增：反序列化 PointLightComponent
+            // ==========================================
+            auto pointLightComponent = entity["PointLightComponent"];
+            if (pointLightComponent) {
+                auto& plc = deserializedEntity.AddComponent<PointLightComponent>();
+                
+                plc.Color = pointLightComponent["Color"].as<glm::vec3>();
+                plc.Intensity = pointLightComponent["Intensity"].as<float>();
             }
         }
 

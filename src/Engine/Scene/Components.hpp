@@ -117,4 +117,12 @@ namespace Ayaya {
         DirectionalLightComponent(const DirectionalLightComponent&) = default;
     };
 
+    struct PointLightComponent {
+        glm::vec3 Color = { 1.0f, 1.0f, 1.0f };
+        float Intensity = 150.0f; // PBR 渲染中，点光源通常需要极高的辐射通量 (Radiance)
+
+        PointLightComponent() = default;
+        PointLightComponent(const PointLightComponent&) = default;
+    };
+
 }

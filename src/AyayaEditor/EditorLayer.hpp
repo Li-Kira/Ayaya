@@ -66,6 +66,7 @@ namespace Ayaya {
         Entity m_HoveredEntity = {}; 
 
         bool m_ShowGrid = true; // 默认开启网格
+        bool m_ShowSkybox = true; // 默认开启网格
         bool m_EnableMSAA = true; // 默认开启抗锯齿
     };
 

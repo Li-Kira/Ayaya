@@ -158,15 +158,18 @@ namespace Ayaya {
                 uint32_t i2 = (y + 1) * (xSegments + 1) + x; // 左下
                 uint32_t i3 = i2 + 1;                        // 右下
 
-                // 第一个三角形 (左上, 左下, 右上)
+                // ==========================================
+                // 终极修复：逆时针 (CCW) 环绕顺序，确保法线与渲染面一致
+                // ==========================================
+                // 第一个三角形 (右上, 左上, 右下) -> 逆时针
                 indices.push_back(i0);
-                indices.push_back(i2);
                 indices.push_back(i1);
+                indices.push_back(i2);
 
-                // 第二个三角形 (右上, 左下, 右下)
+                // 第二个三角形 (左上, 左下, 右下) -> 逆时针
                 indices.push_back(i1);
-                indices.push_back(i2);
                 indices.push_back(i3);
+                indices.push_back(i2);
             }
         }
 

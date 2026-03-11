@@ -1,0 +1,618 @@
+Scene: Untitled
+Entities:
+  - Entity: 6271949671940131604
+    TagComponent:
+      Tag: Main Camera
+    TransformComponent:
+      Translation: [0, 0, 5]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    CameraComponent:
+      Primary: true
+      FixedAspectRatio: false
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 620594148435463272
+    TagComponent:
+      Tag: Point Light 0
+    TransformComponent:
+      Translation: [-10, 10, 10]
+      Rotation: [0, 0, 0]
+      Scale: [0.5, 0.5, 0.5]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/NewMaterial (1).mat
+    PointLightComponent:
+      Color: [1, 1, 1]
+      Intensity: 150
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 11489122374667175055
+    TagComponent:
+      Tag: Point Light 1
+    TransformComponent:
+      Translation: [10, 10, 10]
+      Rotation: [0, 0, 0]
+      Scale: [0.5, 0.5, 0.5]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/NewMaterial (2).mat
+    PointLightComponent:
+      Color: [1, 1, 1]
+      Intensity: 150
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 4310351443698607986
+    TagComponent:
+      Tag: Point Light 2
+    TransformComponent:
+      Translation: [-10, -10, 10]
+      Rotation: [0, 0, 0]
+      Scale: [0.5, 0.5, 0.5]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/NewMaterial (3).mat
+    PointLightComponent:
+      Color: [1, 1, 1]
+      Intensity: 150
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 17035699517086783028
+    TagComponent:
+      Tag: Point Light 3
+    TransformComponent:
+      Translation: [10, -10, 10]
+      Rotation: [0, 0, 0]
+      Scale: [0.5, 0.5, 0.5]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/NewMaterial (4).mat
+    PointLightComponent:
+      Color: [1, 1, 1]
+      Intensity: 150
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 5390624526081811872
+    TagComponent:
+      Tag: PBR Sphere Grid
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 4221825029021971866
+    TagComponent:
+      Tag: Sphere_M0_R5
+    TransformComponent:
+      Translation: [-7.5, -7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M0_R5_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 6067348287623318811
+    TagComponent:
+      Tag: Sphere_M0_R16
+    TransformComponent:
+      Translation: [-5, -7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M0_R16_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 12486168991801979349
+    TagComponent:
+      Tag: Sphere_M0_R33
+    TransformComponent:
+      Translation: [-2.5, -7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M0_R33_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 10743178437079971046
+    TagComponent:
+      Tag: Sphere_M0_R50
+    TransformComponent:
+      Translation: [0, -7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M0_R50_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 1942555905390487403
+    TagComponent:
+      Tag: Sphere_M0_R66
+    TransformComponent:
+      Translation: [2.5, -7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M0_R66_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 9864639737892429519
+    TagComponent:
+      Tag: Sphere_M0_R83
+    TransformComponent:
+      Translation: [5, -7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M0_R83_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 12735147024484818769
+    TagComponent:
+      Tag: Sphere_M0_R100
+    TransformComponent:
+      Translation: [7.5, -7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M0_R100_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 11040683703418179835
+    TagComponent:
+      Tag: Sphere_M16_R5
+    TransformComponent:
+      Translation: [-7.5, -5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M16_R5_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 7724317646811449773
+    TagComponent:
+      Tag: Sphere_M16_R16
+    TransformComponent:
+      Translation: [-5, -5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M16_R16_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 12181060726993130174
+    TagComponent:
+      Tag: Sphere_M16_R33
+    TransformComponent:
+      Translation: [-2.5, -5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M16_R33_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 17001866516757671397
+    TagComponent:
+      Tag: Sphere_M16_R50
+    TransformComponent:
+      Translation: [0, -5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M16_R50_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 7180343192550231962
+    TagComponent:
+      Tag: Sphere_M16_R66
+    TransformComponent:
+      Translation: [2.5, -5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M16_R66_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 10926974411264764335
+    TagComponent:
+      Tag: Sphere_M16_R83
+    TransformComponent:
+      Translation: [5, -5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M16_R83_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 14806443482323999778
+    TagComponent:
+      Tag: Sphere_M16_R100
+    TransformComponent:
+      Translation: [7.5, -5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M16_R100_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 8732469768005754308
+    TagComponent:
+      Tag: Sphere_M33_R5
+    TransformComponent:
+      Translation: [-7.5, -2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M33_R5_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 966437494215531155
+    TagComponent:
+      Tag: Sphere_M33_R16
+    TransformComponent:
+      Translation: [-5, -2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M33_R16_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 3049047858975192605
+    TagComponent:
+      Tag: Sphere_M33_R33
+    TransformComponent:
+      Translation: [-2.5, -2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M33_R33_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 12514455552606734405
+    TagComponent:
+      Tag: Sphere_M33_R50
+    TransformComponent:
+      Translation: [0, -2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M33_R50_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 12865615489841554677
+    TagComponent:
+      Tag: Sphere_M33_R66
+    TransformComponent:
+      Translation: [2.5, -2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M33_R66_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 14824681030534258058
+    TagComponent:
+      Tag: Sphere_M33_R83
+    TransformComponent:
+      Translation: [5, -2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M33_R83_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 14781882978064204240
+    TagComponent:
+      Tag: Sphere_M33_R100
+    TransformComponent:
+      Translation: [7.5, -2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M33_R100_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 11369349965502962854
+    TagComponent:
+      Tag: Sphere_M50_R5
+    TransformComponent:
+      Translation: [-7.5, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M50_R5_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 8071038478581050631
+    TagComponent:
+      Tag: Sphere_M50_R16
+    TransformComponent:
+      Translation: [-5, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M50_R16_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 3962985805429420496
+    TagComponent:
+      Tag: Sphere_M50_R33
+    TransformComponent:
+      Translation: [-2.5, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M50_R33_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 13288604440802434919
+    TagComponent:
+      Tag: Sphere_M50_R50
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M50_R50_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 14224294761430932542
+    TagComponent:
+      Tag: Sphere_M50_R66
+    TransformComponent:
+      Translation: [2.5, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M50_R66_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 16290360372733197893
+    TagComponent:
+      Tag: Sphere_M50_R83
+    TransformComponent:
+      Translation: [5, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M50_R83_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 1363767875231973793
+    TagComponent:
+      Tag: Sphere_M50_R100
+    TransformComponent:
+      Translation: [7.5, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M50_R100_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 2139894817195137015
+    TagComponent:
+      Tag: Sphere_M66_R5
+    TransformComponent:
+      Translation: [-7.5, 2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M66_R5_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 13517453652942699001
+    TagComponent:
+      Tag: Sphere_M66_R16
+    TransformComponent:
+      Translation: [-5, 2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M66_R16_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 5927092514493958135
+    TagComponent:
+      Tag: Sphere_M66_R33
+    TransformComponent:
+      Translation: [-2.5, 2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M66_R33_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 13282484426919089517
+    TagComponent:
+      Tag: Sphere_M66_R50
+    TransformComponent:
+      Translation: [0, 2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M66_R50_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 12835872041600387355
+    TagComponent:
+      Tag: Sphere_M66_R66
+    TransformComponent:
+      Translation: [2.5, 2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M66_R66_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 7909647634449342771
+    TagComponent:
+      Tag: Sphere_M66_R83
+    TransformComponent:
+      Translation: [5, 2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M66_R83_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 11319986517054519094
+    TagComponent:
+      Tag: Sphere_M66_R100
+    TransformComponent:
+      Translation: [7.5, 2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M66_R100_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 6419730662330051290
+    TagComponent:
+      Tag: Sphere_M83_R5
+    TransformComponent:
+      Translation: [-7.5, 5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M83_R5_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 18245067028786951708
+    TagComponent:
+      Tag: Sphere_M83_R16
+    TransformComponent:
+      Translation: [-5, 5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M83_R16_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 6928085134594670437
+    TagComponent:
+      Tag: Sphere_M83_R33
+    TransformComponent:
+      Translation: [-2.5, 5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M83_R33_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 1456615656768868728
+    TagComponent:
+      Tag: Sphere_M83_R50
+    TransformComponent:
+      Translation: [0, 5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M83_R50_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 6595189825171908223
+    TagComponent:
+      Tag: Sphere_M83_R66
+    TransformComponent:
+      Translation: [2.5, 5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M83_R66_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 2445873734011653061
+    TagComponent:
+      Tag: Sphere_M83_R83
+    TransformComponent:
+      Translation: [5, 5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M83_R83_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 407708644291018794
+    TagComponent:
+      Tag: Sphere_M83_R100
+    TransformComponent:
+      Translation: [7.5, 5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M83_R100_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 1515753923942301621
+    TagComponent:
+      Tag: Sphere_M100_R5
+    TransformComponent:
+      Translation: [-7.5, 7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M100_R5_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 16237942383518575538
+    TagComponent:
+      Tag: Sphere_M100_R16
+    TransformComponent:
+      Translation: [-5, 7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M100_R16_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 10641754371110458308
+    TagComponent:
+      Tag: Sphere_M100_R33
+    TransformComponent:
+      Translation: [-2.5, 7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M100_R33_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 9431685665506591371
+    TagComponent:
+      Tag: Sphere_M100_R50
+    TransformComponent:
+      Translation: [0, 7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M100_R50_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 2665879810149714589
+    TagComponent:
+      Tag: Sphere_M100_R66
+    TransformComponent:
+      Translation: [2.5, 7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M100_R66_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 10183173848457388115
+    TagComponent:
+      Tag: Sphere_M100_R83
+    TransformComponent:
+      Translation: [5, 7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M100_R83_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872
+  - Entity: 7153965515896879982
+    TagComponent:
+      Tag: Sphere_M100_R100
+    TransformComponent:
+      Translation: [7.5, 7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/Sphere_M100_R100_Mat.mat
+    RelationshipComponent:
+      Parent: 5390624526081811872

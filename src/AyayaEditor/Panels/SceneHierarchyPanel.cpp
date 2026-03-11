@@ -101,6 +101,7 @@ namespace Ayaya {
         else if (entity.HasComponent<SpriteRendererComponent>()) icon = ICON_FA_PAINT_BRUSH;
         else if (entity.HasComponent<MeshRendererComponent>()) icon = ICON_FA_PAINT_BRUSH;
         else if (entity.HasComponent<DirectionalLightComponent>()) icon = ICON_FA_LIGHTBULB; 
+        else if (entity.HasComponent<PointLightComponent>()) icon = ICON_FA_LIGHTBULB; 
 
         
         std::string displayString = icon + " " + tag;
@@ -584,6 +585,19 @@ namespace Ayaya {
             }
         }
 
+        // --- 绘制 Directional Light 组件 ---
+        if (entity.HasComponent<PointLightComponent>()) {
+            if (ImGui::TreeNodeEx((void*)typeid(PointLightComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Point Light")) {
+                auto& dlc = entity.GetComponent<PointLightComponent>();
+                
+                ImGui::ColorEdit3("Color", glm::value_ptr(dlc.Color));
+                // 使用拖拽条修改灯光强度，考虑到 PBR 能量很高，最大值可以给到成千上万
+                ImGui::DragFloat("Intensity", &dlc.Intensity, 1.0f, 0.0f, 10000.0f, "%.2f");
+                
+                ImGui::TreePop();
+            }
+        }
+
         // ==========================================
         // “添加组件” 按钮与下拉菜单
         // ==========================================
@@ -639,6 +653,15 @@ namespace Ayaya {
             if (!entity.HasComponent<DirectionalLightComponent>()) {
                 if (ImGui::MenuItem("Directional Light")) {
                     entity.AddComponent<DirectionalLightComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            // ==========================================
+            // 新增：注册 Point Light 组件到添加菜单
+            // ==========================================
+            if (!m_SelectionContext.HasComponent<PointLightComponent>()) {
+                if (ImGui::MenuItem("Point Light")) {
+                    m_SelectionContext.AddComponent<PointLightComponent>();
                     ImGui::CloseCurrentPopup();
                 }
             }

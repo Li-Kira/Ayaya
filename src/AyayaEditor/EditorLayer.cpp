@@ -68,7 +68,7 @@ namespace Ayaya {
         // 3.渲染管线调用
         // ==========================================
         SceneRenderer::BeginScene(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection(), m_EditorCamera.GetPosition());
-        SceneRenderer::RenderScene(m_ActiveScene, m_HoveredEntity, m_ShowGrid);
+        SceneRenderer::RenderScene(m_ActiveScene, m_HoveredEntity, m_ShowGrid, m_ShowSkybox);
         SceneRenderer::EndScene();
 
         m_Framebuffer->Unbind();
@@ -109,10 +109,10 @@ namespace Ayaya {
         cameraTransform.Translation = { 0.0f, 0.0f, 5.0f };
 
         // 创造太阳光
-        Entity dirLight = m_ActiveScene->CreateEntity("Directional Light");
-        auto& lightTransform = dirLight.GetComponent<TransformComponent>();
-        lightTransform.Rotation = glm::radians(glm::vec3(-45.0f, 45.0f, 0.0f));
-        dirLight.AddComponent<DirectionalLightComponent>();
+        // Entity dirLight = m_ActiveScene->CreateEntity("Directional Light");
+        // auto& lightTransform = dirLight.GetComponent<TransformComponent>();
+        // lightTransform.Rotation = glm::radians(glm::vec3(-45.0f, 45.0f, 0.0f));
+        // dirLight.AddComponent<DirectionalLightComponent>();
 
         // 创造场景物体
         // Entity parentNode = m_ActiveScene->CreateEntity("Parent Empty Node");
@@ -178,11 +178,34 @@ namespace Ayaya {
         //     AYAYA_CORE_INFO("Successfully loaded default PBR material for the model.");
         // }
 
+        // 生成 4 盏经典的 PBR 测试点光源
+        glm::vec3 lightPositions[] = {
+            glm::vec3(-10.0f,  10.0f, 10.0f),
+            glm::vec3( 10.0f,  10.0f, 10.0f),
+            glm::vec3(-10.0f, -10.0f, 10.0f),
+            glm::vec3( 10.0f, -10.0f, 10.0f),
+        };
+
+        for (int i = 0; i < 4; ++i) {
+            Entity lightEntity = m_ActiveScene->CreateEntity("Point Light " + std::to_string(i));
+            
+            auto& tc = lightEntity.GetComponent<TransformComponent>();
+            tc.Translation = lightPositions[i];
+            tc.Scale = glm::vec3(0.5f); // 让它在场景中以实体形式出现时，显得小一点
+
+            auto& plc = lightEntity.AddComponent<PointLightComponent>();
+            plc.Color = glm::vec3(1.0f, 1.0f, 1.0f);
+            plc.Intensity = 150.0f; // 极高能量
+            
+            // 为了让你能看见这盏灯在哪里，给它挂个白色的球体模型
+            auto& mrc = lightEntity.AddComponent<MeshRendererComponent>();
+            mrc.ModelAsset = std::make_shared<Model>(Mesh::CreateSphere(0.5f, 32, 32));
+            // 如果不给材质，它会自动走 Fallback 纯色管线，或者你可以给它一个自发光材质！
+        }
+
         // ==========================================
-        // 3. 准备共用的母模型和母材质
+        // 3. 生成测试球
         // ==========================================
-        // 创建一个包含完美球体的 ModelAsset
-        // 完美的修复方案：直接调用接收 Mesh 的构造函数！
         auto sphereModel = std::make_shared<Model>(Mesh::CreateSphere(0.5f, 64, 64));
 
         // 读取我们在编辑器里的默认 PBR 材质作为模板
@@ -198,7 +221,7 @@ namespace Ayaya {
         // ==========================================
         int nrRows = 7;
         int nrColumns = 7;
-        float spacing = 2.5f;
+        float spacing = 1.25f;
 
         // 创建一个空的父节点，用来把这 49 个球组织在一起，保持大纲视图的整洁
         Entity gridRoot = m_ActiveScene->CreateEntity("PBR Sphere Grid");
@@ -240,9 +263,12 @@ namespace Ayaya {
                     else if (prop.UniformName == "u_Roughness") {
                         prop.FloatValue = roughness;
                     }
-                    else if (prop.UniformName == "u_AlbedoColor") {
+                    else if (prop.UniformName == "u_Albedo") {
                         // 给一个显眼的暗红色，类似 LearnOpenGL 里的 rusted iron 基础色
                         prop.Vec3Value = { 0.5f, 0.0f, 0.0f }; 
+                    }
+                    else if (prop.UniformName == "u_AO") {
+                        prop.FloatValue = 1.0f;
                     }
                 }
             }
@@ -478,6 +504,7 @@ namespace Ayaya {
             // ==========================================
             if (ImGui::BeginMenu("View")) {
                 ImGui::MenuItem("Show Grid", nullptr, &m_ShowGrid);
+                ImGui::MenuItem("Show Skybox", nullptr, &m_ShowSkybox);
 
                 if (ImGui::MenuItem("Enable MSAA (4x)", nullptr, &m_EnableMSAA)) {
                     // 当点击时，获取当前的 Framebuffer 配置（包含当前的长宽）

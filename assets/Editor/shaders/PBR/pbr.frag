@@ -15,29 +15,32 @@ uniform float u_AO;         // 环境光遮蔽
 // 新增贴图支持
 uniform sampler2D u_AlbedoMap;
 uniform bool u_UseAlbedoMap;
-
 uniform sampler2D u_MetallicMap;
 uniform bool u_UseMetallicMap;
-
 uniform sampler2D u_RoughnessMap;
 uniform bool u_UseRoughnessMap;
-
 uniform sampler2D u_AOMap;
 uniform bool u_UseAOMap;
+uniform sampler2D u_NormalMap;
+uniform bool u_UseNormalMap;
 
 // 光源与相机参数
-layout(std140) uniform DirectionalLight {
-    vec3 u_LightDir;
-    vec3 u_LightColor;
-};
-
 layout(std140) uniform Camera {
     mat4 u_ViewProjection;
     vec3 u_CameraPos;
 };
 
-uniform sampler2D u_NormalMap;
-uniform bool u_UseNormalMap;
+struct PointLight {
+    vec4 Position;
+    vec4 Color;
+};
+
+layout(std140) uniform LightData {
+    vec4 u_DirLightDir;
+    vec4 u_DirLightColor;
+    PointLight u_PointLights[4];
+    int u_PointLightCount;
+};
 
 const float PI = 3.14159265359;
 
@@ -110,47 +113,70 @@ void main() {
     // ==========================================
     // 接下来使用全新的物理变量进行计算
     // ==========================================
-    vec3 N = normalize(v_TBN[2]); 
+    // vec3 N = normalize(v_TBN[2]); 
+    vec3 N = normalize(v_Normal);
 
-    // 2. 如果开启了法线贴图，用贴图覆盖法线！
-    if (u_UseNormalMap) {
-        // 从贴图采样法线信息，默认是 [0, 1] 范围
-        vec3 normalMap = texture(u_NormalMap, v_TexCoord).rgb;
+    // // 2. 如果开启了法线贴图，用贴图覆盖法线！
+    // if (u_UseNormalMap) {
+    //     // 从贴图采样法线信息，默认是 [0, 1] 范围
+    //     vec3 normalMap = texture(u_NormalMap, v_TexCoord).rgb;
         
-        // 将颜色值 [0, 1] 映射到方向向量 [-1, 1]
-        normalMap = normalMap * 2.0 - 1.0; 
+    //     // 将颜色值 [0, 1] 映射到方向向量 [-1, 1]
+    //     normalMap = normalMap * 2.0 - 1.0; 
         
-        // 利用 TBN 矩阵，将切线空间的法线转换到世界空间！
-        N = normalize(v_TBN * normalMap); 
-    }
+    //     // 利用 TBN 矩阵，将切线空间的法线转换到世界空间！
+    //     N = normalize(v_TBN * normalMap); 
+    // }
 
     vec3 V = normalize(u_CameraPos - v_FragPos);
-    vec3 L = normalize(-u_LightDir);
-    vec3 H = normalize(V + L); 
 
     vec3 F0 = vec3(0.04); 
-    F0 = mix(F0, albedo, metallic); // 注意这里用新的 albedo 和 metallic
+    F0 = mix(F0, albedo, metallic);
 
-    float NDF = DistributionGGX(N, H, roughness);   // 注意这里用 roughness
-    float G   = GeometrySmith(N, V, L, roughness);      
-    vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);       
+    vec3 Lo = vec3(0.0); // 最终累加的光照辐射率
 
-    vec3 kS = F;
-    vec3 kD = vec3(1.0) - kS;
-    kD *= 1.0 - metallic;
+    // ==========================================
+    // 计算点光源 (Point Lights)
+    // ==========================================
+    for(int i = 0; i < u_PointLightCount; ++i) {
+        // 算出光源方向 L 和 距离 distance
+        vec3 L = normalize(u_PointLights[i].Position.xyz - v_FragPos);
+        float distance = length(u_PointLights[i].Position.xyz - v_FragPos);
+        
+        // 物理距离衰减 (平方反比定律)
+        float attenuation = 1.0 / (distance * distance);
+        vec3 radiance = u_PointLights[i].Color.xyz * attenuation;
 
-    vec3 numerator    = NDF * G * F;
-    float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
-    vec3 specular     = numerator / denominator;
+        // Cook-Torrance BRDF
+        vec3 H = normalize(V + L);
+        float NDF = DistributionGGX(N, H, roughness);   
+        float G   = GeometrySmith(N, V, L, roughness);      
+        vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);
+           
+        vec3 numerator    = NDF * G * F; 
+        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001; // 防止除0
+        vec3 specular = numerator / denominator;
+        
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
+        kD *= 1.0 - metallic;	  
 
-    float NdotL = max(dot(N, L), 0.0);        
-    vec3 Lo = (kD * albedo / PI + specular) * u_LightColor * NdotL;
+        float NdotL = max(dot(N, L), 0.0);        
 
-    vec3 ambient = vec3(0.03) * albedo * ao; // 注意这里用 ao
+        // 累加上这盏灯的结果
+        Lo += (kD * albedo / PI + specular) * radiance * NdotL;  
+    }
+
+    // ==========================================
+    // 环境光与色调映射 (Tone Mapping)
+    // ==========================================
+    vec3 ambient = vec3(0.03) * albedo * ao; // 暂时用极简环境光替代 IBL
     vec3 color = ambient + Lo;
 
-    color = color / (color + vec3(1.0)); 
-    color = pow(color, vec3(1.0/2.2));   
+    // HDR Reinhard 色调映射
+    color = color / (color + vec3(1.0));
+    // Gamma 校正
+    color = pow(color, vec3(1.0/2.2)); 
 
     FragColor = vec4(color, 1.0);
 }

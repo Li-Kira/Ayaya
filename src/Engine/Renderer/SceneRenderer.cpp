@@ -31,11 +31,18 @@ namespace Ayaya {
     // ==========================================
     // 新增：平行光 UBO 结构体 (严格遵循 std140)
     // ==========================================
-    struct struct_DirectionalLightData {
-        glm::vec3 LightDir;       // 12 bytes
-        float _padding1;          // 4 bytes (凑齐 16 字节)
-        glm::vec3 LightColor;     // 12 bytes
-        float _padding2;          // 4 bytes (凑齐 16 字节)
+    struct struct_PointLight {
+        glm::vec4 Position; // xyz = 位置, w = 占位
+        glm::vec4 Color;    // xyz = 颜色 * 强度, w = 占位
+    };
+
+    struct struct_LightData {
+        glm::vec4 DirLightDir;   // 平行光方向
+        glm::vec4 DirLightColor; // 平行光颜色
+        
+        struct_PointLight PointLights[4]; // 最大支持 4 盏点光源
+        int PointLightCount;              // 当前场景实际有多少盏点光源
+        int _padding[3];                  // 补齐 16 字节对齐
     };
 
     // ==========================================
@@ -75,8 +82,8 @@ namespace Ayaya {
         // 新增 UBO 相关的成员
         std::shared_ptr<UniformBuffer> CameraUniformBuffer;
         struct_CameraData CameraData;
-        std::shared_ptr<UniformBuffer> DirectionalLightUniformBuffer;
-        struct_DirectionalLightData DirectionalLightData;
+        std::shared_ptr<UniformBuffer> LightUniformBuffer;
+        struct_LightData LightData;
 
         // ==========================================
         // 新增：全局渲染队列
@@ -135,8 +142,8 @@ namespace Ayaya {
         s_Data.SkyboxShader->BindUniformBlock("Camera", 0);
 
         // 新增：初始化 LightData UBO，绑定到 1 号槽位
-        s_Data.DirectionalLightUniformBuffer = UniformBuffer::Create(sizeof(struct_DirectionalLightData), 1);
-        s_Data.DefaultShader->BindUniformBlock("DirectionalLight", 1);
+        s_Data.LightUniformBuffer = UniformBuffer::Create(sizeof(struct_LightData), 1);
+        s_Data.DefaultShader->BindUniformBlock("LightData", 1);
     }
 
    void SceneRenderer::BeginScene(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, const glm::vec3& cameraPosition) {
@@ -160,35 +167,44 @@ namespace Ayaya {
         Renderer::EndScene();
     }
 
-    void SceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene, Entity hoveredEntity, bool showGrid) {
+    void SceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene, Entity hoveredEntity, bool showGrid, bool showSkybox) {
 
         // ==========================================
         // Pass 1: Lighting Setup Pass (收集场景灯光)
         // ==========================================
-        glm::vec3 lightDir = { -0.2f, -1.0f, -0.3f }; 
-        glm::vec3 lightColor = { 1.0f, 1.0f, 1.0f };
-        float lightIntensity = 3.0f; // PBR 中光照强度需要大于 1 才能看出明亮的高光！
-
-        auto lightGroup = scene->Reg().view<TransformComponent, DirectionalLightComponent>();
-        for (auto entityID : lightGroup) {
-            Entity lightEntity{ entityID, scene.get() };
-            auto& transform = lightEntity.GetComponent<TransformComponent>();
-            auto& dlc = lightEntity.GetComponent<DirectionalLightComponent>();
-
+        // 清理旧数据
+        memset(&s_Data.LightData, 0, sizeof(struct_LightData));
+        
+        // 1. 收集平行光 (保留之前的逻辑，存入 DirLightDir 和 DirLightColor 的 .xyz 中)
+        auto dirLightGroup = scene->Reg().view<TransformComponent, DirectionalLightComponent>();
+        for (auto entityID : dirLightGroup) {
+            auto [transform, dlc] = dirLightGroup.get<TransformComponent, DirectionalLightComponent>(entityID);
             glm::quat orientation = glm::quat(transform.Rotation);
-            lightDir = glm::rotate(orientation, glm::vec3(0.0f, 0.0f, -1.0f));
-            lightColor = dlc.Color;
+            s_Data.LightData.DirLightDir = glm::vec4(glm::rotate(orientation, glm::vec3(0.0f, 0.0f, -1.0f)), 0.0f);
+            s_Data.LightData.DirLightColor = glm::vec4(dlc.Color * 3.0f, 0.0f);
             break; 
         }
 
-        // ==========================================
-        // 核心优化：直接将整理好的灯光数据打包推入 UBO！
-        // ==========================================
-        s_Data.DirectionalLightData.LightDir = lightDir;
-        s_Data.DirectionalLightData.LightColor = lightColor * lightIntensity;
-        s_Data.DirectionalLightUniformBuffer->SetData(&s_Data.DirectionalLightData, sizeof(struct_DirectionalLightData));
-        // 注：这里彻底删掉了 s_Data.DefaultShader->Bind() 和 SetFloat3
-        // 因为 UBO 的更新完全不需要先绑定 Shader！它存在于独立显存中。
+        // 2. 收集点光源
+        int pointLightIndex = 0;
+        auto pointLightGroup = scene->Reg().view<TransformComponent, PointLightComponent>();
+        for (auto entityID : pointLightGroup) {
+            if (pointLightIndex >= 4) break; // 最多支持 4 盏
+
+            auto [transform, plc] = pointLightGroup.get<TransformComponent, PointLightComponent>(entityID);
+            
+            s_Data.LightData.PointLights[pointLightIndex].Position = glm::vec4(transform.Translation, 1.0f);
+            s_Data.LightData.PointLights[pointLightIndex].Color = glm::vec4(plc.Color * plc.Intensity, 1.0f);
+            
+            pointLightIndex++;
+        }
+        s_Data.LightData.PointLightCount = pointLightIndex;
+
+        // AYAYA_CORE_INFO("pointLightIndex: {0}", pointLightIndex);
+        // AYAYA_CORE_INFO("Color: ({0}, {1}, {2})", s_Data.LightData.PointLights[0].Color.x, s_Data.LightData.PointLights[0].Color.y, s_Data.LightData.PointLights[0].Color.z);
+
+        // 推入 GPU 显存！
+        s_Data.LightUniformBuffer->SetData(&s_Data.LightData, sizeof(struct_LightData));
 
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_STENCIL_TEST);
@@ -334,25 +350,28 @@ namespace Ayaya {
         // ==========================================
         // Pass 3: Skybox Pass (极其优雅的最后渲染)
         // ==========================================
-        glDepthFunc(GL_LEQUAL);  
+        if (showSkybox)
+        {
+            glDepthFunc(GL_LEQUAL);  
         
-        s_Data.SkyboxShader->Bind();
-        glm::mat4 viewNoTranslation = glm::mat4(glm::mat3(s_Data.ViewMatrix));
-        s_Data.SkyboxShader->SetMat4("u_View", viewNoTranslation);
-        s_Data.SkyboxShader->SetMat4("u_Projection", s_Data.ProjectionMatrix);
-        
-        // --- 修复：解开之前被注释掉的环境贴图绑定！ ---
-        if (s_Data.EnvironmentCubemap) {
-            s_Data.EnvironmentCubemap->Bind(0); 
-            s_Data.SkyboxShader->SetInt("u_Skybox", 0);
+            s_Data.SkyboxShader->Bind();
+            glm::mat4 viewNoTranslation = glm::mat4(glm::mat3(s_Data.ViewMatrix));
+            s_Data.SkyboxShader->SetMat4("u_View", viewNoTranslation);
+            s_Data.SkyboxShader->SetMat4("u_Projection", s_Data.ProjectionMatrix);
+            
+            // --- 修复：解开之前被注释掉的环境贴图绑定！ ---
+            if (s_Data.EnvironmentCubemap) {
+                s_Data.EnvironmentCubemap->Bind(0); 
+                s_Data.SkyboxShader->SetInt("u_Skybox", 0);
+            }
+
+            glDisable(GL_CULL_FACE); 
+            Renderer::Submit(s_Data.SkyboxShader, s_Data.SkyboxMesh->GetVertexArray(), glm::mat4(1.0f));
+            glEnable(GL_CULL_FACE);
+
+            glDepthFunc(GL_LESS);
         }
-
-        glDisable(GL_CULL_FACE); 
-        Renderer::Submit(s_Data.SkyboxShader, s_Data.SkyboxMesh->GetVertexArray(), glm::mat4(1.0f));
-        glEnable(GL_CULL_FACE);
-
-        glDepthFunc(GL_LESS);
-
+        
         // ==========================================
         // Pass 4: Background Grid Pass (渲染无限网格)
         // ==========================================

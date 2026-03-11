@@ -7,6 +7,7 @@ layout (location = 3) in vec3 a_Tangent;
 
 out vec3 v_FragPos;
 out vec2 v_TexCoord;
+out vec3 v_Normal;
 out mat3 v_TBN; // <--- 传给片段着色器的 TBN 矩阵
 
 layout(std140) uniform Camera {
@@ -34,6 +35,7 @@ void main() {
 
     // 4. 组装 TBN 矩阵
     v_TBN = mat3(T, B, N);
+    v_Normal = mat3(transpose(inverse(u_Transform))) * a_Normal; 
 
     gl_Position = u_ViewProjection * u_Transform * vec4(a_Position, 1.0);
 }
