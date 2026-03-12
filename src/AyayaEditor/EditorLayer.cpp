@@ -510,6 +510,11 @@ namespace Ayaya {
 
             for (auto entityID : renderGroup) {
                 Entity entity{ entityID, m_ActiveScene.get() };
+                // ==========================================
+                // 核心修复：射线检测直接无视被隐藏的物体，直接穿透过去！
+                // ==========================================
+                if (!entity.IsActiveInHierarchy()) continue;
+                
                 glm::mat4 inverseTransform = glm::inverse(entity.GetWorldTransform());
 
                 glm::vec3 localRayOrigin = glm::vec3(inverseTransform * glm::vec4(rayOrigin, 1.0f));

@@ -405,7 +405,7 @@ namespace Ayaya {
         // ==========================================
         // Pass 5: Outline Post-Pass (渲染描边高亮)
         // ==========================================
-        if (hoveredEntity && hoveredEntity.HasComponent<MeshRendererComponent>()) {
+        if (hoveredEntity && hoveredEntity.HasComponent<MeshRendererComponent>() && hoveredEntity.IsActiveInHierarchy()) {
             glEnable(GL_STENCIL_TEST);
             glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
             glStencilMask(0x00);      
