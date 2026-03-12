@@ -30,6 +30,8 @@ namespace Ayaya {
     struct TagComponent {
         std::string Tag;
 
+        bool IsActive = true;
+
         TagComponent() = default;
         TagComponent(const TagComponent&) = default;
         TagComponent(const std::string& tag) : Tag(tag) {}

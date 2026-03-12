@@ -23,6 +23,11 @@ namespace Ayaya {
         // 新增：获取模型文件路径
         const std::string& GetPath() const { return m_Path; }
 
+        // ==========================================
+        // 新增：允许手动为内存生成的模型分配虚拟路径
+        // ==========================================
+        void SetPath(const std::string& path) { m_Path = path; }
+
     private:
         void LoadModel(const std::string& path);
         void ProcessNode(aiNode* node, const aiScene* scene);

@@ -225,11 +225,12 @@ namespace Ayaya {
         int totalMeshes = 0;
         int drawnMeshes = 0;
 
-        auto meshGroup = scene->Reg().view<TransformComponent, MeshRendererComponent>();
+        auto meshGroup = scene->Reg().view<TransformComponent, MeshRendererComponent, TagComponent>();
         for (auto entityID : meshGroup) {
             Entity entity{ entityID, scene.get() };
             auto& meshComp = entity.GetComponent<MeshRendererComponent>();
             glm::mat4 transform = entity.GetWorldTransform();
+            auto tag = entity.GetComponent<TagComponent>();
 
             // 如果没有模型资产，直接跳过
             if (!meshComp.ModelAsset) continue;
@@ -247,6 +248,7 @@ namespace Ayaya {
                 }
             }
             if (!isVisible) continue;
+            if (!entity.IsActiveInHierarchy()) continue;
 
             // 判断使用的 Shader 和 Material
             bool isFallback = (!meshComp.MaterialAsset || meshComp.MaterialAsset->Properties.empty());

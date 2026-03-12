@@ -94,12 +94,6 @@ namespace Ayaya {
     void EditorLayer::SetupScene() {
         m_ActiveScene = std::make_shared<Scene>();
 
-        // ==========================================
-        // 核心修复：不要直接 Create 和 AddAsset，
-        // 必须调用 ImportAsset 让它登记进硬盘账本！
-        // ==========================================
-        // UUID bricksHandle = AssetManager::ImportAsset("assets/textures/bricks2.jpg");
-
         // 创造摄像机
         Entity cameraEntity = m_ActiveScene->CreateEntity("Main Camera");
         auto& cameraComp = cameraEntity.AddComponent<CameraComponent>();
@@ -109,169 +103,27 @@ namespace Ayaya {
         cameraTransform.Translation = { 0.0f, 0.0f, 5.0f };
 
         // 创造太阳光
-        // Entity dirLight = m_ActiveScene->CreateEntity("Directional Light");
-        // auto& lightTransform = dirLight.GetComponent<TransformComponent>();
-        // lightTransform.Rotation = glm::radians(glm::vec3(-45.0f, 45.0f, 0.0f));
-        // dirLight.AddComponent<DirectionalLightComponent>();
-
-        // 创造场景物体
-        // Entity parentNode = m_ActiveScene->CreateEntity("Parent Empty Node");
-
-        // // --- 左边的方块 (带砖块贴图) ---
-        // Entity square1 = m_ActiveScene->CreateEntity("Left Square");
-        // square1.GetComponent<TransformComponent>().Translation = { -1.5f, 0.0f, 0.0f };
-        // auto& mrc1 = square1.AddComponent<MeshRendererComponent>(); // 添加 3D 网格组件
-        // mrc1.MaterialAsset = std::make_shared<Material>();
-        // MaterialSerializer::Deserialize(mrc1.MaterialAsset, "assets/materials/DefaultPBR.mat");
-        
-        // square1.SetParent(parentNode); 
-
-        // Entity modelEntity = m_ActiveScene->CreateEntity("Assimp Model");
-        // modelEntity.GetComponent<TransformComponent>().Scale = { 1.0f, 1.0f, 1.0f };
-        // modelEntity.GetComponent<TransformComponent>().Translation = { 1.5f, 0.0f, 0.0f };
-        // auto& mrc2 = modelEntity.AddComponent<MeshRendererComponent>(); 
-        // mrc2.ModelAsset = std::make_shared<Model>("assets/models/backpack.obj"); 
-        // mrc2.MaterialAsset = std::make_shared<Material>();
-        // MaterialSerializer::Deserialize(mrc2.MaterialAsset, "assets/materials/DefaultPBR.mat");
-        // mrc2.Color = glm::vec4{0.9f, 0.7f, 0.2f, 1.0f};
+        Entity dirLight = m_ActiveScene->CreateEntity("Directional Light");
+        auto& lightTransform = dirLight.GetComponent<TransformComponent>();
+        lightTransform.Rotation = glm::radians(glm::vec3(-45.0f, 45.0f, 0.0f));
+        dirLight.AddComponent<DirectionalLightComponent>();
 
         
-        // Entity modelEntity = m_ActiveScene->CreateEntity("Assimp Model");
-        // modelEntity.GetComponent<TransformComponent>().Scale = { 1.0f, 1.0f, 1.0f };
-        // modelEntity.GetComponent<TransformComponent>().Translation = { 1.5f, 0.0f, 0.0f };
-        // auto& mrc = modelEntity.AddComponent<MeshRendererComponent>(); 
-        // mrc.ModelAsset = std::make_shared<Model>("assets/models/backpack.obj"); 
-        
-        // Entity cubeEntity = m_ActiveScene->CreateEntity("Cube");
-        // // cubeEntity.SetParent(parentNode); 
-        // cubeEntity.GetComponent<TransformComponent>().Scale = { 1.0f, 1.0f, 1.0f };
-        // cubeEntity.GetComponent<TransformComponent>().Translation = { 0.0f, 0.0f, 0.0f };
-        // auto& mrc2 = cubeEntity.AddComponent<MeshRendererComponent>(); 
+        Entity cubeEntity = m_ActiveScene->CreateEntity("Cube");
+        cubeEntity.GetComponent<TransformComponent>().Scale = { 1.0f, 1.0f, 1.0f };
+        cubeEntity.GetComponent<TransformComponent>().Translation = { 0.0f, 0.0f, 0.0f };
+        auto& mrc = cubeEntity.AddComponent<MeshRendererComponent>(); 
 
-        // auto DefaultMat = std::make_shared<Material>();
-        // bool success = MaterialSerializer::Deserialize(DefaultMat, "assets/Editor/materials/DefaultPBR.mat");
+        auto DefaultMat = std::make_shared<Material>();
+        bool success = MaterialSerializer::Deserialize(DefaultMat, "assets/Editor/materials/DefaultPBR.mat");
 
-        // if (success) {
-        //     // 给物体分配一个克隆体！
-        //     // mrc.MaterialAsset = DefaultMat->Clone();
-        //     mrc2.MaterialAsset = DefaultMat->Clone();
-        // } else {
-        //     AYAYA_CORE_WARN("Failed to load DefaultPBR.mat!");
-        //     // 如果连母材质都没找到，只能给一个空材质，管线会自动走 Fallback(品红色)
-        //     // mrc.MaterialAsset = std::make_shared<Material>(); 
-        //     mrc2.MaterialAsset = std::make_shared<Material>(); 
-        // }
-
-        // ==========================================
-        // 2. 创建 3D 模型并赋予默认 PBR 材质
-        // ==========================================
-        // Entity modelEntity = m_ActiveScene->CreateEntity("Assimp Model");
-        
-        // auto& mrc = modelEntity.AddComponent<MeshRendererComponent>(); 
-        // mrc.ModelAsset = std::make_shared<Model>("assets/models/bunny.obj"); 
-        // mrc.MaterialAsset = std::make_shared<Material>();
-        // bool success = MaterialSerializer::Deserialize(mrc.MaterialAsset, "assets/materials/default_pbr.mat");
-        // if (!success) {
-        //     AYAYA_CORE_WARN("Failed to load default_pbr.mat! Falling back to engine default.");
-        //     // 如果文件读取失败，UI 会显示空面板，渲染管线会自动走那套“品红色”的 Fallback 逻辑
-        // } else {
-        //     AYAYA_CORE_INFO("Successfully loaded default PBR material for the model.");
-        // }
-
-        // 生成 4 盏经典的 PBR 测试点光源
-        glm::vec3 lightPositions[] = {
-            glm::vec3(-10.0f,  10.0f, 10.0f),
-            glm::vec3( 10.0f,  10.0f, 10.0f),
-            glm::vec3(-10.0f, -10.0f, 10.0f),
-            glm::vec3( 10.0f, -10.0f, 10.0f),
-        };
-
-        for (int i = 0; i < 4; ++i) {
-            Entity lightEntity = m_ActiveScene->CreateEntity("Point Light " + std::to_string(i));
-            
-            auto& tc = lightEntity.GetComponent<TransformComponent>();
-            tc.Translation = lightPositions[i];
-            tc.Scale = glm::vec3(0.5f); // 让它在场景中以实体形式出现时，显得小一点
-
-            auto& plc = lightEntity.AddComponent<PointLightComponent>();
-            plc.Color = glm::vec3(1.0f, 1.0f, 1.0f);
-            plc.Intensity = 150.0f; // 极高能量
-            
-            // 为了让你能看见这盏灯在哪里，给它挂个白色的球体模型
-            auto& mrc = lightEntity.AddComponent<MeshRendererComponent>();
-            mrc.ModelAsset = std::make_shared<Model>(Mesh::CreateSphere(0.5f, 32, 32));
-            // 如果不给材质，它会自动走 Fallback 纯色管线，或者你可以给它一个自发光材质！
-        }
-
-        // ==========================================
-        // 3. 生成测试球
-        // ==========================================
-        auto sphereModel = std::make_shared<Model>(Mesh::CreateSphere(0.5f, 64, 64));
-
-        // 读取我们在编辑器里的默认 PBR 材质作为模板
-        auto templateMat = std::make_shared<Material>();
-        bool success = MaterialSerializer::Deserialize(templateMat, "assets/Editor/materials/DefaultPBR.mat");
-        if (!success) {
-            AYAYA_CORE_WARN("Failed to load DefaultPBR.mat for the sphere grid!");
-            templateMat = std::make_shared<Material>(); // 兜底
-        }
-
-        // ==========================================
-        // 4. 生成 7x7 的 PBR 金属度/粗糙度 测试球体矩阵
-        // ==========================================
-        int nrRows = 7;
-        int nrColumns = 7;
-        float spacing = 1.25f;
-
-        // 创建一个空的父节点，用来把这 49 个球组织在一起，保持大纲视图的整洁
-        Entity gridRoot = m_ActiveScene->CreateEntity("PBR Sphere Grid");
-
-        for (int row = 0; row < nrRows; ++row) {
-            // 金属度从下到上递增：0.0 -> 1.0
-            float metallic = (float)row / (float)(nrRows - 1);
-
-            for (int col = 0; col < nrColumns; ++col) {
-                // 粗糙度从左到右递增，限制在 0.05 到 1.0 之间
-                float roughness = glm::clamp((float)col / (float)(nrColumns - 1), 0.05f, 1.0f);
-                
-                // 计算每个球体的位置，使其居中对齐
-                glm::vec3 pos = glm::vec3(
-                    (col - (nrColumns / 2)) * spacing, 
-                    (row - (nrRows / 2)) * spacing, 
-                    0.0f
-                );
-
-                std::string entityName = "Sphere_M" + std::to_string((int)(metallic * 100)) + "_R" + std::to_string((int)(roughness * 100));
-                Entity sphereEntity = m_ActiveScene->CreateEntity(entityName);
-                sphereEntity.SetParent(gridRoot); // 设置父节点
-                
-                auto& tc = sphereEntity.GetComponent<TransformComponent>();
-                tc.Translation = pos;
-
-                auto& mrc = sphereEntity.AddComponent<MeshRendererComponent>();
-                mrc.ModelAsset = sphereModel; // 共享同一个球体网格内存
-                
-                // 核心：为每个球体克隆一份独立的材质，并修改其属性
-                mrc.MaterialAsset = templateMat->Clone();
-                mrc.MaterialAsset->Name = entityName + "_Mat";
-
-                // 遍历克隆出来的材质属性，覆写金属度、粗糙度和基础颜色
-                for (auto& prop : mrc.MaterialAsset->Properties) {
-                    if (prop.UniformName == "u_Metallic") {
-                        prop.FloatValue = metallic;
-                    } 
-                    else if (prop.UniformName == "u_Roughness") {
-                        prop.FloatValue = roughness;
-                    }
-                    else if (prop.UniformName == "u_Albedo") {
-                        // 给一个显眼的暗红色，类似 LearnOpenGL 里的 rusted iron 基础色
-                        prop.Vec3Value = { 0.5f, 0.0f, 0.0f }; 
-                    }
-                    else if (prop.UniformName == "u_AO") {
-                        prop.FloatValue = 1.0f;
-                    }
-                }
-            }
+        if (success) {
+            // 给物体分配一个克隆体！
+            mrc.MaterialAsset = DefaultMat->Clone();
+        } else {
+            AYAYA_CORE_WARN("Failed to load DefaultPBR.mat!");
+            // 如果连母材质都没找到，只能给一个空材质，管线会自动走 Fallback(品红色)
+            mrc.MaterialAsset = std::make_shared<Material>(); 
         }
 
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
@@ -284,7 +136,22 @@ namespace Ayaya {
         // 如果当前路径不为空，直接静默保存覆写
         if (!m_CurrentScenePath.empty()) {
             SceneSerializer serializer(m_ActiveScene);
-            serializer.Serialize(m_CurrentScenePath);
+            
+            // ==========================================
+            // 核心修复：同样在这里收集并传入 EditorState
+            // ==========================================
+            EditorState state;
+            state.ShowGrid = m_ShowGrid;
+            state.ShowSkybox = m_ShowSkybox;
+            state.EnableMSAA = m_EnableMSAA;
+            state.CameraPosition = m_EditorCamera.GetPosition();
+            state.CameraDistance = m_EditorCamera.GetDistance();
+            state.CameraPitch = m_EditorCamera.GetPitch();
+            state.CameraYaw = m_EditorCamera.GetYaw();
+            state.CameraFocalPoint = m_EditorCamera.GetFocalPoint();
+
+            serializer.Serialize(m_CurrentScenePath, state); // 传入两个参数！
+            
             AYAYA_CORE_INFO("Scene strictly saved to {0}", m_CurrentScenePath);
         } 
         // 否则（这是一个新建的未保存场景），转为“另存为”逻辑
@@ -307,7 +174,20 @@ namespace Ayaya {
         
         if (!filepath.empty()) { 
             SceneSerializer serializer(m_ActiveScene);
-            serializer.Serialize(filepath);
+            // 收集当前状态
+            EditorState state;
+            state.ShowGrid = m_ShowGrid;
+            state.ShowSkybox = m_ShowSkybox;
+            state.EnableMSAA = m_EnableMSAA;
+            state.CameraPosition = m_EditorCamera.GetPosition();
+            state.CameraDistance = m_EditorCamera.GetDistance();
+            state.CameraPitch = m_EditorCamera.GetPitch();
+            state.CameraYaw = m_EditorCamera.GetYaw();
+            state.CameraFocalPoint = m_EditorCamera.GetFocalPoint();
+
+            // 传入状态保存
+            serializer.Serialize(filepath, state);
+
             m_CurrentScenePath = filepath; // 更新当前工作路径
             AYAYA_CORE_INFO("Scene saved as to {0}", filepath);
         }
@@ -338,8 +218,30 @@ namespace Ayaya {
         if (!filepath.empty()) { 
             std::shared_ptr<Scene> newScene = std::make_shared<Scene>();
             SceneSerializer serializer(newScene);
-            if (serializer.Deserialize(filepath)) {
+            EditorState state;
+            // 核心修改：将 state 传入解析
+            if (serializer.Deserialize(filepath, state)) {
                 m_ActiveScene = newScene;
+                
+                // ==========================================
+                // 恢复编辑器 UI 和环境状态
+                // ==========================================
+                m_ShowGrid = state.ShowGrid;
+                m_ShowSkybox = state.ShowSkybox;
+                m_EditorCamera.SetPosition(state.CameraPosition);
+                m_EditorCamera.SetDistance(state.CameraDistance);
+                m_EditorCamera.SetPitch(state.CameraPitch);
+                m_EditorCamera.SetYaw(state.CameraYaw);
+                m_EditorCamera.SetFocalPoint(state.CameraFocalPoint);
+                m_EditorCamera.UpdateCameraView();
+                
+                // 如果 MSAA 状态发生了改变，立即重建 Framebuffer！
+                if (m_EnableMSAA != state.EnableMSAA) {
+                    m_EnableMSAA = state.EnableMSAA;
+                    FramebufferSpecification spec = m_Framebuffer->GetSpecification();
+                    spec.Samples = m_EnableMSAA ? 4 : 1;
+                    m_Framebuffer = Framebuffer::Create(spec);
+                }
                 
                 auto view = m_ActiveScene->Reg().view<CameraComponent>();
                 for (auto entityID : view) {

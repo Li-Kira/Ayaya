@@ -1,8 +1,18 @@
 Scene: Untitled
+EditorState:
+  ShowGrid: true
+  ShowSkybox: true
+  EnableMSAA: true
+  CameraPosition: [0.25657946, 1.0622761, 6.88317]
+  CameraDistance: 10
+  CameraPitch: -0.06946887
+  CameraYaw: -0.012796993
+  CameraFocalPoint: [0, 0, 0]
 Entities:
   - Entity: 9207422813788464392
     TagComponent:
       Tag: Main Camera
+      IsActive: true
     TransformComponent:
       Translation: [0, 0, 5]
       Rotation: [0, 0, 0]
@@ -15,6 +25,7 @@ Entities:
   - Entity: 7648224349506625606
     TagComponent:
       Tag: Directional Light
+      IsActive: true
     TransformComponent:
       Translation: [0, 0, 0]
       Rotation: [-0.7853982, 0.7853982, 0]
@@ -27,6 +38,7 @@ Entities:
   - Entity: 941355425607113630
     TagComponent:
       Tag: Parent Empty Node
+      IsActive: true
     TransformComponent:
       Translation: [0, 0, 0]
       Rotation: [0, 0, 0]
@@ -36,6 +48,7 @@ Entities:
   - Entity: 6123212960334515091
     TagComponent:
       Tag: Cube
+      IsActive: true
     TransformComponent:
       Translation: [-1.5, 0, -7.450581e-09]
       Rotation: [0, -0, 0]
@@ -47,6 +60,7 @@ Entities:
   - Entity: 2260445115966781348
     TagComponent:
       Tag: Assimp Model
+      IsActive: true
     TransformComponent:
       Translation: [1.5, 0, -1.4901161e-08]
       Rotation: [0, -0, 0]

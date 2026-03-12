@@ -1,8 +1,18 @@
 Scene: Untitled
+EditorState:
+  ShowGrid: true
+  ShowSkybox: true
+  EnableMSAA: true
+  CameraPosition: [-0.41460758, 1.5562286, 6.4405727]
+  CameraDistance: 10
+  CameraPitch: -0.12758207
+  CameraYaw: -0.0114609385
+  CameraFocalPoint: [0, 0, 0]
 Entities:
   - Entity: 3605041423657451279
     TagComponent:
       Tag: Main Camera
+      IsActive: true
     TransformComponent:
       Translation: [0, 0, 5]
       Rotation: [0, 0, 0]
@@ -15,6 +25,7 @@ Entities:
   - Entity: 12244199376743892501
     TagComponent:
       Tag: Directional Light
+      IsActive: true
     TransformComponent:
       Translation: [0, 0, 0]
       Rotation: [-0.7853982, 0.7853982, 0]
@@ -27,12 +38,13 @@ Entities:
   - Entity: 3087155304286953667
     TagComponent:
       Tag: Cube
+      IsActive: true
     TransformComponent:
       Translation: [0, 0, 0]
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
       ModelPath: assets/models/rock.obj
-      MaterialPath: assets/materials/NewMaterial (2).mat
+      MaterialPath: assets/materials/NewMaterial (1).mat
     RelationshipComponent:
       Parent: 0

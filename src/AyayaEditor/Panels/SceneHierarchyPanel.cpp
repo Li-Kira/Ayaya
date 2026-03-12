@@ -94,7 +94,8 @@ namespace Ayaya {
     }
 
     void SceneHierarchyPanel::DrawEntityNode(Entity entity) {
-        auto& tag = entity.GetComponent<TagComponent>().Tag;
+        auto& tagComp = entity.GetComponent<TagComponent>();
+        auto& tag = tagComp.Tag;
         
         std::string icon = ICON_FA_CUBE; 
         if (entity.HasComponent<CameraComponent>()) icon = ICON_FA_VIDEO; 
@@ -113,6 +114,14 @@ namespace Ayaya {
         auto& rel = entity.GetComponent<RelationshipComponent>();
         if (rel.Children.empty()) flags |= ImGuiTreeNodeFlags_Leaf;
 
+        bool activeInHierarchy = entity.IsActiveInHierarchy();
+        if (!activeInHierarchy) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+        }
+
+        float cursorY = ImGui::GetCursorPosY();
+        ImGui::SetNextItemAllowOverlap();
+        
         bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, "%s", displayString.c_str());
 
         if (ImGui::IsItemClicked()) m_SelectionContext = entity;
@@ -191,6 +200,50 @@ namespace Ayaya {
             ImGui::EndPopup();
         }
 
+        if (!activeInHierarchy) {
+            ImGui::PopStyleColor();
+        }
+
+        // ==========================================
+        // 处理节点右侧的可视化按钮
+        // ==========================================
+        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 24.0f);
+        ImGui::SetCursorPosY(cursorY);
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
+        
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.3f, 0.3f, 0.5f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.2f, 0.2f, 0.2f, 0.5f));
+        
+        // 1. 图标形状依然由自身的局部状态决定
+        std::string eyeIcon = tagComp.IsActive ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
+        
+        // 2. 【核心修改】：如果它因为父节点被隐藏了，把眼睛图标的颜色也变灰！
+        if (!activeInHierarchy) {
+            // ImGuiCol_Text 控制的是 Button 里面图标或文字的颜色
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+        }
+
+        ImGui::PushID((uint32_t)entity); 
+        
+        if (ImGui::Button(eyeIcon.c_str(), ImVec2(24.0f, ImGui::GetTextLineHeight()))) {
+            tagComp.IsActive = !tagComp.IsActive; 
+        }
+        
+        ImGui::PopID();
+
+        // 3. 恢复眼睛图标的颜色
+        if (!activeInHierarchy) {
+            ImGui::PopStyleColor();
+        }
+
+        ImGui::PopStyleColor(3);
+        ImGui::PopStyleVar();
+
+        // ==========================================
+        // 处理展开节点
+        // ==========================================
         if (opened) {
             // 注意：这里需要再次检查 entity 是否被删，防止在该帧后续递归中崩溃
             if (m_EntityToDestroy != entity) {
@@ -211,11 +264,20 @@ namespace Ayaya {
 
         // --- 绘制 Tag 组件 ---
        if (entity.HasComponent<TagComponent>()) {
-            auto& tag = entity.GetComponent<TagComponent>().Tag;
+            auto& tagComp = entity.GetComponent<TagComponent>();
+            auto& tag = tagComp.Tag;
+
+            // 像 Unity 一样，在最左侧放一个激活勾选框
+            ImGui::Checkbox("##IsActive", &tagComp.IsActive);
+            ImGui::SameLine();
+
             char buffer[256];
             memset(buffer, 0, sizeof(buffer));
             strncpy(buffer, tag.c_str(), sizeof(buffer) - 1);
-            if (ImGui::InputText("Tag", buffer, sizeof(buffer))) tag = std::string(buffer);
+            
+            // 让输入框填满剩余宽度
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+            if (ImGui::InputText("##Tag", buffer, sizeof(buffer))) tagComp.Tag = std::string(buffer);
         }
 
         ImGui::Separator();

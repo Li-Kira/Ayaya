@@ -18,6 +18,25 @@ namespace Ayaya {
         glm::mat4 GetViewProjection() const { return m_Projection * m_ViewMatrix; }
         const glm::vec3& GetPosition() const { return m_Position; }
 
+        // ==========================================
+        // 新增：用于序列化编辑器相机的属性访问器
+        // ==========================================
+        float GetDistance() const { return m_Distance; }
+        void SetDistance(float distance) { m_Distance = distance; }
+
+        float GetPitch() const { return m_Pitch; }
+        void SetPitch(float pitch) { m_Pitch = pitch; }
+
+        float GetYaw() const { return m_Yaw; }
+        void SetYaw(float yaw) { m_Yaw = yaw; }
+
+        const glm::vec3& GetFocalPoint() const { return m_FocalPoint; }
+        void SetFocalPoint(const glm::vec3& focalPoint) { m_FocalPoint = focalPoint; }
+
+        // 强行刷新相机的 View 矩阵和位置
+        void SetPosition(const glm::vec3& position) { m_Position = position; }
+        void UpdateCameraView() { RecalculateView(); }
+
     private:
         void RecalculateView();
 
@@ -30,6 +49,9 @@ namespace Ayaya {
         float m_Pitch, m_Yaw; // 俯仰角和偏航角
 
         glm::vec2 m_InitialMousePosition{ 0.0f, 0.0f };
+
+        float m_Distance;
+        glm::vec3 m_FocalPoint;
     };
 
 }

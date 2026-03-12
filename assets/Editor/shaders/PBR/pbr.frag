@@ -136,7 +136,34 @@ void main() {
     vec3 Lo = vec3(0.0); // 最终累加的光照辐射率
 
     // ==========================================
-    // 计算点光源 (Point Lights)
+    // 1. 计算平行光 (Directional Light)
+    // ==========================================
+    // 假设 u_DirLightDir 是光线的照射方向，因此指向光源的向量 L 是它的反方向
+    vec3 L_dir = normalize(-u_DirLightDir.xyz);
+    vec3 H_dir = normalize(V + L_dir);
+    
+    // 平行光没有物理距离衰减，直接使用其颜色作为辐射率
+    vec3 radiance_dir = u_DirLightColor.xyz; 
+
+    // Cook-Torrance BRDF (平行光)
+    float NDF_dir = DistributionGGX(N, H_dir, roughness);   
+    float G_dir   = GeometrySmith(N, V, L_dir, roughness);
+    vec3 F_dir    = fresnelSchlick(max(dot(H_dir, V), 0.0), F0);
+
+    vec3 numerator_dir    = NDF_dir * G_dir * F_dir;
+    float denominator_dir = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L_dir), 0.0) + 0.0001; // 防止除0
+    vec3 specular_dir = numerator_dir / denominator_dir;
+    
+    vec3 kS_dir = F_dir;
+    vec3 kD_dir = vec3(1.0) - kS_dir;
+    kD_dir *= 1.0 - metallic;	  
+
+    float NdotL_dir = max(dot(N, L_dir), 0.0);
+    // 累加平行光的结果
+    Lo += (kD_dir * albedo / PI + specular_dir) * radiance_dir * NdotL_dir;
+
+    // ==========================================
+    // 2. 计算点光源 (Point Lights)
     // ==========================================
     for(int i = 0; i < u_PointLightCount; ++i) {
         // 算出光源方向 L 和 距离 distance

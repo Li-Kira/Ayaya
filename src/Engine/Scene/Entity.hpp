@@ -24,6 +24,34 @@ namespace Ayaya {
         template<typename T> T& GetComponent() const { return m_Scene->m_Registry.get<T>(m_EntityHandle); }
         template<typename T> bool HasComponent() const { return m_Scene->m_Registry.all_of<T>(m_EntityHandle); }
         template<typename T> void RemoveComponent() { m_Scene->m_Registry.remove<T>(m_EntityHandle); }
+        
+        // ==============================================
+        // 新增：判断实体在层级树中是否真实可见
+        // ==============================================
+        bool IsActiveInHierarchy() const {
+        // 1. 如果实体本身无效，直接返回 false
+        if (!*this) return false;
+
+        // 2. 检查自己的局部激活状态 (activeSelf)
+        if (HasComponent<TagComponent>()) {
+            if (!GetComponent<TagComponent>().IsActive) {
+                return false; // 自己被隐藏了，直接判定为不可见
+            }
+        }
+
+        // 3. 顺藤摸瓜，问问老父亲是不是被隐藏了
+        if (HasComponent<RelationshipComponent>()) {
+            auto& rel = GetComponent<RelationshipComponent>();
+            if (rel.Parent != entt::null) {
+                // 构建出父实体，并调用它自己的 IsActiveInHierarchy 进行递归
+                Entity parent{ rel.Parent, m_Scene };
+                return parent.IsActiveInHierarchy();
+            }
+        }
+
+        // 4. 一路爬到根节点都没被隐藏，说明是真的可见！
+        return true;
+    }
 
         glm::mat4 GetWorldTransform() const {
             auto& transform = GetComponent<TransformComponent>();

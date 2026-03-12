@@ -82,6 +82,7 @@ namespace Ayaya {
             out << YAML::Key << "TagComponent";
             out << YAML::BeginMap;
             out << YAML::Key << "Tag" << YAML::Value << entity.GetComponent<TagComponent>().Tag;
+            out << YAML::Key << "IsActive" << YAML::Value << entity.GetComponent<TagComponent>().IsActive;
             out << YAML::EndMap;
         }
 
@@ -237,10 +238,22 @@ namespace Ayaya {
         }
     }
 
-    void SceneSerializer::Serialize(const std::string& filepath) {
+    void SceneSerializer::Serialize(const std::string& filepath, const EditorState& editorState) {
         YAML::Emitter out;
         out << YAML::BeginMap;
         out << YAML::Key << "Scene" << YAML::Value << "Untitled";
+        // ==========================================
+        // 新增：写入编辑器环境状态
+        // ==========================================
+        // ==========================================
+        // 智能写入编辑器环境状态 (自动遍历)
+        // ==========================================
+        out << YAML::Key << "EditorState" << YAML::BeginMap;
+        editorState.ForEach([&](const char* key, const auto& value) {
+            out << YAML::Key << key << YAML::Value << value;
+        });
+        out << YAML::EndMap;
+
         out << YAML::Key << "Entities" << YAML::Value << YAML::BeginSeq;
 
         // =======================================================
@@ -263,7 +276,7 @@ namespace Ayaya {
     // =====================================================================
     // 核心逻辑：反序列化 (读取)
     // =====================================================================
-    bool SceneSerializer::Deserialize(const std::string& filepath) {
+    bool SceneSerializer::Deserialize(const std::string& filepath, EditorState& outEditorState) {
         YAML::Node data;
         try {
             data = YAML::LoadFile(filepath);
@@ -273,6 +286,24 @@ namespace Ayaya {
         }
 
         if (!data["Scene"]) return false;
+
+        // ==========================================
+        // 智能读取编辑器环境状态（全自动安全回退机制）
+        // ==========================================
+        outEditorState = EditorState(); // 1. 无论如何先重置为默认状态
+        auto editorStateNode = data["EditorState"];
+        
+        if (editorStateNode) {
+            // 2. 遍历结构体里的每一个字段，尝试从 YAML 读取
+            outEditorState.ForEach([&](const char* key, auto& value) {
+                // 安全检查：如果 YAML 里有这个节点才读取覆盖，否则保留默认值
+                if (editorStateNode[key]) {
+                    // C++14 黑科技：自动推导该字段的类型 (bool, float, vec3 等)，并安全解析
+                    using FieldType = std::decay_t<decltype(value)>;
+                    value = editorStateNode[key].as<FieldType>();
+                }
+            });
+        }
 
         std::string sceneName = data["Scene"].as<std::string>();
         AYAYA_CORE_INFO("Deserializing scene '{0}'", sceneName);
@@ -295,13 +326,21 @@ namespace Ayaya {
             uint64_t uuid = entity["Entity"].as<uint64_t>();
 
             std::string name;
+            bool isActive = true;
             auto tagComponent = entity["TagComponent"];
-            if (tagComponent) name = tagComponent["Tag"].as<std::string>();
+            if (tagComponent) {
+                name = tagComponent["Tag"].as<std::string>();
+                
+                if (tagComponent["IsActive"]) {
+                    isActive = tagComponent["IsActive"].as<bool>();
+                }
+            }
 
             AYAYA_CORE_TRACE("Deserialized entity with ID = {0}, name = {1}", uuid, name);
 
             Entity deserializedEntity = m_Scene->CreateEntityWithUUID(uuid, name);
             sceneEntities[uuid] = deserializedEntity;
+            deserializedEntity.GetComponent<TagComponent>().IsActive = isActive;
 
             auto transformComponent = entity["TransformComponent"];
             if (transformComponent) {
@@ -345,7 +384,22 @@ namespace Ayaya {
                 // 1. 读取并加载模型
                 if (meshRendererComponent["ModelPath"]) {
                     std::string modelPath = meshRendererComponent["ModelPath"].as<std::string>();
-                    mrc.ModelAsset = std::make_shared<Model>(modelPath);
+                    if (modelPath == "Primitive::Sphere") {
+                        mrc.ModelAsset = std::make_shared<Model>(Mesh::CreateSphere(0.5f, 64, 64));
+                        mrc.ModelAsset->SetPath(modelPath);
+                    } 
+                    else if (modelPath == "Primitive::Cube") {
+                        mrc.ModelAsset = std::make_shared<Model>(Mesh::CreateCube());
+                        mrc.ModelAsset->SetPath(modelPath);
+                    }
+                    else if (modelPath == "Primitive::Plane") {
+                        mrc.ModelAsset = std::make_shared<Model>(Mesh::CreatePlane());
+                        mrc.ModelAsset->SetPath(modelPath);
+                    }
+                    else if (!modelPath.empty()) {
+                        // 如果不是内置图元，则正常从硬盘读取 obj/fbx 模型
+                        mrc.ModelAsset = std::make_shared<Model>(modelPath);
+                    }
                 }
 
                 // 2. 读取并加载材质资产
