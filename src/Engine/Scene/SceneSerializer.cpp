@@ -102,6 +102,8 @@ namespace Ayaya {
             auto& cc = entity.GetComponent<CameraComponent>();
             out << YAML::Key << "Primary" << YAML::Value << cc.Primary;
             out << YAML::Key << "FixedAspectRatio" << YAML::Value << cc.FixedAspectRatio;
+            // 新增：保存物理相机的 EV100
+            out << YAML::Key << "EV100" << YAML::Value << cc.EV100;
             out << YAML::EndMap;
         }
 
@@ -182,6 +184,8 @@ namespace Ayaya {
             out << YAML::BeginMap;
             auto& dlc = entity.GetComponent<DirectionalLightComponent>();
             out << YAML::Key << "Color" << YAML::Value << dlc.Color;
+            // 新增：保存照度 (Lux)
+            out << YAML::Key << "Illuminance" << YAML::Value << dlc.Illuminance; 
             out << YAML::Key << "AmbientStrength" << YAML::Value << dlc.AmbientStrength;
             out << YAML::EndMap;
         }
@@ -195,7 +199,8 @@ namespace Ayaya {
             
             auto& plc = entity.GetComponent<PointLightComponent>();
             out << YAML::Key << "Color" << YAML::Value << plc.Color;
-            out << YAML::Key << "Intensity" << YAML::Value << plc.Intensity;
+            // 修改：将原来的 Intensity 替换为光通量 (LuminousPower)
+            out << YAML::Key << "LuminousPower" << YAML::Value << plc.LuminousPower;
             
             out << YAML::EndMap; // PointLightComponent
         }
@@ -355,6 +360,13 @@ namespace Ayaya {
                 auto& cc = deserializedEntity.AddComponent<CameraComponent>();
                 cc.Primary = cameraComponent["Primary"].as<bool>();
                 cc.FixedAspectRatio = cameraComponent["FixedAspectRatio"].as<bool>();
+
+                // 兼容性检查：如果旧场景没有 EV100，给它一个标准的室外阳光曝光度
+                if (cameraComponent["EV100"]) {
+                    cc.EV100 = cameraComponent["EV100"].as<float>();
+                } else {
+                    cc.EV100 = 14.5f; 
+                }
             }
 
             auto spriteRendererComponent = entity["SpriteRendererComponent"];
@@ -425,6 +437,13 @@ namespace Ayaya {
                 auto& dlc = deserializedEntity.AddComponent<DirectionalLightComponent>();
                 dlc.Color = dirLightComponent["Color"].as<glm::vec3>();
                 dlc.AmbientStrength = dirLightComponent["AmbientStrength"].as<float>();
+
+                // 兼容性检查：如果旧场景没有照度属性，默认给 100000 勒克斯 (正午阳光)
+                if (dirLightComponent["Illuminance"]) {
+                    dlc.Illuminance = dirLightComponent["Illuminance"].as<float>();
+                } else {
+                    dlc.Illuminance = 100000.0f;
+                }
             }
 
             // ==========================================
@@ -435,7 +454,20 @@ namespace Ayaya {
                 auto& plc = deserializedEntity.AddComponent<PointLightComponent>();
                 
                 plc.Color = pointLightComponent["Color"].as<glm::vec3>();
-                plc.Intensity = pointLightComponent["Intensity"].as<float>();
+                
+                // 兼容性检查：如果是新版物理系统，读取 LuminousPower
+                if (pointLightComponent["LuminousPower"]) {
+                    plc.LuminousPower = pointLightComponent["LuminousPower"].as<float>();
+                } 
+                // 兼容性检查：如果是之前测试时的旧场景 (存的是 Intensity)
+                else if (pointLightComponent["Intensity"]) {
+                    // 把旧版的 1.0~10.0 的虚假强度，粗略换算成几百流明的家用灯泡亮度，防止读取后完全看不见
+                    plc.LuminousPower = pointLightComponent["Intensity"].as<float>() * 300.0f; 
+                } 
+                // 更老的场景连强度都没有，默认 1500 流明
+                else {
+                    plc.LuminousPower = 1500.0f;
+                }
             }
         }
 

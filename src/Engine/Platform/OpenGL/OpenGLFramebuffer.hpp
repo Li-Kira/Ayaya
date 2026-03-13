@@ -22,6 +22,9 @@ namespace Ayaya {
         virtual uint32_t GetColorAttachmentRendererID() const override { 
             return m_Specification.Samples > 1 ? m_ResolveColorAttachment : m_ColorAttachment; 
         }
+
+        // --- 新增：返回主 MSAA 缓冲的 ID ---
+        virtual uint32_t GetRendererID() const override { return m_RendererID; }
         
         virtual const FramebufferSpecification& GetSpecification() const override { return m_Specification; }
 

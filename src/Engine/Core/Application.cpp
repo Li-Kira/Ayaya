@@ -12,9 +12,9 @@ namespace Ayaya {
     Application::Application() {
         s_Instance = this; 
         
-        // 注意：如果你在 main() 里已经调用了 Log::Init()，这里可以删掉，否则保留即可。
         Log::Init();
         AYAYA_CORE_WARN("Ayaya Engine is starting up...");
+        AYAYA_CORE_INFO("Log System Initialized!");
 
         m_Window = std::make_unique<Window>(1280, 720, "Ayaya Engine v0.1");
         m_Window->SetEventCallback(std::bind(&Application::OnEvent, this, std::placeholders::_1));
@@ -102,10 +102,11 @@ namespace Ayaya {
 
     // 实现按键处理逻辑
     bool Application::OnKeyPressed(KeyPressedEvent& e) {
-        // if (e.GetKeyCode() == Key::Escape) {
-        //     m_Running = false;
-        //     return true;
-        // }
+        if (e.GetKeyCode() == Key::Escape) {
+            AYAYA_CORE_INFO("Escape key pressed!");
+            m_Running = false;
+            return true;
+        }
 
         if (e.GetKeyCode() == Key::Enter) {
             AYAYA_CORE_INFO("Enter key pressed! [Verified by Event System]");

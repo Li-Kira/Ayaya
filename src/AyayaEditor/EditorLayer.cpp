@@ -20,31 +20,30 @@ namespace Ayaya {
         // ==========================================
         AssetManager::DeserializeRegistry("assets/AssetRegistry.yaml");
 
-        FramebufferSpecification fbSpec;
-        fbSpec.Width = 1280;
-        fbSpec.Height = 720;
-        fbSpec.Samples = m_EnableMSAA ? 4 : 1;
-        m_Framebuffer = Framebuffer::Create(fbSpec);
-
+        // ==========================================
+        // 减负：去掉了之前在这里手动配置和创建 m_Framebuffer 的代码
+        // 现在全权交由 SceneRenderer 在内部自己打理
+        // ==========================================
         SceneRenderer::Init();
-
         SetupScene();
     }
 
     void EditorLayer::OnUpdate(Timestep ts) {
+        
+        // ==========================================
         // 1.处理输入
+        // ==========================================
         HandleShortcuts();
 
         // ==========================================
-        // 2.处理相机和视口
-        // 在一切渲染开始前，检查并处理 Resize
-        // 这样新建的 Framebuffer 马上就会在下面的代码中被渲染塞满，绝对不会黑屏！
+        // 2.处理相机和视口 Resize
         // ==========================================
         static glm::vec2 s_LastViewportSize = { 0.0f, 0.0f };
         if (m_ViewportSize.x > 0.0f && m_ViewportSize.y > 0.0f && 
            (s_LastViewportSize.x != m_ViewportSize.x || s_LastViewportSize.y != m_ViewportSize.y)) {
             
-            m_Framebuffer->Resize((uint32_t)m_ViewportSize.x, (uint32_t)m_ViewportSize.y);
+            // 【核心修改】：通知管线视口大小变了，让它自己去重置它内部的 HDR 和 LDR 缓冲
+            SceneRenderer::OnWindowResize((uint32_t)m_ViewportSize.x, (uint32_t)m_ViewportSize.y);
             m_EditorCamera.OnResize(m_ViewportSize.x, m_ViewportSize.y);
             
             auto view = m_ActiveScene->Reg().view<CameraComponent>();
@@ -59,20 +58,16 @@ namespace Ayaya {
 
         m_EditorCamera.OnUpdate(ts, m_ViewportFocused);
 
-        m_Framebuffer->Bind();
-        RenderCommand::SetClearColor({ 0.12f, 0.12f, 0.14f, 1.0f });
-        RenderCommand::Clear();
-        glClear(GL_STENCIL_BUFFER_BIT); 
-
         // ==========================================
-        // 3.渲染管线调用
+        // 3. 渲染管线调用
+        // 减负：外面不再需要手动 Bind 和 Unbind 画布，也不需要在这 Clear 背景了！
+        // SceneRenderer::BeginScene 内部会搞定一切
         // ==========================================
         SceneRenderer::BeginScene(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection(), m_EditorCamera.GetPosition());
         SceneRenderer::RenderScene(m_ActiveScene, m_HoveredEntity, m_ShowGrid, m_ShowSkybox);
         SceneRenderer::EndScene();
 
-        m_Framebuffer->Unbind();
-
+        // 仅在最外层的默认窗口（不是视口内）刷一层深色底，防止 ImGui 窗口外露白
         RenderCommand::SetClearColor({ 0.1f, 0.1f, 0.1f, 1.0f });
         RenderCommand::Clear();
     }
@@ -107,6 +102,7 @@ namespace Ayaya {
         auto& lightTransform = dirLight.GetComponent<TransformComponent>();
         lightTransform.Rotation = glm::radians(glm::vec3(-45.0f, 45.0f, 0.0f));
         dirLight.AddComponent<DirectionalLightComponent>();
+        dirLight.GetComponent<DirectionalLightComponent>().AmbientStrength = 1500.0f;
 
         
         Entity cubeEntity = m_ActiveScene->CreateEntity("Cube");
@@ -219,13 +215,9 @@ namespace Ayaya {
             std::shared_ptr<Scene> newScene = std::make_shared<Scene>();
             SceneSerializer serializer(newScene);
             EditorState state;
-            // 核心修改：将 state 传入解析
             if (serializer.Deserialize(filepath, state)) {
                 m_ActiveScene = newScene;
                 
-                // ==========================================
-                // 恢复编辑器 UI 和环境状态
-                // ==========================================
                 m_ShowGrid = state.ShowGrid;
                 m_ShowSkybox = state.ShowSkybox;
                 m_EditorCamera.SetPosition(state.CameraPosition);
@@ -235,12 +227,10 @@ namespace Ayaya {
                 m_EditorCamera.SetFocalPoint(state.CameraFocalPoint);
                 m_EditorCamera.UpdateCameraView();
                 
-                // 如果 MSAA 状态发生了改变，立即重建 Framebuffer！
+                // 【核心修改】：通知管线修改 MSAA 采样率
                 if (m_EnableMSAA != state.EnableMSAA) {
                     m_EnableMSAA = state.EnableMSAA;
-                    FramebufferSpecification spec = m_Framebuffer->GetSpecification();
-                    spec.Samples = m_EnableMSAA ? 4 : 1;
-                    m_Framebuffer = Framebuffer::Create(spec);
+                    SceneRenderer::SetMSAASamples(m_EnableMSAA ? 4 : 1);
                 }
                 
                 auto view = m_ActiveScene->Reg().view<CameraComponent>();
@@ -371,29 +361,10 @@ namespace Ayaya {
     void EditorLayer::UIRenderMenuBar() {
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("File")) {
-                
-                // ==========================================
-                // 1. 新建场景 (New Scene)
-                // ==========================================
-                if (ImGui::MenuItem("New Scene", "Ctrl+N")) {
-                    NewScene();
-                }
-
-                // ==========================================
-                // 2. 保存与读取 (同步更新 m_CurrentScenePath)
-                // ==========================================
-                if (ImGui::MenuItem("Save Scene", "Ctrl+S")) {
-                    SaveScene();
-                }
-                
-                // 新增：另存为按钮
-                if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S")) {
-                    SaveSceneAs();
-                }
-                
-                if (ImGui::MenuItem("Load Scene", "Ctrl+O")) {
-                    OpenScene();
-                }
+                if (ImGui::MenuItem("New Scene", "Ctrl+N")) NewScene();
+                if (ImGui::MenuItem("Save Scene", "Ctrl+S")) SaveScene();
+                if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S")) SaveSceneAs();
+                if (ImGui::MenuItem("Load Scene", "Ctrl+O")) OpenScene();
 
                 ImGui::Separator();
                 if (ImGui::MenuItem("Exit")) Application::Get().Close(); 
@@ -401,50 +372,32 @@ namespace Ayaya {
                 ImGui::EndMenu();
             }
 
-            // ==========================================
-            // 新增 View 菜单
-            // ==========================================
             if (ImGui::BeginMenu("View")) {
                 ImGui::MenuItem("Show Grid", nullptr, &m_ShowGrid);
                 ImGui::MenuItem("Show Skybox", nullptr, &m_ShowSkybox);
 
                 if (ImGui::MenuItem("Enable MSAA (4x)", nullptr, &m_EnableMSAA)) {
-                    // 当点击时，获取当前的 Framebuffer 配置（包含当前的长宽）
-                    FramebufferSpecification spec = m_Framebuffer->GetSpecification();
-                    spec.Samples = m_EnableMSAA ? 4 : 1;
-                    
-                    // 核心魔法：直接重新赋值！
-                    // std::shared_ptr 会自动调用旧 OpenGLFramebuffer 的析构函数清理显存，并创建全新的双缓冲/单缓冲结构！
-                    m_Framebuffer = Framebuffer::Create(spec);
-                    
+                    // 【核心修改】：优雅的一行调用！再也不用在 UI 层操作底层缓冲了
+                    SceneRenderer::SetMSAASamples(m_EnableMSAA ? 4 : 1);
                     AYAYA_CORE_INFO("MSAA state changed: {0}", m_EnableMSAA ? "Enabled (4x)" : "Disabled");
                 }
 
                 ImGui::EndMenu();
             }
 
-            // ==========================================
-            // 3. 在菜单栏最右侧显示当前场景名称！
-            // ==========================================
+            // 右侧状态文本...
             std::string sceneName = "Untitled";
             if (!m_CurrentScenePath.empty()) {
-                // 从完整路径中提取文件名 (例如 /Users/xxx/assets/level.ayaya -> level.ayaya)
                 size_t pos = m_CurrentScenePath.find_last_of("/\\");
                 sceneName = pos != std::string::npos ? m_CurrentScenePath.substr(pos + 1) : m_CurrentScenePath;
             }
             std::string displayTitle = "Scene: " + sceneName;
-            
-            // 计算这段文字的宽度
             float textWidth = ImGui::CalcTextSize(displayTitle.c_str()).x;
-            // 将鼠标光标强行推到菜单栏的最右侧
             ImGui::SetCursorPosX(ImGui::GetWindowWidth() - textWidth - 20.0f);
-            // 使用系统禁用的暗淡颜色渲染文字，看起来更专业
             ImGui::TextDisabled("%s", displayTitle.c_str());
 
             ImGui::EndMenuBar();
         }
-
-        
     }
 
     void EditorLayer::UIRenderViewport() {
@@ -461,14 +414,12 @@ namespace Ayaya {
         m_ViewportBounds[1] = { viewportMaxRegion.x + viewportOffset.x, viewportMaxRegion.y + viewportOffset.y };
 
         ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
-        
-        // ==========================================
-        // 核心修复 1：这里绝对不能调用 m_Framebuffer->Resize!
-        // 只静默更新 m_ViewportSize 供下一帧使用
-        // ==========================================
         m_ViewportSize = { viewportPanelSize.x, viewportPanelSize.y };
 
-        uint32_t textureID = m_Framebuffer->GetColorAttachmentRendererID();
+        // ==========================================
+        // 核心修改：向渲染管线索要处理完毕的后期画面
+        // ==========================================
+        uint32_t textureID = SceneRenderer::GetFinalColorAttachmentRendererID();
         ImGui::Image(reinterpret_cast<void*>((intptr_t)textureID), 
                      ImVec2{ m_ViewportSize.x, m_ViewportSize.y }, 
                      ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
@@ -514,7 +465,7 @@ namespace Ayaya {
                 // 核心修复：射线检测直接无视被隐藏的物体，直接穿透过去！
                 // ==========================================
                 if (!entity.IsActiveInHierarchy()) continue;
-                
+
                 glm::mat4 inverseTransform = glm::inverse(entity.GetWorldTransform());
 
                 glm::vec3 localRayOrigin = glm::vec3(inverseTransform * glm::vec4(rayOrigin, 1.0f));

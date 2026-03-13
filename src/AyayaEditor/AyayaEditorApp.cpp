@@ -1,5 +1,6 @@
 #include <Ayaya.hpp>
 #include "EditorLayer.hpp"
+#include <filesystem>
 
 namespace Ayaya {
 
@@ -20,6 +21,12 @@ namespace Ayaya {
 
 // 应用程序入口点
 int main(int argc, char** argv) {
+    // ==========================================
+    // 核心修复：自动重定向工作目录 (Working Directory)
+    // ==========================================
+    std::filesystem::path exePath = std::filesystem::absolute(argv[0]).parent_path();
+    std::filesystem::current_path(exePath);
+    
     Ayaya::Application* app = Ayaya::CreateApplication();
     app->Run();
     delete app;

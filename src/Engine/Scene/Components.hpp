@@ -74,6 +74,12 @@ namespace Ayaya {
         bool Primary = true;           // 标志这是否是当前负责渲染画面的主相机
         bool FixedAspectRatio = false; // 是否锁定长宽比（防止窗口缩放时画面被拉伸变形）
 
+        // ==========================================
+        // 新增：物理相机的曝光值 (Exposure Value at ISO 100)
+        // 晴天室外通常在 14.0 到 15.0 之间
+        // ==========================================
+        float EV100 = 14.5f;
+
         CameraComponent() = default;
         CameraComponent(const CameraComponent&) = default;
     };
@@ -110,18 +116,17 @@ namespace Ayaya {
     // ==========================================
     struct DirectionalLightComponent {
         glm::vec3 Color{ 1.0f, 1.0f, 1.0f }; // 默认纯白光
-        float AmbientStrength = 0.3f;        // 默认环境光强度
+        float Illuminance = 100000.0f; 
+        float AmbientStrength = 0.0f; // 物理渲染中通常用天空盒做环境光，这个可以设为0或保留微调
 
-        // 注意：我们不需要在这里定义光的方向 (Direction)，
-        // 因为光的方向将直接从这个实体自带的 TransformComponent (Rotation) 中计算得出！
-        
         DirectionalLightComponent() = default;
         DirectionalLightComponent(const DirectionalLightComponent&) = default;
     };
 
     struct PointLightComponent {
         glm::vec3 Color = { 1.0f, 1.0f, 1.0f };
-        float Intensity = 150.0f; // PBR 渲染中，点光源通常需要极高的辐射通量 (Radiance)
+        // 替换原来的 Intensity，改用光通量 (Lumens)，默认 1500 (家用灯泡)
+        float LuminousPower = 1500.0f;
 
         PointLightComponent() = default;
         PointLightComponent(const PointLightComponent&) = default;

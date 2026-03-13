@@ -20,18 +20,13 @@ namespace Ayaya {
 
     void SceneHierarchyPanel::SetContext(const std::shared_ptr<Scene>& context) {
         m_Context = context;
-        m_SelectionContext = {}; // 切换场景时清空选中状态
+        ClearSelection(); // 切换场景时清空所有选中状态
     }
 
     void SceneHierarchyPanel::OnImGuiRender() {
         ImGui::Begin("Scene Hierarchy");
 
         if (m_Context) {
-            // ========================================================
-            // 修复 1：必须使用我们自己维护的有序 RootEntities 列表！
-            // 注意：必须拷贝一份 (auto rootEntities = ...)，因为拖拽过程中会修改原数组，
-            // 如果直接引用遍历，会导致 C++ 迭代器失效崩溃。
-            // ========================================================
             auto rootEntities = m_Context->GetRootEntities();
             for (auto entityID : rootEntities) {
                 Entity entity{ entityID, m_Context.get() };
@@ -43,15 +38,16 @@ namespace Ayaya {
             if (remainSize.y < 50.0f) remainSize.y = 50.0f; 
             ImGui::InvisibleButton("##HierarchyEmptyArea", remainSize);
 
-            // [交互 1]：左键点击这个隐形按钮 -> 取消选中
+            // [交互 1]：左键点击这个隐形按钮 -> 取消全部选中
             if (ImGui::IsItemClicked(0)) {
-                m_SelectionContext = {};
+                ClearSelection();
             }
 
             // [交互 2]：右键点击这个隐形按钮 -> 弹出新建菜单！
             if (ImGui::BeginPopupContextItem("HierarchySpacePopup")) {
                 if (ImGui::MenuItem("Create Empty Entity")) {
-                    m_Context->CreateEntity("Empty Entity");
+                    Entity newEntity = m_Context->CreateEntity("Empty Entity");
+                    SetSelectedEntity(newEntity); // 创建后自动选中
                 }
                 ImGui::EndPopup();
             }
@@ -60,36 +56,58 @@ namespace Ayaya {
             if (ImGui::BeginDragDropTarget()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_PAYLOAD")) {
                     entt::entity droppedID = *(entt::entity*)payload->Data;
-                    m_EntityToUnparent = { droppedID, m_Context.get() }; 
+                    // 修改为 push_back 追加到数组中
+                    m_EntitiesToUnparent.push_back({ droppedID, m_Context.get() }); 
                 }
                 ImGui::EndDragDropTarget();
             }
         }
         ImGui::End();
         
+        // ==========================================
+        // 属性面板调用
+        // ==========================================
         ImGui::Begin("Properties");
-        if (m_SelectionContext) DrawComponents(m_SelectionContext);
+        if (!m_SelectedEntities.empty()) {
+            DrawComponents(); 
+        }
         ImGui::End();
 
-        // 处理复制
-        if (m_EntityToDuplicate) {
-            Entity newEntity = m_Context->DuplicateEntity(m_EntityToDuplicate);
-            // 复制完成后，自动选中新生成的物体，提升体验
-            m_SelectionContext = newEntity; 
-            m_EntityToDuplicate = {};
+        // ==========================================
+        // 批量处理复制
+        // ==========================================
+        if (!m_EntitiesToDuplicate.empty()) {
+            std::vector<Entity> newSelections;
+            for (auto entity : m_EntitiesToDuplicate) {
+                Entity newEntity = m_Context->DuplicateEntity(entity);
+                newSelections.push_back(newEntity);
+            }
+            m_SelectedEntities = newSelections; // 批量选中所有新生成的物体
+            m_EntitiesToDuplicate.clear();
         }
 
-        // 处理删除
-        if (m_EntityToDestroy) {
-            if (m_SelectionContext == m_EntityToDestroy) m_SelectionContext = {};
-            m_Context->DestroyEntity(m_EntityToDestroy);
-            m_EntityToDestroy = {};
+        // ==========================================
+        // 批量处理删除
+        // ==========================================
+        if (!m_EntitiesToDestroy.empty()) {
+            for (auto entity : m_EntitiesToDestroy) {
+                // 如果删除的物体在选中列表中，把它踢出去
+                auto it = std::find(m_SelectedEntities.begin(), m_SelectedEntities.end(), entity);
+                if (it != m_SelectedEntities.end()) m_SelectedEntities.erase(it);
+                
+                m_Context->DestroyEntity(entity);
+            }
+            m_EntitiesToDestroy.clear();
         }
 
-        // 处理解绑 (Unparent)
-        if (m_EntityToUnparent) {
-            m_EntityToUnparent.SetParent({}); 
-            m_EntityToUnparent = {};
+        // ==========================================
+        // 批量处理解绑
+        // ==========================================
+        if (!m_EntitiesToUnparent.empty()) {
+            for (auto entity : m_EntitiesToUnparent) {
+                entity.SetParent({}); 
+            }
+            m_EntitiesToUnparent.clear();
         }
     }
 
@@ -104,10 +122,12 @@ namespace Ayaya {
         else if (entity.HasComponent<DirectionalLightComponent>()) icon = ICON_FA_LIGHTBULB; 
         else if (entity.HasComponent<PointLightComponent>()) icon = ICON_FA_LIGHTBULB; 
 
-        
         std::string displayString = icon + " " + tag;
 
-        ImGuiTreeNodeFlags flags = ((m_SelectionContext == entity) ? ImGuiTreeNodeFlags_Selected : 0) 
+        // 1. 判断是否在多选列表中
+        bool isSelected = IsEntitySelected(entity);
+
+        ImGuiTreeNodeFlags flags = (isSelected ? ImGuiTreeNodeFlags_Selected : 0) 
                                  | ImGuiTreeNodeFlags_OpenOnArrow 
                                  | ImGuiTreeNodeFlags_SpanAvailWidth;
         
@@ -124,7 +144,16 @@ namespace Ayaya {
         
         bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, "%s", displayString.c_str());
 
-        if (ImGui::IsItemClicked()) m_SelectionContext = entity;
+        // ==========================================
+        // 2. 核心交互：支持 Ctrl + 左键进行多选
+        // ==========================================
+        if (ImGui::IsItemClicked()) {
+            if (ImGui::GetIO().KeyCtrl) {
+                ToggleEntitySelection(entity); // 按住 Ctrl：追加/取消选择
+            } else {
+                SetSelectedEntity(entity);     // 普通点击：单选
+            }
+        }
 
         // 拖放源
         if (ImGui::BeginDragDropSource()) {
@@ -134,11 +163,8 @@ namespace Ayaya {
             ImGui::EndDragDropSource();
         }
 
-        // =======================================================
         // 核心交互：带有拖拽重排 (Reorder) 指示线的 DropTarget 逻辑
-        // =======================================================
         if (ImGui::BeginDragDropTarget()) {
-            // 使用 AcceptBeforeDelivery 让我们在鼠标松开前就能计算反馈并画线
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_PAYLOAD", ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect)) {
                 
                 float mouseY = ImGui::GetMousePos().y;
@@ -146,12 +172,10 @@ namespace Ayaya {
                 float itemMaxY = ImGui::GetItemRectMax().y;
                 float itemHeight = itemMaxY - itemMinY;
 
-                // 判断拖拽落点属于上侧、下侧还是中间
                 bool insertBefore = mouseY < itemMinY + itemHeight * 0.25f;
                 bool insertAfter  = mouseY > itemMaxY - itemHeight * 0.25f;
                 bool reparent     = !insertBefore && !insertAfter;
 
-                // 画出黄色的提示线
                 ImDrawList* drawList = ImGui::GetWindowDrawList();
                 ImVec2 minRect = ImGui::GetItemRectMin();
                 ImVec2 maxRect = ImGui::GetItemRectMax();
@@ -161,10 +185,9 @@ namespace Ayaya {
                 } else if (insertAfter) {
                     drawList->AddLine(ImVec2(minRect.x, itemMaxY), ImVec2(maxRect.x, itemMaxY), IM_COL32(255, 215, 0, 255), 2.0f);
                 } else {
-                    drawList->AddRect(minRect, maxRect, IM_COL32(255, 215, 0, 255), 0.0f, 0, 2.0f); // 画边框表示成为子节点
+                    drawList->AddRect(minRect, maxRect, IM_COL32(255, 215, 0, 255), 0.0f, 0, 2.0f); 
                 }
 
-                // 鼠标真正松开时 (IsDelivery) 触发换爹与排序
                 if (payload->IsDelivery()) {
                     entt::entity droppedID = *(entt::entity*)payload->Data;
                     Entity droppedEntity{ droppedID, m_Context.get() };
@@ -172,30 +195,33 @@ namespace Ayaya {
                     if (insertBefore) {
                         Entity parent{ entity.GetComponent<RelationshipComponent>().Parent, m_Context.get() };
                         droppedEntity.SetParent(parent);
-                        droppedEntity.MoveTo(entity, true);  // 移到前面
+                        droppedEntity.MoveTo(entity, true);  
                     } else if (insertAfter) {
                         Entity parent{ entity.GetComponent<RelationshipComponent>().Parent, m_Context.get() };
                         droppedEntity.SetParent(parent);
-                        droppedEntity.MoveTo(entity, false); // 移到后面
+                        droppedEntity.MoveTo(entity, false); 
                     } else {
-                        droppedEntity.SetParent(entity);     // 变成子节点
+                        droppedEntity.SetParent(entity);     
                     }
                 }
             }
             ImGui::EndDragDropTarget();
         }
-        // 修复 2：删除了下方多余的旧 BeginDragDropTarget() 块，防止冲突覆盖。
 
         // 右键菜单
         if (ImGui::BeginPopupContextItem()) {
             if (ImGui::MenuItem("Duplicate Entity")) {
-                m_EntityToDuplicate = entity; // 标记延迟复制
+                // 如果右击的是被选中的物体，就把所有选中的都复制！否则只复制这一个。
+                if (IsEntitySelected(entity)) m_EntitiesToDuplicate = m_SelectedEntities;
+                else m_EntitiesToDuplicate.push_back(entity);
             }
             if (ImGui::MenuItem("Delete Entity")) {
-                m_EntityToDestroy = entity;
+                if (IsEntitySelected(entity)) m_EntitiesToDestroy = m_SelectedEntities;
+                else m_EntitiesToDestroy.push_back(entity);
             }
             if (ImGui::MenuItem("Unparent")) {
-                m_EntityToUnparent = entity; 
+                if (IsEntitySelected(entity)) m_EntitiesToUnparent = m_SelectedEntities;
+                else m_EntitiesToUnparent.push_back(entity);
             }
             ImGui::EndPopup();
         }
@@ -204,24 +230,18 @@ namespace Ayaya {
             ImGui::PopStyleColor();
         }
 
-        // ==========================================
         // 处理节点右侧的可视化按钮
-        // ==========================================
         ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 24.0f);
         ImGui::SetCursorPosY(cursorY);
 
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
-        
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.3f, 0.3f, 0.5f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.2f, 0.2f, 0.2f, 0.5f));
         
-        // 1. 图标形状依然由自身的局部状态决定
         std::string eyeIcon = tagComp.IsActive ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
         
-        // 2. 【核心修改】：如果它因为父节点被隐藏了，把眼睛图标的颜色也变灰！
         if (!activeInHierarchy) {
-            // ImGuiCol_Text 控制的是 Button 里面图标或文字的颜色
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
         }
 
@@ -233,7 +253,6 @@ namespace Ayaya {
         
         ImGui::PopID();
 
-        // 3. 恢复眼睛图标的颜色
         if (!activeInHierarchy) {
             ImGui::PopStyleColor();
         }
@@ -242,12 +261,14 @@ namespace Ayaya {
         ImGui::PopStyleVar();
 
         // ==========================================
-        // 处理展开节点
+        // 处理展开节点 (修复批量删除时的检查)
         // ==========================================
         if (opened) {
-            // 注意：这里需要再次检查 entity 是否被删，防止在该帧后续递归中崩溃
-            if (m_EntityToDestroy != entity) {
-                // 必须拷贝一份 Children，防止在循环中由于 SetParent 改变 Children 导致迭代器失效
+            // 检查当前实体是否在即将被删除的列表中
+            bool isBeingDestroyed = std::find(m_EntitiesToDestroy.begin(), m_EntitiesToDestroy.end(), entity) != m_EntitiesToDestroy.end();
+            
+            // 如果它没被标记为删除，才去遍历它的子节点，防止迭代器崩溃
+            if (!isBeingDestroyed) {
                 std::vector<entt::entity> children = rel.Children;
                 for (auto childID : children) {
                     DrawEntityNode({ childID, m_Context.get() });
@@ -257,101 +278,125 @@ namespace Ayaya {
         }
     }
 
-    void SceneHierarchyPanel::DrawComponents(Entity entity) {
+    void SceneHierarchyPanel::DrawComponents() {
+        if (m_SelectedEntities.empty()) return;
+
         // ==========================================
-        // 绘制组件
+        // 多选顶部提示 UI
         // ==========================================
+        if (m_SelectedEntities.size() > 1) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.8f, 0.3f, 1.0f)); 
+            ImGui::Text("Batch Editing %zu Entities", m_SelectedEntities.size());
+            ImGui::PopStyleColor();
+            ImGui::Separator();
+            ImGui::Spacing();
+        }
+
+        // 取第一个实体作为展示和同步的基准
+        Entity referenceEntity = m_SelectedEntities[0];
 
         // --- 绘制 Tag 组件 ---
-       if (entity.HasComponent<TagComponent>()) {
-            auto& tagComp = entity.GetComponent<TagComponent>();
-            auto& tag = tagComp.Tag;
+        bool allHaveTag = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<TagComponent>()) { allHaveTag = false; break; }
+        
+        if (allHaveTag) {
+            auto& refTagComp = referenceEntity.GetComponent<TagComponent>();
 
-            // 像 Unity 一样，在最左侧放一个激活勾选框
-            ImGui::Checkbox("##IsActive", &tagComp.IsActive);
+            bool isActive = refTagComp.IsActive;
+            if (ImGui::Checkbox("##IsActive", &isActive)) {
+                for (auto e : m_SelectedEntities) e.GetComponent<TagComponent>().IsActive = isActive;
+            }
             ImGui::SameLine();
 
             char buffer[256];
             memset(buffer, 0, sizeof(buffer));
-            strncpy(buffer, tag.c_str(), sizeof(buffer) - 1);
+            strncpy(buffer, refTagComp.Tag.c_str(), sizeof(buffer) - 1);
             
-            // 让输入框填满剩余宽度
             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-            if (ImGui::InputText("##Tag", buffer, sizeof(buffer))) tagComp.Tag = std::string(buffer);
+            if (ImGui::InputText("##Tag", buffer, sizeof(buffer))) {
+                for (auto e : m_SelectedEntities) e.GetComponent<TagComponent>().Tag = std::string(buffer);
+            }
         }
-
         ImGui::Separator();
 
         // --- 绘制 Transform 组件 ---
-        if (entity.HasComponent<TransformComponent>()) {
-            if (ImGui::TreeNodeEx((void*)typeid(TransformComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Transform")) {
-                auto& transform = entity.GetComponent<TransformComponent>();
+        bool allHaveTransform = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<TransformComponent>()) { allHaveTransform = false; break; }
 
-                ImGui::DragFloat3("Position", glm::value_ptr(transform.Translation), 0.1f);
+        if (allHaveTransform) {
+            if (ImGui::TreeNodeEx((void*)typeid(TransformComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Transform")) {
+                auto& refTransform = referenceEntity.GetComponent<TransformComponent>();
+
+                glm::vec3 translation = refTransform.Translation;
+                if (ImGui::DragFloat3("Position", glm::value_ptr(translation), 0.1f)) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Translation = translation;
+                }
                 
-                // UI 上显示角度制，方便人类阅读
-                glm::vec3 rotation = glm::degrees(transform.Rotation);
+                glm::vec3 rotation = glm::degrees(refTransform.Rotation);
                 if (ImGui::DragFloat3("Rotation", glm::value_ptr(rotation), 1.0f)) {
-                    transform.Rotation = glm::radians(rotation); // 回写时转回弧度
+                    for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Rotation = glm::radians(rotation);
                 }
 
-                ImGui::DragFloat3("Scale", glm::value_ptr(transform.Scale), 0.1f);
+                glm::vec3 scale = refTransform.Scale;
+                if (ImGui::DragFloat3("Scale", glm::value_ptr(scale), 0.1f)) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Scale = scale;
+                }
 
                 ImGui::TreePop();
             }
         }
 
         // --- 绘制 Sprite Renderer 组件 ---
-        if (entity.HasComponent<SpriteRendererComponent>()) {
-            if (ImGui::TreeNodeEx((void*)typeid(SpriteRendererComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Sprite Renderer")) {
-                auto& src = entity.GetComponent<SpriteRendererComponent>();
-                ImGui::ColorEdit4("Color", glm::value_ptr(src.Color));
+        bool allHaveSprite = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<SpriteRendererComponent>()) { allHaveSprite = false; break; }
 
-                // ==========================================
-                // 贴图槽位 UI 与拖拽接收 (Drop Target) 逻辑
-                // ==========================================
+        if (allHaveSprite) {
+            if (ImGui::TreeNodeEx((void*)typeid(SpriteRendererComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Sprite Renderer")) {
+                auto& refSrc = referenceEntity.GetComponent<SpriteRendererComponent>();
+                
+                glm::vec4 color = refSrc.Color;
+                if (ImGui::ColorEdit4("Color", glm::value_ptr(color))) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<SpriteRendererComponent>().Color = color;
+                }
+
                 ImGui::Spacing();
                 ImGui::Text("Texture");
 
                 ImVec2 textureSlotSize = { 64.0f, 64.0f };
                 
-                // 1. 绘制展示框：有贴图就画贴图，没贴图就画个空按钮框
-                if (src.TextureHandle != 0 && AssetManager::IsAssetHandleValid(src.TextureHandle)) {
-                    auto tex = AssetManager::GetAsset<Texture2D>(src.TextureHandle);
-                    // 注意 UV 的翻转：{0, 1}, {1, 0}
+                if (refSrc.TextureHandle != 0 && AssetManager::IsAssetHandleValid(refSrc.TextureHandle)) {
+                    auto tex = AssetManager::GetAsset<Texture2D>(refSrc.TextureHandle);
                     ImGui::Image((ImTextureID)(intptr_t)tex->GetRendererID(), textureSlotSize, {0, 1}, {1, 0});
                 } else {
                     ImGui::Button("Empty", textureSlotSize);
                 }
 
-                // 2. 核心魔法：声明刚刚画的展示框是一个可以接收“拖拽包裹”的坑！
-                if (ImGui::BeginDragDropTarget()) { // <==== 【务必加上这一行！】开启接收坑
+                if (ImGui::BeginDragDropTarget()) { 
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                         const char* pathStr = (const char*)payload->Data;
                         std::filesystem::path texturePath = std::filesystem::path("assets") / pathStr;
 
                         if (texturePath.extension() == ".png" || texturePath.extension() == ".jpg") {
-                            // 一行代码搞定：导入资产、写入账本、返回全局唯一 UUID
                             UUID importedHandle = AssetManager::ImportAsset(texturePath);
-                            
                             if (importedHandle != 0) {
-                                src.TextureHandle = importedHandle;
+                                // 批量应用贴图
+                                for (auto e : m_SelectedEntities) {
+                                    e.GetComponent<SpriteRendererComponent>().TextureHandle = importedHandle;
+                                }
                                 AYAYA_CORE_INFO("Successfully imported and applied texture: {0}", texturePath.string());
                             }
                         } else {
                             AYAYA_CORE_WARN("Dropped file is not a supported image format!");
                         }
                     }
-                    ImGui::EndDragDropTarget(); // <==== 【务必加上这一行！】结束接收坑
+                    ImGui::EndDragDropTarget(); 
                 }
 
-                // 3. 卸载贴图的小功能
-                if (src.TextureHandle != 0) {
+                if (refSrc.TextureHandle != 0) {
                     ImGui::SameLine();
-                    // 稍微算一下坐标，让 Remove 按钮和 64x64 的图片垂直居中对齐
                     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textureSlotSize.y * 0.5f - 10.0f);
                     if (ImGui::Button("Remove")) {
-                        src.TextureHandle = 0; // 只要把 UUID 设为 0，渲染器就会自动用白底替代
+                        for (auto e : m_SelectedEntities) e.GetComponent<SpriteRendererComponent>().TextureHandle = 0;
                     }
                 }
 
@@ -360,31 +405,95 @@ namespace Ayaya {
         }
 
         // --- 绘制 Camera 组件 ---
-        if (entity.HasComponent<CameraComponent>()) {
+        bool allHaveCamera = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<CameraComponent>()) { allHaveCamera = false; break; }
+
+        if (allHaveCamera) {
             if (ImGui::TreeNodeEx((void*)typeid(CameraComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Camera")) {
-                auto& cameraComp = entity.GetComponent<CameraComponent>();
+                auto& refCamera = referenceEntity.GetComponent<CameraComponent>();
                 
-                // 【核心修改】：监听 Checkbox 的变化，保证全局只有一个 Primary Camera
-                if (ImGui::Checkbox("Primary Camera", &cameraComp.Primary)) {
-                    if (cameraComp.Primary) {
-                        // 如果勾选了这个相机，把场景里其他所有相机的 Primary 都设为 false
+                bool primary = refCamera.Primary;
+                if (ImGui::Checkbox("Primary Camera", &primary)) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().Primary = primary;
+                    if (primary) {
                         auto view = m_Context->Reg().view<CameraComponent>();
                         for (auto entityID : view) {
-                            if (entityID != (entt::entity)entity) {
+                            // 确保选中的物体是唯一的 primary（防止多选时多个物体变成 Primary）
+                            if (!IsEntitySelected(Entity{entityID, m_Context.get()})) {
                                 view.get<CameraComponent>(entityID).Primary = false;
                             }
                         }
                     }
                 }
                 
-                ImGui::Checkbox("Fixed Aspect Ratio", &cameraComp.FixedAspectRatio);
+                bool fixedAspect = refCamera.FixedAspectRatio;
+                if (ImGui::Checkbox("Fixed Aspect Ratio", &fixedAspect)) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().FixedAspectRatio = fixedAspect;
+                }
+
+                float ev100 = refCamera.EV100;
+                if (ImGui::DragFloat("EV100 (Exposure)", &ev100, 0.1f, -10.0f, 25.0f, "%.2f")) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().EV100 = ev100;
+                }
+
+                ImGui::TreePop();
+            }
+        }
+
+        // --- 绘制 Directional Light 组件 ---
+        bool allHaveDirLight = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<DirectionalLightComponent>()) { allHaveDirLight = false; break; }
+
+        if (allHaveDirLight) {
+            if (ImGui::TreeNodeEx((void*)typeid(DirectionalLightComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Directional Light")) {
+                auto& refDlc = referenceEntity.GetComponent<DirectionalLightComponent>();
+                
+                glm::vec3 color = refDlc.Color;
+                if (ImGui::ColorEdit3("Light Color", glm::value_ptr(color))) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<DirectionalLightComponent>().Color = color;
+                }
+
+                float illuminance = refDlc.Illuminance;
+                if (ImGui::DragFloat("Illuminance (Lux)", &illuminance, 1000.0f, 0.0f, 150000.0f, "%.0f")) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<DirectionalLightComponent>().Illuminance = illuminance;
+                }
+
+                float ambient = refDlc.AmbientStrength;
+                if (ImGui::DragFloat("Ambient (Sky) Light", &ambient, 100.0f, 0.0f, 50000.0f, "%.0f")) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<DirectionalLightComponent>().AmbientStrength = ambient;
+                }
+
+                ImGui::TreePop();
+            }
+        }
+
+        // --- 绘制 Point Light 组件 ---
+        bool allHavePointLight = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<PointLightComponent>()) { allHavePointLight = false; break; }
+
+        if (allHavePointLight) {
+            if (ImGui::TreeNodeEx((void*)typeid(PointLightComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Point Light")) {
+                auto& refPlc = referenceEntity.GetComponent<PointLightComponent>();
+                
+                glm::vec3 color = refPlc.Color;
+                if (ImGui::ColorEdit3("Color", glm::value_ptr(color))) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<PointLightComponent>().Color = color;
+                }
+
+                float power = refPlc.LuminousPower;
+                if (ImGui::DragFloat("Luminous Power (lm)", &power, 50.0f, 0.0f, 100000.0f, "%.0f")) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<PointLightComponent>().LuminousPower = power;
+                }
+
                 ImGui::TreePop();
             }
         }
 
         // --- 绘制 Mesh Renderer 组件 ---
-        if (entity.HasComponent<MeshRendererComponent>()) {
-            
+        bool allHaveMeshRenderer = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<MeshRendererComponent>()) { allHaveMeshRenderer = false; break; }
+
+        if (allHaveMeshRenderer) {
             bool opened = ImGui::TreeNodeEx((void*)typeid(MeshRendererComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Mesh Renderer");
             
             bool removeComponent = false;
@@ -395,32 +504,28 @@ namespace Ayaya {
                 ImGui::EndPopup();
             }
 
-            // ==========================================
-            // --- MeshRendererComponent 展开 ---
-            // ==========================================
             if (opened) {
-                auto& mrc = entity.GetComponent<MeshRendererComponent>();
+                auto& refMrc = referenceEntity.GetComponent<MeshRendererComponent>();
 
-                // ==========================================
-                // --- 1. 模型资产管理 (放入 TreeNode) ---
-                // ==========================================
+                // --- 1. 模型资产管理 ---
                 ImGui::Spacing();
                 if (ImGui::TreeNodeEx("Model", ImGuiTreeNodeFlags_DefaultOpen)) {
                     
                     ImGui::Text("Mesh Source");
-                    std::string modelDisplay = (mrc.ModelAsset && !mrc.ModelAsset->GetPath().empty()) 
-                                                ? mrc.ModelAsset->GetPath() : "Drop .obj / .fbx here";
+                    std::string modelDisplay = (refMrc.ModelAsset && !refMrc.ModelAsset->GetPath().empty()) 
+                                                ? refMrc.ModelAsset->GetPath() : "Drop .obj / .fbx here";
                     
-                    // 让按钮宽度填满可用空间
                     ImGui::Button(modelDisplay.c_str(), ImVec2(-1.0f, 30.0f));
 
-                    // 接收外部拖拽进来的 3D 模型文件
                     if (ImGui::BeginDragDropTarget()) {
                         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                             const char* pathStr = (const char*)payload->Data;
                             std::filesystem::path modelPath = std::filesystem::path("assets") / pathStr;
                             if (modelPath.extension() == ".obj" || modelPath.extension() == ".fbx" || modelPath.extension() == ".gltf") {
-                                mrc.ModelAsset = std::make_shared<Model>(modelPath.string());
+                                // 批量应用模型
+                                for (auto e : m_SelectedEntities) {
+                                    e.GetComponent<MeshRendererComponent>().ModelAsset = std::make_shared<Model>(modelPath.string());
+                                }
                             }
                         }
                         ImGui::EndDragDropTarget();
@@ -429,97 +534,76 @@ namespace Ayaya {
                     ImGui::TreePop();
                 }
 
-                // ==========================================
                 // --- 2. 材质资产管理 ---
-                // ==========================================
                 ImGui::Spacing();
                 if (ImGui::TreeNodeEx("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
                     
-                    if (mrc.MaterialAsset) {
-                        auto& mat = mrc.MaterialAsset;
+                    if (refMrc.MaterialAsset) {
+                        auto& mat = refMrc.MaterialAsset;
                         
                         ImGui::Text("Material Asset (.mat)");
                         std::string matDisplay = (!mat->AssetPath.empty()) ? mat->AssetPath : "Default / Internal";
                         ImGui::Button(matDisplay.c_str(), ImVec2(-1.0f, 30.0f));
 
-                        // 接收外部拖拽进来的 .mat 文件
+                        // 批量拖拽应用材质
                         if (ImGui::BeginDragDropTarget()) {
                             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                                 const char* pathStr = (const char*)payload->Data;
                                 std::filesystem::path matPath = std::filesystem::path("assets") / pathStr;
                                 if (matPath.extension() == ".mat") {
-                                    // ==========================================
-                                    // 核心修复 1：创建全新指针！
-                                    // 不要去修改原有的 mat，而是创建一个新的 Material 实例赋给物体。
-                                    // 这样即使别的物体还在用旧材质，也不会被意外篡改！
-                                    // ==========================================
-                                    auto newMat = std::make_shared<Material>();
-                                    if (MaterialSerializer::Deserialize(newMat, matPath.string())) {
-                                        mrc.MaterialAsset = newMat; 
+                                    for (auto e : m_SelectedEntities) {
+                                        auto newMat = std::make_shared<Material>();
+                                        if (MaterialSerializer::Deserialize(newMat, matPath.string())) {
+                                            e.GetComponent<MeshRendererComponent>().MaterialAsset = newMat; 
+                                        }
                                     }
                                 }
                             }
                             ImGui::EndDragDropTarget();
                         }
 
-                        // 保存当前材质到硬盘
-                        // ==========================================
-                        // 保存当前材质到硬盘 (带查重防覆盖机制)
-                        // ==========================================
                         if (ImGui::Button("Save to .mat")) {
-                            // 如果是新材质，或者是从内置模板克隆来的，才需要分配新路径
-                            // (如果是已经保存在硬盘里的普通材质，直接覆盖它自己的原文件即可)
                             if (mat->AssetPath.empty() || mat->AssetPath.find("assets/Editor/") != std::string::npos) {
-                                
                                 if (!std::filesystem::exists("assets/materials")) {
                                     std::filesystem::create_directories("assets/materials");
                                 }
                                 
                                 std::string baseName = mat->Name;
-                                // 净化默认名字：如果名字带 Instance，或者为空，统称为 NewMaterial
                                 if (baseName == "Empty Material" || baseName.empty() || baseName.find("(Instance)") != std::string::npos) {
                                     baseName = "NewMaterial";
                                 }
                                 
                                 std::string finalPath = "assets/materials/" + baseName + ".mat";
                                 int index = 1;
-                                
-                                // 核心修复：循环检查文件是否存在，存在则递增序号！
                                 while (std::filesystem::exists(finalPath)) {
                                     finalPath = "assets/materials/" + baseName + " (" + std::to_string(index) + ").mat";
                                     index++;
                                 }
                                 
                                 mat->AssetPath = finalPath;
-                                // 顺便把内存里材质的名字也更新为最终的文件名 (去掉 .mat 后缀)
                                 mat->Name = std::filesystem::path(finalPath).stem().string();
                             }
                             
-                            // 执行序列化保存
                             MaterialSerializer::Serialize(mat, mat->AssetPath);
                             AYAYA_CORE_INFO("Material saved to {0}", mat->AssetPath);
                         }
                         
                         ImGui::SameLine();
                         if (ImGui::Button("Remove Material")) {
-                            mrc.MaterialAsset = nullptr; 
+                            for (auto e : m_SelectedEntities) e.GetComponent<MeshRendererComponent>().MaterialAsset = nullptr;
                         }
 
-                        if (mrc.MaterialAsset) { 
-                            ImGui::Text("Shader: %s", mrc.MaterialAsset->ShaderName.c_str());
+                        if (refMrc.MaterialAsset) { 
+                            ImGui::Text("Shader: %s", refMrc.MaterialAsset->ShaderName.c_str());
                             ImGui::Separator();
 
-                            // ==========================================
-                            // UI 升级：开启双列排版布局 + 智能分组分割线
-                            // ==========================================
                             ImGui::Columns(2, "MaterialProperties", false);
                             ImGui::SetColumnWidth(0, 140.0f); 
 
-                            std::string lastCategory = ""; // 用于记录上一个属性的大类
+                            std::string lastCategory = ""; 
 
-                            for (auto& prop : mrc.MaterialAsset->Properties) {
+                            for (auto& prop : refMrc.MaterialAsset->Properties) {
                                 
-                                // --- 1. 智能推断当前属性属于哪个大组 ---
                                 std::string currentCategory = "Other";
                                 if (prop.UniformName.find("Albedo") != std::string::npos) currentCategory = "Albedo";
                                 else if (prop.UniformName.find("Metallic") != std::string::npos) currentCategory = "Metallic";
@@ -528,43 +612,37 @@ namespace Ayaya {
                                 else if (prop.UniformName.find("Emission") != std::string::npos || prop.UniformName.find("Emissive") != std::string::npos) currentCategory = "Emission";
                                 else if (prop.UniformName.find("AO") != std::string::npos || prop.UniformName.find("Ambient") != std::string::npos) currentCategory = "AO";
 
-                                // --- 2. 组别切换时，插入贯穿双列的分割线 ---
                                 if (currentCategory != lastCategory) {
-                                    if (!lastCategory.empty()) {
-                                        // 结束上一行，画一条分割线
-                                        ImGui::Separator();
-                                    }
+                                    if (!lastCategory.empty()) ImGui::Separator();
                                     lastCategory = currentCategory;
                                 }
 
                                 ImGui::PushID(prop.UniformName.c_str()); 
-                                
-                                // --- 左列：属性名称 ---
                                 ImGui::AlignTextToFramePadding(); 
                                 ImGui::Text("%s", prop.DisplayName.c_str());
                                 ImGui::NextColumn();
-
-                                // --- 右列：操作控件 ---
                                 ImGui::SetNextItemWidth(-1.0f); 
                                 
+                                bool propChanged = false;
+
                                 switch (prop.Type) {
                                     case MaterialPropertyType::Float:
-                                        ImGui::SliderFloat("##val", &prop.FloatValue, 0.0f, 1.0f);
+                                        propChanged = ImGui::SliderFloat("##val", &prop.FloatValue, 0.0f, 1.0f);
                                         break;
                                     case MaterialPropertyType::Int:
-                                        ImGui::InputInt("##val", &prop.IntValue);
+                                        propChanged = ImGui::InputInt("##val", &prop.IntValue);
                                         break;
                                     case MaterialPropertyType::Bool:
-                                        ImGui::Checkbox("##val", &prop.BoolValue);
+                                        propChanged = ImGui::Checkbox("##val", &prop.BoolValue);
                                         break;
                                     case MaterialPropertyType::Vec2:
-                                        ImGui::DragFloat2("##val", glm::value_ptr(prop.Vec2Value), 0.05f);
+                                        propChanged = ImGui::DragFloat2("##val", glm::value_ptr(prop.Vec2Value), 0.05f);
                                         break;
                                     case MaterialPropertyType::Vec3:
-                                        ImGui::ColorEdit3("##val", glm::value_ptr(prop.Vec3Value), ImGuiColorEditFlags_NoInputs);
+                                        propChanged = ImGui::ColorEdit3("##val", glm::value_ptr(prop.Vec3Value), ImGuiColorEditFlags_NoInputs);
                                         break;
                                     case MaterialPropertyType::Vec4:
-                                        ImGui::ColorEdit4("##val", glm::value_ptr(prop.Vec4Value), ImGuiColorEditFlags_NoInputs);
+                                        propChanged = ImGui::ColorEdit4("##val", glm::value_ptr(prop.Vec4Value), ImGuiColorEditFlags_NoInputs);
                                         break;
                                     case MaterialPropertyType::Texture2D:
                                     {
@@ -586,6 +664,7 @@ namespace Ayaya {
                                                     if (importedHandle != 0) {
                                                         prop.TextureHandle = importedHandle;
                                                         prop.TexturePath = texturePath.string(); 
+                                                        propChanged = true;
                                                     }
                                                 }
                                             }
@@ -598,12 +677,30 @@ namespace Ayaya {
                                             if (ImGui::Button("X##Remove")) {
                                                 prop.TextureHandle = 0;
                                                 prop.TexturePath = "";
+                                                propChanged = true;
                                             }
                                         }
                                         break;
                                     }
                                     default:
                                         break;
+                                }
+
+                                // 批量应用材质参数
+                                if (propChanged) {
+                                    for (auto e : m_SelectedEntities) {
+                                        if (e.HasComponent<MeshRendererComponent>()) {
+                                            auto currentMat = e.GetComponent<MeshRendererComponent>().MaterialAsset;
+                                            if (currentMat) {
+                                                for (auto& p : currentMat->Properties) {
+                                                    if (p.UniformName == prop.UniformName) {
+                                                        p = prop; // 覆盖整个属性
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                                 
                                 ImGui::NextColumn(); 
@@ -614,14 +711,15 @@ namespace Ayaya {
                         }
                     } 
                     else {
-                        // 材质为空时的兜底逻辑
                         ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "Warning: No Material Assigned!");
                         if (ImGui::Button("Add Default Material", ImVec2(-1.0f, 30.0f))) {
-                            auto templateMat = std::make_shared<Material>();
-                            if (MaterialSerializer::Deserialize(templateMat, "assets/Editor/materials/DefaultPBR.mat")) {
-                                mrc.MaterialAsset = templateMat->Clone();
-                            } else {
-                                mrc.MaterialAsset = std::make_shared<Material>();
+                            for (auto e : m_SelectedEntities) {
+                                auto templateMat = std::make_shared<Material>();
+                                if (MaterialSerializer::Deserialize(templateMat, "assets/Editor/materials/DefaultPBR.mat")) {
+                                    e.GetComponent<MeshRendererComponent>().MaterialAsset = templateMat->Clone();
+                                } else {
+                                    e.GetComponent<MeshRendererComponent>().MaterialAsset = std::make_shared<Material>();
+                                }
                             }
                         }
                     }
@@ -631,43 +729,17 @@ namespace Ayaya {
             }
 
             if (removeComponent) {
-                entity.RemoveComponent<MeshRendererComponent>();
-            }
-        }
-
-        // --- 绘制 Directional Light 组件 ---
-        if (entity.HasComponent<DirectionalLightComponent>()) {
-            if (ImGui::TreeNodeEx((void*)typeid(DirectionalLightComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Directional Light")) {
-                auto& dlc = entity.GetComponent<DirectionalLightComponent>();
-                
-                ImGui::ColorEdit3("Light Color", glm::value_ptr(dlc.Color));
-                ImGui::DragFloat("Ambient Strength", &dlc.AmbientStrength, 0.01f, 0.0f, 1.0f);
-                
-                ImGui::TreePop();
-            }
-        }
-
-        // --- 绘制 Directional Light 组件 ---
-        if (entity.HasComponent<PointLightComponent>()) {
-            if (ImGui::TreeNodeEx((void*)typeid(PointLightComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Point Light")) {
-                auto& dlc = entity.GetComponent<PointLightComponent>();
-                
-                ImGui::ColorEdit3("Color", glm::value_ptr(dlc.Color));
-                // 使用拖拽条修改灯光强度，考虑到 PBR 能量很高，最大值可以给到成千上万
-                ImGui::DragFloat("Intensity", &dlc.Intensity, 1.0f, 0.0f, 10000.0f, "%.2f");
-                
-                ImGui::TreePop();
+                for (auto e : m_SelectedEntities) e.RemoveComponent<MeshRendererComponent>();
             }
         }
 
         // ==========================================
-        // “添加组件” 按钮与下拉菜单
+        // “添加组件” 按钮 (基于第一个实体判定，给所有实体添加)
         // ==========================================
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
 
-        // 按钮居中魔法
         ImVec2 contentRegionAvailable = ImGui::GetContentRegionAvail();
         ImGui::SetCursorPosX(contentRegionAvailable.x * 0.5f - 60.0f);
         
@@ -676,54 +748,43 @@ namespace Ayaya {
         }
 
         if (ImGui::BeginPopup("AddComponentPopup")) {
-            // 如果没有相机组件，才显示添加相机
-            if (!entity.HasComponent<CameraComponent>()) {
+            if (!referenceEntity.HasComponent<CameraComponent>()) {
                 if (ImGui::MenuItem("Camera")) {
-                    entity.AddComponent<CameraComponent>();
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<CameraComponent>()) e.AddComponent<CameraComponent>();
                     ImGui::CloseCurrentPopup();
                 }
             }
-            // 如果没有 MeshRenderer，才显示添加 MeshRenderer
-            if (!entity.HasComponent<MeshRendererComponent>()) {
+            if (!referenceEntity.HasComponent<MeshRendererComponent>()) {
                 if (ImGui::MenuItem("Mesh Renderer")) {
-                auto& mrc = entity.AddComponent<MeshRendererComponent>();
-                
-                // ==========================================
-                // 核心：读取编辑器内置模板，并分配克隆体！
-                // ==========================================
-                auto templateMat = std::make_shared<Material>();
-                bool success = MaterialSerializer::Deserialize(templateMat, "assets/Editor/materials/DefaultPBR.mat");
-                
-                if (success) {
-                    mrc.MaterialAsset = templateMat->Clone(); // Clone() 会自动清空 AssetPath
-                } else {
-                    AYAYA_CORE_WARN("Failed to load Editor DefaultPBR.mat");
-                    mrc.MaterialAsset = std::make_shared<Material>();
+                    for (auto e : m_SelectedEntities) {
+                        if (!e.HasComponent<MeshRendererComponent>()) {
+                            auto& mrc = e.AddComponent<MeshRendererComponent>();
+                            auto templateMat = std::make_shared<Material>();
+                            if (MaterialSerializer::Deserialize(templateMat, "assets/Editor/materials/DefaultPBR.mat")) {
+                                mrc.MaterialAsset = templateMat->Clone();
+                            } else {
+                                mrc.MaterialAsset = std::make_shared<Material>();
+                            }
+                        }
+                    }
+                    ImGui::CloseCurrentPopup();
                 }
-                
-                ImGui::CloseCurrentPopup();
             }
-            }
-            // 之前的 SpriteRenderer 也可以留着做 2D 用
-            if (!entity.HasComponent<SpriteRendererComponent>()) {
+            if (!referenceEntity.HasComponent<SpriteRendererComponent>()) {
                 if (ImGui::MenuItem("Sprite Renderer")) {
-                    entity.AddComponent<SpriteRendererComponent>();
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<SpriteRendererComponent>()) e.AddComponent<SpriteRendererComponent>();
                     ImGui::CloseCurrentPopup();
                 }
             }
-            // 如果没有平行光，才显示添加平行光
-            if (!entity.HasComponent<DirectionalLightComponent>()) {
+            if (!referenceEntity.HasComponent<DirectionalLightComponent>()) {
                 if (ImGui::MenuItem("Directional Light")) {
-                    entity.AddComponent<DirectionalLightComponent>();
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<DirectionalLightComponent>()) e.AddComponent<DirectionalLightComponent>();
                     ImGui::CloseCurrentPopup();
                 }
             }
-            // ==========================================
-            // 新增：注册 Point Light 组件到添加菜单
-            // ==========================================
-            if (!m_SelectionContext.HasComponent<PointLightComponent>()) {
+            if (!referenceEntity.HasComponent<PointLightComponent>()) {
                 if (ImGui::MenuItem("Point Light")) {
-                    m_SelectionContext.AddComponent<PointLightComponent>();
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<PointLightComponent>()) e.AddComponent<PointLightComponent>();
                     ImGui::CloseCurrentPopup();
                 }
             }

@@ -2,6 +2,7 @@
 
 #include "Engine/Scene/Scene.hpp"
 #include "Engine/Scene/Entity.hpp"
+#include "Renderer/Framebuffer.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 
@@ -11,6 +12,13 @@ namespace Ayaya {
     public:
         // 初始化管线（加载必备 Shader 和默认材质等）
         static void Init();
+
+        // --- 新增：视口尺寸改变时通知管线重建 FBO ---
+        static void OnWindowResize(uint32_t width, uint32_t height);
+        // --- 新增：给 Editor 提供开关 MSAA 的能力 ---
+        static void SetMSAASamples(uint32_t samples);
+        // --- 新增：获取最终处理完毕的屏幕贴图 ---
+        static uint32_t GetFinalColorAttachmentRendererID();
 
         // 开始一帧的渲染准备
         static void BeginScene(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, const glm::vec3& cameraPosition);

@@ -86,6 +86,14 @@ namespace Ayaya {
         struct_LightData LightData;
 
         // ==========================================
+        // 新增：内部渲染目标与后期资源
+        // ==========================================
+        std::shared_ptr<Framebuffer> GeometryFBO;    // 装载 HDR 和 MSAA 场景
+        std::shared_ptr<Framebuffer> PostProcessFBO; // 最终 LDR 画布
+        std::shared_ptr<Shader> PostProcessShader;   // 后期 Shader
+        uint32_t EmptyVAO;                           // 用于全屏绘制的空 VAO
+
+        // ==========================================
         // 新增：全局渲染队列
         // ==========================================
         std::vector<RenderCommandData> OpaqueDrawList;
@@ -144,6 +152,41 @@ namespace Ayaya {
         // 新增：初始化 LightData UBO，绑定到 1 号槽位
         s_Data.LightUniformBuffer = UniformBuffer::Create(sizeof(struct_LightData), 1);
         s_Data.DefaultShader->BindUniformBlock("LightData", 1);
+
+        // ==========================================
+        // 7. 初始化内部 FBO 和 后期 Pass 资源
+        // ==========================================
+        FramebufferSpecification geoSpec;
+        geoSpec.Format = FramebufferFormat::RGBA16F; // 核心：开启 HDR 格式！
+        geoSpec.Samples = 4;                         // 默认 4x MSAA
+        geoSpec.Width = 1280; geoSpec.Height = 720;
+        s_Data.GeometryFBO = Framebuffer::Create(geoSpec);
+
+        FramebufferSpecification postSpec;
+        postSpec.Format = FramebufferFormat::RGBA8;  // 后期输出为普通色彩给屏幕
+        postSpec.Samples = 1;                        // 后期缓冲不需要 MSAA
+        postSpec.Width = 1280; postSpec.Height = 720;
+        s_Data.PostProcessFBO = Framebuffer::Create(postSpec);
+
+        s_Data.PostProcessShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/postprocess.frag");
+
+        // 创建一个空 VAO，供 gl_VertexID 魔法使用
+        glGenVertexArrays(1, &s_Data.EmptyVAO);
+    }
+
+    void SceneRenderer::OnWindowResize(uint32_t width, uint32_t height) {
+        s_Data.GeometryFBO->Resize(width, height);
+        s_Data.PostProcessFBO->Resize(width, height);
+    }
+
+    void SceneRenderer::SetMSAASamples(uint32_t samples) {
+        auto spec = s_Data.GeometryFBO->GetSpecification();
+        spec.Samples = samples;
+        s_Data.GeometryFBO = Framebuffer::Create(spec); // 直接重建
+    }
+
+    uint32_t SceneRenderer::GetFinalColorAttachmentRendererID() {
+        return s_Data.PostProcessFBO->GetColorAttachmentRendererID();
     }
 
    void SceneRenderer::BeginScene(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, const glm::vec3& cameraPosition) {
@@ -160,6 +203,14 @@ namespace Ayaya {
         s_Data.CameraData.CameraPosition = s_Data.CameraPosition;
         s_Data.CameraUniformBuffer->SetData(&s_Data.CameraData, sizeof(struct_CameraData));
 
+        // ==========================================
+        // 接管 FBO：在这里清理画布
+        // ==========================================
+        s_Data.GeometryFBO->Bind();
+        RenderCommand::SetClearColor({ 0.0f, 0.0f, 0.0f, 0.0f });
+        RenderCommand::Clear();
+        glClear(GL_STENCIL_BUFFER_BIT);
+
         Renderer::BeginScene(s_Data.ViewProjectionMatrix);
     }
 
@@ -175,33 +226,43 @@ namespace Ayaya {
         // 清理旧数据
         memset(&s_Data.LightData, 0, sizeof(struct_LightData));
         
-        // 1. 收集平行光 (保留之前的逻辑，存入 DirLightDir 和 DirLightColor 的 .xyz 中)
+        // 1. 收集平行光 (直接使用 Lux)
+        bool hasDirLight = false;
         auto dirLightGroup = scene->Reg().view<TransformComponent, DirectionalLightComponent>();
         for (auto entityID : dirLightGroup) {
             auto [transform, dlc] = dirLightGroup.get<TransformComponent, DirectionalLightComponent>(entityID);
             glm::quat orientation = glm::quat(transform.Rotation);
-            s_Data.LightData.DirLightDir = glm::vec4(glm::rotate(orientation, glm::vec3(0.0f, 0.0f, -1.0f)), 0.0f);
-            s_Data.LightData.DirLightColor = glm::vec4(dlc.Color * 3.0f, 0.0f);
+            glm::vec3 dir = glm::rotate(orientation, glm::vec3(0.0f, 0.0f, -1.0f));
+            
+            // ==========================================
+            // 核心修复：将 UI 上的 AmbientStrength 打包进 w 通道
+            // ==========================================
+            s_Data.LightData.DirLightDir = glm::vec4(dir, dlc.AmbientStrength);
+            s_Data.LightData.DirLightColor = glm::vec4(dlc.Color * dlc.Illuminance, 0.0f);
+            hasDirLight = true;
             break; 
+        }
+
+        // 如果场景里没有平行光（比如室内棚拍），给一个微弱的默认环境光
+        if (!hasDirLight) {
+            s_Data.LightData.DirLightDir = glm::vec4(0.0f, -1.0f, 0.0f, 0.03f);
         }
 
         // 2. 收集点光源
         int pointLightIndex = 0;
         auto pointLightGroup = scene->Reg().view<TransformComponent, PointLightComponent>();
         for (auto entityID : pointLightGroup) {
-            if (pointLightIndex >= 4) break; // 最多支持 4 盏
-
+            if (pointLightIndex >= 4) break; 
             auto [transform, plc] = pointLightGroup.get<TransformComponent, PointLightComponent>(entityID);
-            
             s_Data.LightData.PointLights[pointLightIndex].Position = glm::vec4(transform.Translation, 1.0f);
-            s_Data.LightData.PointLights[pointLightIndex].Color = glm::vec4(plc.Color * plc.Intensity, 1.0f);
+            
+            // 物理换算：流明 (Lumens) 转换为 坎德拉 (Candelas)，供 shader 做平方反比衰减
+            float candelas = plc.LuminousPower / (4.0f * glm::pi<float>());
+            s_Data.LightData.PointLights[pointLightIndex].Color = glm::vec4(plc.Color * candelas, 1.0f);
             
             pointLightIndex++;
         }
         s_Data.LightData.PointLightCount = pointLightIndex;
-
-        // AYAYA_CORE_INFO("pointLightIndex: {0}", pointLightIndex);
-        // AYAYA_CORE_INFO("Color: ({0}, {1}, {2})", s_Data.LightData.PointLights[0].Color.x, s_Data.LightData.PointLights[0].Color.y, s_Data.LightData.PointLights[0].Color.z);
 
         // 推入 GPU 显存！
         s_Data.LightUniformBuffer->SetData(&s_Data.LightData, sizeof(struct_LightData));
@@ -373,38 +434,96 @@ namespace Ayaya {
 
             glDepthFunc(GL_LESS);
         }
+
+        // ==========================================
+        // 接下来进入流派 A：严格的管线分离！
+        // ==========================================
+        // 1. 解绑 HDR 缓冲，触发硬件 MSAA 颜色降采样
+        s_Data.GeometryFBO->Unbind();
+
+        // 2. 绑定 LDR 画布
+        s_Data.PostProcessFBO->Bind();
         
-        // ==========================================
-        // Pass 4: Background Grid Pass (渲染无限网格)
-        // ==========================================
+        // 3. 在 LDR 画布上填涂编辑器的 UI 背景色 (深灰色)
+        // 这一步不会受到 Tone Mapping 的任何影响！
+        RenderCommand::SetClearColor({ 0.12f, 0.12f, 0.14f, 1.0f });
+        RenderCommand::Clear(); 
+
+        // ------------------------------------------
+        // Pass 4: Post-Processing (色调映射)
+        // ------------------------------------------
+
+        // 提取相机的 EV100
+        float currentEV100 = 14.5f; // 默认值
+        auto cameraView = scene->Reg().view<CameraComponent>();
+        for (auto entityID : cameraView) {
+            auto& cc = cameraView.get<CameraComponent>(entityID);
+            if (cc.Primary) {
+                currentEV100 = cc.EV100;
+                break;
+            }
+        }
+
+        glDisable(GL_DEPTH_TEST); 
+        // 开启混合！让 HDR 画布里 Alpha=0 的地方，透出底部的深灰色背景
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        s_Data.PostProcessShader->Bind();
+        s_Data.PostProcessShader->SetInt("u_ScreenTexture", 0);
+        float physicalExposure = 1.0f / (1.2f * std::exp2(currentEV100));
+        s_Data.PostProcessShader->SetFloat("u_Exposure", physicalExposure);
+
+        uint32_t hdrTexture = s_Data.GeometryFBO->GetColorAttachmentRendererID();
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, hdrTexture);
+
+        glBindVertexArray(s_Data.EmptyVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        
+        glDisable(GL_BLEND); // 画完后立即关闭混合
+
+        // ------------------------------------------
+        // Pass 5: 核心魔法 - Depth & Stencil Blit (拷贝深度与模板)
+        // ------------------------------------------
+        // 我们利用底层 OpenGL API，将 MSAA 缓冲中的深度和模板，强行注入给当前的 LDR 画布！
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, s_Data.GeometryFBO->GetRendererID());
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_Data.PostProcessFBO->GetRendererID());
+
+        uint32_t width = s_Data.PostProcessFBO->GetSpecification().Width;
+        uint32_t height = s_Data.PostProcessFBO->GetSpecification().Height;
+
+        glBlitFramebuffer(0, 0, width, height,
+                          0, 0, width, height,
+                          GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT, GL_NEAREST);
+
+        // 拷贝完成后，重新确立 LDR 画布的绘制地位
+        glBindFramebuffer(GL_FRAMEBUFFER, s_Data.PostProcessFBO->GetRendererID());
+        glEnable(GL_DEPTH_TEST);
+
+        // ------------------------------------------
+        // Pass 6: Background Grid Pass (完美遮挡的网格)
+        // ------------------------------------------
         if (showGrid) {
-            // 1. 开启混合
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             
-            // 2. 核心防御：严格规范深度测试状态！
-            glEnable(GL_DEPTH_TEST);
-            glDepthFunc(GL_LESS);  // 确保恢复到正常的"近挡远"逻辑（防止被天空盒的 GL_LEQUAL 污染）
-            glDepthMask(GL_FALSE); // 网格自身不写入深度，但严格接受模型的深度遮挡！
-
-            // 3. 核心防御：关闭模板测试（防止被上一层 Hover 描边的状态影响）
+            glDepthFunc(GL_LESS);  
+            glDepthMask(GL_FALSE); 
             glDisable(GL_STENCIL_TEST); 
 
-            // 4. 渲染网格
             s_Data.GridShader->Bind();
-            // 注意这里 Y 轴缩放为 0，所以网格严格位于 Y=0 的地平面
             glm::mat4 gridTransform = glm::scale(glm::mat4(1.0f), glm::vec3(100.0f, 0.0f, 100.0f));
             Renderer::Submit(s_Data.GridShader, s_Data.GridMesh->GetVertexArray(), gridTransform);
             
-            // 5. 乖乖还原状态，保持环境整洁
             glDepthMask(GL_TRUE); 
             glDisable(GL_BLEND); 
             glEnable(GL_STENCIL_TEST); 
         }
 
-        // ==========================================
-        // Pass 5: Outline Post-Pass (渲染描边高亮)
-        // ==========================================
+        // ------------------------------------------
+        // Pass 7: Outline Post-Pass (完美的模板描边)
+        // ------------------------------------------
         if (hoveredEntity && hoveredEntity.HasComponent<MeshRendererComponent>() && hoveredEntity.IsActiveInHierarchy()) {
             glEnable(GL_STENCIL_TEST);
             glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
@@ -412,6 +531,7 @@ namespace Ayaya {
             glDisable(GL_DEPTH_TEST); 
 
             s_Data.OutlineShader->Bind();
+            // 因为已经在 LDR 环境下，这里的橙色就是所见即所得的 #FFA600，绝不会变形！
             s_Data.OutlineShader->SetFloat3("u_Color", glm::vec3(1.0f, 0.65f, 0.0f)); 
             
             glm::mat4 baseTransform = hoveredEntity.GetWorldTransform();
@@ -429,5 +549,8 @@ namespace Ayaya {
             glEnable(GL_DEPTH_TEST);
             glDisable(GL_STENCIL_TEST);
         }
+
+        // 渲染全部完成，解绑最终的 LDR 画布交给 EditorLayer 去显示！
+        s_Data.PostProcessFBO->Unbind();
     }
 }

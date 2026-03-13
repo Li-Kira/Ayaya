@@ -116,17 +116,17 @@ void main() {
     // vec3 N = normalize(v_TBN[2]); 
     vec3 N = normalize(v_Normal);
 
-    // // 2. 如果开启了法线贴图，用贴图覆盖法线！
-    // if (u_UseNormalMap) {
-    //     // 从贴图采样法线信息，默认是 [0, 1] 范围
-    //     vec3 normalMap = texture(u_NormalMap, v_TexCoord).rgb;
+    // 2. 如果开启了法线贴图，用贴图覆盖法线！
+    if (u_UseNormalMap) {
+        // 从贴图采样法线信息，默认是 [0, 1] 范围
+        vec3 normalMap = texture(u_NormalMap, v_TexCoord).rgb;
         
-    //     // 将颜色值 [0, 1] 映射到方向向量 [-1, 1]
-    //     normalMap = normalMap * 2.0 - 1.0; 
+        // 将颜色值 [0, 1] 映射到方向向量 [-1, 1]
+        normalMap = normalMap * 2.0 - 1.0; 
         
-    //     // 利用 TBN 矩阵，将切线空间的法线转换到世界空间！
-    //     N = normalize(v_TBN * normalMap); 
-    // }
+        // 利用 TBN 矩阵，将切线空间的法线转换到世界空间！
+        N = normalize(v_TBN * normalMap); 
+    }
 
     vec3 V = normalize(u_CameraPos - v_FragPos);
 
@@ -197,13 +197,17 @@ void main() {
     // ==========================================
     // 环境光与色调映射 (Tone Mapping)
     // ==========================================
-    vec3 ambient = vec3(0.03) * albedo * ao; // 暂时用极简环境光替代 IBL
+    // vec3 ambient = vec3(0.03) * albedo * ao; // 暂时用极简环境光替代 IBL
+    // 动态读取 C++ 传过来的物理天光强度
+    // vec3 ambient = vec3(0.03) * albedo * ao;
+    float ambientStrength = u_DirLightDir.w;
+    vec3 ambient = vec3(ambientStrength) * albedo * ao;
     vec3 color = ambient + Lo;
 
-    // HDR Reinhard 色调映射
-    color = color / (color + vec3(1.0));
-    // Gamma 校正
-    color = pow(color, vec3(1.0/2.2)); 
+    // // HDR Reinhard 色调映射
+    // color = color / (color + vec3(1.0));
+    // // Gamma 校正
+    // color = pow(color, vec3(1.0/2.2)); 
 
     FragColor = vec4(color, 1.0);
 }

@@ -1,0 +1,59 @@
+MaterialName: Sphere_M83_R5_Mat
+ShaderName: PBR
+Properties:
+  - UniformName: u_Albedo
+    DisplayName: Albedo Color
+    Type: 4
+    Vec3Value: [0.5, 0, 0]
+  - UniformName: u_UseAlbedoMap
+    DisplayName: Enable Albedo Map
+    Type: 2
+    BoolValue: false
+  - UniformName: u_AlbedoMap
+    DisplayName: Albedo Texture
+    Type: 8
+    TexturePath: ""
+  - UniformName: u_UseNormalMap
+    DisplayName: Enable Normal Map
+    Type: 2
+    BoolValue: false
+  - UniformName: u_NormalMap
+    DisplayName: Normal Map
+    Type: 8
+    TexturePath: ""
+  - UniformName: u_Metallic
+    DisplayName: Metallic
+    Type: 0
+    FloatValue: 0.8333333
+  - UniformName: u_UseMetallicMap
+    DisplayName: Enable Metallic Map
+    Type: 2
+    BoolValue: false
+  - UniformName: u_MetallicMap
+    DisplayName: Metallic Texture
+    Type: 8
+    TexturePath: ""
+  - UniformName: u_Roughness
+    DisplayName: Roughness
+    Type: 0
+    FloatValue: 0.05
+  - UniformName: u_UseRoughnessMap
+    DisplayName: Enable Roughness Map
+    Type: 2
+    BoolValue: false
+  - UniformName: u_RoughnessMap
+    DisplayName: Roughness Texture
+    Type: 8
+    TexturePath: ""
+  - UniformName: u_AO
+    DisplayName: Ambient Occlusion
+    Type: 0
+    FloatValue: 1
+  - UniformName: u_UseAOMap
+    DisplayName: Enable AO Map
+    Type: 2
+    BoolValue: false
+  - UniformName: u_AOMap
+    DisplayName: AO Texture
+    Type: 8
+    TexturePath: ""

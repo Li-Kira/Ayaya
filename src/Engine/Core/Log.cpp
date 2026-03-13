@@ -15,8 +15,6 @@ namespace Ayaya {
 
         s_ClientLogger = spdlog::stdout_color_mt("APP");
         s_ClientLogger->set_level(spdlog::level::trace);
-        
-        AYAYA_CORE_INFO("Log System Initialized!");
     }
 
 }

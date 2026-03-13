@@ -1,0 +1,736 @@
+Scene: Untitled
+EditorState:
+  ShowGrid: false
+  ShowSkybox: false
+  EnableMSAA: true
+  CameraPosition: [0.29844487, 1.8392124, 23.390566]
+  CameraDistance: 0
+  CameraPitch: -0.06720891
+  CameraYaw: 0.05145497
+  CameraFocalPoint: [0, 0, 0]
+Entities:
+  - Entity: 5948316899377550005
+    TagComponent:
+      Tag: Main Camera
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 5]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    CameraComponent:
+      Primary: true
+      FixedAspectRatio: false
+      EV100: 0
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 4673506207229515908
+    TagComponent:
+      Tag: Point Light 0
+      IsActive: true
+    TransformComponent:
+      Translation: [-10, 10, 10]
+      Rotation: [0, 0, 0]
+      Scale: [0.5, 0.5, 0.5]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/NewMaterial (1).mat
+    PointLightComponent:
+      Color: [1, 1, 1]
+      LuminousPower: 1500
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 18134488219967424044
+    TagComponent:
+      Tag: Point Light 1
+      IsActive: true
+    TransformComponent:
+      Translation: [10, 10, 10]
+      Rotation: [0, 0, 0]
+      Scale: [0.5, 0.5, 0.5]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/NewMaterial (2).mat
+    PointLightComponent:
+      Color: [1, 1, 1]
+      LuminousPower: 1500
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 16967919021197220176
+    TagComponent:
+      Tag: Point Light 2
+      IsActive: true
+    TransformComponent:
+      Translation: [-10, -10, 10]
+      Rotation: [0, 0, 0]
+      Scale: [0.5, 0.5, 0.5]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/NewMaterial (3).mat
+    PointLightComponent:
+      Color: [1, 1, 1]
+      LuminousPower: 1500
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 7776252869593817873
+    TagComponent:
+      Tag: Point Light 3
+      IsActive: true
+    TransformComponent:
+      Translation: [10, -10, 10]
+      Rotation: [0, 0, 0]
+      Scale: [0.5, 0.5, 0.5]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/NewMaterial (4).mat
+    PointLightComponent:
+      Color: [1, 1, 1]
+      LuminousPower: 1500
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 454681315911136007
+    TagComponent:
+      Tag: PBR Sphere Grid
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 14180390231928814554
+    TagComponent:
+      Tag: Sphere_M0_R5
+      IsActive: true
+    TransformComponent:
+      Translation: [-7.5, -7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M0_R5_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 11304064241039315965
+    TagComponent:
+      Tag: Sphere_M0_R16
+      IsActive: true
+    TransformComponent:
+      Translation: [-5, -7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M0_R16_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 10103244382630039209
+    TagComponent:
+      Tag: Sphere_M0_R33
+      IsActive: true
+    TransformComponent:
+      Translation: [-2.5, -7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M0_R33_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 16702459296978883351
+    TagComponent:
+      Tag: Sphere_M0_R50
+      IsActive: true
+    TransformComponent:
+      Translation: [0, -7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M0_R50_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 2467157189256502405
+    TagComponent:
+      Tag: Sphere_M0_R66
+      IsActive: true
+    TransformComponent:
+      Translation: [2.5, -7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M0_R66_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 17741071141692052095
+    TagComponent:
+      Tag: Sphere_M0_R83
+      IsActive: true
+    TransformComponent:
+      Translation: [5, -7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M0_R83_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 17740591265077510907
+    TagComponent:
+      Tag: Sphere_M0_R100
+      IsActive: true
+    TransformComponent:
+      Translation: [7.5, -7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M0_R100_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 10464699468366235916
+    TagComponent:
+      Tag: Sphere_M16_R5
+      IsActive: true
+    TransformComponent:
+      Translation: [-7.5, -5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M16_R5_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 4080826509765440307
+    TagComponent:
+      Tag: Sphere_M16_R16
+      IsActive: true
+    TransformComponent:
+      Translation: [-5, -5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M16_R16_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 9724380828745411508
+    TagComponent:
+      Tag: Sphere_M16_R33
+      IsActive: true
+    TransformComponent:
+      Translation: [-2.5, -5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M16_R33_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 10783664929510380957
+    TagComponent:
+      Tag: Sphere_M16_R50
+      IsActive: true
+    TransformComponent:
+      Translation: [0, -5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M16_R50_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 6236941920131156724
+    TagComponent:
+      Tag: Sphere_M16_R66
+      IsActive: true
+    TransformComponent:
+      Translation: [2.5, -5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M16_R66_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 17008038194438138920
+    TagComponent:
+      Tag: Sphere_M16_R83
+      IsActive: true
+    TransformComponent:
+      Translation: [5, -5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M16_R83_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 9904271597798751397
+    TagComponent:
+      Tag: Sphere_M16_R100
+      IsActive: true
+    TransformComponent:
+      Translation: [7.5, -5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M16_R100_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 12454745608770059806
+    TagComponent:
+      Tag: Sphere_M33_R5
+      IsActive: true
+    TransformComponent:
+      Translation: [-7.5, -2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M33_R5_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 18401491765531654327
+    TagComponent:
+      Tag: Sphere_M33_R16
+      IsActive: true
+    TransformComponent:
+      Translation: [-5, -2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M33_R16_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 9348027648776900782
+    TagComponent:
+      Tag: Sphere_M33_R33
+      IsActive: true
+    TransformComponent:
+      Translation: [-2.5, -2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M33_R33_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 17751290344493326145
+    TagComponent:
+      Tag: Sphere_M33_R50
+      IsActive: true
+    TransformComponent:
+      Translation: [0, -2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M33_R50_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 2196336093993331587
+    TagComponent:
+      Tag: Sphere_M33_R66
+      IsActive: true
+    TransformComponent:
+      Translation: [2.5, -2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M33_R66_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 12524165893417908058
+    TagComponent:
+      Tag: Sphere_M33_R83
+      IsActive: true
+    TransformComponent:
+      Translation: [5, -2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M33_R83_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 14888776582807275225
+    TagComponent:
+      Tag: Sphere_M33_R100
+      IsActive: true
+    TransformComponent:
+      Translation: [7.5, -2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M33_R100_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 7712548751370405178
+    TagComponent:
+      Tag: Sphere_M50_R5
+      IsActive: true
+    TransformComponent:
+      Translation: [-7.5, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M50_R5_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 17062175257226599934
+    TagComponent:
+      Tag: Sphere_M50_R16
+      IsActive: true
+    TransformComponent:
+      Translation: [-5, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M50_R16_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 5630167432543382369
+    TagComponent:
+      Tag: Sphere_M50_R33
+      IsActive: true
+    TransformComponent:
+      Translation: [-2.5, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M50_R33_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 10031530543579594372
+    TagComponent:
+      Tag: Sphere_M50_R50
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M50_R50_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 13696111789324161207
+    TagComponent:
+      Tag: Sphere_M50_R66
+      IsActive: true
+    TransformComponent:
+      Translation: [2.5, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M50_R66_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 4092345181773180402
+    TagComponent:
+      Tag: Sphere_M50_R83
+      IsActive: true
+    TransformComponent:
+      Translation: [5, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M50_R83_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 12139174842283467893
+    TagComponent:
+      Tag: Sphere_M50_R100
+      IsActive: true
+    TransformComponent:
+      Translation: [7.5, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M50_R100_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 554932139284313008
+    TagComponent:
+      Tag: Sphere_M66_R5
+      IsActive: true
+    TransformComponent:
+      Translation: [-7.5, 2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M66_R5_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 641220254051612622
+    TagComponent:
+      Tag: Sphere_M66_R16
+      IsActive: true
+    TransformComponent:
+      Translation: [-5, 2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M66_R16_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 16845992191887604492
+    TagComponent:
+      Tag: Sphere_M66_R33
+      IsActive: true
+    TransformComponent:
+      Translation: [-2.5, 2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M66_R33_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 2429917273015710460
+    TagComponent:
+      Tag: Sphere_M66_R50
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M66_R50_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 3633832020812006239
+    TagComponent:
+      Tag: Sphere_M66_R66
+      IsActive: true
+    TransformComponent:
+      Translation: [2.5, 2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M66_R66_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 7722587756968172135
+    TagComponent:
+      Tag: Sphere_M66_R83
+      IsActive: true
+    TransformComponent:
+      Translation: [5, 2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M66_R83_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 18121561528972126915
+    TagComponent:
+      Tag: Sphere_M66_R100
+      IsActive: true
+    TransformComponent:
+      Translation: [7.5, 2.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M66_R100_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 5557376298992102553
+    TagComponent:
+      Tag: Sphere_M83_R5
+      IsActive: true
+    TransformComponent:
+      Translation: [-7.5, 5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M83_R5_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 14232831882245990189
+    TagComponent:
+      Tag: Sphere_M83_R16
+      IsActive: true
+    TransformComponent:
+      Translation: [-5, 5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M83_R16_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 3565561095305945668
+    TagComponent:
+      Tag: Sphere_M83_R33
+      IsActive: true
+    TransformComponent:
+      Translation: [-2.5, 5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M83_R33_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 596952473056353486
+    TagComponent:
+      Tag: Sphere_M83_R50
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M83_R50_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 12116363593392979293
+    TagComponent:
+      Tag: Sphere_M83_R66
+      IsActive: true
+    TransformComponent:
+      Translation: [2.5, 5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M83_R66_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 10071468536417815098
+    TagComponent:
+      Tag: Sphere_M83_R83
+      IsActive: true
+    TransformComponent:
+      Translation: [5, 5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M83_R83_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 15831100693101426757
+    TagComponent:
+      Tag: Sphere_M83_R100
+      IsActive: true
+    TransformComponent:
+      Translation: [7.5, 5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M83_R100_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 10908765520439904052
+    TagComponent:
+      Tag: Sphere_M100_R5
+      IsActive: true
+    TransformComponent:
+      Translation: [-7.5, 7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M100_R5_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 16759778860054133429
+    TagComponent:
+      Tag: Sphere_M100_R16
+      IsActive: true
+    TransformComponent:
+      Translation: [-5, 7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M100_R16_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 15224640695126231657
+    TagComponent:
+      Tag: Sphere_M100_R33
+      IsActive: true
+    TransformComponent:
+      Translation: [-2.5, 7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M100_R33_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 5150654801832263055
+    TagComponent:
+      Tag: Sphere_M100_R50
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M100_R50_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 15593721669897890867
+    TagComponent:
+      Tag: Sphere_M100_R66
+      IsActive: true
+    TransformComponent:
+      Translation: [2.5, 7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M100_R66_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 7805305103125184721
+    TagComponent:
+      Tag: Sphere_M100_R83
+      IsActive: true
+    TransformComponent:
+      Translation: [5, 7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M100_R83_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 3556057618848213169
+    TagComponent:
+      Tag: Sphere_M100_R100
+      IsActive: true
+    TransformComponent:
+      Translation: [7.5, 7.5, 0]
+      Rotation: [0, -0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M100_R100_Mat.mat
+    RelationshipComponent:
+      Parent: 454681315911136007

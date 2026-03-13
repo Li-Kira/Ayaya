@@ -7,11 +7,12 @@ in vec3 v_TexCoords;
 uniform samplerCube u_Skybox; 
 
 void main() {    
-    // 从 Cubemap 中采样环境贴图 (如果有 HDR 可以在这里做个 Tone Mapping)
     vec4 envColor = texture(u_Skybox, v_TexCoords);
     
     // 简单的 Gamma 校正 (假设输入的不是 sRGB 贴图)
     envColor.rgb = pow(envColor.rgb, vec3(1.0/2.2)); 
     
-    FragColor = envColor;
+    // 赋予天空盒等同于物理天空的亮度 (约 20000 坎德拉/平方米)
+    // 这样它才能在 EV100 = 14.5 的极限曝光压缩下，依然保持正常的明亮蔚蓝！
+    FragColor = vec4(envColor.rgb * 20000.0, 1.0);
 }

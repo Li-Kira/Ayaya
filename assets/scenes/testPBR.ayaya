@@ -3,10 +3,10 @@ EditorState:
   ShowGrid: true
   ShowSkybox: true
   EnableMSAA: true
-  CameraPosition: [0.25657946, 1.0622761, 6.88317]
+  CameraPosition: [-2.6074347, 0.85549754, 3.4354234]
   CameraDistance: 10
-  CameraPitch: -0.06946887
-  CameraYaw: -0.012796993
+  CameraPitch: -0.12617609
+  CameraYaw: -0.56830066
   CameraFocalPoint: [0, 0, 0]
 Entities:
   - Entity: 9207422813788464392
@@ -20,6 +20,7 @@ Entities:
     CameraComponent:
       Primary: true
       FixedAspectRatio: false
+      EV100: 14.5
     RelationshipComponent:
       Parent: 0
   - Entity: 7648224349506625606
@@ -32,7 +33,8 @@ Entities:
       Scale: [1, 1, 1]
     DirectionalLightComponent:
       Color: [1, 1, 1]
-      AmbientStrength: 0.3
+      Illuminance: 100000
+      AmbientStrength: 1500
     RelationshipComponent:
       Parent: 0
   - Entity: 941355425607113630

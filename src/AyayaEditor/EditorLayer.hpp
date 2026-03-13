@@ -6,7 +6,6 @@
 #include "Panels/ContentBrowserPanel.hpp"
 #include <Renderer/Renderer.hpp>
 #include <Renderer/Texture.hpp>
-#include <Renderer/Framebuffer.hpp>
 // --- 新增：引入场景序列化器 ---
 #include "Scene/SceneSerializer.hpp"
 #include "Renderer/MaterialSerializer.hpp"
@@ -47,7 +46,6 @@ namespace Ayaya {
 
     private:
         EditorCamera m_EditorCamera;
-        std::shared_ptr<Framebuffer> m_Framebuffer; 
         std::shared_ptr<Scene> m_ActiveScene;
         std::string m_CurrentScenePath = std::string();
 
