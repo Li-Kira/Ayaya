@@ -179,7 +179,8 @@ namespace Ayaya {
         bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, "%s", displayString.c_str());
 
         // ==========================================
-        // 核心修改：支持 Shift + 左键范围选择
+        // 支持 Shift + 左键范围选择
+        // 支持 Ctrl + 左键进行多选
         // ==========================================
         if (ImGui::IsItemClicked()) {
             if (ImGui::GetIO().KeyShift) {
@@ -191,17 +192,6 @@ namespace Ayaya {
             } else {
                 SetSelectedEntity(entity);     // 普通点击：单选
                 m_LastClickedEntity = entity;  // 记录为最新的锚点
-            }
-        }
-        
-        // ==========================================
-        // 2. 核心交互：支持 Ctrl + 左键进行多选
-        // ==========================================
-        if (ImGui::IsItemClicked()) {
-            if (ImGui::GetIO().KeyCtrl) {
-                ToggleEntitySelection(entity); // 按住 Ctrl：追加/取消选择
-            } else {
-                SetSelectedEntity(entity);     // 普通点击：单选
             }
         }
 

@@ -1,6 +1,6 @@
 # Ayaya
 
-Ayaya: a game engine
+Ayaya: a cross-platform game engine
 
 ![](assets/other/Snipaste_2026-03-10_11-24-08.png)
 

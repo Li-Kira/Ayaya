@@ -125,7 +125,7 @@ namespace Ayaya {
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0.0f));
 
         ImGui::SetNextItemWidth(sliderWidth);
-        ImGui::SliderFloat("##IconSize", &m_ThumbnailSize, 32.0f, 128.0f, ""); // 空字符串隐藏数字
+        ImGui::SliderFloat("##IconSize", &m_ThumbnailSize, 32.0f, 256.0f, ""); // 空字符串隐藏数字
 
         // 记得弹出样式，防止污染其他 UI 组件
         ImGui::PopStyleVar(); 
