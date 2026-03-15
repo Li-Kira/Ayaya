@@ -119,7 +119,7 @@ namespace Ayaya {
                     if (propNode["TexturePath"]) {
                         prop.TexturePath = propNode["TexturePath"].as<std::string>();
                         if (!prop.TexturePath.empty()) {
-                            prop.TextureHandle = AssetManager::ImportAsset(prop.TexturePath);
+                            prop.TextureHandle = AssetManager::ImportAsset(std::filesystem::path(prop.TexturePath));
                         }
                     }
                 }

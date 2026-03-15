@@ -2,6 +2,7 @@
 #include "Asset.hpp"
 #include <memory>
 #include <unordered_map>
+#include <filesystem>
 
 namespace Ayaya {
 

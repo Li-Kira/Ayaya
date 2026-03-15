@@ -10,6 +10,17 @@ if(APPLE)
     set(CMAKE_MACOSX_RPATH 1)
     set(APPLE_FRAMEWORKS "-framework Cocoa -framework IOKit -framework CoreVideo -framework OpenGL -framework QuartzCore")
     add_definitions(-DGLM_FORCE_DEPTH_ZERO_TO_ONE) 
+elseif(WIN32)
+    # Windows 平台特有设置
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+    
+    # ==========================================
+    # 【核心修复】：强制 MSVC 编译器使用 UTF-8 编码！
+    # 解决 spdlog 的 static_assert 报错和 C4819 中文乱码警告
+    # ==========================================
+    add_compile_options(/utf-8) 
+    
+    set(OPENGL_LIB opengl32) # Windows 自带的 OpenGL 库
 endif()
 
 # 3. 定义路径变量
@@ -85,7 +96,8 @@ target_precompile_headers(Ayaya PRIVATE
 )
 
 # 6. 设置包含路径
-find_path(ASSIMP_INCLUDE_DIR NAMES assimp/Importer.hpp PATHS /opt/homebrew/include /usr/local/include /usr/include)
+# 增加了 ${VENDOR_INCLUDE}，让 Windows 和 Mac 都能在 vendor 目录下找到 Assimp
+find_path(ASSIMP_INCLUDE_DIR NAMES assimp/Importer.hpp PATHS "${VENDOR_INCLUDE}" /opt/homebrew/include /usr/local/include /usr/include)
 
 target_include_directories(Ayaya PUBLIC 
     "${CMAKE_CURRENT_SOURCE_DIR}/src" 
@@ -96,14 +108,23 @@ target_include_directories(Ayaya PUBLIC
     "${STB_DIR}"             # 允许 #include <stb_image.h>
     "${ENTT_DIR}"            # 允许包含 EnTT 头文件
     "${IMGUIZMO_DIR}"        # 允许直接 #include <ImGuizmo.h>
-    "${YAML_CPP_DIR}/include" # <--- 新增：让引擎能找到 <yaml-cpp/yaml.h>
-    ${ASSIMP_INCLUDE_DIR}    # <--- 新增：让引擎能找到 Assimp 的头文件
+    "${YAML_CPP_DIR}/include" # 允许引擎能找到 <yaml-cpp/yaml.h>
+    ${ASSIMP_INCLUDE_DIR}    # 允许引擎能找到 Assimp 的头文件
 )
 
 # 7. 链接第三方库
-find_library(GLFW_LIB NAMES glfw glfw3 PATHS ${VENDOR_LIB} NO_DEFAULT_PATH)
-find_library(ASSIMP_LIB NAMES assimp PATHS /opt/homebrew/lib /usr/local/lib /usr/lib)
-target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${APPLE_FRAMEWORKS} yaml-cpp ${ASSIMP_LIB})
+find_library(GLFW_LIB NAMES glfw glfw3 PATHS "${VENDOR_LIB}" NO_DEFAULT_PATH)
+# 增加了 Windows 平台常见的 Assimp 静态库名 (assimp-vc143-mt 等) 和 vendor 路径
+find_library(ASSIMP_LIB NAMES assimp assimp-vc143-mt assimp-vc142-mt PATHS "${VENDOR_LIB}" /opt/homebrew/lib /usr/local/lib /usr/lib)
+
+if(APPLE)
+    # Mac 平台链接
+    target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${APPLE_FRAMEWORKS} yaml-cpp ${ASSIMP_LIB})
+elseif(WIN32)
+    # Windows 平台链接
+    target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${OPENGL_LIB} yaml-cpp ${ASSIMP_LIB})
+endif()
+
 
 # =========================================================================
 # 8. 定义 AyayaEditor (编辑器应用程序 - 面向开发者)
@@ -117,13 +138,6 @@ file(GLOB EDITOR_SOURCES
 add_executable(AyayaEditor ${EDITOR_SOURCES})
 target_link_libraries(AyayaEditor PRIVATE Ayaya)
 
-# 复制资源到 Editor 的输出目录
-add_custom_command(TARGET AyayaEditor POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E create_symlink
-    "${CMAKE_CURRENT_SOURCE_DIR}/assets"
-    "$<TARGET_FILE_DIR:AyayaEditor>/assets"
-    COMMENT "Creating symlink to assets for AyayaEditor"
-)
 
 # =========================================================================
 # 9. 定义 Sandbox (游戏运行端程序 - 面向玩家)
@@ -132,10 +146,58 @@ file(GLOB SANDBOX_SOURCES "src/Sandbox/*.cpp" "src/Sandbox/*.hpp")
 add_executable(Sandbox ${SANDBOX_SOURCES})
 target_link_libraries(Sandbox PRIVATE Ayaya)
 
-# 复制资源到 Sandbox 的输出目录
+
+# =========================================================================
+# 10. 智能跨平台资源复制逻辑
+# =========================================================================
+if(WIN32)
+    # Windows 下如果没有开发者模式权限，软链接会报错，这里改用直接复制文件夹
+    set(COPY_COMMAND copy_directory)
+    set(COPY_COMMENT "Copying assets directory for")
+else()
+    # Mac/Linux 下使用软链接，保持同步和节省空间
+    set(COPY_COMMAND create_symlink)
+    set(COPY_COMMENT "Creating symlink to assets for")
+endif()
+
+# 为 Editor 复制/链接资源
+add_custom_command(TARGET AyayaEditor POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E ${COPY_COMMAND}
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+    "$<TARGET_FILE_DIR:AyayaEditor>/assets"
+    COMMENT "${COPY_COMMENT} AyayaEditor"
+)
+
+# 为 Sandbox 复制/链接资源
 add_custom_command(TARGET Sandbox POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E create_symlink
+    COMMAND ${CMAKE_COMMAND} -E ${COPY_COMMAND}
     "${CMAKE_CURRENT_SOURCE_DIR}/assets"
     "$<TARGET_FILE_DIR:Sandbox>/assets"
-    COMMENT "Creating symlink to assets for Sandbox"
+    COMMENT "${COPY_COMMENT} Sandbox"
 )
+
+# =========================================================================
+# 11. 自动化 DLL 拷贝逻辑 (Windows 专属)
+# =========================================================================
+if(WIN32)
+    # 自动搜集 vendor/bin 目录下的所有 .dll 文件
+    file(GLOB VENDOR_DLLS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/bin/*.dll")
+    
+    if(VENDOR_DLLS)
+        # 1. 为 AyayaEditor 自动拷贝 DLL
+        add_custom_command(TARGET AyayaEditor POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different 
+            ${VENDOR_DLLS} 
+            "$<TARGET_FILE_DIR:AyayaEditor>"
+            COMMENT "Auto-copying DLLs to AyayaEditor output directory..."
+        )
+
+        # 2. 为 Sandbox 自动拷贝 DLL
+        add_custom_command(TARGET Sandbox POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different 
+            ${VENDOR_DLLS} 
+            "$<TARGET_FILE_DIR:Sandbox>"
+            COMMENT "Auto-copying DLLs to Sandbox output directory..."
+        )
+    endif()
+endif()

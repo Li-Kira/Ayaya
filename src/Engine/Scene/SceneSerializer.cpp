@@ -6,6 +6,7 @@
 
 #include <yaml-cpp/yaml.h>
 #include <fstream>
+#include <filesystem>
 
 // =====================================================================
 // YAML-CPP 扩展：教 YAML 库如何理解 glm::vec3 和 glm::vec4

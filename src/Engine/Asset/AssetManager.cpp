@@ -98,7 +98,7 @@ namespace Ayaya {
         for (auto assetNode : registryNode) {
             UUID handle = assetNode["Handle"].as<uint64_t>();
             AssetMetadata metadata;
-            metadata.FilePath = assetNode["FilePath"].as<std::string>();
+            metadata.FilePath = std::filesystem::path(assetNode["FilePath"].as<std::string>());
             metadata.Type = (AssetType)assetNode["Type"].as<int>();
 
             s_Registry[handle] = metadata;
