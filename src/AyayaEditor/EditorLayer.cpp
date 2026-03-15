@@ -1,6 +1,7 @@
 #include "EditorLayer.hpp"
 #include "Renderer/Mesh.hpp"
 #include "Renderer/SceneRenderer.hpp"
+#include "Events/MouseEvent.hpp"
 
 #include <glad/glad.h>
 #include <imgui.h>
@@ -264,6 +265,25 @@ namespace Ayaya {
             if (Input::IsKeyPressed(Key::W)) m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
             if (Input::IsKeyPressed(Key::E)) m_GizmoType = ImGuizmo::OPERATION::ROTATE;
             if (Input::IsKeyPressed(Key::R)) m_GizmoType = ImGuizmo::OPERATION::SCALE;
+
+            // 按下 F 键聚焦到选中物体 (Focus)
+            static bool s_F_Pressed = false;
+            if (Input::IsKeyPressed(Key::F)) {
+                if (!s_F_Pressed) {
+                    glm::mat4 transform = selectedEntity.GetWorldTransform();
+                    glm::vec3 targetPos = glm::vec3(transform[3]); 
+                    
+                    // 只需要设置焦点和距离，相机内部会自动算出自己的新 Position！
+                    m_EditorCamera.SetFocalPoint(targetPos);
+                    m_EditorCamera.SetDistance(5.0f);
+                    m_EditorCamera.UpdateCameraView(); 
+                    
+                    AYAYA_CORE_INFO("Camera focused on entity.");
+                }
+                s_F_Pressed = true;
+            } else {
+                s_F_Pressed = false;
+            }
         }
 
         // =====================================
@@ -416,6 +436,15 @@ namespace Ayaya {
 
         m_ViewportFocused = ImGui::IsWindowFocused();
         m_ViewportHovered = ImGui::IsWindowHovered();
+
+        if (m_ViewportHovered) {
+            float scrollOffset = ImGui::GetIO().MouseWheel;
+            if (scrollOffset != 0.0f) {
+                // 生成一个虚拟的滚轮事件，强行塞给 EditorCamera
+                MouseScrolledEvent e(0.0f, scrollOffset);
+                m_EditorCamera.OnEvent(e);
+            }
+        }
 
         auto viewportMinRegion = ImGui::GetWindowContentRegionMin();
         auto viewportMaxRegion = ImGui::GetWindowContentRegionMax();

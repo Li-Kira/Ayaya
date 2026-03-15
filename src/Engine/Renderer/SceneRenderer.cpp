@@ -108,7 +108,7 @@ namespace Ayaya {
         s_Data.WhiteTexture->SetData(&whiteTextureData, sizeof(uint32_t));
 
         // 2. 初始化 3D 网格地基
-        s_Data.GridMesh = Mesh::CreateCube(1.0f);
+        s_Data.GridMesh = Mesh::CreatePlane(1.0f, 1.0f);
 
         // 3. 加载管线必需的 Shader
         // 注意：这里需要确保你的 Shader 类有 Create 方法，或者你继续使用 ShaderLibrary。
@@ -512,10 +512,12 @@ namespace Ayaya {
             glDepthMask(GL_FALSE); 
             glDisable(GL_STENCIL_TEST); 
 
+            glDisable(GL_CULL_FACE);
             s_Data.GridShader->Bind();
-            glm::mat4 gridTransform = glm::scale(glm::mat4(1.0f), glm::vec3(100.0f, 0.0f, 100.0f));
+            glm::mat4 gridTransform = glm::scale(glm::mat4(1.0f), glm::vec3(1000.0f, 1.0f, 1000.0f));
             Renderer::Submit(s_Data.GridShader, s_Data.GridMesh->GetVertexArray(), gridTransform);
             
+            glEnable(GL_CULL_FACE);
             glDepthMask(GL_TRUE); 
             glDisable(GL_BLEND); 
             glEnable(GL_STENCIL_TEST); 
@@ -531,7 +533,6 @@ namespace Ayaya {
             glDisable(GL_DEPTH_TEST); 
 
             s_Data.OutlineShader->Bind();
-            // 因为已经在 LDR 环境下，这里的橙色就是所见即所得的 #FFA600，绝不会变形！
             s_Data.OutlineShader->SetFloat3("u_Color", glm::vec3(1.0f, 0.65f, 0.0f)); 
             
             glm::mat4 baseTransform = hoveredEntity.GetWorldTransform();

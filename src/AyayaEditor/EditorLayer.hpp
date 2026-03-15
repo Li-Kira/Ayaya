@@ -17,6 +17,10 @@
 
 namespace Ayaya {
 
+    enum class SceneState {
+        Edit = 0, Play = 1
+    };
+
     class EditorLayer : public Layer {
     public:
         EditorLayer();
@@ -45,11 +49,20 @@ namespace Ayaya {
         void HandleMousePicking(const glm::mat4& cameraViewMatrix, const glm::mat4& cameraProjectionMatrix);
         void HandleGizmo(const glm::mat4& cameraViewMatrix, const glm::mat4& cameraProjectionMatrix);
 
+        // ==========================================
+        // 新增：游玩模式相关的函数
+        // ==========================================
+        // void OnScenePlay();
+        // void OnSceneStop();
+        // void UIRenderToolbar(); // 顶部工具栏 (放播放按钮)
+
     private:
         EditorCamera m_EditorCamera;
         std::shared_ptr<Scene> m_ActiveScene;
-        std::string m_CurrentScenePath = std::string();
+        // std::shared_ptr<Scene> m_EditorScene; 
+        SceneState m_SceneState = SceneState::Edit;
 
+        std::string m_CurrentScenePath = std::string();
         glm::vec2 m_ViewportSize = { 0.0f, 0.0f };         
         ImVec2 m_ViewportBounds[2]; 
 
@@ -59,7 +72,7 @@ namespace Ayaya {
 
         bool m_ViewportFocused = false;
         bool m_ViewportHovered = false;
-        glm::vec2 m_InitialMousePos = { 0.0f, 0.0f };
+        glm::vec2 m_InitialMousePos = { 0.0f, 0.0f }; 
 
         int m_GizmoType = 7; // ImGuizmo::OPERATION::TRANSLATE 的值
         Entity m_HoveredEntity = {}; 
@@ -67,8 +80,7 @@ namespace Ayaya {
         bool m_ShowGrid = true; // 默认开启网格
         bool m_ShowSkybox = true; // 默认开启网格
         bool m_EnableMSAA = true; // 默认开启抗锯齿
-        // 控制偏好设置窗口的开关
-        bool m_ShowPreferencesWindow = false;
+        bool m_ShowPreferencesWindow = false; // 控制偏好设置窗口的开关
     };
 
 }

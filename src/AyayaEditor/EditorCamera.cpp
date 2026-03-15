@@ -7,9 +7,13 @@
 namespace Ayaya {
 
     EditorCamera::EditorCamera() {
-        m_Position = { -4.255f, 2.300f, 5.245f };
+        // m_Position 的初始值现在不重要了，因为它会被 RecalculateView 覆盖
         m_Pitch = glm::radians(-22.093f);
         m_Yaw = glm::radians(-33.919f);
+
+        // 新增：初始化轨道相机的核心参数
+        m_FocalPoint = { 0.0f, 0.0f, 0.0f }; // 默认看向世界原点
+        m_Distance = 10.0f;                  // 默认距离 10 米
 
         OnResize(1280.0f, 720.0f);
         RecalculateView();
@@ -21,19 +25,17 @@ namespace Ayaya {
     }
 
     void EditorCamera::OnUpdate(Timestep ts, bool viewportFocused) {
-        // 只有鼠标停留在视口内，才允许漫游
         if (!viewportFocused) return;
 
-        // 按住鼠标右键进入飞行模式！
         if (Input::IsMouseButtonPressed(1)) {
             glm::vec2 mousePos = { Input::GetMouseX(), Input::GetMouseY() };
-            glm::vec2 delta = (mousePos - m_InitialMousePosition) * 0.003f; // 鼠标灵敏度
+            glm::vec2 delta = (mousePos - m_InitialMousePosition) * 0.003f; 
             m_InitialMousePosition = mousePos;
 
+            // 1. 更新旋转角 (转头)
             m_Pitch -= delta.y;
             m_Yaw -= delta.x;
 
-            // 限制抬头/低头角度，防止后空翻导致万向节死锁
             if (m_Pitch > glm::radians(89.0f)) m_Pitch = glm::radians(89.0f);
             if (m_Pitch < glm::radians(-89.0f)) m_Pitch = glm::radians(-89.0f);
 
@@ -42,7 +44,6 @@ namespace Ayaya {
             glm::vec3 right   = glm::rotate(orientation, glm::vec3(1.0f, 0.0f, 0.0f));
             glm::vec3 up      = glm::rotate(orientation, glm::vec3(0.0f, 1.0f, 0.0f));
 
-            // 专业优化：按住 Shift 键提供 4 倍移速！
             float velocity = (Input::IsKeyPressed(Key::LeftShift) ? 10.0f : 5.0f) * (float)ts;
 
             if (Input::IsKeyPressed(Key::W)) m_Position += forward * velocity;
@@ -52,16 +53,44 @@ namespace Ayaya {
             if (Input::IsKeyPressed(Key::E)) m_Position += up * velocity;
             if (Input::IsKeyPressed(Key::Q)) m_Position -= up * velocity;
 
+            m_FocalPoint = m_Position + forward * m_Distance;
+
             RecalculateView();
         } else {
-            // 松开右键时，时刻记录鼠标位置，防止下次按下时镜头瞬移
             m_InitialMousePosition = { Input::GetMouseX(), Input::GetMouseY() };
         }
     }
 
+    void EditorCamera::OnEvent(Event& e) {
+        EventDispatcher dispatcher(e);
+        dispatcher.Dispatch<MouseScrolledEvent>([this](MouseScrolledEvent& event) {
+            // 用滚轮改变距离，并根据当前距离动态调整缩放速度（离得越近，缩得越慢，防止穿模）
+            float distance = m_Distance;
+            float zoomSpeed = std::max(distance * 0.2f, 0.1f);
+            m_Distance -= event.GetYOffset() * zoomSpeed;
+            
+            // 限制一下最近和最远距离
+            if (m_Distance < 0.1f) m_Distance = 0.1f;
+            if (m_Distance > 1000.0f) m_Distance = 1000.0f;
+            
+            RecalculateView();
+            return false;
+        });
+    }
+
     void EditorCamera::RecalculateView() {
         glm::quat orientation = glm::quat(glm::vec3(m_Pitch, m_Yaw, 0.0f));
-        // 视图矩阵是相机位置矩阵的逆矩阵
+        
+        // ==========================================
+        // 核心升级：真正的轨道相机数学模型！
+        // ==========================================
+        // 1. 提取相机当前的前方朝向
+        glm::vec3 forward = glm::rotate(orientation, glm::vec3(0.0f, 0.0f, -1.0f));
+        
+        // 2. 相机的真实物理位置 = 焦点位置 - (前方方向 * 距离)
+        m_Position = m_FocalPoint - forward * m_Distance;
+
+        // 3. 计算最终的视图矩阵
         m_ViewMatrix = glm::translate(glm::mat4(1.0f), m_Position) * glm::toMat4(orientation);
         m_ViewMatrix = glm::inverse(m_ViewMatrix);
     }

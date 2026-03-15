@@ -2,6 +2,9 @@
 #include "Engine/Core/Timestep.hpp"
 #include <glm/glm.hpp>
 
+#include "Events/Event.hpp"
+#include "Events/MouseEvent.hpp"
+
 namespace Ayaya {
 
     class EditorCamera {
@@ -10,6 +13,7 @@ namespace Ayaya {
 
         // 核心更新逻辑：处理键鼠输入
         void OnUpdate(Timestep ts, bool viewportFocused);
+        void OnEvent(Event& e);
         // 处理视口缩放
         void OnResize(float width, float height);
 
