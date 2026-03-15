@@ -4,6 +4,7 @@
 #include "EditorCamera.hpp"
 #include "Panels/SceneHierarchyPanel.hpp"
 #include "Panels/ContentBrowserPanel.hpp"
+#include "Panels/PreferencesPanel.hpp"
 #include <Renderer/Renderer.hpp>
 #include <Renderer/Texture.hpp>
 // --- 新增：引入场景序列化器 ---
@@ -52,9 +53,9 @@ namespace Ayaya {
         glm::vec2 m_ViewportSize = { 0.0f, 0.0f };         
         ImVec2 m_ViewportBounds[2]; 
 
-        
         SceneHierarchyPanel m_SceneHierarchyPanel;
         ContentBrowserPanel m_ContentBrowserPanel;
+        PreferencesPanel m_PreferencesPanel;
 
         bool m_ViewportFocused = false;
         bool m_ViewportHovered = false;
@@ -66,6 +67,8 @@ namespace Ayaya {
         bool m_ShowGrid = true; // 默认开启网格
         bool m_ShowSkybox = true; // 默认开启网格
         bool m_EnableMSAA = true; // 默认开启抗锯齿
+        // 控制偏好设置窗口的开关
+        bool m_ShowPreferencesWindow = false;
     };
 
 }

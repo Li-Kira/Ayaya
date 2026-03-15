@@ -26,6 +26,9 @@ namespace Ayaya {
     void SceneHierarchyPanel::OnImGuiRender() {
         ImGui::Begin("Scene Hierarchy");
 
+        // 每次渲染大纲前，清空可见节点顺序列表
+        m_VisibleNodes.clear();
+
         if (m_Context) {
             auto rootEntities = m_Context->GetRootEntities();
             for (auto entityID : rootEntities) {
@@ -63,6 +66,34 @@ namespace Ayaya {
             }
         }
         ImGui::End();
+
+        // ==========================================
+        //  [交互 4]：统一结算 Shift 范围多选逻辑
+        // ==========================================
+        if (m_ShiftClickTarget) {
+            if (m_LastClickedEntity) {
+                // 找到“锚点”和“目标”在当前可见列表中的索引
+                auto itStart = std::find(m_VisibleNodes.begin(), m_VisibleNodes.end(), m_LastClickedEntity);
+                auto itEnd = std::find(m_VisibleNodes.begin(), m_VisibleNodes.end(), m_ShiftClickTarget);
+                
+                if (itStart != m_VisibleNodes.end() && itEnd != m_VisibleNodes.end()) {
+                    m_SelectedEntities.clear(); // Shift 单击通常会替换原有选择
+                    
+                    // 确保按顺序遍历（因为你可能是从下往上 Shift 点击）
+                    auto minIt = std::min(itStart, itEnd);
+                    auto maxIt = std::max(itStart, itEnd);
+                    
+                    for (auto it = minIt; it <= maxIt; ++it) {
+                        m_SelectedEntities.push_back(*it);
+                    }
+                }
+            } else {
+                // 如果之前没点过任何东西，Shift 点击等同于普通单选
+                SetSelectedEntity(m_ShiftClickTarget);
+                m_LastClickedEntity = m_ShiftClickTarget;
+            }
+            m_ShiftClickTarget = {}; // 结算完毕，清空标记
+        }
         
         // ==========================================
         // 属性面板调用
@@ -112,6 +143,9 @@ namespace Ayaya {
     }
 
     void SceneHierarchyPanel::DrawEntityNode(Entity entity) {
+        // --- 新增：只要进入了这个函数，说明该节点没有被折叠，记录进可见列表顺序中 ---
+        m_VisibleNodes.push_back(entity);
+
         auto& tagComp = entity.GetComponent<TagComponent>();
         auto& tag = tagComp.Tag;
         
@@ -144,6 +178,22 @@ namespace Ayaya {
         
         bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, "%s", displayString.c_str());
 
+        // ==========================================
+        // 核心修改：支持 Shift + 左键范围选择
+        // ==========================================
+        if (ImGui::IsItemClicked()) {
+            if (ImGui::GetIO().KeyShift) {
+                // 如果按住了 Shift，不要立刻操作数组，先标记下来，等全树画完后统一结算范围
+                m_ShiftClickTarget = entity; 
+            } else if (ImGui::GetIO().KeyCtrl) {
+                ToggleEntitySelection(entity); // 按住 Ctrl：追加/取消选择
+                m_LastClickedEntity = entity;  // 记录为最新的锚点
+            } else {
+                SetSelectedEntity(entity);     // 普通点击：单选
+                m_LastClickedEntity = entity;  // 记录为最新的锚点
+            }
+        }
+        
         // ==========================================
         // 2. 核心交互：支持 Ctrl + 左键进行多选
         // ==========================================
@@ -231,7 +281,7 @@ namespace Ayaya {
         }
 
         // 处理节点右侧的可视化按钮
-        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 24.0f);
+        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 20.0f);
         ImGui::SetCursorPosY(cursorY);
 
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));

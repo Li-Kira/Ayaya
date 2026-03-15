@@ -19,6 +19,8 @@ namespace Ayaya {
         // 启动时读取资产注册表
         // ==========================================
         AssetManager::DeserializeRegistry("assets/AssetRegistry.yaml");
+        // 新增：初始化并加载编辑器偏好设置
+        m_PreferencesPanel.Init();
 
         // ==========================================
         // 减负：去掉了之前在这里手动配置和创建 m_Framebuffer 的代码
@@ -78,6 +80,7 @@ namespace Ayaya {
 
         m_SceneHierarchyPanel.OnImGuiRender();
         m_ContentBrowserPanel.OnImGuiRender();
+        m_PreferencesPanel.OnImGuiRender();
 
         UIRenderViewport();
 
@@ -369,6 +372,13 @@ namespace Ayaya {
                 ImGui::Separator();
                 if (ImGui::MenuItem("Exit")) Application::Get().Close(); 
                 
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::BeginMenu("Edit")) {
+                if (ImGui::MenuItem("Preferences")) {
+                    m_PreferencesPanel.SetOpen(true); // 打开偏好设置面板
+                }
                 ImGui::EndMenu();
             }
 

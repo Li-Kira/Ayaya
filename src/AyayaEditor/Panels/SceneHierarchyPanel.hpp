@@ -59,8 +59,13 @@ namespace Ayaya {
         std::vector<Entity> m_SelectedEntities;
 
         // ==========================================
-        // 核心修改：将延迟操作的标记升级为数组，支持批量操作
+        // 新增：用于支持 Shift 范围多选的辅助变量
         // ==========================================
+        std::vector<Entity> m_VisibleNodes; // 当前帧所有“未被折叠隐藏”的节点顺序
+        Entity m_LastClickedEntity = {};    // 记录上一次被选中的“锚点”物体
+        Entity m_ShiftClickTarget = {};     // 记录当前被 Shift 点击的目标
+
+        //将延迟操作的标记升级为数组，支持批量操作
         std::vector<Entity> m_EntitiesToDestroy;  
         std::vector<Entity> m_EntitiesToUnparent; 
         std::vector<Entity> m_EntitiesToDuplicate;

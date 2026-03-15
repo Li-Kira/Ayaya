@@ -29,6 +29,7 @@ namespace Ayaya {
         bool ShouldClose() const { return glfwWindowShouldClose(m_Window); }
         unsigned int GetWidth() const { return m_Data.Width; }
         unsigned int GetHeight() const { return m_Data.Height; }
+        void SetSize(unsigned int width, unsigned int height);
 
         // 事件系统核心：设置回调函数
         void SetEventCallback(const EventCallbackFn& callback) { m_Data.EventCallback = callback; }

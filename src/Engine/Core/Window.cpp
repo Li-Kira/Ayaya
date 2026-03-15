@@ -102,6 +102,10 @@ namespace Ayaya {
         m_Data.VSync = enabled;
     }
 
+    void Window::SetSize(unsigned int width, unsigned int height) {
+        glfwSetWindowSize(m_Window, width, height);
+    }
+
     void Window::OnUpdate() {
         glfwPollEvents();
         glfwSwapBuffers(m_Window);
