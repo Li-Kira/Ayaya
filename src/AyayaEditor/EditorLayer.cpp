@@ -10,6 +10,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
+#include <IconsFontAwesome5.h> 
 
 namespace Ayaya {
 
@@ -28,62 +29,138 @@ namespace Ayaya {
         // 现在全权交由 SceneRenderer 在内部自己打理
         // ==========================================
         SceneRenderer::Init();
+
+        // ==========================================
+        // 新增：创建 Game 窗口专属的 FBO 画布
+        // ==========================================
+        FramebufferSpecification spec;
+        spec.Width = 1280; spec.Height = 720;
+        spec.Format = FramebufferFormat::RGBA8; 
+        m_GameFBO = Framebuffer::Create(spec);
         SetupScene();
     }
 
     void EditorLayer::OnUpdate(Timestep ts) {
-        
-        // ==========================================
-        // 1.处理输入
-        // ==========================================
         HandleShortcuts();
 
         // ==========================================
-        // 2.处理相机和视口 Resize
+        // 2.1 处理 Scene (上帝视口) 的 Resize
         // ==========================================
         static glm::vec2 s_LastViewportSize = { 0.0f, 0.0f };
         if (m_ViewportSize.x > 0.0f && m_ViewportSize.y > 0.0f && 
            (s_LastViewportSize.x != m_ViewportSize.x || s_LastViewportSize.y != m_ViewportSize.y)) {
             
-            // 【核心修改】：通知管线视口大小变了，让它自己去重置它内部的 HDR 和 LDR 缓冲
             SceneRenderer::OnWindowResize((uint32_t)m_ViewportSize.x, (uint32_t)m_ViewportSize.y);
             m_EditorCamera.OnResize(m_ViewportSize.x, m_ViewportSize.y);
+            // 删除在这里强行修改 CameraComponent 比例的代码，上帝视口不该干涉玩家相机！
+            s_LastViewportSize = m_ViewportSize;
+        }
+
+        // ==========================================
+        // 2.2 处理 Game (游戏视口) 的 Resize
+        // ==========================================
+        static glm::vec2 s_LastGameViewportSize = { 0.0f, 0.0f };
+        if (m_GameViewportSize.x > 0.0f && m_GameViewportSize.y > 0.0f && 
+           (s_LastGameViewportSize.x != m_GameViewportSize.x || s_LastGameViewportSize.y != m_GameViewportSize.y)) {
             
+            m_GameFBO->Resize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);
+            // 只有 Game 窗口改变，才改变玩家相机的长宽比！
             auto view = m_ActiveScene->Reg().view<CameraComponent>();
             for (auto entityID : view) {
                 auto& cameraComp = view.get<CameraComponent>(entityID);
                 if (!cameraComp.FixedAspectRatio) {
-                    cameraComp.Camera.SetViewportSize((uint32_t)m_ViewportSize.x, (uint32_t)m_ViewportSize.y);
+                    cameraComp.Camera.SetViewportSize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);
                 }
             }
-            s_LastViewportSize = m_ViewportSize;
+            s_LastGameViewportSize = m_GameViewportSize;
         }
 
-        m_EditorCamera.OnUpdate(ts, m_ViewportFocused);
+        // 上帝相机只在 Edit 模式响应输入
+        if (m_SceneState == SceneState::Edit) {
+            m_EditorCamera.OnUpdate(ts, m_ViewportFocused);
+        }
 
         // ==========================================
-        // 3. 渲染管线调用
-        // 减负：外面不再需要手动 Bind 和 Unbind 画布，也不需要在这 Clear 背景了！
-        // SceneRenderer::BeginScene 内部会搞定一切
+        // Pass 1: 永远渲染 Game 窗口 (无论处于 Edit 还是 Play 模式)
+        // ==========================================
+        bool hasValidCamera = false;
+        glm::mat4 cameraViewMatrix, cameraProjectionMatrix;
+        glm::vec3 cameraPosition;
+        
+        // 用于接收当前玩家相机的环境配置
+        bool renderSkybox = m_ShowSkybox; 
+        glm::vec4 clearColor = { 0.12f, 0.12f, 0.14f, 1.0f }; 
+        
+        auto view = m_ActiveScene->Reg().view<TransformComponent, CameraComponent>();
+        for (auto entityID : view) {
+            auto [transform, cameraComp] = view.get<TransformComponent, CameraComponent>(entityID);
+            if (cameraComp.Primary) {
+                Entity cameraEntity{ entityID, m_ActiveScene.get() };
+                glm::mat4 worldTransform = cameraEntity.GetWorldTransform();
+                
+                // ==========================================
+                // 核心修复 1：强行剥离 Scale 干扰，解决相机畸变问题！
+                // ==========================================
+                glm::vec3 scale, translation, skew;
+                glm::quat rotation;
+                glm::vec4 perspective;
+                glm::decompose(worldTransform, scale, rotation, translation, skew, perspective);
+                
+                cameraPosition = translation;
+                glm::mat4 unscaledTransform = glm::translate(glm::mat4(1.0f), translation) * glm::toMat4(rotation);
+                cameraViewMatrix = glm::inverse(unscaledTransform); 
+                cameraProjectionMatrix = cameraComp.Camera.GetProjection();
+                
+                // ==========================================
+                // 核心修复 2：提取该相机的专属背景配置
+                // ==========================================
+                renderSkybox = (cameraComp.ClearFlag == CameraComponent::ClearFlags::Skybox);
+                clearColor = cameraComp.BackgroundColor;
+
+                hasValidCamera = true;
+                break; 
+            }
+        }
+
+        if (hasValidCamera) {
+            SceneRenderer::BeginScene(cameraViewMatrix, cameraProjectionMatrix, cameraPosition);
+            // 传入刚才提取出来的 skybox 和 clearColor
+            SceneRenderer::RenderScene(m_ActiveScene, {}, false, renderSkybox, clearColor);
+            SceneRenderer::EndScene();
+
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, SceneRenderer::GetPostProcessFBORendererID());
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_GameFBO->GetRendererID());
+            glBlitFramebuffer(0, 0, (GLint)m_ViewportSize.x, (GLint)m_ViewportSize.y,
+                              0, 0, (GLint)m_GameViewportSize.x, (GLint)m_GameViewportSize.y,
+                              GL_COLOR_BUFFER_BIT, GL_NEAREST);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0); 
+        } else {
+            // 没有主相机时，Game 窗口呈现黑屏待机
+            m_GameFBO->Bind();
+            RenderCommand::SetClearColor({ 0.0f, 0.0f, 0.0f, 1.0f });
+            RenderCommand::Clear();
+            m_GameFBO->Unbind();
+        }
+
+        // ==========================================
+        // Pass 2: 永远渲染 Scene 窗口 (上帝视角)
         // ==========================================
         SceneRenderer::BeginScene(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection(), m_EditorCamera.GetPosition());
         SceneRenderer::RenderScene(m_ActiveScene, m_HoveredEntity, m_ShowGrid, m_ShowSkybox);
         SceneRenderer::EndScene();
-
-        // 仅在最外层的默认窗口（不是视口内）刷一层深色底，防止 ImGui 窗口外露白
-        RenderCommand::SetClearColor({ 0.1f, 0.1f, 0.1f, 1.0f });
-        RenderCommand::Clear();
     }
 
     void EditorLayer::OnImGuiRender() {
         UIRenderDockspace();
         UIRenderMenuBar();
+        UIRenderToolbar();
 
         m_SceneHierarchyPanel.OnImGuiRender();
         m_ContentBrowserPanel.OnImGuiRender();
         m_PreferencesPanel.OnImGuiRender();
 
         UIRenderViewport();
+        UIRenderGameViewport();
 
         ImGui::End(); // End DockSpace
     }
@@ -92,6 +169,7 @@ namespace Ayaya {
 
     void EditorLayer::SetupScene() {
         m_ActiveScene = std::make_shared<Scene>();
+        m_EditorScene = m_ActiveScene;
 
         // 创造摄像机
         Entity cameraEntity = m_ActiveScene->CreateEntity("Main Camera");
@@ -195,6 +273,7 @@ namespace Ayaya {
 
     void EditorLayer::NewScene() {
         m_ActiveScene = std::make_shared<Scene>();
+        m_EditorScene = m_ActiveScene;
 
         Entity cameraEntity = m_ActiveScene->CreateEntity("Main Camera");
         auto& cameraComp = cameraEntity.AddComponent<CameraComponent>();
@@ -371,6 +450,7 @@ namespace Ayaya {
                 ImGuiID dock_id_bottom = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.30f, NULL, &dock_main_id);
 
                 ImGui::DockBuilderDockWindow("Viewport", dock_main_id);
+                ImGui::DockBuilderDockWindow("Game", dock_main_id);
                 ImGui::DockBuilderDockWindow("Scene Hierarchy", dock_id_right);
                 ImGui::DockBuilderDockWindow("Properties", dock_id_right_bottom);
                 ImGui::DockBuilderDockWindow("Content Browser", dock_id_bottom);
@@ -465,6 +545,24 @@ namespace Ayaya {
 
         HandleMousePicking(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
         HandleGizmo(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
+
+        ImGui::End();
+        ImGui::PopStyleVar();
+    }
+
+    void EditorLayer::UIRenderGameViewport() {
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{ 0.0f, 0.0f });
+        // 创建一个名为 "Game" 的新标签页/窗口
+        ImGui::Begin("Game");
+
+        ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
+        m_GameViewportSize = { viewportPanelSize.x, viewportPanelSize.y };
+
+        // 将专属画布 m_GameFBO 中的贴图显示出来
+        uint32_t textureID = m_GameFBO->GetColorAttachmentRendererID();
+        ImGui::Image(reinterpret_cast<void*>((intptr_t)textureID), 
+                     ImVec2{ m_GameViewportSize.x, m_GameViewportSize.y }, 
+                     ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
 
         ImGui::End();
         ImGui::PopStyleVar();
@@ -576,5 +674,70 @@ namespace Ayaya {
             tc.Rotation = glm::eulerAngles(rotation);
             tc.Scale = scale;
         }
+    }
+
+    void EditorLayer::OnScenePlay() {
+        m_SceneState = SceneState::Play;
+
+        // 1. 克隆并覆盖当前运行场景
+        m_ActiveScene = std::make_shared<Scene>();
+        SceneSerializer serializer(m_EditorScene);
+        EditorState dummyState;
+        std::string tempPath = "assets/Editor/temp/temp_play_scene.ayaya";
+        serializer.Serialize(tempPath, dummyState);
+        SceneSerializer deserializer(m_ActiveScene);
+        deserializer.Deserialize(tempPath, dummyState);
+
+        // 2. 更新面板上下文
+        m_SceneHierarchyPanel.SetContext(m_ActiveScene);
+
+        // ==========================================
+        // 核心修复 3：强行重置克隆出来的玩家相机的视口比例和模式！
+        // ==========================================
+        auto view = m_ActiveScene->Reg().view<CameraComponent>();
+        for (auto entityID : view) {
+            auto& cameraComp = view.get<CameraComponent>(entityID);
+            
+            // 弥补序列化漏洞，拨回透视相机模式，防止画面缩小成一个点
+            cameraComp.Camera.SetProjectionType(SceneCamera::ProjectionType::Perspective);
+
+            if (!cameraComp.FixedAspectRatio) {
+                // 解开这里的注释！让 Game 窗口的尺寸赋给新相机
+                cameraComp.Camera.SetViewportSize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);
+            }
+        }
+    }
+
+    void EditorLayer::OnSceneStop() {
+        m_SceneState = SceneState::Edit;
+        // 恢复编辑状态的场景
+        m_ActiveScene = m_EditorScene;
+        m_SceneHierarchyPanel.SetContext(m_ActiveScene);
+    }
+
+    void EditorLayer::UIRenderToolbar() {
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 2));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        auto& colors = ImGui::GetStyle().Colors;
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(colors[ImGuiCol_ButtonHovered].x, colors[ImGuiCol_ButtonHovered].y, colors[ImGuiCol_ButtonHovered].z, 0.5f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(colors[ImGuiCol_ButtonActive].x, colors[ImGuiCol_ButtonActive].y, colors[ImGuiCol_ButtonActive].z, 0.5f));
+
+        ImGui::Begin("##Toolbar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        float size = ImGui::GetWindowHeight() - 4.0f;
+        ImGui::SetCursorPosX((ImGui::GetWindowContentRegionMax().x * 0.5f) - (size * 0.5f));
+        
+        std::string icon = (m_SceneState == SceneState::Edit) ? ICON_FA_PLAY : ICON_FA_STOP;
+        if (m_SceneState == SceneState::Play) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
+
+        if (ImGui::Button(icon.c_str(), ImVec2(size, size))) {
+            if (m_SceneState == SceneState::Edit) OnScenePlay();
+            else OnSceneStop();
+        }
+
+        if (m_SceneState == SceneState::Play) ImGui::PopStyleColor();
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(3);
+        ImGui::End();
     }
 }

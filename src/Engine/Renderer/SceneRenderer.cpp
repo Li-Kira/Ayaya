@@ -218,7 +218,7 @@ namespace Ayaya {
         Renderer::EndScene();
     }
 
-    void SceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene, Entity hoveredEntity, bool showGrid, bool showSkybox) {
+    void SceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene, Entity hoveredEntity, bool showGrid, bool showSkybox, const glm::vec4& clearColor) {
 
         // ==========================================
         // Pass 1: Lighting Setup Pass (收集场景灯光)
@@ -444,10 +444,10 @@ namespace Ayaya {
         // 2. 绑定 LDR 画布
         s_Data.PostProcessFBO->Bind();
         
-        // 3. 在 LDR 画布上填涂编辑器的 UI 背景色 (深灰色)
-        // 这一步不会受到 Tone Mapping 的任何影响！
-        RenderCommand::SetClearColor({ 0.12f, 0.12f, 0.14f, 1.0f });
-        RenderCommand::Clear(); 
+        // 3. 在 LDR 画布上填涂背景色
+        // 【核心修改】：使用传入的 clearColor，而不是写死的深灰色！
+        RenderCommand::SetClearColor(clearColor);
+        RenderCommand::Clear();
 
         // ------------------------------------------
         // Pass 4: Post-Processing (色调映射)
@@ -553,5 +553,9 @@ namespace Ayaya {
 
         // 渲染全部完成，解绑最终的 LDR 画布交给 EditorLayer 去显示！
         s_Data.PostProcessFBO->Unbind();
+    }
+
+    uint32_t SceneRenderer::GetPostProcessFBORendererID() {
+        return s_Data.PostProcessFBO->GetRendererID();
     }
 }

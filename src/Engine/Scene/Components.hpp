@@ -69,16 +69,19 @@ namespace Ayaya {
     };
 
     // 相机组件 (纯数据，没有任何控制逻辑)
+    // 相机组件 (纯数据，没有任何控制逻辑)
     struct CameraComponent {
         Ayaya::SceneCamera Camera;
         bool Primary = true;           // 标志这是否是当前负责渲染画面的主相机
         bool FixedAspectRatio = false; // 是否锁定长宽比（防止窗口缩放时画面被拉伸变形）
+        float EV100 = 14.5f;
 
         // ==========================================
-        // 新增：物理相机的曝光值 (Exposure Value at ISO 100)
-        // 晴天室外通常在 14.0 到 15.0 之间
+        // 核心完善：相机背景渲染模式
         // ==========================================
-        float EV100 = 14.5f;
+        enum class ClearFlags { Skybox, SolidColor };
+        ClearFlags ClearFlag = ClearFlags::Skybox;                // 默认渲染天空盒
+        glm::vec4 BackgroundColor = { 0.12f, 0.12f, 0.14f, 1.0f };// 如果是纯色模式的清屏颜色
 
         CameraComponent() = default;
         CameraComponent(const CameraComponent&) = default;

@@ -19,12 +19,16 @@ namespace Ayaya {
         static void SetMSAASamples(uint32_t samples);
         // --- 新增：获取最终处理完毕的屏幕贴图 ---
         static uint32_t GetFinalColorAttachmentRendererID();
+        // ==========================================
+        // 新增：向外暴露 LDR 画布的底层 ID，用于全屏拷贝
+        // ==========================================
+        static uint32_t GetPostProcessFBORendererID();
 
         // 开始一帧的渲染准备
         static void BeginScene(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, const glm::vec3& cameraPosition);
         
         // 渲染整个 3D 场景的核心管线
-        static void RenderScene(const std::shared_ptr<Scene>& scene, Entity hoveredEntity, bool showGrid, bool  showSkybox);
+        static void RenderScene(const std::shared_ptr<Scene>& scene, Entity hoveredEntity, bool showGrid, bool showSkybox, const glm::vec4& clearColor = glm::vec4(0.12f, 0.12f, 0.14f, 1.0f));
         
         // 结束一帧的渲染
         static void EndScene();
