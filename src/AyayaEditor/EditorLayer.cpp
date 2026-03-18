@@ -445,10 +445,22 @@ namespace Ayaya {
                 ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
 
                 ImGuiID dock_main_id = dockspace_id;
+
+                // ==========================================
+                // 核心魔法 1：在最上方切出约 6% 的高度作为全局工具栏！
+                // ==========================================
+                ImGuiID dock_id_top = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Up, 0.035f, nullptr, &dock_main_id);
+
                 ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.25f, nullptr, &dock_main_id);
                 ImGuiID dock_id_right_bottom = ImGui::DockBuilderSplitNode(dock_id_right, ImGuiDir_Down, 0.5f, nullptr, &dock_id_right);
                 ImGuiID dock_id_bottom = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.30f, NULL, &dock_main_id);
+                ImGuiID dock_id_game = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.5f, nullptr, &dock_main_id);
 
+                // ==========================================
+                // 核心魔法 2：把 ##Toolbar 强行停靠在这个顶部节点！
+                // ==========================================
+                ImGui::DockBuilderDockWindow("##Toolbar", dock_id_top);
+                
                 ImGui::DockBuilderDockWindow("Viewport", dock_main_id);
                 ImGui::DockBuilderDockWindow("Game", dock_main_id);
                 ImGui::DockBuilderDockWindow("Scene Hierarchy", dock_id_right);
@@ -678,6 +690,8 @@ namespace Ayaya {
 
     void EditorLayer::OnScenePlay() {
         m_SceneState = SceneState::Play;
+        m_IsPaused = false;
+        m_TimeStepScale = 1.0f;
 
         // 1. 克隆并覆盖当前运行场景
         m_ActiveScene = std::make_shared<Scene>();
@@ -710,6 +724,10 @@ namespace Ayaya {
 
     void EditorLayer::OnSceneStop() {
         m_SceneState = SceneState::Edit;
+        // --- 新增：停止游戏也重置状态 ---
+        m_IsPaused = false;
+        m_TimeStepScale = 1.0f;
+
         // 恢复编辑状态的场景
         m_ActiveScene = m_EditorScene;
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
@@ -718,26 +736,72 @@ namespace Ayaya {
     void EditorLayer::UIRenderToolbar() {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 2));
         ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(0, 0));
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.1f, 0.1f, 0.1f, 1.0f)); 
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        
         auto& colors = ImGui::GetStyle().Colors;
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(colors[ImGuiCol_ButtonHovered].x, colors[ImGuiCol_ButtonHovered].y, colors[ImGuiCol_ButtonHovered].z, 0.5f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(colors[ImGuiCol_ButtonActive].x, colors[ImGuiCol_ButtonActive].y, colors[ImGuiCol_ButtonActive].z, 0.5f));
 
-        ImGui::Begin("##Toolbar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-        float size = ImGui::GetWindowHeight() - 4.0f;
-        ImGui::SetCursorPosX((ImGui::GetWindowContentRegionMax().x * 0.5f) - (size * 0.5f));
-        
-        std::string icon = (m_SceneState == SceneState::Edit) ? ICON_FA_PLAY : ICON_FA_STOP;
-        if (m_SceneState == SceneState::Play) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
+        ImGuiWindowClass window_class;
+        window_class.DockNodeFlagsOverrideSet = ImGuiDockNodeFlags_NoTabBar | ImGuiDockNodeFlags_NoResize;
+        ImGui::SetNextWindowClass(&window_class);
 
-        if (ImGui::Button(icon.c_str(), ImVec2(size, size))) {
+        ImGui::Begin("##Toolbar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        
+        // ==========================================
+        // 核心修改：固定大小并居中整个按钮组
+        // ==========================================
+        float size = ImGui::GetWindowHeight() - 4.0f;
+        float speedBtnWidth = size + 28.0f; // 加速按钮带文字，所以宽一点
+        float spacing = 8.0f;               // 按钮之间的间距
+        
+        // 计算 3 个按钮加起来的总宽度，用于居中
+        float totalWidth = size + size + speedBtnWidth + (spacing * 2.0f);
+
+        // 水平和垂直完美居中算法
+        ImGui::SetCursorPosX((ImGui::GetWindowContentRegionMax().x * 0.5f) - (totalWidth * 0.5f));
+        ImGui::SetCursorPosY((ImGui::GetWindowHeight() - size) * 0.5f);
+        
+        // ==========================================
+        // 1. 播放/停止按钮
+        // ==========================================
+        bool isPlayMode = (m_SceneState == SceneState::Play);
+        std::string playIcon = isPlayMode ? ICON_FA_STOP : ICON_FA_PLAY;
+        
+        if (isPlayMode) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.8f, 0.2f, 1.0f)); // 运行中变为醒目的绿色
+        if (ImGui::Button(playIcon.c_str(), ImVec2(size, size))) {
             if (m_SceneState == SceneState::Edit) OnScenePlay();
             else OnSceneStop();
         }
+        if (isPlayMode) ImGui::PopStyleColor();
 
-        if (m_SceneState == SceneState::Play) ImGui::PopStyleColor();
+        ImGui::SameLine(0, spacing);
+
+        // ==========================================
+        // 2. 暂停按钮
+        // ==========================================
+        // 如果处于暂停状态，给按钮加一个深色背景高亮，像按下去了一样
+        if (m_IsPaused) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.3f, 0.3f, 0.8f));
+        if (ImGui::Button(ICON_FA_PAUSE, ImVec2(size, size))) {
+            // 只有在 Play 模式下才允许点击暂停
+            if (m_SceneState == SceneState::Play) m_IsPaused = !m_IsPaused; 
+        }
+        if (m_IsPaused) ImGui::PopStyleColor();
+
+        ImGui::SameLine(0, spacing);
+
+        // ==========================================
+        // 3. 加速按钮 (点击循环切换倍速: 1x -> 2x -> 4x -> 1x)
+        // ==========================================
+        std::string speedText = std::string(ICON_FA_FORWARD) + " " + std::to_string((int)m_TimeStepScale) + "x";
+        if (ImGui::Button(speedText.c_str(), ImVec2(speedBtnWidth, size))) {
+            m_TimeStepScale *= 2.0f;
+            if (m_TimeStepScale > 4.0f) m_TimeStepScale = 1.0f; 
+        }
+
+        ImGui::PopStyleColor(4); 
         ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(3);
         ImGui::End();
     }
 }

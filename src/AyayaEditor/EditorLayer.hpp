@@ -64,6 +64,12 @@ namespace Ayaya {
         std::shared_ptr<Scene> m_EditorScene; 
         SceneState m_SceneState = SceneState::Edit;
 
+        // ==========================================
+        // 新增：控制游戏运行状态的变量
+        // ==========================================
+        bool m_IsPaused = false;
+        float m_TimeStepScale = 1.0f; // 1x, 2x, 4x 等倍速
+
         std::string m_CurrentScenePath = std::string();
         glm::vec2 m_ViewportSize = { 0.0f, 0.0f };
         ImVec2 m_ViewportBounds[2]; 
