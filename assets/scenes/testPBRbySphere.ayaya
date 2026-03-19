@@ -3,8 +3,8 @@ EditorState:
   ShowGrid: false
   ShowSkybox: false
   EnableMSAA: true
-  CameraPosition: [-1.7380456, 1.7042502, 21.910238]
-  CameraDistance: 0
+  CameraPosition: [-0.42034855, 1.602888, 24.18198]
+  CameraDistance: 24.238691
   CameraPitch: -0.06617762
   CameraYaw: -0.017380968
   CameraFocalPoint: [0, 0, 0]
@@ -14,13 +14,15 @@ Entities:
       Tag: Main Camera
       IsActive: true
     TransformComponent:
-      Translation: [0, 0, 5]
+      Translation: [0, 0, 22.3]
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     CameraComponent:
       Primary: true
       FixedAspectRatio: false
       EV100: 0
+      ClearFlag: 1
+      BackgroundColor: [0.12, 0.12, 0.14, 1]
     RelationshipComponent:
       Parent: 0
   - Entity: 4673506207229515908

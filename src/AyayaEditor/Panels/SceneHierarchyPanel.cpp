@@ -452,6 +452,51 @@ namespace Ayaya {
             if (ImGui::TreeNodeEx((void*)typeid(CameraComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Camera")) {
                 auto& refCamera = referenceEntity.GetComponent<CameraComponent>();
                 
+                // 1. 投影模式 (预留扩展，目前我们固定透视，但可以展示出来)
+                const char* projectionTypeStrings[] = { "Perspective", "Orthographic" };
+                const char* currentProjectionTypeString = projectionTypeStrings[(int)refCamera.Camera.GetProjectionType()];
+                if (ImGui::BeginCombo("Projection", currentProjectionTypeString)) {
+                    for (int i = 0; i < 2; i++) {
+                        bool isSelected = currentProjectionTypeString == projectionTypeStrings[i];
+                        if (ImGui::Selectable(projectionTypeStrings[i], isSelected)) {
+                            for (auto e : m_SelectedEntities) {
+                                e.GetComponent<CameraComponent>().Camera.SetProjectionType((SceneCamera::ProjectionType)i);
+                            }
+                        }
+                        if (isSelected) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+
+                // 2. 清除模式 (Clear Flags)
+                const char* clearFlagStrings[] = { "Skybox", "Solid Color" };
+                const char* currentClearFlagString = clearFlagStrings[(int)refCamera.ClearFlag];
+                if (ImGui::BeginCombo("Clear Flags", currentClearFlagString)) {
+                    for (int i = 0; i < 2; i++) {
+                        bool isSelected = currentClearFlagString == clearFlagStrings[i];
+                        if (ImGui::Selectable(clearFlagStrings[i], isSelected)) {
+                            for (auto e : m_SelectedEntities) {
+                                e.GetComponent<CameraComponent>().ClearFlag = (CameraComponent::ClearFlags)i;
+                            }
+                        }
+                        if (isSelected) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+
+                // 3. 动态展示背景颜色选择器
+                if (refCamera.ClearFlag == CameraComponent::ClearFlags::SolidColor) {
+                    glm::vec4 bgColor = refCamera.BackgroundColor;
+                    if (ImGui::ColorEdit4("Background", glm::value_ptr(bgColor))) {
+                        for (auto e : m_SelectedEntities) {
+                            e.GetComponent<CameraComponent>().BackgroundColor = bgColor;
+                        }
+                    }
+                }
+
+                ImGui::Separator();
+
+                // 4. 其他基础属性
                 bool primary = refCamera.Primary;
                 if (ImGui::Checkbox("Primary Camera", &primary)) {
                     for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().Primary = primary;

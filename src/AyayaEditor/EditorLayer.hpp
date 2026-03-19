@@ -45,6 +45,7 @@ namespace Ayaya {
         
         void UIRenderDockspace();
         void UIRenderMenuBar();
+        void UIRenderToolbar(); // 顶部工具栏 (放播放按钮)
         void UIRenderViewport();
         void UIRenderGameViewport();
         
@@ -56,7 +57,6 @@ namespace Ayaya {
         // ==========================================
         void OnScenePlay();
         void OnSceneStop();
-        void UIRenderToolbar(); // 顶部工具栏 (放播放按钮)
 
     private:
         EditorCamera m_EditorCamera;
