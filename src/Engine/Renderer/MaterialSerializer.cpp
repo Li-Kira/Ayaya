@@ -3,6 +3,7 @@
 #include "Asset/AssetManager.hpp"
 #include <yaml-cpp/yaml.h>
 #include <fstream>
+#include <algorithm>
 
 namespace Ayaya {
 
@@ -118,6 +119,7 @@ namespace Ayaya {
                 if (prop.Type == MaterialPropertyType::Texture2D) {
                     if (propNode["TexturePath"]) {
                         prop.TexturePath = propNode["TexturePath"].as<std::string>();
+                        std::replace(prop.TexturePath.begin(), prop.TexturePath.end(), '\\', '/');
                         if (!prop.TexturePath.empty()) {
                             prop.TextureHandle = AssetManager::ImportAsset(std::filesystem::path(prop.TexturePath));
                         }

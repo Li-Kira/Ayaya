@@ -3,18 +3,18 @@ EditorState:
   ShowGrid: false
   ShowSkybox: false
   EnableMSAA: true
-  CameraPosition: [0.29844487, 1.8392124, 23.390566]
+  CameraPosition: [-1.6976695, 1.5265822, 23.110363]
   CameraDistance: 0
-  CameraPitch: -0.06720891
-  CameraYaw: 0.05145497
-  CameraFocalPoint: [0, 0, 0]
+  CameraPitch: -0.049115177
+  CameraYaw: -0.012740378
+  CameraFocalPoint: [-1.6976695, 1.5265822, 23.110363]
 Entities:
   - Entity: 5948316899377550005
     TagComponent:
       Tag: Main Camera
       IsActive: true
     TransformComponent:
-      Translation: [0, 0, 5]
+      Translation: [0, 0, 22.5]
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     CameraComponent:

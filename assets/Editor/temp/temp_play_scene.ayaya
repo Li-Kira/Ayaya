@@ -1,0 +1,51 @@
+Scene: Untitled
+EditorState:
+  ShowGrid: true
+  ShowSkybox: true
+  EnableMSAA: true
+  CameraPosition: [0, 0, 0]
+  CameraDistance: 10
+  CameraPitch: 0
+  CameraYaw: 0
+  CameraFocalPoint: [0, 0, 0]
+Entities:
+  - Entity: 2984325921025698835
+    TagComponent:
+      Tag: Main Camera
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 5]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    CameraComponent:
+      Primary: true
+      FixedAspectRatio: false
+      EV100: 14.5
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 14271835056011228079
+    TagComponent:
+      Tag: Directional Light
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [-0.7853982, 0.7853982, 0]
+      Scale: [1, 1, 1]
+    DirectionalLightComponent:
+      Color: [1, 1, 1]
+      Illuminance: 100000
+      AmbientStrength: 1500
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 15655038607720979551
+    TagComponent:
+      Tag: Cube
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: assets/materials/NewMaterial (2).mat
+    RelationshipComponent:
+      Parent: 0

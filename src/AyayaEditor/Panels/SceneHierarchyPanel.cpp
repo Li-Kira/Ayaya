@@ -790,7 +790,15 @@ namespace Ayaya {
         if (ImGui::BeginPopup("AddComponentPopup")) {
             if (!referenceEntity.HasComponent<CameraComponent>()) {
                 if (ImGui::MenuItem("Camera")) {
-                    for (auto e : m_SelectedEntities) if (!e.HasComponent<CameraComponent>()) e.AddComponent<CameraComponent>();
+                    for (auto e : m_SelectedEntities) {
+                        if (!e.HasComponent<CameraComponent>()) {
+                            auto& cc = e.AddComponent<CameraComponent>();
+                            // ==========================================
+                            // 核心修复 1：新建相机组件时，必须赋予默认的透视模式！
+                            // ==========================================
+                            cc.Camera.SetProjectionType(SceneCamera::ProjectionType::Perspective);
+                        }
+                    }
                     ImGui::CloseCurrentPopup();
                 }
             }

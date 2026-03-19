@@ -24,8 +24,8 @@ namespace Ayaya {
         m_IsOpen = isOpen;
         if (isOpen) {
             // 每次打开面板时，同步一次当前的真实数据
-            m_WindowWidth = Application::Get().GetWindow().GetWidth();
-            m_WindowHeight = Application::Get().GetWindow().GetHeight();
+            m_WindowWidth = (int)ImGui::GetMainViewport()->Size.x;
+            m_WindowHeight = (int)ImGui::GetMainViewport()->Size.y;
             m_UIScale = ImGui::GetIO().FontGlobalScale;
         }
     }
@@ -112,8 +112,8 @@ namespace Ayaya {
         // 让按钮填满宽度，稍微高一点，看起来像个确定按钮
         if (ImGui::Button("Save Preferences", ImVec2(-1.0f, 30.0f))) {
             // 点击时不仅保存文件，同时自动把当前的真实窗口大小抓取下来保存
-            m_WindowWidth = Application::Get().GetWindow().GetWidth();
-            m_WindowHeight = Application::Get().GetWindow().GetHeight();
+            m_WindowWidth = (int)ImGui::GetMainViewport()->Size.x;
+            m_WindowHeight = (int)ImGui::GetMainViewport()->Size.y;
             m_UIScale = ImGui::GetIO().FontGlobalScale;
             
             SavePreferences();

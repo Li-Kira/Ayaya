@@ -98,9 +98,6 @@ namespace Ayaya {
                 Entity cameraEntity{ entityID, m_ActiveScene.get() };
                 glm::mat4 worldTransform = cameraEntity.GetWorldTransform();
                 
-                // ==========================================
-                // 核心修复 1：强行剥离 Scale 干扰，解决相机畸变问题！
-                // ==========================================
                 glm::vec3 scale, translation, skew;
                 glm::quat rotation;
                 glm::vec4 perspective;
@@ -109,11 +106,17 @@ namespace Ayaya {
                 cameraPosition = translation;
                 glm::mat4 unscaledTransform = glm::translate(glm::mat4(1.0f), translation) * glm::toMat4(rotation);
                 cameraViewMatrix = glm::inverse(unscaledTransform); 
-                cameraProjectionMatrix = cameraComp.Camera.GetProjection();
                 
                 // ==========================================
-                // 核心修复 2：提取该相机的专属背景配置
+                // 核心修复 2：在获取投影矩阵前，强制矫正当前主相机的长宽比！
+                // 这样新建的相机立刻就能拥有完美的 Game 窗口比例
                 // ==========================================
+                if (!cameraComp.FixedAspectRatio && m_GameViewportSize.x > 0.0f && m_GameViewportSize.y > 0.0f) {
+                    cameraComp.Camera.SetViewportSize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);
+                }
+
+                cameraProjectionMatrix = cameraComp.Camera.GetProjection();
+                
                 renderSkybox = (cameraComp.ClearFlag == CameraComponent::ClearFlags::Skybox);
                 clearColor = cameraComp.BackgroundColor;
 
@@ -300,6 +303,7 @@ namespace Ayaya {
             EditorState state;
             if (serializer.Deserialize(filepath, state)) {
                 m_ActiveScene = newScene;
+                m_EditorScene = m_ActiveScene;
                 
                 m_ShowGrid = state.ShowGrid;
                 m_ShowSkybox = state.ShowSkybox;
