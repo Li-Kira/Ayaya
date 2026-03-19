@@ -5,6 +5,7 @@
 #include "Panels/SceneHierarchyPanel.hpp"
 #include "Panels/ContentBrowserPanel.hpp"
 #include "Panels/PreferencesPanel.hpp"
+#include "Renderer/SceneRenderer.hpp"
 #include <Renderer/Renderer.hpp>
 #include <Renderer/Texture.hpp>
 // --- 新增：引入场景序列化器 ---
@@ -89,9 +90,12 @@ namespace Ayaya {
         Entity m_HoveredEntity = {}; 
 
         bool m_ShowGrid = true; // 默认开启网格
-        bool m_ShowSkybox = true; // 默认开启网格
+        bool m_ShowSkybox = true; // 默认开启天空盒
         bool m_EnableMSAA = true; // 默认开启抗锯齿
         bool m_ShowPreferencesWindow = false; // 控制偏好设置窗口的开关
+
+        SceneRenderer::Statistics m_GameStats;
+        bool m_ShowStatsPanel = true;
     };
 
 }

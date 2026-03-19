@@ -1,6 +1,5 @@
 #include "EditorLayer.hpp"
 #include "Renderer/Mesh.hpp"
-#include "Renderer/SceneRenderer.hpp"
 #include "Events/MouseEvent.hpp"
 
 #include <glad/glad.h>
@@ -131,6 +130,8 @@ namespace Ayaya {
             SceneRenderer::RenderScene(m_ActiveScene, {}, false, renderSkybox, clearColor);
             SceneRenderer::EndScene();
 
+            m_GameStats = SceneRenderer::GetStats();
+
             glBindFramebuffer(GL_READ_FRAMEBUFFER, SceneRenderer::GetPostProcessFBORendererID());
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_GameFBO->GetRendererID());
             glBlitFramebuffer(0, 0, (GLint)m_ViewportSize.x, (GLint)m_ViewportSize.y,
@@ -139,6 +140,8 @@ namespace Ayaya {
             glBindFramebuffer(GL_FRAMEBUFFER, 0); 
         } else {
             // 没有主相机时，Game 窗口呈现黑屏待机
+            memset(&m_GameStats, 0, sizeof(SceneRenderer::Statistics));
+
             m_GameFBO->Bind();
             RenderCommand::SetClearColor({ 0.0f, 0.0f, 0.0f, 1.0f });
             RenderCommand::Clear();
@@ -180,7 +183,8 @@ namespace Ayaya {
         cameraComp.Camera.SetProjectionType(SceneCamera::ProjectionType::Perspective);
         cameraComp.Camera.SetViewportSize(1280, 720);
         auto& cameraTransform = cameraEntity.GetComponent<TransformComponent>();
-        cameraTransform.Translation = { 0.0f, 0.0f, 5.0f };
+        cameraTransform.Translation = { -2.114f, 0.866f, 2.953f };
+        cameraTransform.Rotation = glm::radians(glm::vec3(-12.907f, -35.081f, 0.0f));
 
         // 创造太阳光
         Entity dirLight = m_ActiveScene->CreateEntity("Directional Light");
@@ -501,6 +505,7 @@ namespace Ayaya {
             if (ImGui::BeginMenu("View")) {
                 ImGui::MenuItem("Show Grid", nullptr, &m_ShowGrid);
                 ImGui::MenuItem("Show Skybox", nullptr, &m_ShowSkybox);
+                ImGui::MenuItem("Show Statistics", nullptr, &m_ShowStatsPanel);
 
                 if (ImGui::MenuItem("Enable MSAA (4x)", nullptr, &m_EnableMSAA)) {
                     // 【核心修改】：优雅的一行调用！再也不用在 UI 层操作底层缓冲了
@@ -568,17 +573,76 @@ namespace Ayaya {
 
     void EditorLayer::UIRenderGameViewport() {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{ 0.0f, 0.0f });
-        // 创建一个名为 "Game" 的新标签页/窗口
         ImGui::Begin("Game");
 
         ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
         m_GameViewportSize = { viewportPanelSize.x, viewportPanelSize.y };
 
-        // 将专属画布 m_GameFBO 中的贴图显示出来
+        // 记录画图前的光标起始位置，这是悬浮层定位的锚点！
+        ImVec2 cursorStartPos = ImGui::GetCursorPos();
+
+        // 渲染底层的游戏画面
         uint32_t textureID = m_GameFBO->GetColorAttachmentRendererID();
         ImGui::Image(reinterpret_cast<void*>((intptr_t)textureID), 
                      ImVec2{ m_GameViewportSize.x, m_GameViewportSize.y }, 
                      ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+
+        // ==========================================
+        // 核心魔法：Unity 风格的 Game 窗口内置 Stats 悬浮层 (完美兼容版)
+        // ==========================================
+        if (m_ShowStatsPanel) {
+            float overlayWidth = 375.0f;  
+            float overlayHeight = 340.0f; 
+            
+            ImGui::SetCursorPos(ImVec2(cursorStartPos.x + m_GameViewportSize.x - overlayWidth - 10.0f, cursorStartPos.y + 10.0f));
+
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.15f, 0.9f));
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 4.0f);
+            
+            // 去掉了报错的 Flag，使用最基础的配置
+            ImGui::BeginChild("StatsOverlay", ImVec2(overlayWidth, overlayHeight), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            
+            // ==========================================
+            // 兼容性修复：手动推移光标替代 Padding！
+            // ==========================================
+            ImGui::SetCursorPosY(10.0f); // 手动往下推 10 像素 (Top Padding)
+            ImGui::Indent(10.0f);        // 全局向右缩进 10 像素 (Left Padding)
+
+            auto& io = ImGui::GetIO();
+
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Graphics");
+            ImGui::Separator();
+            ImGui::Text("%.1f FPS (%.1f ms)", io.Framerate, 1000.0f / io.Framerate);
+            ImGui::Text("Screen: %dx%d", (int)m_GameViewportSize.x, (int)m_GameViewportSize.y);
+            ImGui::Spacing();
+            
+            ImGui::TextColored(ImVec4(0.8f, 0.6f, 0.2f, 1.0f), "Rendering");
+            ImGui::Separator();
+            ImGui::Text("Batches: %d", m_GameStats.DrawCalls);
+            ImGui::Text("SetPass calls: %d", m_GameStats.ShaderBinds);
+            ImGui::Spacing();
+
+            ImGui::TextColored(ImVec4(0.3f, 0.6f, 0.9f, 1.0f), "Geometry & Scene");
+            ImGui::Separator();
+            
+            ImGui::Text("Tris: %d", m_GameStats.TriangleCount); 
+            ImGui::SameLine(0.0f, 15.0f); // 相对间距，防止重叠
+            ImGui::Text("Verts: %d", m_GameStats.VertexCount);
+
+            if (m_ActiveScene) {
+                size_t entityCount = 0;
+                auto view = m_ActiveScene->Reg().view<IDComponent>();
+                for (auto e : view) entityCount++;
+                ImGui::Text("Active Entities: %zu", entityCount);
+            }
+
+            ImGui::Unindent(10.0f); // 渲染完毕后取消缩进，保持良好习惯
+            ImGui::EndChild();
+            
+            // 这里改回 PopStyleVar(1)，因为我们去掉了之前的 Padding 压栈
+            ImGui::PopStyleVar(); 
+            ImGui::PopStyleColor();
+        }
 
         ImGui::End();
         ImGui::PopStyleVar();

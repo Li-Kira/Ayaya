@@ -468,6 +468,38 @@ namespace Ayaya {
                     ImGui::EndCombo();
                 }
 
+               if (refCamera.Camera.GetProjectionType() == SceneCamera::ProjectionType::Perspective) {
+                    float fov = glm::degrees(refCamera.Camera.GetPerspectiveFOV());
+                    // FOV 限制在 1度 到 179度 之间，防止画面反转或崩坏
+                    if (ImGui::DragFloat("FOV", &fov, 0.1f, 1.0f, 179.0f)) {
+                        for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().Camera.SetPerspectiveFOV(glm::radians(fov));
+                    }
+                    float nearClip = refCamera.Camera.GetPerspectiveNearClip();
+                    // 近裁剪面必须大于 0
+                    if (ImGui::DragFloat("Near Clip", &nearClip, 0.1f, 0.01f, 1000.0f)) {
+                        for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().Camera.SetPerspectiveNearClip(nearClip);
+                    }
+                    float farClip = refCamera.Camera.GetPerspectiveFarClip();
+                    // 远裁剪面必须大于近裁剪面
+                    if (ImGui::DragFloat("Far Clip", &farClip, 1.0f, nearClip + 0.1f, 10000.0f)) {
+                        for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().Camera.SetPerspectiveFarClip(farClip);
+                    }
+                } else {
+                    float orthoSize = refCamera.Camera.GetOrthographicSize();
+                    // 正交大小必须大于 0
+                    if (ImGui::DragFloat("Size", &orthoSize, 0.1f, 0.1f, 1000.0f)) {
+                        for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().Camera.SetOrthographicSize(orthoSize);
+                    }
+                    float nearClip = refCamera.Camera.GetOrthographicNearClip();
+                    if (ImGui::DragFloat("Near Clip", &nearClip, 0.1f, -1000.0f, 1000.0f)) {
+                        for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().Camera.SetOrthographicNearClip(nearClip);
+                    }
+                    float farClip = refCamera.Camera.GetOrthographicFarClip();
+                    if (ImGui::DragFloat("Far Clip", &farClip, 0.1f, nearClip + 0.1f, 1000.0f)) {
+                        for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().Camera.SetOrthographicFarClip(farClip);
+                    }
+                }
+
                 // 2. 清除模式 (Clear Flags)
                 const char* clearFlagStrings[] = { "Skybox", "Solid Color" };
                 const char* currentClearFlagString = clearFlagStrings[(int)refCamera.ClearFlag];

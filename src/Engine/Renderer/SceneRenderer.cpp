@@ -18,7 +18,6 @@
 #include <glm/gtx/quaternion.hpp>
 
 namespace Ayaya {
-
     // 【极其重要的 C++ 内存对齐】：
     // OpenGL 的 std140 布局要求极其严格。vec3 在显存中会被按 16 字节(vec4)对齐！
     // 所以必须手动加上 float padding，否则数据会完全错位！
@@ -97,6 +96,8 @@ namespace Ayaya {
         // 新增：全局渲染队列
         // ==========================================
         std::vector<RenderCommandData> OpaqueDrawList;
+        // 新增：静态统计数据
+        SceneRenderer::Statistics Stats;
     };
 
     static SceneRendererData s_Data;
@@ -190,6 +191,9 @@ namespace Ayaya {
     }
 
    void SceneRenderer::BeginScene(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, const glm::vec3& cameraPosition) {
+        // 在每帧渲染开始时，清零计数器！
+        ResetStats();
+
         // 保存分开的矩阵
         s_Data.ViewMatrix = viewMatrix;
         s_Data.ProjectionMatrix = projectionMatrix;
@@ -366,6 +370,8 @@ namespace Ayaya {
             if (currentShader != cmd.ShaderAsset) {
                 currentShader = cmd.ShaderAsset;
                 currentShader->Bind();
+
+                s_Data.Stats.ShaderBinds++;
             }
 
             // 3. 只有当 Material 发生变化时，才重新上传 Uniform 和绑定贴图
@@ -402,6 +408,11 @@ namespace Ayaya {
 
             // 4. 提交绘制！(Renderer 会负责绑定 VAO 和上传 Transform 矩阵)
             Renderer::Submit(currentShader, cmd.MeshAsset->GetVertexArray(), cmd.Transform);
+
+            // 埋点 1：记录实体模型的绘制
+            s_Data.Stats.DrawCalls++;
+            s_Data.Stats.VertexCount += cmd.MeshAsset->GetVertexCount();
+            s_Data.Stats.TriangleCount += cmd.MeshAsset->GetIndexCount() / 3;
         }
 
         // 剔除日志
@@ -420,9 +431,22 @@ namespace Ayaya {
             s_Data.SkyboxShader->Bind();
             glm::mat4 viewNoTranslation = glm::mat4(glm::mat3(s_Data.ViewMatrix));
             s_Data.SkyboxShader->SetMat4("u_View", viewNoTranslation);
-            s_Data.SkyboxShader->SetMat4("u_Projection", s_Data.ProjectionMatrix);
             
-            // --- 修复：解开之前被注释掉的环境贴图绑定！ ---
+            // ==========================================
+            // 核心修复：图形学魔法，识别并拯救正交相机下的天空盒！
+            // ==========================================
+            glm::mat4 skyboxProjection = s_Data.ProjectionMatrix;
+            
+            // 检查投影矩阵的 [3][3] 元素。如果是 1.0，说明当前是正交相机
+            if (s_Data.ProjectionMatrix[3][3] == 1.0f) {
+                // 强行给天空盒捏造一个标准的透视投影矩阵！
+                float aspect = (float)s_Data.GeometryFBO->GetSpecification().Width / (float)s_Data.GeometryFBO->GetSpecification().Height;
+                skyboxProjection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10.0f);
+            }
+            
+            // 把修复好的矩阵传给 Shader
+            s_Data.SkyboxShader->SetMat4("u_Projection", skyboxProjection);
+            
             if (s_Data.EnvironmentCubemap) {
                 s_Data.EnvironmentCubemap->Bind(0); 
                 s_Data.SkyboxShader->SetInt("u_Skybox", 0);
@@ -433,6 +457,9 @@ namespace Ayaya {
             glEnable(GL_CULL_FACE);
 
             glDepthFunc(GL_LESS);
+
+            s_Data.Stats.DrawCalls++;
+            s_Data.Stats.VertexCount += 36; // 立方体 36 个顶点
         }
 
         // ==========================================
@@ -480,6 +507,8 @@ namespace Ayaya {
 
         glBindVertexArray(s_Data.EmptyVAO);
         glDrawArrays(GL_TRIANGLES, 0, 3);
+        s_Data.Stats.DrawCalls++;
+        s_Data.Stats.VertexCount += 3;
         
         glDisable(GL_BLEND); // 画完后立即关闭混合
 
@@ -557,5 +586,13 @@ namespace Ayaya {
 
     uint32_t SceneRenderer::GetPostProcessFBORendererID() {
         return s_Data.PostProcessFBO->GetRendererID();
+    }
+
+    void SceneRenderer::ResetStats() {
+        memset(&s_Data.Stats, 0, sizeof(Statistics));
+    }
+
+    SceneRenderer::Statistics SceneRenderer::GetStats() {
+        return s_Data.Stats;
     }
 }

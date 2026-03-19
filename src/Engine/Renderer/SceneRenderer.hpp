@@ -32,6 +32,18 @@ namespace Ayaya {
         
         // 结束一帧的渲染
         static void EndScene();
+
+        // ==========================================
+        // 新增：渲染统计数据结构
+        // ==========================================
+        struct Statistics {
+            uint32_t DrawCalls = 0;
+            uint32_t ShaderBinds = 0;   // 对应 Unity 的 SetPass Calls
+            uint32_t VertexCount = 0;
+            uint32_t TriangleCount = 0; // 对应 Unity 的 Tris
+        };
+        static void ResetStats();
+        static Statistics GetStats();
     };
 
 }

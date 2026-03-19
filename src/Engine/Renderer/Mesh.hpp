@@ -38,6 +38,9 @@ namespace Ayaya {
 
         std::shared_ptr<VertexArray> GetVertexArray() const { return m_VertexArray; }
 
+        uint32_t GetVertexCount() const { return m_VertexCount; }
+        uint32_t GetIndexCount() const { return m_IndexCount; }
+
         // ==========================================
         // 几何体工厂：一键生成标准图元
         // ==========================================
@@ -48,6 +51,9 @@ namespace Ayaya {
     private:
         std::shared_ptr<VertexArray> m_VertexArray;
         AABB m_BoundingBox;
+
+        uint32_t m_VertexCount = 0;
+        uint32_t m_IndexCount = 0;
     };
 
 }

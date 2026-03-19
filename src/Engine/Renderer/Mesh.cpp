@@ -4,6 +4,8 @@
 namespace Ayaya {
 
     Mesh::Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices) {
+        m_VertexCount = (uint32_t)vertices.size();
+        m_IndexCount = (uint32_t)indices.size();
         m_VertexArray.reset(VertexArray::Create());
 
         // 将 Vertex 结构体数组转换为紧凑的 Buffer
