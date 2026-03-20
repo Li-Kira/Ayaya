@@ -1,6 +1,7 @@
 #include "EditorLayer.hpp"
 #include "Renderer/Mesh.hpp"
 #include "Events/MouseEvent.hpp"
+#include "Scripting/ScriptEngine.hpp"
 
 #include <glad/glad.h>
 #include <imgui.h>
@@ -28,6 +29,11 @@ namespace Ayaya {
         // 现在全权交由 SceneRenderer 在内部自己打理
         // ==========================================
         SceneRenderer::Init();
+        
+        // ==========================================
+        // 核心修复：唤醒 Lua 虚拟机！
+        // ==========================================
+        ScriptEngine::Init();
 
         // ==========================================
         // 新增：创建 Game 窗口专属的 FBO 画布
@@ -806,9 +812,9 @@ namespace Ayaya {
         }
 
         // ==========================================
-        // 4. 开启物理效果计算
+        // 4. 开启统一的运行时总开关！
         // ==========================================
-        m_ActiveScene->OnPhysics2DStart();
+        m_ActiveScene->OnRuntimeStart();
     }
 
     void EditorLayer::OnSceneStop() {
@@ -818,10 +824,10 @@ namespace Ayaya {
         m_TimeStepScale = 1.0f;
 
         // ==========================================
-        // 停止并销毁物理世界，释放内存！
+        // 停止统一的运行时，清理内存！
         // ==========================================
         if (m_ActiveScene) {
-            m_ActiveScene->OnPhysics2DStop();
+            m_ActiveScene->OnRuntimeStop();
         }
 
         // 恢复编辑状态的场景

@@ -973,6 +973,59 @@ namespace Ayaya {
             }
         }
 
+        // --- 绘制 Lua Script 组件 ---
+        bool allHaveLuaScript = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<LuaScriptComponent>()) { allHaveLuaScript = false; break; }
+
+        if (allHaveLuaScript) {
+            bool opened = ImGui::TreeNodeEx((void*)typeid(LuaScriptComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Lua Script");
+            
+            bool removeComponent = false;
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Remove Component")) removeComponent = true;
+                ImGui::EndPopup();
+            }
+
+            if (opened) {
+                auto& refLsc = referenceEntity.GetComponent<LuaScriptComponent>();
+
+                ImGui::Text("Script Source");
+                std::string pathDisplay = refLsc.ScriptPath.empty() ? "Drop .lua file here" : refLsc.ScriptPath;
+                ImGui::Button(pathDisplay.c_str(), ImVec2(-1.0f, 30.0f));
+
+                // 核心交互：支持拖拽 .lua 文件绑定脚本！
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                        const char* pathStr = (const char*)payload->Data;
+                        std::filesystem::path scriptPath = std::filesystem::path("assets") / pathStr;
+                        if (scriptPath.extension() == ".lua") {
+                            for (auto e : m_SelectedEntities) {
+                                e.GetComponent<LuaScriptComponent>().ScriptPath = scriptPath.string();
+                            }
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+
+                ImGui::Spacing();
+                
+                // 保底方案：允许用户手动输入路径
+                char buffer[256];
+                memset(buffer, 0, sizeof(buffer));
+                strncpy(buffer, refLsc.ScriptPath.c_str(), sizeof(buffer) - 1);
+                if (ImGui::InputText("Path##ScriptPath", buffer, sizeof(buffer))) {
+                    for (auto e : m_SelectedEntities) {
+                        e.GetComponent<LuaScriptComponent>().ScriptPath = std::string(buffer);
+                    }
+                }
+
+                ImGui::TreePop();
+            }
+            if (removeComponent) {
+                for (auto e : m_SelectedEntities) e.RemoveComponent<LuaScriptComponent>();
+            }
+        }
+
         // --- 绘制 Rigidbody 2D 组件 ---
         bool allHaveRb2d = true;
         for (auto e : m_SelectedEntities) if (!e.HasComponent<Rigidbody2DComponent>()) { allHaveRb2d = false; break; }
@@ -1131,6 +1184,20 @@ namespace Ayaya {
             if (!referenceEntity.HasComponent<PointLightComponent>()) {
                 if (ImGui::MenuItem("Point Light")) {
                     for (auto e : m_SelectedEntities) if (!e.HasComponent<PointLightComponent>()) e.AddComponent<PointLightComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
+            // ==========================================
+            // 新增：允许用户从菜单中添加 Lua 脚本组件
+            // ==========================================
+            if (!referenceEntity.HasComponent<LuaScriptComponent>()) {
+                if (ImGui::MenuItem("Lua Script")) {
+                    for (auto e : m_SelectedEntities) {
+                        if (!e.HasComponent<LuaScriptComponent>()) {
+                            e.AddComponent<LuaScriptComponent>();
+                        }
+                    }
                     ImGui::CloseCurrentPopup();
                 }
             }

@@ -38,6 +38,12 @@ namespace Ayaya {
         const std::vector<entt::entity>& GetRootEntities() const { return m_RootEntities; }
 
         // ==========================================
+        // 运行时的总开关 (生命周期)
+        // ==========================================
+        void OnRuntimeStart();
+        void OnRuntimeStop();
+
+        // ==========================================
         // 新增：物理系统的生命周期
         // ==========================================
         void OnPhysics2DStart();

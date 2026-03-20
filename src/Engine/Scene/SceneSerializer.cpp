@@ -259,6 +259,14 @@ namespace Ayaya {
             out << YAML::EndMap; 
         }
 
+        if (entity.HasComponent<LuaScriptComponent>()) {
+            out << YAML::Key << "LuaScriptComponent";
+            out << YAML::BeginMap; 
+            auto& lsc = entity.GetComponent<LuaScriptComponent>();
+            out << YAML::Key << "ScriptPath" << YAML::Value << lsc.ScriptPath;
+            out << YAML::EndMap; 
+        }
+
         // --- 核心：保存父子层级关系 UUID ---
         if (entity.HasComponent<RelationshipComponent>()) {
             out << YAML::Key << "RelationshipComponent";
@@ -549,6 +557,12 @@ namespace Ayaya {
                 bc2d.Friction = boxCollider2DComponent["Friction"].as<float>();
                 bc2d.Restitution = boxCollider2DComponent["Restitution"].as<float>();
                 bc2d.RestitutionThreshold = boxCollider2DComponent["RestitutionThreshold"].as<float>();
+            }
+
+            auto luaScriptComponent = entity["LuaScriptComponent"];
+            if (luaScriptComponent) {
+                auto& lsc = deserializedEntity.AddComponent<LuaScriptComponent>();
+                lsc.ScriptPath = luaScriptComponent["ScriptPath"].as<std::string>();
             }
         }
 

@@ -167,4 +167,18 @@ namespace Ayaya {
         BoxCollider2DComponent(const BoxCollider2DComponent&) = default;
     };
 
+    // ==========================================
+    // Lua 脚本组件
+    // ==========================================
+    struct LuaScriptComponent {
+        std::string ScriptPath = ""; 
+
+        // 仅在运行时有效，用于存储当前实体的专属 Lua 环境 (沙盒)
+        void* RuntimeEnvironment = nullptr; 
+
+        LuaScriptComponent() = default;
+        LuaScriptComponent(const LuaScriptComponent&) = default;
+        LuaScriptComponent(const std::string& path) : ScriptPath(path) {}
+    };
+
 }

@@ -9,23 +9,23 @@ EditorState:
   CameraYaw: 0
   CameraFocalPoint: [0, 0, 0]
 Entities:
-  - Entity: 17584129003793938180
+  - Entity: 12340860498744403305
     TagComponent:
       Tag: Main Camera
       IsActive: true
     TransformComponent:
-      Translation: [0, 0, 10]
-      Rotation: [0, 0, 0]
+      Translation: [-2.114, 0.866, 2.953]
+      Rotation: [-0.22526963, -0.612279, 0]
       Scale: [1, 1, 1]
     CameraComponent:
       Primary: true
       FixedAspectRatio: false
       EV100: 14.5
-      ClearFlag: 1
+      ClearFlag: 0
       BackgroundColor: [0.12, 0.12, 0.14, 1]
     RelationshipComponent:
       Parent: 0
-  - Entity: 6727328896029978
+  - Entity: 9572643018626608191
     TagComponent:
       Tag: Directional Light
       IsActive: true
@@ -39,47 +39,18 @@ Entities:
       AmbientStrength: 1500
     RelationshipComponent:
       Parent: 0
-  - Entity: 17734577197527621036
-    TagComponent:
-      Tag: Plane
-      IsActive: true
-    TransformComponent:
-      Translation: [-5.9604645e-08, 0, 0]
-      Rotation: [0, -0, 0]
-      Scale: [15, 1, 1]
-    MeshRendererComponent:
-      MaterialPath: assets/materials/NewMaterial (3).mat
-    Rigidbody2DComponent:
-      BodyType: 0
-      FixedRotation: false
-    BoxCollider2DComponent:
-      Offset: [0, 0]
-      Size: [0.5, 0.5]
-      Density: 1
-      Friction: 0.5
-      Restitution: 0
-      RestitutionThreshold: 0.5
-    RelationshipComponent:
-      Parent: 0
-  - Entity: 1255645958252395194
+  - Entity: 6619717396135751333
     TagComponent:
       Tag: Cube
       IsActive: true
     TransformComponent:
-      Translation: [0, 2.4252295, 0]
-      Rotation: [0, -0, 0]
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
-      MaterialPath: assets/materials/NewMaterial (4).mat
-    Rigidbody2DComponent:
-      BodyType: 1
-      FixedRotation: false
-    BoxCollider2DComponent:
-      Offset: [0, 0]
-      Size: [0.5, 0.5]
-      Density: 1
-      Friction: 0.5
-      Restitution: 1
-      RestitutionThreshold: 0.5
+      ModelPath: Primitive::Cube
+      MaterialPath: assets/materials/NewMaterial (8).mat
+    LuaScriptComponent:
+      ScriptPath: assets/scripts/Player.lua
     RelationshipComponent:
       Parent: 0

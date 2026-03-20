@@ -7,6 +7,7 @@
 #include <box2d/b2_body.h>
 #include <box2d/b2_fixture.h>
 #include <box2d/b2_polygon_shape.h>
+#include "Scripting/ScriptEngine.hpp"
 
 namespace Ayaya {
 
@@ -110,6 +111,35 @@ namespace Ayaya {
         return newEntity;
     }
 
+    // ==========================================
+    // 游戏开始：按顺序唤醒所有运行时系统！
+    // ==========================================
+    void Scene::OnRuntimeStart() {
+        // 1. 唤醒物理世界
+        OnPhysics2DStart();
+
+        // 2. 唤醒所有的 Lua 脚本，为它们分配独立的沙盒环境
+        m_Registry.view<LuaScriptComponent>().each([=](auto entityID, auto& lsc) {
+            ScriptEngine::OnCreateEntity({ entityID, this });
+        });
+
+        // (未来如果有音频系统、粒子系统，统统加在这里！)
+    }
+
+    // ==========================================
+    // 游戏结束：按顺序清理所有运行时系统的内存！
+    // ==========================================
+    void Scene::OnRuntimeStop() {
+        // 1. 销毁物理世界
+        OnPhysics2DStop();
+
+        // 2. 释放 Lua 运行时的沙盒环境指针
+        m_Registry.view<LuaScriptComponent>().each([=](auto entityID, auto& lsc) {
+            // 虽然 Scene 销毁时会回收组件，但手动置空指针是一个好习惯
+            lsc.RuntimeEnvironment = nullptr; 
+        });
+    }
+
     void Scene::OnPhysics2DStart() {
         // 创建物理世界，设置标准的地球重力向下 9.8
         m_PhysicsWorld = new b2World({ 0.0f, -9.8f });
@@ -162,8 +192,16 @@ namespace Ayaya {
     }
 
     void Scene::OnUpdateRuntime(Timestep ts) {
+
         // ==========================================
-        // 1. 物理步进计算
+        // 1. 执行 Lua 逻辑
+        // ==========================================
+        m_Registry.view<LuaScriptComponent>().each([=](auto entityID, auto& lsc) {
+            ScriptEngine::OnUpdateEntity({ entityID, this }, ts);
+        });
+
+        // ==========================================
+        // 2. 物理步进计算
         // ==========================================
         const int32_t velocityIterations = 6;
         const int32_t positionIterations = 2;

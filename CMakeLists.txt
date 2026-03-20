@@ -63,6 +63,7 @@ file(GLOB CORE_SOURCES "${ENGINE_DIR}/Core/*.cpp")
 file(GLOB RENDERER_SOURCES "${ENGINE_DIR}/Renderer/*.cpp")
 file(GLOB OPENGL_SOURCES "${ENGINE_DIR}/Platform/OpenGL/*.cpp")
 file(GLOB SCENE_SOURCES "${ENGINE_DIR}/Scene/*.cpp")
+file(GLOB SCRIPTING_SOURCES "${ENGINE_DIR}/Scripting/*.cpp")
 file(GLOB UTILS_SOURCES "${ENGINE_DIR}/Utils/*.cpp")
 file(GLOB ASSET_SOURCES "${ENGINE_DIR}/Asset/*.cpp")
 set(GLAD_SOURCE "${ENGINE_DIR}/Platform/OpenGL/glad.c")
@@ -88,6 +89,7 @@ set(AYAYA_SOURCES
     ${RENDERER_SOURCES} 
     ${OPENGL_SOURCES}
     ${SCENE_SOURCES}
+    ${SCRIPTING_SOURCES}
     ${UTILS_SOURCES}
     ${ASSET_SOURCES}
     ${GLAD_SOURCE}
@@ -99,6 +101,18 @@ set(AYAYA_SOURCES
 add_library(Ayaya STATIC ${AYAYA_SOURCES})
 target_compile_definitions(Ayaya PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
 set_source_files_properties(${GLAD_SOURCE} PROPERTIES LANGUAGE C)
+
+# 编译lua
+file(GLOB LUA_SOURCES "${VENDOR_DIR}/lua/*.c" "${VENDOR_DIR}/lua/src/*.c")
+
+if(LUA_SOURCES)
+    list(FILTER LUA_SOURCES EXCLUDE REGEX "lua\\.c$")
+    list(FILTER LUA_SOURCES EXCLUDE REGEX "luac\\.c$")
+else()
+    message(FATAL_ERROR "Could not find Lua source files! Please check your vendor/lua directory.")
+endif()
+
+add_library(Lua STATIC ${LUA_SOURCES})
 
 # --- 配置预编译头 (PCH) ---
 target_precompile_headers(Ayaya PRIVATE 
@@ -123,6 +137,9 @@ target_include_directories(Ayaya PUBLIC
 
     # 新增：允许引擎能找到 <box2d/box2d.h>
     "${BOX2D_DIR}/include"
+    "${VENDOR_INCLUDE}/sol"
+    "${VENDOR_DIR}/lua"
+    "${VENDOR_DIR}/lua/src"
 )
 
 # 7. 链接第三方库
@@ -132,10 +149,10 @@ find_library(ASSIMP_LIB NAMES assimp assimp-vc143-mt assimp-vc142-mt PATHS "${VE
 
 if(APPLE)
     # Mac 平台链接
-    target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${APPLE_FRAMEWORKS} yaml-cpp ${ASSIMP_LIB} box2d)
+    target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${APPLE_FRAMEWORKS} yaml-cpp ${ASSIMP_LIB} box2d Lua)
 elseif(WIN32)
     # Windows 平台链接
-    target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${OPENGL_LIB} yaml-cpp ${ASSIMP_LIB} box2d)
+    target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${OPENGL_LIB} yaml-cpp ${ASSIMP_LIB} box2d Lua)
 endif()
 
 
