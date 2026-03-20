@@ -860,7 +860,7 @@ namespace Ayaya {
         ImVec2 contentRegionAvailable = ImGui::GetContentRegionAvail();
         ImGui::SetCursorPosX(contentRegionAvailable.x * 0.5f - 60.0f);
         
-        if (ImGui::Button("Add Component", ImVec2(120, 25))) {
+        if (ImGui::Button("Add Component", ImVec2(150, 25))) {
             ImGui::OpenPopup("AddComponentPopup");
         }
 

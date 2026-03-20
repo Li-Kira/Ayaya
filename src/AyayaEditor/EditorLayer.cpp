@@ -588,25 +588,23 @@ namespace Ayaya {
                      ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
 
         // ==========================================
-        // 核心魔法：Unity 风格的 Game 窗口内置 Stats 悬浮层 (完美兼容版)
+        // 核心魔法：Unity 风格的 Game 窗口内置 Stats 悬浮层 (完美动态适配版)
         // ==========================================
         if (m_ShowStatsPanel) {
-            float overlayWidth = 375.0f;  
-            float overlayHeight = 340.0f; 
+            // 1. 使用 static 保存上一帧算出的完美尺寸，实现 0 延迟感的自适应外框
+            static ImVec2 s_OverlaySize = ImVec2(375.0f, 340.0f); 
             
-            ImGui::SetCursorPos(ImVec2(cursorStartPos.x + m_GameViewportSize.x - overlayWidth - 10.0f, cursorStartPos.y + 10.0f));
+            // 2. 定位时使用这个动态尺寸
+            ImGui::SetCursorPos(ImVec2(cursorStartPos.x + m_GameViewportSize.x - s_OverlaySize.x - 10.0f, cursorStartPos.y + 10.0f));
 
             ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.15f, 0.9f));
             ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 4.0f);
             
-            // 去掉了报错的 Flag，使用最基础的配置
-            ImGui::BeginChild("StatsOverlay", ImVec2(overlayWidth, overlayHeight), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            // 3. 开启 Child，传入动态的外框尺寸
+            ImGui::BeginChild("StatsOverlay", s_OverlaySize, false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
             
-            // ==========================================
-            // 兼容性修复：手动推移光标替代 Padding！
-            // ==========================================
-            ImGui::SetCursorPosY(10.0f); // 手动往下推 10 像素 (Top Padding)
-            ImGui::Indent(10.0f);        // 全局向右缩进 10 像素 (Left Padding)
+            ImGui::SetCursorPosY(10.0f); 
+            ImGui::Indent(10.0f);        
 
             auto& io = ImGui::GetIO();
 
@@ -626,7 +624,7 @@ namespace Ayaya {
             ImGui::Separator();
             
             ImGui::Text("Tris: %d", m_GameStats.TriangleCount); 
-            ImGui::SameLine(0.0f, 15.0f); // 相对间距，防止重叠
+            ImGui::SameLine(0.0f, 15.0f); 
             ImGui::Text("Verts: %d", m_GameStats.VertexCount);
 
             if (m_ActiveScene) {
@@ -636,10 +634,22 @@ namespace Ayaya {
                 ImGui::Text("Active Entities: %zu", entityCount);
             }
 
-            ImGui::Unindent(10.0f); // 渲染完毕后取消缩进，保持良好习惯
+            ImGui::Unindent(10.0f); 
+
+            // ==========================================
+            // 终极动态适配魔法：在结束绘制前，向 ImGui 索要完美的宽高！
+            // ==========================================
+            
+            // [宽度动态]: 根据当前系统字体的行高，等比缩放你觉得最舒服的 375.0f
+            // (假设你在 Windows 上觉得刚好时，标准行高是 16.0f)
+            float currentLineHeight = ImGui::GetTextLineHeight(); 
+            s_OverlaySize.x = 375.0f * (currentLineHeight / 16.0f);
+            
+            // [高度动态]: 直接获取当前画笔(Cursor)的 Y 坐标，再加上 10 像素作为底部边距！
+            s_OverlaySize.y = ImGui::GetCursorPosY() + 10.0f; 
+
             ImGui::EndChild();
             
-            // 这里改回 PopStyleVar(1)，因为我们去掉了之前的 Padding 压栈
             ImGui::PopStyleVar(); 
             ImGui::PopStyleColor();
         }
