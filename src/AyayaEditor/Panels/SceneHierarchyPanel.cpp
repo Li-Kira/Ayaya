@@ -14,6 +14,26 @@
 
 namespace Ayaya {
 
+    // ==========================================
+    // 静态辅助函数：用于动态生成默认的白色 PBR 材质
+    // ==========================================
+    static std::shared_ptr<Material> CreateWhitePBR() {
+        auto mat = std::make_shared<Material>();
+        mat->Name = "New Material";
+        mat->ShaderName = "PBR";
+        
+        MaterialProperty p1; p1.UniformName = "u_Albedo"; p1.DisplayName = "Albedo Color"; p1.Type = MaterialPropertyType::Vec3; p1.Vec3Value = glm::vec3(1.0f); mat->Properties.push_back(p1);
+        MaterialProperty p2; p2.UniformName = "u_UseAlbedoMap"; p2.DisplayName = "Enable Albedo Map"; p2.Type = MaterialPropertyType::Bool; p2.BoolValue = false; mat->Properties.push_back(p2);
+        MaterialProperty p3; p3.UniformName = "u_Metallic"; p3.DisplayName = "Metallic"; p3.Type = MaterialPropertyType::Float; p3.FloatValue = 0.0f; mat->Properties.push_back(p3);
+        MaterialProperty p4; p4.UniformName = "u_UseMetallicMap"; p4.DisplayName = "Enable Metallic Map"; p4.Type = MaterialPropertyType::Bool; p4.BoolValue = false; mat->Properties.push_back(p4);
+        MaterialProperty p5; p5.UniformName = "u_Roughness"; p5.DisplayName = "Roughness"; p5.Type = MaterialPropertyType::Float; p5.FloatValue = 0.5f; mat->Properties.push_back(p5);
+        MaterialProperty p6; p6.UniformName = "u_UseRoughnessMap"; p6.DisplayName = "Enable Roughness Map"; p6.Type = MaterialPropertyType::Bool; p6.BoolValue = false; mat->Properties.push_back(p6);
+        MaterialProperty p7; p7.UniformName = "u_UseNormalMap"; p7.DisplayName = "Enable Normal Map"; p7.Type = MaterialPropertyType::Bool; p7.BoolValue = false; mat->Properties.push_back(p7);
+        MaterialProperty p8; p8.UniformName = "u_AO"; p8.DisplayName = "Ambient Occlusion"; p8.Type = MaterialPropertyType::Float; p8.FloatValue = 1.0f; mat->Properties.push_back(p8);
+        MaterialProperty p9; p9.UniformName = "u_UseAOMap"; p9.DisplayName = "Enable AO Map"; p9.Type = MaterialPropertyType::Bool; p9.BoolValue = false; mat->Properties.push_back(p9);
+        return mat;
+    }
+
     SceneHierarchyPanel::SceneHierarchyPanel(const std::shared_ptr<Scene>& context) {
         SetContext(context);
     }
@@ -52,6 +72,63 @@ namespace Ayaya {
                     Entity newEntity = m_Context->CreateEntity("Empty Entity");
                     SetSelectedEntity(newEntity); // 创建后自动选中
                 }
+                // --- 新增 3D 几何体分类 ---
+                if (ImGui::BeginMenu("3D Object")) {
+                    if (ImGui::MenuItem("Cube")) {
+                        Entity entity = m_Context->CreateEntity("Cube");
+                        auto& mrc = entity.AddComponent<MeshRendererComponent>();
+                        mrc.ModelAsset = std::make_shared<Model>(Mesh::CreateCube(1.0f));
+                        mrc.ModelAsset->SetPath("Primitive::Cube"); // 打上标记，防止丢失
+                        mrc.MaterialAsset = CreateWhitePBR();       // 赋予白模材质
+                        SetSelectedEntity(entity);
+                    }
+                    if (ImGui::MenuItem("Sphere")) {
+                        Entity entity = m_Context->CreateEntity("Sphere");
+                        auto& mrc = entity.AddComponent<MeshRendererComponent>();
+                        mrc.ModelAsset = std::make_shared<Model>(Mesh::CreateSphere(0.5f, 64, 64));
+                        mrc.ModelAsset->SetPath("Primitive::Sphere");
+                        mrc.MaterialAsset = CreateWhitePBR();
+                        SetSelectedEntity(entity);
+                    }
+                    if (ImGui::MenuItem("Plane")) {
+                        Entity entity = m_Context->CreateEntity("Plane");
+                        auto& mrc = entity.AddComponent<MeshRendererComponent>();
+                        mrc.ModelAsset = std::make_shared<Model>(Mesh::CreatePlane(1.0f, 1.0f));
+                        mrc.ModelAsset->SetPath("Primitive::Plane");
+                        mrc.MaterialAsset = CreateWhitePBR();
+                        SetSelectedEntity(entity);
+                    }
+                    ImGui::EndMenu();
+                }
+
+                // --- 新增灯光分类 ---
+                if (ImGui::BeginMenu("Light")) {
+                    if (ImGui::MenuItem("Directional Light")) {
+                        Entity entity = m_Context->CreateEntity("Directional Light");
+                        auto& lightTransform = entity.GetComponent<TransformComponent>();
+                        lightTransform.Rotation = glm::radians(glm::vec3(-45.0f, 45.0f, 0.0f));
+                        entity.AddComponent<DirectionalLightComponent>();
+                        entity.GetComponent<DirectionalLightComponent>().AmbientStrength = 1500.0f;
+                        SetSelectedEntity(entity);
+                    }
+                    if (ImGui::MenuItem("Point Light")) {
+                        Entity entity = m_Context->CreateEntity("Point Light");
+                        entity.AddComponent<PointLightComponent>();
+                        entity.GetComponent<PointLightComponent>().LuminousPower = 1500.0f;
+                        SetSelectedEntity(entity);
+                    }
+                    ImGui::EndMenu();
+                }
+
+                // --- 新增相机 ---
+                if (ImGui::MenuItem("Camera")) {
+                    Entity entity = m_Context->CreateEntity("Camera");
+                    auto& cc = entity.AddComponent<CameraComponent>();
+                    cc.Camera.SetProjectionType(SceneCamera::ProjectionType::Perspective);
+                    cc.Primary = false; // 新建相机默认不顶替主相机
+                    SetSelectedEntity(entity);
+                }
+
                 ImGui::EndPopup();
             }
 
@@ -629,10 +706,25 @@ namespace Ayaya {
                 if (ImGui::TreeNodeEx("Model", ImGuiTreeNodeFlags_DefaultOpen)) {
                     
                     ImGui::Text("Mesh Source");
-                    std::string modelDisplay = (refMrc.ModelAsset && !refMrc.ModelAsset->GetPath().empty()) 
-                                                ? refMrc.ModelAsset->GetPath() : "Drop .obj / .fbx here";
-                    
-                    ImGui::Button(modelDisplay.c_str(), ImVec2(-1.0f, 30.0f));
+                    // ==========================================
+                    // 核心修复：智能识别默认空路径并自动补偿
+                    // ==========================================
+                    std::string modelDisplay = "Drop .obj / .fbx here";
+                    if (refMrc.ModelAsset) {
+                        std::string path = refMrc.ModelAsset->GetPath();
+                        if (!path.empty()) {
+                            modelDisplay = path;
+                        } else {
+                            // 如果没有路径但有模型，说明这是底层组件默认初始化的 Cube
+                            modelDisplay = "Primitive::Cube";
+                            refMrc.ModelAsset->SetPath("Primitive::Cube"); // 自动补全路径，防止序列化丢失
+                        }
+                    }
+
+                    // 修改：点击按钮，弹出自带模型选择框
+                    if (ImGui::Button(modelDisplay.c_str(), ImVec2(-1.0f, 30.0f))) {
+                        ImGui::OpenPopup("ModelSelectionPopup");
+                    }
 
                     if (ImGui::BeginDragDropTarget()) {
                         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
@@ -646,6 +738,37 @@ namespace Ayaya {
                             }
                         }
                         ImGui::EndDragDropTarget();
+                    }
+
+                    // ==========================================
+                    // 新增：基础图元切换菜单
+                    // ==========================================
+                    if (ImGui::BeginPopup("ModelSelectionPopup")) {
+                        ImGui::TextDisabled("Built-in Primitives");
+                        ImGui::Separator();
+                        
+                        if (ImGui::MenuItem("Cube")) {
+                            for (auto e : m_SelectedEntities) {
+                                auto model = std::make_shared<Model>(Mesh::CreateCube(1.0f));
+                                model->SetPath("Primitive::Cube");
+                                e.GetComponent<MeshRendererComponent>().ModelAsset = model;
+                            }
+                        }
+                        if (ImGui::MenuItem("Sphere")) {
+                            for (auto e : m_SelectedEntities) {
+                                auto model = std::make_shared<Model>(Mesh::CreateSphere(0.5f, 64, 64));
+                                model->SetPath("Primitive::Sphere");
+                                e.GetComponent<MeshRendererComponent>().ModelAsset = model;
+                            }
+                        }
+                        if (ImGui::MenuItem("Plane")) {
+                            for (auto e : m_SelectedEntities) {
+                                auto model = std::make_shared<Model>(Mesh::CreatePlane(1.0f, 1.0f));
+                                model->SetPath("Primitive::Plane");
+                                e.GetComponent<MeshRendererComponent>().ModelAsset = model;
+                            }
+                        }
+                        ImGui::EndPopup();
                     }
                     
                     ImGui::TreePop();

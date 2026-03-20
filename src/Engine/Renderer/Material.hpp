@@ -65,7 +65,6 @@ namespace Ayaya {
         std::shared_ptr<Material> Clone() const {
             auto clone = std::make_shared<Material>();
             
-            // 名字加上 Instance 后缀，模仿 Unity
             clone->Name = this->Name + " (Instance)"; 
             clone->ShaderName = this->ShaderName;
             
