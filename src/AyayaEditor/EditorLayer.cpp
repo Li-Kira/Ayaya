@@ -29,7 +29,7 @@ namespace Ayaya {
         // 现在全权交由 SceneRenderer 在内部自己打理
         // ==========================================
         SceneRenderer::Init();
-        
+
         // ==========================================
         // 核心修复：唤醒 Lua 虚拟机！
         // ==========================================
@@ -43,6 +43,11 @@ namespace Ayaya {
         spec.Format = FramebufferFormat::RGBA8; 
         m_GameFBO = Framebuffer::Create(spec);
         SetupScene();
+
+        // 清理临时文件
+        if (std::filesystem::exists("assets/Editor/temp/temp_play_scene.ayaya")) {
+        std::filesystem::remove("assets/Editor/temp/temp_play_scene.ayaya");
+    }
     }
 
     void EditorLayer::OnUpdate(Timestep ts) {
@@ -828,6 +833,11 @@ namespace Ayaya {
         // ==========================================
         if (m_ActiveScene) {
             m_ActiveScene->OnRuntimeStop();
+        }
+
+        std::string tempPath = "assets/Editor/temp/temp_play_scene.ayaya";
+        if (std::filesystem::exists(tempPath)) {
+            std::filesystem::remove(tempPath);
         }
 
         // 恢复编辑状态的场景
