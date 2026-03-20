@@ -1,7 +1,7 @@
 Scene: Untitled
 EditorState:
   ShowGrid: true
-  ShowSkybox: true
+  ShowSkybox: false
   EnableMSAA: true
   CameraPosition: [-5.1704745, 3.7611105, 7.6889687]
   CameraDistance: 10
@@ -21,7 +21,7 @@ Entities:
       Primary: true
       FixedAspectRatio: false
       EV100: 14.5
-      ClearFlag: 0
+      ClearFlag: 1
       BackgroundColor: [0.12, 0.12, 0.14, 1]
     RelationshipComponent:
       Parent: 0

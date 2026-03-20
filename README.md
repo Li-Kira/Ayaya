@@ -2,7 +2,7 @@
 
 Ayaya: a cross-platform game engine
 
-![](assets/other/Snipaste_2026-03-10_11-24-08.png)
+![](assets/other/Snipaste_2026-03-20_17-39-21.png)
 
 
 
@@ -37,3 +37,8 @@ cmake --build . --config Release --target AyayaEditor
 cmake --build . --config Release --target Sandbox
 ```
 
+## Project Overview
+* **Core Architecture**: ECS (Entity-Component-System) based on EnTT, Layer-based update loop, Graphics API-agnostic rendering wrapper.  
+* **Rendering Pipeline**: Modern Data-Driven Forward Rendering with PBR (Physically Based Rendering), Frustum Culling, Render Queues (State Sorting), and hardware MSAA.  
+* **Physics Backend**: Box2D (2D rigid body physics, fully integrated with the ECS lifecycle).
+* **Scripting System**: "Dual-Track" Architecture (Runtime Lua + Editor Python). The runtime logic is powered by **Lua 5.4** and **Sol2**, deeply integrated with the ECS via `LuaScriptComponent`. It features per-entity sandboxed execution environments, real-time script hot-reloading (zero C++ recompilation), and seamless bindings to native C++ APIs (Transform, Input, etc.). Python integration for Editor automation and asset pipeline is currently in the roadmap.

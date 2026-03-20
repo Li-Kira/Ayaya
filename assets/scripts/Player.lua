@@ -7,7 +7,7 @@ end
 function OnUpdate(ts)
     -- 从 C++ 端获取 Transform 组件引用
     local transform = entity:GetTransform()
-    local speed = 5.0 * ts
+    local speed = 1.0 * ts
 
     -- 控制移动 (这里的 Input.IsKeyPressed 是直接呼叫的 C++ 底层 GLFW)
     if Input.IsKeyPressed(Key.W) then
