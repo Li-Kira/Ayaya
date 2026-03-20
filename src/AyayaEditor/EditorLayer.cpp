@@ -93,7 +93,7 @@ namespace Ayaya {
         glm::vec3 cameraPosition;
         
         // 用于接收当前玩家相机的环境配置
-        bool renderSkybox = m_ShowSkybox; 
+        bool renderSkybox = false; 
         glm::vec4 clearColor = { 0.12f, 0.12f, 0.14f, 1.0f }; 
         
         auto view = m_ActiveScene->Reg().view<TransformComponent, CameraComponent>();
@@ -158,7 +158,7 @@ namespace Ayaya {
         // Pass 2: 永远渲染 Scene 窗口 (上帝视角)
         // ==========================================
         SceneRenderer::BeginScene(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection(), m_EditorCamera.GetPosition());
-        SceneRenderer::RenderScene(m_ActiveScene, m_HoveredEntity, m_ShowGrid, m_ShowSkybox);
+        SceneRenderer::RenderScene(m_ActiveScene, m_HoveredEntity, m_ShowGrid, renderSkybox);
         SceneRenderer::EndScene();
     }
 

@@ -424,6 +424,8 @@ namespace Ayaya {
         // ==========================================
         // Pass 3: Skybox Pass (极其优雅的最后渲染)
         // ==========================================
+        // AYAYA_CORE_ERROR("showSkybox: {0}", showSkybox);
+        
         if (showSkybox)
         {
             glDepthFunc(GL_LEQUAL);  

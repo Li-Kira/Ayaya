@@ -994,7 +994,14 @@ namespace Ayaya {
             }
             if (!referenceEntity.HasComponent<DirectionalLightComponent>()) {
                 if (ImGui::MenuItem("Directional Light")) {
-                    for (auto e : m_SelectedEntities) if (!e.HasComponent<DirectionalLightComponent>()) e.AddComponent<DirectionalLightComponent>();
+                    for (auto e : m_SelectedEntities)
+                    { 
+                        if (!e.HasComponent<DirectionalLightComponent>()) 
+                        {
+                            auto& dlc = e.AddComponent<DirectionalLightComponent>();
+                            dlc.AmbientStrength = 1500.0f;
+                        }
+                    }
                     ImGui::CloseCurrentPopup();
                 }
             }
