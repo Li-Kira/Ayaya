@@ -78,6 +78,12 @@ namespace Ayaya {
         if (m_SceneState == SceneState::Edit) {
             m_EditorCamera.OnUpdate(ts, m_ViewportFocused);
         }
+        // 如果处于 Play 模式且没有暂停，则推进物理运算！
+        // (完美兼容你之前写的加速/减速播放 m_TimeStepScale)
+        // ==========================================
+        else if (m_SceneState == SceneState::Play && !m_IsPaused) {
+            m_ActiveScene->OnUpdateRuntime(ts * m_TimeStepScale);
+        }
 
         // ==========================================
         // Pass 1: 永远渲染 Game 窗口 (无论处于 Edit 还是 Play 模式)
@@ -798,6 +804,11 @@ namespace Ayaya {
                 cameraComp.Camera.SetViewportSize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);
             }
         }
+
+        // ==========================================
+        // 4. 开启物理效果计算
+        // ==========================================
+        m_ActiveScene->OnPhysics2DStart();
     }
 
     void EditorLayer::OnSceneStop() {
@@ -805,6 +816,13 @@ namespace Ayaya {
         // --- 新增：停止游戏也重置状态 ---
         m_IsPaused = false;
         m_TimeStepScale = 1.0f;
+
+        // ==========================================
+        // 停止并销毁物理世界，释放内存！
+        // ==========================================
+        if (m_ActiveScene) {
+            m_ActiveScene->OnPhysics2DStop();
+        }
 
         // 恢复编辑状态的场景
         m_ActiveScene = m_EditorScene;

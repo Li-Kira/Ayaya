@@ -850,6 +850,97 @@ namespace Ayaya {
             }
         }
 
+        // --- 绘制 Rigidbody 2D 组件 ---
+        bool allHaveRb2d = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<Rigidbody2DComponent>()) { allHaveRb2d = false; break; }
+
+        if (allHaveRb2d) {
+            bool opened = ImGui::TreeNodeEx((void*)typeid(Rigidbody2DComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Rigidbody 2D");
+            
+            bool removeComponent = false;
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Remove Component")) removeComponent = true;
+                ImGui::EndPopup();
+            }
+
+            if (opened) {
+                auto& refRb2d = referenceEntity.GetComponent<Rigidbody2DComponent>();
+
+                const char* bodyTypeStrings[] = { "Static", "Dynamic", "Kinematic" };
+                const char* currentBodyTypeString = bodyTypeStrings[(int)refRb2d.Type];
+                if (ImGui::BeginCombo("Body Type", currentBodyTypeString)) {
+                    for (int i = 0; i < 3; i++) {
+                        bool isSelected = currentBodyTypeString == bodyTypeStrings[i];
+                        if (ImGui::Selectable(bodyTypeStrings[i], isSelected)) {
+                            for (auto e : m_SelectedEntities) {
+                                e.GetComponent<Rigidbody2DComponent>().Type = (Rigidbody2DComponent::BodyType)i;
+                            }
+                        }
+                        if (isSelected) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+
+                bool fixedRotation = refRb2d.FixedRotation;
+                if (ImGui::Checkbox("Fixed Rotation", &fixedRotation)) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<Rigidbody2DComponent>().FixedRotation = fixedRotation;
+                }
+
+                ImGui::TreePop();
+            }
+            if (removeComponent) {
+                for (auto e : m_SelectedEntities) e.RemoveComponent<Rigidbody2DComponent>();
+            }
+        }
+
+        // --- 绘制 BoxCollider 2D 组件 ---
+        bool allHaveBc2d = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<BoxCollider2DComponent>()) { allHaveBc2d = false; break; }
+
+        if (allHaveBc2d) {
+            bool opened = ImGui::TreeNodeEx((void*)typeid(BoxCollider2DComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Box Collider 2D");
+            
+            bool removeComponent = false;
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Remove Component")) removeComponent = true;
+                ImGui::EndPopup();
+            }
+
+            if (opened) {
+                auto& refBc2d = referenceEntity.GetComponent<BoxCollider2DComponent>();
+
+                glm::vec2 offset = refBc2d.Offset;
+                if (ImGui::DragFloat2("Offset", glm::value_ptr(offset), 0.05f)) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<BoxCollider2DComponent>().Offset = offset;
+                }
+
+                glm::vec2 size = refBc2d.Size;
+                if (ImGui::DragFloat2("Size", glm::value_ptr(size), 0.05f)) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<BoxCollider2DComponent>().Size = size;
+                }
+
+                float density = refBc2d.Density;
+                if (ImGui::DragFloat("Density", &density, 0.01f, 0.0f, 10.0f)) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<BoxCollider2DComponent>().Density = density;
+                }
+
+                float friction = refBc2d.Friction;
+                if (ImGui::DragFloat("Friction", &friction, 0.01f, 0.0f, 1.0f)) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<BoxCollider2DComponent>().Friction = friction;
+                }
+
+                float restitution = refBc2d.Restitution;
+                if (ImGui::DragFloat("Restitution (Bounciness)", &restitution, 0.01f, 0.0f, 1.0f)) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<BoxCollider2DComponent>().Restitution = restitution;
+                }
+
+                ImGui::TreePop();
+            }
+            if (removeComponent) {
+                for (auto e : m_SelectedEntities) e.RemoveComponent<BoxCollider2DComponent>();
+            }
+        }
+
         // ==========================================
         // “添加组件” 按钮 (基于第一个实体判定，给所有实体添加)
         // ==========================================
@@ -913,6 +1004,23 @@ namespace Ayaya {
                     ImGui::CloseCurrentPopup();
                 }
             }
+
+            // ==========================================
+            // 新增：允许用户从菜单中添加物理组件
+            // ==========================================
+            if (!referenceEntity.HasComponent<Rigidbody2DComponent>()) {
+                if (ImGui::MenuItem("Rigidbody 2D")) {
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<Rigidbody2DComponent>()) e.AddComponent<Rigidbody2DComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!referenceEntity.HasComponent<BoxCollider2DComponent>()) {
+                if (ImGui::MenuItem("Box Collider 2D")) {
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<BoxCollider2DComponent>()) e.AddComponent<BoxCollider2DComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            
             ImGui::EndPopup();
         }
     }

@@ -3,6 +3,11 @@
 #include "Entity.hpp"
 #include "Components.hpp"
 
+#include <box2d/b2_world.h>
+#include <box2d/b2_body.h>
+#include <box2d/b2_fixture.h>
+#include <box2d/b2_polygon_shape.h>
+
 namespace Ayaya {
 
     Scene::Scene() {}
@@ -103,5 +108,88 @@ namespace Ayaya {
         }
 
         return newEntity;
+    }
+
+    void Scene::OnPhysics2DStart() {
+        // 创建物理世界，设置标准的地球重力向下 9.8
+        m_PhysicsWorld = new b2World({ 0.0f, -9.8f });
+
+        // 遍历所有带有 Rigidbody2D 的实体
+        auto view = m_Registry.view<Rigidbody2DComponent>();
+        for (auto e : view) {
+            Entity entity = { e, this };
+            auto& transform = entity.GetComponent<TransformComponent>();
+            auto& rb2d = entity.GetComponent<Rigidbody2DComponent>();
+
+            // 1. 定义物理身体
+            b2BodyDef bodyDef;
+            bodyDef.type = rb2d.Type == Rigidbody2DComponent::BodyType::Static ? b2_staticBody : 
+                           (rb2d.Type == Rigidbody2DComponent::BodyType::Dynamic ? b2_dynamicBody : b2_kinematicBody);
+            
+            bodyDef.position.Set(transform.Translation.x, transform.Translation.y);
+            bodyDef.angle = transform.Rotation.z; // 2D 物理只关心 Z 轴旋转
+            bodyDef.fixedRotation = rb2d.FixedRotation;
+
+            // 2. 在物理世界中生成它
+            b2Body* body = m_PhysicsWorld->CreateBody(&bodyDef);
+            rb2d.RuntimeBody = body; // 存入组件，供后续使用
+
+            // 3. 如果它也有碰撞体，挂载形状！
+            if (entity.HasComponent<BoxCollider2DComponent>()) {
+                auto& bc2d = entity.GetComponent<BoxCollider2DComponent>();
+
+                b2PolygonShape boxShape;
+                // Box2D 的 SetAsBox 接受半宽/半高。我们需要把 Transform 的 Scale 也乘进去！
+                boxShape.SetAsBox(bc2d.Size.x * transform.Scale.x, bc2d.Size.y * transform.Scale.y, b2Vec2(bc2d.Offset.x, bc2d.Offset.y), 0.0f);
+
+                b2FixtureDef fixtureDef;
+                fixtureDef.shape = &boxShape;
+                fixtureDef.density = bc2d.Density;
+                fixtureDef.friction = bc2d.Friction;
+                fixtureDef.restitution = bc2d.Restitution;
+                fixtureDef.restitutionThreshold = bc2d.RestitutionThreshold;
+
+                // 将形状附加到身体上
+                body->CreateFixture(&fixtureDef);
+                bc2d.RuntimeFixture = body->GetFixtureList();
+            }
+        }
+    }
+
+    void Scene::OnPhysics2DStop() {
+        delete m_PhysicsWorld;
+        m_PhysicsWorld = nullptr;
+    }
+
+    void Scene::OnUpdateRuntime(Timestep ts) {
+        // ==========================================
+        // 1. 物理步进计算
+        // ==========================================
+        const int32_t velocityIterations = 6;
+        const int32_t positionIterations = 2;
+        if (m_PhysicsWorld) {
+            m_PhysicsWorld->Step(ts, velocityIterations, positionIterations);
+
+            // ==========================================
+            // 2. 将计算结果强行覆盖回 Transform！
+            // ==========================================
+            auto view = m_Registry.view<Rigidbody2DComponent>();
+            for (auto e : view) {
+                Entity entity = { e, this };
+                auto& transform = entity.GetComponent<TransformComponent>();
+                auto& rb2d = entity.GetComponent<Rigidbody2DComponent>();
+
+                b2Body* body = (b2Body*)rb2d.RuntimeBody;
+                if (body) {
+                    const auto& position = body->GetPosition();
+                    transform.Translation.x = position.x;
+                    transform.Translation.y = position.y;
+                    // 同步旋转 (Box2D 计算出的弧度直接赋给 Z 轴)
+                    transform.Rotation.z = body->GetAngle();
+                }
+            }
+        }
+
+        // ... 在这里执行你原本的相机抓取和 RenderScene 逻辑 ...
     }
 }

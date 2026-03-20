@@ -7,6 +7,8 @@
 
 #include "Engine/Core/UUID.hpp"
 
+class b2World;
+
 namespace Ayaya {
 
     class Entity; // 前向声明，解决循环依赖
@@ -35,11 +37,22 @@ namespace Ayaya {
         // 获取有序的根节点列表
         const std::vector<entt::entity>& GetRootEntities() const { return m_RootEntities; }
 
+        // ==========================================
+        // 新增：物理系统的生命周期
+        // ==========================================
+        void OnPhysics2DStart();
+        void OnPhysics2DStop();
+        
+        // 我们需要一个专供游戏运行时的 Update (不包含编辑器相机逻辑)
+        void OnUpdateRuntime(Timestep ts);
+
     private:
         entt::registry m_Registry; 
         std::vector<entt::entity> m_RootEntities; 
 
         friend class Entity; 
+
+        b2World* m_PhysicsWorld = nullptr;
     };
 
 }

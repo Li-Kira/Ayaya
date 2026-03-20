@@ -135,4 +135,36 @@ namespace Ayaya {
         PointLightComponent(const PointLightComponent&) = default;
     };
 
+    // ==========================================
+    // Box2D 物理组件
+    // ==========================================
+    struct Rigidbody2DComponent {
+        enum class BodyType { Static = 0, Dynamic = 1, Kinematic = 2 };
+        BodyType Type = BodyType::Static;
+        bool FixedRotation = false;
+
+        // 核心：用于在运行时存储 Box2D 的底层指针 (b2Body*)
+        // 使用 void* 是为了不污染 Components.hpp 的头文件依赖
+        void* RuntimeBody = nullptr;
+
+        Rigidbody2DComponent() = default;
+        Rigidbody2DComponent(const Rigidbody2DComponent&) = default;
+    };
+
+    struct BoxCollider2DComponent {
+        glm::vec2 Offset = { 0.0f, 0.0f };
+        glm::vec2 Size = { 0.5f, 0.5f }; // Box2D 这里的 Size 代表的是半宽/半高 (Half-Extents)
+
+        // 物理材质属性
+        float Density = 1.0f;     // 密度 (决定质量)
+        float Friction = 0.5f;    // 摩擦力
+        float Restitution = 0.0f; // 弹力 (0=不弹, 1=完美反弹)
+        float RestitutionThreshold = 0.5f; // 速度低于此值时不发生反弹
+
+        void* RuntimeFixture = nullptr; // 存储底层 b2Fixture*
+
+        BoxCollider2DComponent() = default;
+        BoxCollider2DComponent(const BoxCollider2DComponent&) = default;
+    };
+
 }

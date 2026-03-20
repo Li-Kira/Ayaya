@@ -45,6 +45,16 @@ set(ENTT_DIR "${VENDOR_INCLUDE}/entt")
 set(IMGUIZMO_DIR "${VENDOR_INCLUDE}/ImGuizmo")
 # stb 路径
 set(STB_DIR "${VENDOR_INCLUDE}/stb")
+# ==========================================
+# 新增：配置 Box2D 物理引擎
+# ==========================================
+set(BOX2D_DIR "${VENDOR_INCLUDE}/Box2D")
+# 强制关闭 Box2D 的测试床和文档，只编译核心物理库
+set(BOX2D_BUILD_TESTBED OFF CACHE BOOL "Disable Box2D Testbed" FORCE)
+set(BOX2D_BUILD_UNIT_TESTS OFF CACHE BOOL "Disable Box2D Unit Tests" FORCE)
+set(BOX2D_BUILD_DOCS OFF CACHE BOOL "Disable Box2D Docs" FORCE)
+add_subdirectory(${BOX2D_DIR})
+
 
 # 4. 收集底层引擎核心源文件 (Ayaya Library)
 # 注意：SCENE_SOURCES 现在只会收集 Engine/Scene 里的文件，
@@ -110,6 +120,9 @@ target_include_directories(Ayaya PUBLIC
     "${IMGUIZMO_DIR}"        # 允许直接 #include <ImGuizmo.h>
     "${YAML_CPP_DIR}/include" # 允许引擎能找到 <yaml-cpp/yaml.h>
     ${ASSIMP_INCLUDE_DIR}    # 允许引擎能找到 Assimp 的头文件
+
+    # 新增：允许引擎能找到 <box2d/box2d.h>
+    "${BOX2D_DIR}/include"
 )
 
 # 7. 链接第三方库
@@ -119,10 +132,10 @@ find_library(ASSIMP_LIB NAMES assimp assimp-vc143-mt assimp-vc142-mt PATHS "${VE
 
 if(APPLE)
     # Mac 平台链接
-    target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${APPLE_FRAMEWORKS} yaml-cpp ${ASSIMP_LIB})
+    target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${APPLE_FRAMEWORKS} yaml-cpp ${ASSIMP_LIB} box2d)
 elseif(WIN32)
     # Windows 平台链接
-    target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${OPENGL_LIB} yaml-cpp ${ASSIMP_LIB})
+    target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${OPENGL_LIB} yaml-cpp ${ASSIMP_LIB} box2d)
 endif()
 
 
