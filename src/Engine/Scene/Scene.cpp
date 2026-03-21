@@ -72,6 +72,16 @@ namespace Ayaya {
         m_Registry.destroy(entity);
     }
 
+
+    // ============================================================
+    // 泛型辅助函数：如果原实体有该组件，就完美拷贝给新实体
+    // ============================================================
+    template<typename T>
+    static void CopyComponentIfExists(Entity dst, Entity src) {
+        if (src.HasComponent<T>()) {
+            dst.AddComponent<T>(src.GetComponent<T>());
+        }
+    }
     // ============================================================
     // 实现复制逻辑
     // ============================================================
@@ -79,15 +89,25 @@ namespace Ayaya {
         std::string name = entity.GetComponent<TagComponent>().Tag;
         Entity newEntity = CreateEntity(name);
 
+        // 强行覆盖 Transform
         newEntity.GetComponent<TransformComponent>() = entity.GetComponent<TransformComponent>();
 
-        if (entity.HasComponent<SpriteRendererComponent>()) {
-            newEntity.AddComponent<SpriteRendererComponent>(entity.GetComponent<SpriteRendererComponent>());
-        }
+        // 特殊处理 Camera (需要将新相机的 Primary 设为 false，防止抢占焦点)
         if (entity.HasComponent<CameraComponent>()) {
             auto& cameraComp = newEntity.AddComponent<CameraComponent>(entity.GetComponent<CameraComponent>());
             cameraComp.Primary = false; 
         }
+
+        // =========================================================
+        // 核心修复：利用模板一行代码无损拷贝所有新加入系统的组件！
+        // =========================================================
+        CopyComponentIfExists<SpriteRendererComponent>(newEntity, entity);
+        CopyComponentIfExists<MeshRendererComponent>(newEntity, entity);
+        CopyComponentIfExists<DirectionalLightComponent>(newEntity, entity);
+        CopyComponentIfExists<PointLightComponent>(newEntity, entity);
+        CopyComponentIfExists<Rigidbody2DComponent>(newEntity, entity);
+        CopyComponentIfExists<BoxCollider2DComponent>(newEntity, entity);
+        CopyComponentIfExists<LuaScriptComponent>(newEntity, entity);
 
         // =========================================================
         // 【核心修复】：必须预先拷贝被复制物体的父节点和子节点数组！

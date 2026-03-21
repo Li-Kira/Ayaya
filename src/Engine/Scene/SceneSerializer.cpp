@@ -123,13 +123,28 @@ namespace Ayaya {
             out << YAML::Key << "CameraComponent";
             out << YAML::BeginMap;
             auto& cc = entity.GetComponent<CameraComponent>();
+            
+            // 基础属性
             out << YAML::Key << "Primary" << YAML::Value << cc.Primary;
             out << YAML::Key << "FixedAspectRatio" << YAML::Value << cc.FixedAspectRatio;
-            // 新增：保存物理相机的 EV100
             out << YAML::Key << "EV100" << YAML::Value << cc.EV100;
-            out << YAML::Key << "ClearFlag" << YAML::Value << (int)cc.ClearFlag; // 枚举转 int
+            out << YAML::Key << "ClearFlag" << YAML::Value << (int)cc.ClearFlag; 
             out << YAML::Key << "BackgroundColor" << YAML::Value << cc.BackgroundColor;
-            out << YAML::EndMap;
+            
+            // ==========================================
+            // 核心修复：完整保存内部的 SceneCamera 矩阵参数！
+            // ==========================================
+            out << YAML::Key << "Camera" << YAML::BeginMap;
+            out << YAML::Key << "ProjectionType" << YAML::Value << (int)cc.Camera.GetProjectionType();
+            out << YAML::Key << "PerspectiveFOV" << YAML::Value << cc.Camera.GetPerspectiveFOV();
+            out << YAML::Key << "PerspectiveNear" << YAML::Value << cc.Camera.GetPerspectiveNearClip();
+            out << YAML::Key << "PerspectiveFar" << YAML::Value << cc.Camera.GetPerspectiveFarClip();
+            out << YAML::Key << "OrthographicSize" << YAML::Value << cc.Camera.GetOrthographicSize();
+            out << YAML::Key << "OrthographicNear" << YAML::Value << cc.Camera.GetOrthographicNearClip();
+            out << YAML::Key << "OrthographicFar" << YAML::Value << cc.Camera.GetOrthographicFarClip();
+            out << YAML::EndMap; // 结束 Camera 内部 Map
+
+            out << YAML::EndMap; // 结束 CameraComponent Map
         }
 
         if (entity.HasComponent<SpriteRendererComponent>()) {
@@ -420,18 +435,31 @@ namespace Ayaya {
             auto cameraComponent = entity["CameraComponent"];
             if (cameraComponent) {
                 auto& cc = deserializedEntity.AddComponent<CameraComponent>();
+                
+                // 读取基础属性
                 cc.Primary = cameraComponent["Primary"].as<bool>();
                 cc.FixedAspectRatio = cameraComponent["FixedAspectRatio"].as<bool>();
 
-                // 兼容性检查：如果旧场景没有 EV100，给它一个标准的室外阳光曝光度
                 if (cameraComponent["EV100"]) 
                     cc.EV100 = cameraComponent["EV100"].as<float>();
-                
                 if (cameraComponent["ClearFlag"]) 
                     cc.ClearFlag = (CameraComponent::ClearFlags)cameraComponent["ClearFlag"].as<int>();
-                    
                 if (cameraComponent["BackgroundColor"]) 
                     cc.BackgroundColor = cameraComponent["BackgroundColor"].as<glm::vec4>();
+
+                // ==========================================
+                // 核心修复：完美恢复相机的投影与裁剪面参数！
+                // ==========================================
+                auto cameraProps = cameraComponent["Camera"];
+                if (cameraProps) {
+                    cc.Camera.SetProjectionType((SceneCamera::ProjectionType)cameraProps["ProjectionType"].as<int>());
+                    cc.Camera.SetPerspectiveFOV(cameraProps["PerspectiveFOV"].as<float>());
+                    cc.Camera.SetPerspectiveNearClip(cameraProps["PerspectiveNear"].as<float>());
+                    cc.Camera.SetPerspectiveFarClip(cameraProps["PerspectiveFar"].as<float>());
+                    cc.Camera.SetOrthographicSize(cameraProps["OrthographicSize"].as<float>());
+                    cc.Camera.SetOrthographicNearClip(cameraProps["OrthographicNear"].as<float>());
+                    cc.Camera.SetOrthographicFarClip(cameraProps["OrthographicFar"].as<float>());
+                }
             }
 
             auto spriteRendererComponent = entity["SpriteRendererComponent"];

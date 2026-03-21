@@ -1,25 +1,47 @@
 -- Player.lua
+local jumpCooldown = 0.0
 
 function OnCreate()
-    print("Player Entity Created from Lua!")
+    -- 使用我们新绑定的引擎原生日志！
+    Log.Info("Player spawned! Press SPACE to jump.")
 end
 
 function OnUpdate(ts)
-    -- 从 C++ 端获取 Transform 组件引用
-    local transform = entity:GetTransform()
-    local speed = 1.0 * ts
+    -- 确保实体身上挂载了刚体，否则会报错
+    if not entity:HasRigidbody2D() then
+        Log.Warn("Player needs a Rigidbody2D to move!")
+        return
+    end
 
-    -- 控制移动 (这里的 Input.IsKeyPressed 是直接呼叫的 C++ 底层 GLFW)
-    if Input.IsKeyPressed(Key.W) then
-        transform.Translation.y = transform.Translation.y + speed
-    end
-    if Input.IsKeyPressed(Key.S) then
-        transform.Translation.y = transform.Translation.y - speed
-    end
+    local rb2d = entity:GetRigidbody2D()
+    local velocity = rb2d:GetLinearVelocity()
+    local speed = 10.0
+    
+    -- 左右物理移动 (施加持续的力)
     if Input.IsKeyPressed(Key.A) then
-        transform.Translation.x = transform.Translation.x - speed
+        rb2d:ApplyLinearImpulse(vec2.new(-speed * ts, 0.0), true)
     end
     if Input.IsKeyPressed(Key.D) then
-        transform.Translation.x = transform.Translation.x + speed
+        rb2d:ApplyLinearImpulse(vec2.new(speed * ts, 0.0), true)
+    end
+
+    -- 冷却计时器
+    if jumpCooldown > 0 then
+        jumpCooldown = jumpCooldown - ts
+    end
+
+    -- 跳跃逻辑 (冲量)
+    if Input.IsKeyPressed(Key.Space) and jumpCooldown <= 0.0 then
+        -- 向上施加瞬间冲量
+        rb2d:ApplyLinearImpulse(vec2.new(0.0, 5.0), true)
+        jumpCooldown = 1.0 -- 1秒冷却
+        Log.Info("Boing! Jump triggered. Velocity Y: " .. tostring(velocity.y))
+    end
+    
+    -- 速度限制 (防止方块飞出宇宙)
+    if velocity.x > 5.0 then
+        rb2d:SetLinearVelocity(vec2.new(5.0, velocity.y))
+    elseif velocity.x < -5.0 then
+        rb2d:SetLinearVelocity(vec2.new(-5.0, velocity.y))
     end
 end

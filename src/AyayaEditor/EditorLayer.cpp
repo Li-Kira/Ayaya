@@ -808,7 +808,7 @@ namespace Ayaya {
             auto& cameraComp = view.get<CameraComponent>(entityID);
             
             // 弥补序列化漏洞，拨回透视相机模式，防止画面缩小成一个点
-            cameraComp.Camera.SetProjectionType(SceneCamera::ProjectionType::Perspective);
+            // cameraComp.Camera.SetProjectionType(SceneCamera::ProjectionType::Perspective);
 
             if (!cameraComp.FixedAspectRatio) {
                 // 解开这里的注释！让 Game 窗口的尺寸赋给新相机
