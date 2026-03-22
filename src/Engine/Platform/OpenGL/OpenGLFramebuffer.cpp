@@ -1,98 +1,171 @@
 #include "ayapch.h"
 #include "OpenGLFramebuffer.hpp"
-#include "Renderer/Renderer.hpp"
 #include <glad/glad.h>
 
 namespace Ayaya {
 
+    static bool IsDepthFormat(FramebufferTextureFormat format) {
+        return format == FramebufferTextureFormat::DEPTH24STENCIL8;
+    }
+
+    // 辅助函数：根据我们的枚举获取 OpenGL 内部格式
+    static GLenum AyayaTextureFormatToGL(FramebufferTextureFormat format) {
+        switch (format) {
+            case FramebufferTextureFormat::RGBA8:       return GL_RGBA8;
+            case FramebufferTextureFormat::RGBA16F:     return GL_RGBA16F;
+            case FramebufferTextureFormat::RGBA32F:     return GL_RGBA32F;
+            case FramebufferTextureFormat::RED_INTEGER: return GL_R32I;
+            default: return 0;
+        }
+    }
+
+    static GLenum AyayaTextureFormatToGLDataFormat(FramebufferTextureFormat format) {
+        switch (format) {
+            case FramebufferTextureFormat::RGBA8:       return GL_RGBA;
+            case FramebufferTextureFormat::RGBA16F:     return GL_RGBA;
+            case FramebufferTextureFormat::RGBA32F:     return GL_RGBA;
+            case FramebufferTextureFormat::RED_INTEGER: return GL_RED_INTEGER;
+            default: return 0;
+        }
+    }
+    
+    static GLenum AyayaTextureFormatToGLDataType(FramebufferTextureFormat format) {
+        switch (format) {
+            case FramebufferTextureFormat::RGBA8:       return GL_UNSIGNED_BYTE;
+            case FramebufferTextureFormat::RGBA16F:     return GL_FLOAT;
+            case FramebufferTextureFormat::RGBA32F:     return GL_FLOAT;
+            case FramebufferTextureFormat::RED_INTEGER: return GL_INT;
+            default: return 0;
+        }
+    }
+
     OpenGLFramebuffer::OpenGLFramebuffer(const FramebufferSpecification& spec)
         : m_Specification(spec) {
+        
+        for (auto format : m_Specification.Attachments.Attachments) {
+            if (!IsDepthFormat(format.TextureFormat))
+                m_ColorAttachmentSpecs.emplace_back(format);
+            else
+                m_DepthAttachmentSpec = format;
+        }
+
         Invalidate();
     }
 
     OpenGLFramebuffer::~OpenGLFramebuffer() {
         if (m_RendererID) {
             glDeleteFramebuffers(1, &m_RendererID);
-            glDeleteTextures(1, &m_ColorAttachment);
+            glDeleteTextures(m_ColorAttachments.size(), m_ColorAttachments.data());
             glDeleteTextures(1, &m_DepthAttachment);
         }
         if (m_ResolveFBO) {
             glDeleteFramebuffers(1, &m_ResolveFBO);
-            glDeleteTextures(1, &m_ResolveColorAttachment);
+            glDeleteTextures(m_ResolveColorAttachments.size(), m_ResolveColorAttachments.data());
         }
     }
 
     void OpenGLFramebuffer::Invalidate() {
-        // 清理旧缓冲
         if (m_RendererID) {
             glDeleteFramebuffers(1, &m_RendererID);
-            glDeleteTextures(1, &m_ColorAttachment);
+            glDeleteTextures(m_ColorAttachments.size(), m_ColorAttachments.data());
             glDeleteTextures(1, &m_DepthAttachment);
-            
             if (m_ResolveFBO) {
                 glDeleteFramebuffers(1, &m_ResolveFBO);
-                glDeleteTextures(1, &m_ResolveColorAttachment);
+                glDeleteTextures(m_ResolveColorAttachments.size(), m_ResolveColorAttachments.data());
             }
+            m_ColorAttachments.clear();
+            m_ResolveColorAttachments.clear();
         }
 
         bool multisampled = m_Specification.Samples > 1;
 
-        // ==========================================
-        // 核心修改：判断内部格式 (HDR支持)
-        // ==========================================
-        GLenum internalFormat = (m_Specification.Format == FramebufferFormat::RGBA16F) ? GL_RGBA16F : GL_RGBA8;
-        GLenum dataFormat = GL_RGBA;
-        // 如果是 HDR，数据类型必须是 GL_FLOAT (浮点)，否则无法突破 1.0 的限制！
-        GLenum dataType = (m_Specification.Format == FramebufferFormat::RGBA16F) ? GL_FLOAT : GL_UNSIGNED_BYTE;
-        
-        // A. 创建主渲染缓冲
         glGenFramebuffers(1, &m_RendererID);
         glBindFramebuffer(GL_FRAMEBUFFER, m_RendererID);
 
-        // 1. 创建颜色附件
-        glGenTextures(1, &m_ColorAttachment);
-        if (multisampled) {
-            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_ColorAttachment);
-            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_Specification.Samples, internalFormat, m_Specification.Width, m_Specification.Height, GL_FALSE);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, m_ColorAttachment, 0);
-        } else {
-            glBindTexture(GL_TEXTURE_2D, m_ColorAttachment);
-            glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, m_Specification.Width, m_Specification.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_ColorAttachment, 0);
+        // ==========================================
+        // 1. 动态生成多个颜色附件 (MRT)
+        // ==========================================
+        if (m_ColorAttachmentSpecs.size()) {
+            m_ColorAttachments.resize(m_ColorAttachmentSpecs.size());
+            glGenTextures(m_ColorAttachments.size(), m_ColorAttachments.data());
+
+            for (size_t i = 0; i < m_ColorAttachments.size(); i++) {
+                GLenum internalFormat = AyayaTextureFormatToGL(m_ColorAttachmentSpecs[i].TextureFormat);
+                GLenum dataFormat = AyayaTextureFormatToGLDataFormat(m_ColorAttachmentSpecs[i].TextureFormat);
+                GLenum dataType = AyayaTextureFormatToGLDataType(m_ColorAttachmentSpecs[i].TextureFormat);
+
+                if (multisampled) {
+                    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_ColorAttachments[i]);
+                    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_Specification.Samples, internalFormat, m_Specification.Width, m_Specification.Height, GL_FALSE);
+                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D_MULTISAMPLE, m_ColorAttachments[i], 0);
+                } else {
+                    glBindTexture(GL_TEXTURE_2D, m_ColorAttachments[i]);
+                    glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, m_Specification.Width, m_Specification.Height, 0, dataFormat, dataType, nullptr);
+                    
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, m_ColorAttachments[i], 0);
+                }
+            }
         }
 
-        // 2. 创建深度附件
-        glGenTextures(1, &m_DepthAttachment);
-        if (multisampled) {
-            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_DepthAttachment);
-            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_Specification.Samples, GL_DEPTH24_STENCIL8, m_Specification.Width, m_Specification.Height, GL_FALSE);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, m_DepthAttachment, 0);
-        } else {
-            glBindTexture(GL_TEXTURE_2D, m_DepthAttachment);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, m_Specification.Width, m_Specification.Height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, m_DepthAttachment, 0);
+        // ==========================================
+        // 2. 动态生成深度附件
+        // ==========================================
+        if (m_DepthAttachmentSpec.TextureFormat != FramebufferTextureFormat::None) {
+            glGenTextures(1, &m_DepthAttachment);
+            if (multisampled) {
+                glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, m_DepthAttachment);
+                glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, m_Specification.Samples, GL_DEPTH24_STENCIL8, m_Specification.Width, m_Specification.Height, GL_FALSE);
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, m_DepthAttachment, 0);
+            } else {
+                glBindTexture(GL_TEXTURE_2D, m_DepthAttachment);
+                // 核心修复：降级使用 OpenGL 4.1 支持的 glTexImage2D
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, m_Specification.Width, m_Specification.Height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, m_DepthAttachment, 0);
+            }
+        }
+
+        // ==========================================
+        // 3. 告诉 OpenGL 我们要同时绘制到哪些缓冲！
+        // ==========================================
+        if (m_ColorAttachments.size() > 1) {
+            // 支持同时绘制到 4 张贴图
+            GLenum buffers[4] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3 };
+            glDrawBuffers((GLsizei)m_ColorAttachments.size(), buffers);
+        } else if (m_ColorAttachments.empty()) {
+            glDrawBuffer(GL_NONE); // 只有深度测试的 pass
         }
 
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
             AYAYA_CORE_ERROR("Framebuffer is incomplete!");
 
         // ==========================================
-        // B. 如果开启了 MSAA，额外创建一个普通的 Resolve 缓冲给 ImGui 用
+        // 4. 重建 MSAA 降采样缓冲
         // ==========================================
-        if (multisampled) {
+        if (multisampled && m_ColorAttachments.size() > 0) {
             glGenFramebuffers(1, &m_ResolveFBO);
             glBindFramebuffer(GL_FRAMEBUFFER, m_ResolveFBO);
 
-            glGenTextures(1, &m_ResolveColorAttachment);
-            glBindTexture(GL_TEXTURE_2D, m_ResolveColorAttachment);
-            glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, m_Specification.Width, m_Specification.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            m_ResolveColorAttachments.resize(m_ColorAttachments.size());
+            glGenTextures(m_ResolveColorAttachments.size(), m_ResolveColorAttachments.data());
 
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_ResolveColorAttachment, 0);
-            
+            for (size_t i = 0; i < m_ResolveColorAttachments.size(); i++) {
+                GLenum internalFormat = AyayaTextureFormatToGL(m_ColorAttachmentSpecs[i].TextureFormat);
+                GLenum dataFormat = AyayaTextureFormatToGLDataFormat(m_ColorAttachmentSpecs[i].TextureFormat);
+                GLenum dataType = AyayaTextureFormatToGLDataType(m_ColorAttachmentSpecs[i].TextureFormat);
+
+                glBindTexture(GL_TEXTURE_2D, m_ResolveColorAttachments[i]);
+                glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, m_Specification.Width, m_Specification.Height, 0, dataFormat, dataType, nullptr);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, m_ResolveColorAttachments[i], 0);
+            }
+
             if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
                 AYAYA_CORE_ERROR("Resolve Framebuffer is incomplete!");
         }
@@ -106,38 +179,31 @@ namespace Ayaya {
     }
 
     void OpenGLFramebuffer::Unbind() {
-        // ==========================================
-        // 核心步骤：硬件级 MSAA 降采样 (Blit)
-        // ==========================================
+        // MSAA 降采样 (循环拷贝所有开启了的通道)
         if (m_Specification.Samples > 1) {
-            // 指定读取源为 MSAA 缓冲
             glBindFramebuffer(GL_READ_FRAMEBUFFER, m_RendererID);
-            // 指定写入目标为普通缓冲
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_ResolveFBO);
             
-            // 执行硬件拷贝与混合降采样
-            glBlitFramebuffer(0, 0, m_Specification.Width, m_Specification.Height, 
-                              0, 0, m_Specification.Width, m_Specification.Height, 
-                              GL_COLOR_BUFFER_BIT, GL_NEAREST);
+            for (size_t i = 0; i < m_ColorAttachments.size(); i++) {
+                glReadBuffer(GL_COLOR_ATTACHMENT0 + i);
+                glDrawBuffer(GL_COLOR_ATTACHMENT0 + i);
+                glBlitFramebuffer(0, 0, m_Specification.Width, m_Specification.Height, 
+                                  0, 0, m_Specification.Width, m_Specification.Height, 
+                                  GL_COLOR_BUFFER_BIT, GL_NEAREST);
+            }
         }
-        
-        // 恢复绑定到默认屏幕缓冲
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
     void OpenGLFramebuffer::Resize(uint32_t width, uint32_t height) {
-        if (width == 0 || height == 0 || width > 8192 || height > 8192) {
-            AYAYA_CORE_WARN("Attempted to resize framebuffer to {0}, {1}", width, height);
-            return;
-        }
+        if (width == 0 || height == 0 || width > 8192 || height > 8192) return;
         m_Specification.Width = width;
         m_Specification.Height = height;
         Invalidate();
     }
 
-    // 工厂方法
     std::shared_ptr<Framebuffer> Framebuffer::Create(const FramebufferSpecification& spec) {
-        // 理想情况下这里应该有 switch(Renderer::GetAPI())，这里保持你原有的精简写法
+        // 由于我们目前只有 OpenGL 后端，直接返回 OpenGLFramebuffer
         return std::make_shared<OpenGLFramebuffer>(spec);
     }
 }

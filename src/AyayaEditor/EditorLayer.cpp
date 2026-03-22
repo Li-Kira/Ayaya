@@ -40,7 +40,7 @@ namespace Ayaya {
         // ==========================================
         FramebufferSpecification spec;
         spec.Width = 1280; spec.Height = 720;
-        spec.Format = FramebufferFormat::RGBA8; 
+        spec.Attachments = { FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::Depth };
         m_GameFBO = Framebuffer::Create(spec);
         SetupScene();
 
@@ -105,7 +105,8 @@ namespace Ayaya {
         
         // 用于接收当前玩家相机的环境配置
         bool renderSkybox = false; 
-        glm::vec4 clearColor = { 0.12f, 0.12f, 0.14f, 1.0f }; 
+        // glm::vec4 clearColor = { 0.12f, 0.12f, 0.14f, 1.0f }; 
+        glm::vec4 clearColor = { 0.0f, 0.0f, 0.0f, 1.0f }; 
         
         auto view = m_ActiveScene->Reg().view<TransformComponent, CameraComponent>();
         for (auto entityID : view) {
@@ -169,7 +170,7 @@ namespace Ayaya {
         // Pass 2: 永远渲染 Scene 窗口 (上帝视角)
         // ==========================================
         SceneRenderer::BeginScene(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection(), m_EditorCamera.GetPosition());
-        SceneRenderer::RenderScene(m_ActiveScene, m_HoveredEntity, m_ShowGrid, renderSkybox);
+        SceneRenderer::RenderScene(m_ActiveScene, m_HoveredEntity, m_ShowGrid, renderSkybox, clearColor);
         SceneRenderer::EndScene();
     }
 
