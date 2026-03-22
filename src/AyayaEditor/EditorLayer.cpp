@@ -344,7 +344,6 @@ namespace Ayaya {
                 auto view = m_ActiveScene->Reg().view<CameraComponent>();
                 for (auto entityID : view) {
                     auto& cameraComp = view.get<CameraComponent>(entityID);
-                    cameraComp.Camera.SetProjectionType(SceneCamera::ProjectionType::Perspective);
                     if (!cameraComp.FixedAspectRatio) {
                         cameraComp.Camera.SetViewportSize((uint32_t)m_ViewportSize.x, (uint32_t)m_ViewportSize.y);
                     }
@@ -807,9 +806,6 @@ namespace Ayaya {
         for (auto entityID : view) {
             auto& cameraComp = view.get<CameraComponent>(entityID);
             
-            // 弥补序列化漏洞，拨回透视相机模式，防止画面缩小成一个点
-            // cameraComp.Camera.SetProjectionType(SceneCamera::ProjectionType::Perspective);
-
             if (!cameraComp.FixedAspectRatio) {
                 // 解开这里的注释！让 Game 窗口的尺寸赋给新相机
                 cameraComp.Camera.SetViewportSize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);

@@ -3,8 +3,8 @@ EditorState:
   ShowGrid: true
   ShowSkybox: false
   EnableMSAA: true
-  CameraPosition: [-2.6502833, 2.5363774, 4.071806]
-  CameraDistance: 5
+  CameraPosition: [-3.816408, 3.0563211, 5.8634005]
+  CameraDistance: 7.2
   CameraPitch: -0.2385955
   CameraYaw: -0.5769982
   CameraFocalPoint: [0, 1.3546865, 0]
