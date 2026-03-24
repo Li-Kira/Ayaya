@@ -793,6 +793,10 @@ namespace Ayaya {
         SceneSerializer serializer(m_EditorScene);
         EditorState dummyState;
         std::string tempPath = "assets/Editor/temp/temp_play_scene.ayaya";
+        std::filesystem::path dirPath = std::filesystem::path(tempPath).parent_path();
+        if (!std::filesystem::exists(dirPath)) {
+            std::filesystem::create_directories(dirPath);
+        }
         serializer.Serialize(tempPath, dummyState);
         SceneSerializer deserializer(m_ActiveScene);
         deserializer.Deserialize(tempPath, dummyState);

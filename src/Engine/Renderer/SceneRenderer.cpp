@@ -310,11 +310,7 @@ namespace Ayaya {
         // 极度关键：坐标贴图的 Alpha 清理为 0，代表天空！
         RenderCommand::SetClearColor({ 0.0f, 0.0f, 0.0f, 0.0f });
         RenderCommand::Clear();
-        glClear(GL_STENCIL_BUFFER_BIT);
-
         glEnable(GL_DEPTH_TEST);
-        glEnable(GL_STENCIL_TEST);
-        glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
 
         m_Data->OpaqueDrawList.clear();
         // 根据当前相机的 ViewProjection 矩阵生成视锥体
@@ -372,22 +368,14 @@ namespace Ayaya {
         std::shared_ptr<Material> currentMaterial = nullptr;
 
         for (const auto& cmd : m_Data->OpaqueDrawList) {
-            
-            // 1. 处理悬停描边遮罩 (每个物体的 EntityID 可能不同，必须每帧判断)
-            if (hoveredEntity && hoveredEntity == cmd.TargetEntity) {
-                glStencilFunc(GL_ALWAYS, 1, 0xFF); glStencilMask(0xFF); 
-            } else {
-                glStencilFunc(GL_ALWAYS, 0, 0xFF); glStencilMask(0x00); 
-            }
-
-            // 2. 只有当 Shader 发生变化时，才调用昂贵的 Bind()
+            // 1. 只有当 Shader 发生变化时，才调用昂贵的 Bind()
             if (currentShader != cmd.ShaderAsset) {
                 currentShader = cmd.ShaderAsset;
                 currentShader->Bind();
                 m_Data->Stats.ShaderBinds++;
             }
 
-            // 3. 只有当 Material 发生变化时，才重新上传 Uniform 和绑定贴图
+            // 2. 只有当 Material 发生变化时，才重新上传 Uniform 和绑定贴图
             if (currentMaterial != cmd.MaterialAsset) {
                 currentMaterial = cmd.MaterialAsset;
                 
@@ -416,7 +404,7 @@ namespace Ayaya {
                 }
             }
 
-            // 4. 提交绘制！(Renderer 会负责绑定 VAO 和上传 Transform 矩阵)
+            // 3. 提交绘制！(Renderer 会负责绑定 VAO 和上传 Transform 矩阵)
             Renderer::Submit(currentShader, cmd.MeshAsset->GetVertexArray(), cmd.Transform);
 
             // 记录实体模型的绘制
@@ -427,9 +415,6 @@ namespace Ayaya {
 
         // 剔除日志
         // AYAYA_CORE_TRACE("Culling: {0} / {1} meshes rendered", drawnMeshes, totalMeshes);
-        // 恢复模板测试状态
-        glStencilMask(0x00);
-        glDisable(GL_STENCIL_TEST);
         m_Data->GeometryFBO->Unbind();
 
         // ==========================================
@@ -471,19 +456,18 @@ namespace Ayaya {
         // 注意：不解绑，我们要继续在这个 FBO 上画前方物理世界的其余东西！
 
         // ==========================================
-        // Pass 4: Depth & Stencil Blit (极其黑科技)
+        // Pass 4: Depth
         // ==========================================
         // 我们把 G-Buffer 里的深度图复制过来，这样等会画网格和天空盒时才知道怎么遮挡！
         glBindFramebuffer(GL_READ_FRAMEBUFFER, m_Data->GeometryFBO->GetRendererID());
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_Data->LightingFBO->GetRendererID());
-
-        uint32_t width = m_Data->LightingFBO->GetSpecification().Width;
-        uint32_t height = m_Data->LightingFBO->GetSpecification().Height;
-
+        
+        uint32_t width = m_Data->GeometryFBO->GetSpecification().Width;
+        uint32_t height = m_Data->GeometryFBO->GetSpecification().Height;
         glBlitFramebuffer(0, 0, width, height,
                           0, 0, width, height,
-                          GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT, GL_NEAREST);
-
+                          GL_DEPTH_BUFFER_BIT,
+                          GL_NEAREST);
         // 重新确立 Lighting FBO 的绘制焦点
         glBindFramebuffer(GL_FRAMEBUFFER, m_Data->LightingFBO->GetRendererID());
 
@@ -524,7 +508,6 @@ namespace Ayaya {
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             glDepthFunc(GL_LESS);  
             glDepthMask(GL_FALSE); 
-            glDisable(GL_STENCIL_TEST); 
             glDisable(GL_CULL_FACE);
             
             m_Data->GridShader->Bind();
@@ -534,7 +517,6 @@ namespace Ayaya {
             glEnable(GL_CULL_FACE);
             glDepthMask(GL_TRUE); 
             glDisable(GL_BLEND); 
-            glEnable(GL_STENCIL_TEST); 
         }
 
         m_Data->SelectionFBO->Bind();
@@ -559,6 +541,7 @@ namespace Ayaya {
                 }
             }
         }
+        glEnable(GL_DEPTH_TEST);
         m_Data->SelectionFBO->Unbind();
 
         m_Data->LightingFBO->Unbind();
