@@ -72,11 +72,13 @@ namespace Ayaya {
         float m_TimeStepScale = 1.0f; // 1x, 2x, 4x 等倍速
 
         std::string m_CurrentScenePath = std::string();
+        
         glm::vec2 m_ViewportSize = { 0.0f, 0.0f };
         ImVec2 m_ViewportBounds[2]; 
-        
-        std::shared_ptr<Framebuffer> m_GameFBO;
         glm::vec2 m_GameViewportSize = { 0.0f, 0.0f };
+
+        std::shared_ptr<SceneRenderer> m_SceneRenderer;
+        std::shared_ptr<SceneRenderer> m_GameRenderer;
 
         SceneHierarchyPanel m_SceneHierarchyPanel;
         ContentBrowserPanel m_ContentBrowserPanel;

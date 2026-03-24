@@ -32,7 +32,7 @@ Properties:
   - UniformName: u_MetallicMap
     DisplayName: Metallic Texture
     Type: 8
-    TexturePath: ""
+    TexturePath: assets/textures/backpack/specular.jpg
   - UniformName: u_Roughness
     DisplayName: Roughness
     Type: 0
@@ -44,7 +44,7 @@ Properties:
   - UniformName: u_RoughnessMap
     DisplayName: Roughness Texture
     Type: 8
-    TexturePath: ""
+    TexturePath: assets/textures/backpack/roughness.jpg
   - UniformName: u_AO
     DisplayName: Ambient Occlusion
     Type: 0
@@ -56,4 +56,4 @@ Properties:
   - UniformName: u_AOMap
     DisplayName: AO Texture
     Type: 8
-    TexturePath: ""
+    TexturePath: assets/textures/backpack/ao.jpg

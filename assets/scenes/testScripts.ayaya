@@ -23,14 +23,6 @@ Entities:
       EV100: 14.5
       ClearFlag: 1
       BackgroundColor: [0.12, 0.12, 0.14, 1]
-      Camera:
-        ProjectionType: 1
-        PerspectiveFOV: 0.7853982
-        PerspectiveNear: 0.01
-        PerspectiveFar: 1000
-        OrthographicSize: 5
-        OrthographicNear: -1
-        OrthographicFar: 1000
     RelationshipComponent:
       Parent: 0
   - Entity: 6150662150699103715
@@ -77,12 +69,12 @@ Entities:
       Tag: Floor
       IsActive: true
     TransformComponent:
-      Translation: [0, 0, 0]
+      Translation: [2.9802322e-08, 0, 0]
       Rotation: [0, -0, 0]
       Scale: [15, 1, 1]
     MeshRendererComponent:
       ModelPath: Primitive::Cube
-      MaterialPath: assets/materials/New Material.mat
+      MaterialPath: assets/materials/NewMaterial (15).mat
     Rigidbody2DComponent:
       BodyType: 0
       FixedRotation: false

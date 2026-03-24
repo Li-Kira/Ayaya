@@ -55,8 +55,6 @@ void main() {
     // 3. 存入颜色
     vec3 albedo = u_UseAlbedoMap ? pow(texture(u_AlbedoMap, v_TexCoord).rgb, vec3(2.2)) : u_Albedo;
     g_Albedo = vec4(albedo, 1.0);
-
-    // 4. 存入 PBR 参数 (R: 金属度, G: 粗糙度, B: AO)
     float metallic = u_UseMetallicMap ? texture(u_MetallicMap, v_TexCoord).r : u_Metallic;
     float roughness = u_UseRoughnessMap ? texture(u_RoughnessMap, v_TexCoord).r : u_Roughness;
     float ao = u_UseAOMap ? texture(u_AOMap, v_TexCoord).r : u_AO;

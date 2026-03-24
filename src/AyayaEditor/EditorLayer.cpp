@@ -21,27 +21,19 @@ namespace Ayaya {
         // 启动时读取资产注册表
         // ==========================================
         AssetManager::DeserializeRegistry("assets/AssetRegistry.yaml");
-        // 新增：初始化并加载编辑器偏好设置
+        // 初始化并加载编辑器偏好设置
         m_PreferencesPanel.Init();
-
         // ==========================================
-        // 减负：去掉了之前在这里手动配置和创建 m_Framebuffer 的代码
-        // 现在全权交由 SceneRenderer 在内部自己打理
-        // ==========================================
-        SceneRenderer::Init();
-
-        // ==========================================
-        // 核心修复：唤醒 Lua 虚拟机！
+        // 初始化 Lua 虚拟机
         // ==========================================
         ScriptEngine::Init();
 
-        // ==========================================
-        // 新增：创建 Game 窗口专属的 FBO 画布
-        // ==========================================
-        FramebufferSpecification spec;
-        spec.Width = 1280; spec.Height = 720;
-        spec.Attachments = { FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::Depth };
-        m_GameFBO = Framebuffer::Create(spec);
+        m_SceneRenderer = std::make_shared<SceneRenderer>();
+        m_SceneRenderer->Init();
+        
+        m_GameRenderer = std::make_shared<SceneRenderer>();
+        m_GameRenderer->Init();
+        
         SetupScene();
 
         // 清理临时文件
@@ -53,16 +45,24 @@ namespace Ayaya {
     void EditorLayer::OnUpdate(Timestep ts) {
         HandleShortcuts();
 
+        // 获取窗口的缩放系数，用来适配 Mac 的 Retina 缩放
+        float dpiScale = ImGui::GetIO().DisplayFramebufferScale.x;
+        // AYAYA_CORE_ERROR("dpiScale: {0}", dpiScale);
+        
+
         // ==========================================
         // 2.1 处理 Scene (上帝视口) 的 Resize
         // ==========================================
         static glm::vec2 s_LastViewportSize = { 0.0f, 0.0f };
+        // 2.1 处理 Scene 的 Resize
         if (m_ViewportSize.x > 0.0f && m_ViewportSize.y > 0.0f && 
            (s_LastViewportSize.x != m_ViewportSize.x || s_LastViewportSize.y != m_ViewportSize.y)) {
             
-            SceneRenderer::OnWindowResize((uint32_t)m_ViewportSize.x, (uint32_t)m_ViewportSize.y);
+            uint32_t physicalWidth = (uint32_t)(m_ViewportSize.x * dpiScale);
+            uint32_t physicalHeight = (uint32_t)(m_ViewportSize.y * dpiScale);
+            // 【修改为调用 m_SceneRenderer】
+            m_SceneRenderer->OnWindowResize(physicalWidth, physicalHeight);
             m_EditorCamera.OnResize(m_ViewportSize.x, m_ViewportSize.y);
-            // 删除在这里强行修改 CameraComponent 比例的代码，上帝视口不该干涉玩家相机！
             s_LastViewportSize = m_ViewportSize;
         }
 
@@ -73,7 +73,12 @@ namespace Ayaya {
         if (m_GameViewportSize.x > 0.0f && m_GameViewportSize.y > 0.0f && 
            (s_LastGameViewportSize.x != m_GameViewportSize.x || s_LastGameViewportSize.y != m_GameViewportSize.y)) {
             
-            m_GameFBO->Resize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);
+            uint32_t physicalGameWidth = (uint32_t)(m_GameViewportSize.x * dpiScale);
+            uint32_t physicalGameHeight = (uint32_t)(m_GameViewportSize.y * dpiScale);
+            
+            // 【修改为调用 m_GameRenderer，并删除 m_GameFBO->Resize】
+            m_GameRenderer->OnWindowResize(physicalGameWidth, physicalGameHeight);
+            
             // 只有 Game 窗口改变，才改变玩家相机的长宽比！
             auto view = m_ActiveScene->Reg().view<CameraComponent>();
             for (auto entityID : view) {
@@ -89,15 +94,13 @@ namespace Ayaya {
         if (m_SceneState == SceneState::Edit) {
             m_EditorCamera.OnUpdate(ts, m_ViewportFocused);
         }
-        // 如果处于 Play 模式且没有暂停，则推进物理运算！
-        // (完美兼容你之前写的加速/减速播放 m_TimeStepScale)
-        // ==========================================
+        // 如果处于 Play 模式且没有暂停，则推进物理运算，兼容 m_TimeStepScale
         else if (m_SceneState == SceneState::Play && !m_IsPaused) {
             m_ActiveScene->OnUpdateRuntime(ts * m_TimeStepScale);
         }
 
         // ==========================================
-        // Pass 1: 永远渲染 Game 窗口 (无论处于 Edit 还是 Play 模式)
+        // Pass 1: Game 窗口
         // ==========================================
         bool hasValidCamera = false;
         glm::mat4 cameraViewMatrix, cameraProjectionMatrix;
@@ -105,7 +108,6 @@ namespace Ayaya {
         
         // 用于接收当前玩家相机的环境配置
         bool renderSkybox = false; 
-        // glm::vec4 clearColor = { 0.12f, 0.12f, 0.14f, 1.0f }; 
         glm::vec4 clearColor = { 0.0f, 0.0f, 0.0f, 1.0f }; 
         
         auto view = m_ActiveScene->Reg().view<TransformComponent, CameraComponent>();
@@ -143,35 +145,25 @@ namespace Ayaya {
         }
 
         if (hasValidCamera) {
-            SceneRenderer::BeginScene(cameraViewMatrix, cameraProjectionMatrix, cameraPosition);
-            // 传入刚才提取出来的 skybox 和 clearColor
-            SceneRenderer::RenderScene(m_ActiveScene, {}, false, renderSkybox, clearColor);
-            SceneRenderer::EndScene();
+            m_GameRenderer->BeginScene(cameraViewMatrix, cameraProjectionMatrix, cameraPosition);
+            m_GameRenderer->RenderScene(m_ActiveScene, {}, false, renderSkybox, clearColor);
+            m_GameRenderer->EndScene();
 
-            m_GameStats = SceneRenderer::GetStats();
-
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, SceneRenderer::GetPostProcessFBORendererID());
-            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_GameFBO->GetRendererID());
-            glBlitFramebuffer(0, 0, (GLint)m_ViewportSize.x, (GLint)m_ViewportSize.y,
-                              0, 0, (GLint)m_GameViewportSize.x, (GLint)m_GameViewportSize.y,
-                              GL_COLOR_BUFFER_BIT, GL_NEAREST);
-            glBindFramebuffer(GL_FRAMEBUFFER, 0); 
+            m_GameStats = m_GameRenderer->GetStats();
         } else {
-            // 没有主相机时，Game 窗口呈现黑屏待机
             memset(&m_GameStats, 0, sizeof(SceneRenderer::Statistics));
-
-            m_GameFBO->Bind();
-            RenderCommand::SetClearColor({ 0.0f, 0.0f, 0.0f, 1.0f });
-            RenderCommand::Clear();
-            m_GameFBO->Unbind();
+            // 由于没有主相机，直接让管线渲染黑屏
+            m_GameRenderer->BeginScene(glm::mat4(1.0f), glm::mat4(1.0f), glm::vec3(0.0f));
+            m_GameRenderer->RenderScene(m_ActiveScene, {}, false, false, {0.0f, 0.0f, 0.0f, 1.0f});
+            m_GameRenderer->EndScene();
         }
 
         // ==========================================
-        // Pass 2: 永远渲染 Scene 窗口 (上帝视角)
+        // Pass 2: 渲染 Scene 窗口
         // ==========================================
-        SceneRenderer::BeginScene(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection(), m_EditorCamera.GetPosition());
-        SceneRenderer::RenderScene(m_ActiveScene, m_HoveredEntity, m_ShowGrid, renderSkybox, clearColor);
-        SceneRenderer::EndScene();
+        m_SceneRenderer->BeginScene(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection(), m_EditorCamera.GetPosition());
+        m_SceneRenderer->RenderScene(m_ActiveScene, m_HoveredEntity, m_ShowGrid, renderSkybox, clearColor);
+        m_SceneRenderer->EndScene();
     }
 
     void EditorLayer::OnImGuiRender() {
@@ -339,7 +331,8 @@ namespace Ayaya {
                 // 【核心修改】：通知管线修改 MSAA 采样率
                 if (m_EnableMSAA != state.EnableMSAA) {
                     m_EnableMSAA = state.EnableMSAA;
-                    SceneRenderer::SetMSAASamples(m_EnableMSAA ? 4 : 1);
+                    m_SceneRenderer->SetMSAASamples(m_EnableMSAA ? 4 : 1);
+                    m_GameRenderer->SetMSAASamples(m_EnableMSAA ? 4 : 1);
                 }
                 
                 auto view = m_ActiveScene->Reg().view<CameraComponent>();
@@ -525,8 +518,8 @@ namespace Ayaya {
                 ImGui::MenuItem("Show Statistics", nullptr, &m_ShowStatsPanel);
 
                 if (ImGui::MenuItem("Enable MSAA (4x)", nullptr, &m_EnableMSAA)) {
-                    // 【核心修改】：优雅的一行调用！再也不用在 UI 层操作底层缓冲了
-                    SceneRenderer::SetMSAASamples(m_EnableMSAA ? 4 : 1);
+                    m_SceneRenderer->SetMSAASamples(m_EnableMSAA ? 4 : 1);
+                    m_GameRenderer->SetMSAASamples(m_EnableMSAA ? 4 : 1);
                     AYAYA_CORE_INFO("MSAA state changed: {0}", m_EnableMSAA ? "Enabled (4x)" : "Disabled");
                 }
 
@@ -576,7 +569,7 @@ namespace Ayaya {
         // ==========================================
         // 核心修改：向渲染管线索要处理完毕的后期画面
         // ==========================================
-        uint32_t textureID = SceneRenderer::GetFinalColorAttachmentRendererID();
+        uint32_t textureID = m_SceneRenderer->GetFinalColorAttachmentRendererID();
         ImGui::Image(reinterpret_cast<void*>((intptr_t)textureID), 
                      ImVec2{ m_ViewportSize.x, m_ViewportSize.y }, 
                      ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
@@ -599,7 +592,7 @@ namespace Ayaya {
         ImVec2 cursorStartPos = ImGui::GetCursorPos();
 
         // 渲染底层的游戏画面
-        uint32_t textureID = m_GameFBO->GetColorAttachmentRendererID();
+        uint32_t textureID = m_GameRenderer->GetFinalColorAttachmentRendererID();
         ImGui::Image(reinterpret_cast<void*>((intptr_t)textureID), 
                      ImVec2{ m_GameViewportSize.x, m_GameViewportSize.y }, 
                      ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
@@ -698,9 +691,6 @@ namespace Ayaya {
             glm::vec3 rayOrigin = glm::vec3(glm::inverse(cameraViewMatrix)[3]);
 
             float closestT = std::numeric_limits<float>::max();
-            // ==========================================
-            // 核心修复：把 SpriteRendererComponent 换成 MeshRendererComponent！
-            // ==========================================
             auto renderGroup = m_ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
 
             for (auto entityID : renderGroup) {
@@ -710,25 +700,35 @@ namespace Ayaya {
                 // ==========================================
                 if (!entity.IsActiveInHierarchy()) continue;
 
-                glm::mat4 inverseTransform = glm::inverse(entity.GetWorldTransform());
+                auto& meshComp = entity.GetComponent<MeshRendererComponent>();
+                if (!meshComp.ModelAsset) continue; // 确保有模型
 
+                glm::mat4 inverseTransform = glm::inverse(entity.GetWorldTransform());
                 glm::vec3 localRayOrigin = glm::vec3(inverseTransform * glm::vec4(rayOrigin, 1.0f));
                 glm::vec3 localRayDir = glm::normalize(glm::vec3(inverseTransform * glm::vec4(rayWorldDir, 0.0f)));
-
                 glm::vec3 invDir = 1.0f / localRayDir;
-                glm::vec3 t0 = (-0.5f - localRayOrigin) * invDir; 
-                glm::vec3 t1 = (0.5f - localRayOrigin) * invDir;
 
-                glm::vec3 tmin = glm::min(t0, t1);
-                glm::vec3 tmax = glm::max(t0, t1);
+                // ==========================================
+                // 核心修复：遍历模型的所有子网格，获取真实的 AABB
+                // ==========================================
+                for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
+                    // 假设你的 AABB 结构体有 Min 和 Max 属性
+                    const auto& aabb = mesh->GetAABB(); 
+                    
+                    glm::vec3 t0 = (aabb.Min - localRayOrigin) * invDir; 
+                    glm::vec3 t1 = (aabb.Max - localRayOrigin) * invDir;
 
-                float tNear = glm::max(glm::max(tmin.x, tmin.y), tmin.z);
-                float tFar = glm::min(glm::min(tmax.x, tmax.y), tmax.z);
+                    glm::vec3 tmin = glm::min(t0, t1);
+                    glm::vec3 tmax = glm::max(t0, t1);
 
-                if (tNear <= tFar && tFar >= 0.0f) {
-                    if (tNear < closestT) {
-                        closestT = tNear;
-                        m_HoveredEntity = entity;
+                    float tNear = glm::max(glm::max(tmin.x, tmin.y), tmin.z);
+                    float tFar = glm::min(glm::min(tmax.x, tmax.y), tmax.z);
+
+                    if (tNear <= tFar && tFar >= 0.0f) {
+                        if (tNear < closestT) {
+                            closestT = tNear;
+                            m_HoveredEntity = entity;
+                        }
                     }
                 }
             }

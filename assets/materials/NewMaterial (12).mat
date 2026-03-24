@@ -1,4 +1,4 @@
-MaterialName: Sphere_M0_R100_Mat
+MaterialName: NewMaterial (12)
 ShaderName: PBR
 Properties:
   - UniformName: u_Albedo
@@ -8,19 +8,19 @@ Properties:
   - UniformName: u_UseAlbedoMap
     DisplayName: Enable Albedo Map
     Type: 2
-    BoolValue: true
+    BoolValue: false
   - UniformName: u_AlbedoMap
     DisplayName: Albedo Texture
     Type: 8
-    TexturePath: assets/textures/rusted_iron/albedo.png
+    TexturePath: ""
   - UniformName: u_UseNormalMap
     DisplayName: Enable Normal Map
     Type: 2
-    BoolValue: true
+    BoolValue: false
   - UniformName: u_NormalMap
     DisplayName: Normal Map
     Type: 8
-    TexturePath: assets/textures/rusted_iron/normal.png
+    TexturePath: ""
   - UniformName: u_Metallic
     DisplayName: Metallic
     Type: 0
@@ -28,23 +28,23 @@ Properties:
   - UniformName: u_UseMetallicMap
     DisplayName: Enable Metallic Map
     Type: 2
-    BoolValue: true
+    BoolValue: false
   - UniformName: u_MetallicMap
     DisplayName: Metallic Texture
     Type: 8
-    TexturePath: assets/textures/rusted_iron/metallic.png
+    TexturePath: ""
   - UniformName: u_Roughness
     DisplayName: Roughness
     Type: 0
-    FloatValue: 1
+    FloatValue: 0.5
   - UniformName: u_UseRoughnessMap
     DisplayName: Enable Roughness Map
     Type: 2
-    BoolValue: true
+    BoolValue: false
   - UniformName: u_RoughnessMap
     DisplayName: Roughness Texture
     Type: 8
-    TexturePath: assets/textures/rusted_iron/roughness.png
+    TexturePath: ""
   - UniformName: u_AO
     DisplayName: Ambient Occlusion
     Type: 0
@@ -52,8 +52,8 @@ Properties:
   - UniformName: u_UseAOMap
     DisplayName: Enable AO Map
     Type: 2
-    BoolValue: true
+    BoolValue: false
   - UniformName: u_AOMap
     DisplayName: AO Texture
     Type: 8
-    TexturePath: assets/textures/rusted_iron/ao.png
+    TexturePath: ""

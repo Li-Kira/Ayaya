@@ -44,7 +44,7 @@ Properties:
   - UniformName: u_RoughnessMap
     DisplayName: Roughness Texture
     Type: 8
-    TexturePath: ""
+    TexturePath: assets/textures/rusted_iron/roughness.png
   - UniformName: u_AO
     DisplayName: Ambient Occlusion
     Type: 0
