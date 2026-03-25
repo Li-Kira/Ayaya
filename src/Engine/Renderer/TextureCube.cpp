@@ -50,6 +50,13 @@ namespace Ayaya {
         stbi_set_flip_vertically_on_load(true); 
     }
 
+    TextureCube::TextureCube(uint32_t rendererID, int width, int height)
+        : m_RendererID(rendererID), m_Width(width), m_Height(height)
+    {
+        // 我们什么都不需要做，因为 IBLBuilder 已经生成了 ID 并填充了 HDR 数据！
+        // 这里的 TextureCube 对象只是优雅地将它包装成了引擎的 C++ 资产。
+    }
+
     TextureCube::~TextureCube() {
         glDeleteTextures(1, &m_RendererID);
     }

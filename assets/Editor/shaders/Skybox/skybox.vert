@@ -5,6 +5,7 @@ out vec3 v_TexCoords;
 
 uniform mat4 u_Projection;
 uniform mat4 u_View; // 注意：这里的 View 矩阵将被我们在 C++ 里抹除平移！
+uniform mat4 u_Transform;
 
 void main() {
     v_TexCoords = a_Position; // 天空盒的本地坐标直接就是 Cubemap 的 3D 采样向量！

@@ -8,6 +8,7 @@
 #include "Renderer/TextureCube.hpp"
 #include "Renderer/UniformBuffer.hpp"
 #include "Renderer/Frustum.hpp"
+#include "Renderer/IBLBuilder.hpp"
 #include "Asset/AssetManager.hpp"
 #include "Engine/Scene/Components.hpp"
 
@@ -50,6 +51,16 @@ namespace Ayaya {
     static std::shared_ptr<UniformBuffer> s_CameraUniformBuffer;
     static std::shared_ptr<UniformBuffer> s_LightUniformBuffer;
 
+    // ==========================================
+    // 新增：全局静态共享渲染资源 (防止多实例重复加载)
+    // ==========================================
+    static std::shared_ptr<Mesh> s_SkyboxMesh;
+    static std::shared_ptr<Shader> s_SkyboxShader;
+    static std::shared_ptr<TextureCube> s_DefaultEnvironmentMap;
+    static std::shared_ptr<TextureCube> s_DefaultIrradianceMap;
+    static std::shared_ptr<TextureCube> s_DefaultPrefilterMap;
+    static std::shared_ptr<Texture2D>   s_DefaultBRDFLUT;
+
     struct SceneRendererData {
         glm::mat4 ViewMatrix;
         glm::mat4 ProjectionMatrix;
@@ -75,7 +86,10 @@ namespace Ayaya {
         std::shared_ptr<Mesh> SkyboxMesh;
         std::shared_ptr<Shader> SkyboxShader;
         std::shared_ptr<TextureCube> EnvironmentCubemap; 
+        std::shared_ptr<TextureCube> IrradianceMap;
         std::shared_ptr<Mesh> SkyboxCubeMesh;
+        std::shared_ptr<TextureCube> PrefilterMap;
+        std::shared_ptr<Texture2D>   BRDFLUT;
 
         // 新增 UBO 相关的成员
         struct_CameraData CameraData;
@@ -133,18 +147,53 @@ namespace Ayaya {
         m_Data->FallbackMaterial->ShaderName = "Fallback";
 
         // 5. 加载天空盒
-        m_Data->SkyboxShader = Shader::Create("assets/Editor/shaders/Skybox/skybox.vert", "assets/Editor/shaders/Skybox/skybox.frag");
+        // m_Data->SkyboxShader = Shader::Create("assets/Editor/shaders/Skybox/skybox.vert", "assets/Editor/shaders/Skybox/skybox.frag");
+        // m_Data->SkyboxMesh = Mesh::CreateCube(1.0f);
         // 加载天空盒纹理 (按 Right, Left, Top, Bottom, Front, Back 顺序)
-        std::vector<std::string> faces = {
-            "assets/textures/skybox/right.jpg",
-            "assets/textures/skybox/left.jpg",
-            "assets/textures/skybox/top.jpg",
-            "assets/textures/skybox/bottom.jpg",
-            "assets/textures/skybox/front.jpg",
-            "assets/textures/skybox/back.jpg"
-        };
-        m_Data->EnvironmentCubemap = std::make_shared<TextureCube>(faces);
-        m_Data->SkyboxMesh = Mesh::CreateCube(1.0f);
+        // std::vector<std::string> faces = {
+        //     "assets/textures/skybox/right.jpg",
+        //     "assets/textures/skybox/left.jpg",
+        //     "assets/textures/skybox/top.jpg",
+        //     "assets/textures/skybox/bottom.jpg",
+        //     "assets/textures/skybox/front.jpg",
+        //     "assets/textures/skybox/back.jpg"
+        // };
+        // m_Data->EnvironmentCubemap = std::make_shared<TextureCube>(faces);
+
+        if (!s_SkyboxMesh) {
+            // 只有第一个 Renderer 初始化时，才会执行这段极度耗时的烘焙代码
+            s_SkyboxShader = Shader::Create("assets/Editor/shaders/Skybox/skybox.vert", "assets/Editor/shaders/Skybox/skybox.frag");
+            s_SkyboxMesh = Mesh::CreateCube(1.0f);
+
+            std::shared_ptr<Texture2D> hdrTexture = Texture2D::Create("assets/textures/skybox/hdr/newport_loft.hdr");
+            std::shared_ptr<Shader> convertShader = Shader::Create("assets/Editor/shaders/IBL/equirectangular_to_cubemap.vert", "assets/Editor/shaders/IBL/equirectangular_to_cubemap.frag");
+            
+            uint32_t envCubemapID = IBLBuilder::ConvertEquirectangularToCubemap(hdrTexture, s_SkyboxMesh, convertShader);
+            s_DefaultEnvironmentMap = std::make_shared<TextureCube>(envCubemapID, 1024, 1024);
+
+            std::shared_ptr<Shader> irradianceShader = Shader::Create("assets/Editor/shaders/IBL/cubemap.vert", "assets/Editor/shaders/IBL/irradiance_convolution.frag");
+            uint32_t irradianceMapID = IBLBuilder::CreateIrradianceMap(envCubemapID, s_SkyboxMesh, irradianceShader);
+            s_DefaultIrradianceMap = std::make_shared<TextureCube>(irradianceMapID, 32, 32);
+            // 【新增】：烘焙 Prefilter
+            std::shared_ptr<Shader> prefilterShader = Shader::Create("assets/Editor/shaders/IBL/cubemap.vert", "assets/Editor/shaders/IBL/prefilter.frag");
+            uint32_t prefilterID = IBLBuilder::CreatePrefilterMap(envCubemapID, s_SkyboxMesh, prefilterShader);
+            s_DefaultPrefilterMap = std::make_shared<TextureCube>(prefilterID, 128, 128);
+
+            // 【新增】：烘焙 BRDF LUT
+            std::shared_ptr<Shader> brdfShader = Shader::Create("assets/Editor/shaders/IBL/brdf.vert", "assets/Editor/shaders/IBL/brdf.frag");
+            // 注意：把在底下 7.4 创建的 m_Data->EmptyVAO 挪到前面来，因为这里要用！
+            if(m_Data->EmptyVAO == 0) glGenVertexArrays(1, &m_Data->EmptyVAO);
+            uint32_t brdfID = IBLBuilder::CreateBRDFLUT(brdfShader, m_Data->EmptyVAO);
+            s_DefaultBRDFLUT = Texture2D::Create(brdfID, 512, 512);
+        }
+
+        // 把静态共享的资源挂载到当前的 Renderer 实例身上，供渲染时使用
+        m_Data->SkyboxMesh = s_SkyboxMesh;
+        m_Data->SkyboxShader = s_SkyboxShader;
+        m_Data->EnvironmentCubemap = s_DefaultEnvironmentMap;
+        m_Data->IrradianceMap = s_DefaultIrradianceMap;
+        m_Data->PrefilterMap = s_DefaultPrefilterMap;
+        m_Data->BRDFLUT = s_DefaultBRDFLUT;
 
         // ==========================================
         // 6. 初始化 UBO
@@ -446,6 +495,23 @@ namespace Ayaya {
         glActiveTexture(GL_TEXTURE3);
         glBindTexture(GL_TEXTURE_2D, m_Data->GeometryFBO->GetColorAttachmentRendererID(3));
 
+        // 【新增】：绑定 IBL 漫反射贴图 (使用空闲的槽位，比如 4)
+        if (m_Data->IrradianceMap) {
+            m_Data->IrradianceMap->Bind(4); 
+            m_Data->DeferredLightingShader->SetInt("u_IrradianceMap", 4);
+            // 与天空盒保持一致的亮度倍增器！
+            m_Data->DeferredLightingShader->SetFloat("u_Intensity", 30000.0f); 
+        }
+
+        if (m_Data->PrefilterMap) {
+            m_Data->PrefilterMap->Bind(5); 
+            m_Data->DeferredLightingShader->SetInt("u_PrefilteredMap", 5);
+        }
+        if (m_Data->BRDFLUT) {
+            m_Data->BRDFLUT->Bind(6); 
+            m_Data->DeferredLightingShader->SetInt("u_BRDFLUT", 6);
+        }
+
         glBindVertexArray(m_Data->EmptyVAO);
         glDrawArrays(GL_TRIANGLES, 0, 3);
         
@@ -479,6 +545,13 @@ namespace Ayaya {
         if (showSkybox) {
             glDepthFunc(GL_LEQUAL);  
             m_Data->SkyboxShader->Bind();
+            // ==========================================
+            // 【新增】：向天空盒注入物理能量倍增器
+            // ==========================================
+            // 因为当前相机的 EV100 高达 14.5，我们需要极高的亮度才能被看见。
+            // 这里暂定 30000.0f，后续可移入 Scene 的 Environment 属性中由用户调节。
+            m_Data->SkyboxShader->SetFloat("u_Intensity", 30000.0f);
+
             glm::mat4 viewNoTranslation = glm::mat4(glm::mat3(m_Data->ViewMatrix));
             m_Data->SkyboxShader->SetMat4("u_View", viewNoTranslation);
             

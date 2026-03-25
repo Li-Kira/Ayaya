@@ -10,6 +10,7 @@ namespace Ayaya {
         OpenGLTexture2D(const std::string& path);
         // 新增构造函数声明
         OpenGLTexture2D(uint32_t width, uint32_t height);
+        OpenGLTexture2D(uint32_t rendererID, uint32_t width, uint32_t height);
 
         virtual ~OpenGLTexture2D();
 

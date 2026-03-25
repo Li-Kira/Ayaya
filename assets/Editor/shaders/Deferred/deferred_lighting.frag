@@ -11,6 +11,12 @@ uniform sampler2D g_Normal;
 uniform sampler2D g_Albedo;
 uniform sampler2D g_PBR; 
 
+// 【新增】：IBL 专属采样器
+uniform samplerCube u_IrradianceMap;
+uniform samplerCube u_PrefilteredMap;
+uniform sampler2D   u_BRDFLUT;
+uniform float       u_Intensity;
+
 // ==========================================
 // 引擎 UBO 接口
 // ==========================================
@@ -67,10 +73,15 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
+// 菲涅尔方程 (考虑粗糙度)
+vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+
 void main() {
     // 1. 从 G-Buffer 提取当前像素的物理数据
     vec4 posData = texture(g_Position, v_TexCoord);
-    
     // 如果透明度通道为 0，说明这个像素没有画任何物体（是天空盒区域），直接丢弃光照计算！
     if (posData.a < 0.1) {
         discard;
@@ -79,8 +90,8 @@ void main() {
     vec3 FragPos = posData.rgb;
     vec3 Normal = texture(g_Normal, v_TexCoord).rgb;
     vec3 Albedo = texture(g_Albedo, v_TexCoord).rgb;
-    
     vec4 pbrData = texture(g_PBR, v_TexCoord);
+    
     float Metallic = pbrData.r;
     float Roughness = pbrData.g;
     float AO = pbrData.b;
@@ -88,7 +99,7 @@ void main() {
     // 2. 基础 PBR 变量准备
     vec3 N = normalize(Normal);
     vec3 V = normalize(u_CameraPosition - FragPos);
-
+    
     vec3 F0 = vec3(0.04); 
     F0 = mix(F0, Albedo, Metallic);
     vec3 Lo = vec3(0.0);
@@ -100,10 +111,10 @@ void main() {
     vec3 H = normalize(V + L);
     vec3 radiance = DirLightColor.rgb;
 
-    float NDF = DistributionGGX(N, H, Roughness);   
+    float NDF = DistributionGGX(N, H, Roughness);
     float G   = GeometrySmith(N, V, L, Roughness);      
-    vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);       
-
+    vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);
+    
     vec3 numerator    = NDF * G * F;
     float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
     vec3 specular     = numerator / denominator;
@@ -111,7 +122,7 @@ void main() {
     vec3 kS = F;
     vec3 kD = vec3(1.0) - kS;
     kD *= 1.0 - Metallic;     
-    float NdotL = max(dot(N, L), 0.0);        
+    float NdotL = max(dot(N, L), 0.0);
     Lo += (kD * Albedo / PI + specular) * radiance * NdotL;
 
     // ==========================================
@@ -144,14 +155,33 @@ void main() {
     }
 
     // ==========================================
-    // 5. 环境光与最终合成
+    // 5. 终极 IBL 物理环境光合成 (Split-Sum Approximation)
     // ==========================================
-    float ambientStrength = DirLightDir.w; // 借用了方向光的 W 通道传环境光强度
-    // vec3 ambient = vec3(0.03) * Albedo * AO * ambientStrength;
-    vec3 ambient = vec3(ambientStrength) * Albedo * AO;
+    vec3 F_ambient = fresnelSchlickRoughness(max(dot(N, V), 0.0), F0, Roughness);
+    vec3 kS_ambient = F_ambient;
+    vec3 kD_ambient = 1.0 - kS_ambient;
+    kD_ambient *= 1.0 - Metallic; 
+    
+    // (Part 1): Diffuse 漫反射
+    vec3 irradiance = texture(u_IrradianceMap, N).rgb * u_Intensity;
+    vec3 diffuse    = irradiance * Albedo;
+    
+    // (Part 2): Specular 高光倒影 (Split-Sum)
+    const float MAX_REFLECTION_LOD = 4.0; 
+    // 技巧：根据粗糙度去采样不同模糊级别的预滤波环境图，并乘上亮度倍增器
+    vec3 R = reflect(-V, N);
+    vec3 prefilteredColor = textureLod(u_PrefilteredMap, R, Roughness * MAX_REFLECTION_LOD).rgb * u_Intensity;
+    
+    // 查表：提取 BRDF 积分的 Scale 和 Bias
+    vec2 brdf = texture(u_BRDFLUT, vec2(max(dot(N, V), 0.0), Roughness)).rg;
+    vec3 specular_ambient = prefilteredColor * (F_ambient * brdf.x + brdf.y);
+
+    // 终极融合！
+    vec3 ambient = (kD_ambient * diffuse + specular_ambient) * AO;
     
     vec3 color = ambient + Lo;
-
-    // 输出到高动态范围 (HDR) 缓冲！
     FragColor = vec4(color, 1.0);
+
+    // FragColor = vec4(texture(u_BRDFLUT, v_TexCoord).rg, 0.0, 1.0);
+    // FragColor = vec4(prefilteredColor / u_Intensity, 1.0); // 除以强度还原颜色
 }

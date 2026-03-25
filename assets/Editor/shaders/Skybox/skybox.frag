@@ -3,16 +3,13 @@ out vec4 FragColor;
 
 in vec3 v_TexCoords;
 
-// 采样器是 samplerCube 而不是 sampler2D
 uniform samplerCube u_Skybox; 
+uniform float u_Intensity; // 【新增】：环境光强度倍增器
 
 void main() {    
-    vec4 envColor = texture(u_Skybox, v_TexCoords);
+    // 直接采样 HDR 颜色
+    vec3 envColor = texture(u_Skybox, v_TexCoords).rgb;
     
-    // 简单的 Gamma 校正 (假设输入的不是 sRGB 贴图)
-    envColor.rgb = pow(envColor.rgb, vec3(1.0/2.2)); 
-    
-    // 赋予天空盒等同于物理天空的亮度 (约 20000 坎德拉/平方米)
-    // 这样它才能在 EV100 = 14.5 的极限曝光压缩下，依然保持正常的明亮蔚蓝！
-    FragColor = vec4(envColor.rgb * 20000.0, 1.0);
+    // 乘以强度倍增器，将其校准到匹配当前物理相机的真实亮度级别！
+    FragColor = vec4(envColor * u_Intensity, 1.0);
 }

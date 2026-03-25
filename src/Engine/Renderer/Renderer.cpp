@@ -6,6 +6,10 @@ namespace Ayaya {
 
     void Renderer::Init() {
         RenderCommand::Init();
+
+        // 现代渲染必备的基础设施
+        // 消除高粗糙度 Cubemap Mipmap 采样时的可见缝隙
+        glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
     }
 
     void Renderer::Shutdown() {
