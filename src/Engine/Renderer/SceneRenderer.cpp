@@ -147,53 +147,27 @@ namespace Ayaya {
         m_Data->FallbackMaterial->ShaderName = "Fallback";
 
         // 5. 加载天空盒
-        // m_Data->SkyboxShader = Shader::Create("assets/Editor/shaders/Skybox/skybox.vert", "assets/Editor/shaders/Skybox/skybox.frag");
-        // m_Data->SkyboxMesh = Mesh::CreateCube(1.0f);
-        // 加载天空盒纹理 (按 Right, Left, Top, Bottom, Front, Back 顺序)
-        // std::vector<std::string> faces = {
-        //     "assets/textures/skybox/right.jpg",
-        //     "assets/textures/skybox/left.jpg",
-        //     "assets/textures/skybox/top.jpg",
-        //     "assets/textures/skybox/bottom.jpg",
-        //     "assets/textures/skybox/front.jpg",
-        //     "assets/textures/skybox/back.jpg"
-        // };
-        // m_Data->EnvironmentCubemap = std::make_shared<TextureCube>(faces);
-
         if (!s_SkyboxMesh) {
-            // 只有第一个 Renderer 初始化时，才会执行这段极度耗时的烘焙代码
+            // 只生成必要的基础设施，不加载具体贴图！
             s_SkyboxShader = Shader::Create("assets/Editor/shaders/Skybox/skybox.vert", "assets/Editor/shaders/Skybox/skybox.frag");
             s_SkyboxMesh = Mesh::CreateCube(1.0f);
 
-            std::shared_ptr<Texture2D> hdrTexture = Texture2D::Create("assets/textures/skybox/hdr/newport_loft.hdr");
-            std::shared_ptr<Shader> convertShader = Shader::Create("assets/Editor/shaders/IBL/equirectangular_to_cubemap.vert", "assets/Editor/shaders/IBL/equirectangular_to_cubemap.frag");
-            
-            uint32_t envCubemapID = IBLBuilder::ConvertEquirectangularToCubemap(hdrTexture, s_SkyboxMesh, convertShader);
-            s_DefaultEnvironmentMap = std::make_shared<TextureCube>(envCubemapID, 1024, 1024);
-
-            std::shared_ptr<Shader> irradianceShader = Shader::Create("assets/Editor/shaders/IBL/cubemap.vert", "assets/Editor/shaders/IBL/irradiance_convolution.frag");
-            uint32_t irradianceMapID = IBLBuilder::CreateIrradianceMap(envCubemapID, s_SkyboxMesh, irradianceShader);
-            s_DefaultIrradianceMap = std::make_shared<TextureCube>(irradianceMapID, 32, 32);
-            // 【新增】：烘焙 Prefilter
-            std::shared_ptr<Shader> prefilterShader = Shader::Create("assets/Editor/shaders/IBL/cubemap.vert", "assets/Editor/shaders/IBL/prefilter.frag");
-            uint32_t prefilterID = IBLBuilder::CreatePrefilterMap(envCubemapID, s_SkyboxMesh, prefilterShader);
-            s_DefaultPrefilterMap = std::make_shared<TextureCube>(prefilterID, 128, 128);
-
-            // 【新增】：烘焙 BRDF LUT
+            // 【保留】：烘焙 BRDF LUT (全局仅需一次)
             std::shared_ptr<Shader> brdfShader = Shader::Create("assets/Editor/shaders/IBL/brdf.vert", "assets/Editor/shaders/IBL/brdf.frag");
-            // 注意：把在底下 7.4 创建的 m_Data->EmptyVAO 挪到前面来，因为这里要用！
             if(m_Data->EmptyVAO == 0) glGenVertexArrays(1, &m_Data->EmptyVAO);
             uint32_t brdfID = IBLBuilder::CreateBRDFLUT(brdfShader, m_Data->EmptyVAO);
             s_DefaultBRDFLUT = Texture2D::Create(brdfID, 512, 512);
         }
 
-        // 把静态共享的资源挂载到当前的 Renderer 实例身上，供渲染时使用
+        // 把静态共享的基础设施挂载到当前实例
         m_Data->SkyboxMesh = s_SkyboxMesh;
         m_Data->SkyboxShader = s_SkyboxShader;
-        m_Data->EnvironmentCubemap = s_DefaultEnvironmentMap;
-        m_Data->IrradianceMap = s_DefaultIrradianceMap;
-        m_Data->PrefilterMap = s_DefaultPrefilterMap;
         m_Data->BRDFLUT = s_DefaultBRDFLUT;
+        
+        // 注意：EnvironmentCubemap, IrradianceMap, PrefilterMap 现在初始为空！
+        m_Data->EnvironmentCubemap = nullptr;
+        m_Data->IrradianceMap = nullptr;
+        m_Data->PrefilterMap = nullptr;
 
         // ==========================================
         // 6. 初始化 UBO
@@ -260,6 +234,59 @@ namespace Ayaya {
 
         // 创建一个空 VAO，供 gl_VertexID 魔法使用
         glGenVertexArrays(1, &m_Data->EmptyVAO);
+    }
+
+    void SceneRenderer::SetEnvironment(EnvironmentComponent& envComp) {
+        uint32_t baseCubemapID = 0;
+
+        // ==========================================
+        // 分支 1：处理单张全景图 (HDR 或 普通 JPG)
+        // ==========================================
+        if (envComp.Type == EnvironmentType::HDR_Equirectangular || 
+            envComp.Type == EnvironmentType::LDR_Equirectangular) 
+        {
+            if (!envComp.EquirectangularTexture) return;
+
+            // 转换全景图为 Cubemap
+            std::shared_ptr<Shader> convertShader = Shader::Create("assets/Editor/shaders/IBL/equirectangular_to_cubemap.vert", "assets/Editor/shaders/IBL/equirectangular_to_cubemap.frag");
+            baseCubemapID = IBLBuilder::ConvertEquirectangularToCubemap(envComp.EquirectangularTexture, s_SkyboxMesh, convertShader);
+            
+            m_Data->EnvironmentCubemap = std::make_shared<TextureCube>(baseCubemapID, 1024, 1024);
+        }
+        // ==========================================
+        // 分支 2：处理传统的 6 面体天空盒
+        // ==========================================
+        else if (envComp.Type == EnvironmentType::Classic_Cubemap) 
+        {
+            if (!envComp.ClassicCubemapTexture) return;
+
+            baseCubemapID = envComp.ClassicCubemapTexture->GetRendererID();
+            m_Data->EnvironmentCubemap = envComp.ClassicCubemapTexture;
+
+            // 【关键】：传统天空盒默认没生成 Mipmap。为了防止后续 Prefilter 报死黑，必须强制生成！
+            glBindTexture(GL_TEXTURE_CUBE_MAP, baseCubemapID);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); 
+            glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+        }
+
+        // ==========================================
+        // 统一烘焙 IBL 光照贴图
+        // ==========================================
+        if (baseCubemapID != 0) {
+            // 烘焙漫反射 Irradiance
+            std::shared_ptr<Shader> irradianceShader = Shader::Create("assets/Editor/shaders/IBL/cubemap.vert", "assets/Editor/shaders/IBL/irradiance_convolution.frag");
+            uint32_t irrID = IBLBuilder::CreateIrradianceMap(baseCubemapID, s_SkyboxMesh, irradianceShader);
+            m_Data->IrradianceMap = std::make_shared<TextureCube>(irrID, 32, 32);
+
+            // 烘焙高光 Prefilter
+            std::shared_ptr<Shader> prefilterShader = Shader::Create("assets/Editor/shaders/IBL/cubemap.vert", "assets/Editor/shaders/IBL/prefilter.frag");
+            uint32_t preID = IBLBuilder::CreatePrefilterMap(baseCubemapID, s_SkyboxMesh, prefilterShader);
+            m_Data->PrefilterMap = std::make_shared<TextureCube>(preID, 128, 128);
+            
+            // 烘焙完成，清除脏标记
+            envComp.IsDirty = false; 
+        }
     }
 
     void SceneRenderer::OnWindowResize(uint32_t width, uint32_t height) {

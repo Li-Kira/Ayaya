@@ -26,6 +26,8 @@ namespace Ayaya {
         void RenderScene(const std::shared_ptr<Scene>& scene, Entity hoveredEntity, bool showGrid, bool showSkybox, const glm::vec4& clearColor = glm::vec4(0.12f, 0.12f, 0.14f, 1.0f));
         void EndScene();
 
+        void SetEnvironment(EnvironmentComponent& envComp);
+
         struct Statistics {
             uint32_t DrawCalls = 0;
             uint32_t ShaderBinds = 0;   // SetPass Calls

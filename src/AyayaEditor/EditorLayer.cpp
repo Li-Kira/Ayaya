@@ -99,6 +99,31 @@ namespace Ayaya {
             m_ActiveScene->OnUpdateRuntime(ts * m_TimeStepScale);
         }
 
+
+        // ==========================================
+        // 环境光与 IBL 动态更新系统
+        // ==========================================
+        auto envView = m_ActiveScene->Reg().view<EnvironmentComponent>();
+        for (auto entityID : envView) {
+            auto& envComp = envView.get<EnvironmentComponent>(entityID);
+            
+            // 如果发现贴图被更改了 (脏标记为 true)
+            if (envComp.IsDirty) {
+                // 1. 让 Scene 视口渲染器烘焙生成 IBL 贴图
+                m_SceneRenderer->SetEnvironment(envComp);
+                
+                // 2. 为了让 Game 游戏视口也能看到天空盒，让它也同步更新！
+                // （目前先让它也烘焙一次，未来我们可以把贴图直接存在 Component 里让两者共享，提升性能）
+                envComp.IsDirty = true;
+                m_GameRenderer->SetEnvironment(envComp);
+                
+                // 3. 两个视口都更新完毕，彻底清理脏标记
+                envComp.IsDirty = false; 
+            }
+            
+            break; // 目前只支持场景中存在一个全局天空盒
+        }
+
         // ==========================================
         // Pass 1: Game 窗口
         // ==========================================
@@ -203,7 +228,17 @@ namespace Ayaya {
         dirLight.AddComponent<DirectionalLightComponent>();
         dirLight.GetComponent<DirectionalLightComponent>().AmbientStrength = 1500.0f;
 
+        // 创造天空盒/环境光
+        Entity skyEntity = m_ActiveScene->CreateEntity("Skybox");
+        auto& envComp = skyEntity.AddComponent<EnvironmentComponent>();
         
+        envComp.Type = EnvironmentType::HDR_Equirectangular;
+        envComp.EquirectangularPath = "assets/textures/skybox/hdr/newport_loft.hdr";
+        envComp.EquirectangularTexture = Texture2D::Create(envComp.EquirectangularPath);
+        envComp.Intensity = 30000.0f; 
+        envComp.IsDirty = true;
+
+        // 创造物体
         Entity cubeEntity = m_ActiveScene->CreateEntity("Cube");
         cubeEntity.GetComponent<TransformComponent>().Scale = { 1.0f, 1.0f, 1.0f };
         cubeEntity.GetComponent<TransformComponent>().Translation = { 0.0f, 0.0f, 0.0f };
