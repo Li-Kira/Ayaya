@@ -92,6 +92,7 @@ namespace Ayaya {
         std::shared_ptr<Texture2D>   BRDFLUT;
         float EnvironmentIntensity = 1.0f;
         glm::vec3 EnvironmentAmbientColor = { 0.1f, 0.1f, 0.1f };
+        glm::vec4 ClearColor = { 0.12f, 0.12f, 0.14f, 1.0f };
 
         // 新增 UBO 相关的成员
         struct_CameraData CameraData;
@@ -304,6 +305,10 @@ namespace Ayaya {
         m_Data->EnvironmentAmbientColor = ambientColor;
     }
 
+    void SceneRenderer::SetClearColor(const glm::vec4& color) {
+        m_Data->ClearColor = color;
+    }
+
     void SceneRenderer::OnWindowResize(uint32_t width, uint32_t height) {
         m_Data->GeometryFBO->Resize(width, height);
         m_Data->LightingFBO->Resize(width, height);
@@ -513,7 +518,28 @@ namespace Ayaya {
         // ==========================================
         m_Data->LightingFBO->Bind();
         // 用相机的实际背景色清屏！
-        RenderCommand::SetClearColor(clearColor);
+        // ==========================================
+        // 【核心修复 2】：为背景色注入物理能量！
+        // 1. 获取当前相机的物理曝光系数
+        // ==========================================
+        float currentEV100 = 14.5f;
+        auto cameraView = scene->Reg().view<CameraComponent>();
+        for (auto entityID : cameraView) {
+            auto& cc = cameraView.get<CameraComponent>(entityID);
+            if (cc.Primary) { currentEV100 = cc.EV100; break; }
+        }
+        float physicalExposure = 1.0f / (1.2f * std::exp2(currentEV100));
+
+        // ==========================================
+        // 2. 将 UI 上选的 LDR 普通颜色 (0~1)，除以曝光衰减系数
+        //    将其强行放大到几万级别的 HDR 能量，从而抵消后期的曝光变暗！
+        // ==========================================
+        glm::vec4 hdrClearColor = m_Data->ClearColor;
+        hdrClearColor.r /= physicalExposure;
+        hdrClearColor.g /= physicalExposure;
+        hdrClearColor.b /= physicalExposure;
+
+        RenderCommand::SetClearColor(hdrClearColor);
         RenderCommand::Clear();
 
         // 画全屏四边形，绝对不能开启深度测试！
@@ -676,17 +702,17 @@ namespace Ayaya {
         RenderCommand::SetClearColor({ 0.0f, 0.0f, 0.0f, 1.0f });
         RenderCommand::Clear();
 
-        float currentEV100 = 14.5f;
-        auto cameraView = scene->Reg().view<CameraComponent>();
-        for (auto entityID : cameraView) {
-            auto& cc = cameraView.get<CameraComponent>(entityID);
-            if (cc.Primary) { currentEV100 = cc.EV100; break; }
-        }
+        // float currentEV100 = 14.5f;
+        // auto cameraView = scene->Reg().view<CameraComponent>();
+        // for (auto entityID : cameraView) {
+        //     auto& cc = cameraView.get<CameraComponent>(entityID);
+        //     if (cc.Primary) { currentEV100 = cc.EV100; break; }
+        // }
 
         glDisable(GL_DEPTH_TEST); 
         m_Data->PostProcessShader->Bind();
         m_Data->PostProcessShader->SetInt("u_ScreenTexture", 0);
-        float physicalExposure = 1.0f / (1.2f * std::exp2(currentEV100));
+        // float physicalExposure = 1.0f / (1.2f * std::exp2(currentEV100));
         m_Data->PostProcessShader->SetFloat("u_Exposure", physicalExposure);
         m_Data->PostProcessShader->SetInt("u_SelectionTexture", 1);
 

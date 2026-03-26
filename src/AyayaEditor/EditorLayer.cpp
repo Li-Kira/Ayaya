@@ -179,9 +179,10 @@ namespace Ayaya {
                 }
 
                 cameraProjectionMatrix = cameraComp.Camera.GetProjection();
-                
+
                 renderSkybox = (cameraComp.ClearFlag == CameraComponent::ClearFlags::Skybox);
                 clearColor = cameraComp.BackgroundColor;
+                m_GameRenderer->SetClearColor(clearColor);
 
                 hasValidCamera = true;
                 break; 
@@ -205,6 +206,7 @@ namespace Ayaya {
         // ------------------------------------------
         // 5.2: 渲染 Scene 窗口
         // ------------------------------------------
+        m_SceneRenderer->SetClearColor({ 0.12f, 0.12f, 0.14f, 1.0f });
         m_SceneRenderer->BeginScene(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection(), m_EditorCamera.GetPosition());
         m_SceneRenderer->RenderScene(m_ActiveScene, m_HoveredEntity, m_ShowGrid, renderSkybox, clearColor);
         m_SceneRenderer->EndScene();
