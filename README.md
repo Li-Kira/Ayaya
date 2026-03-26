@@ -2,7 +2,7 @@
 
 Ayaya: a cross-platform game engine
 
-![](assets/other/Snipaste_2026-03-20_17-39-21.png)
+![](assets/other/Snipaste_2026-03-26_16-41-21.png)
 
 
 
