@@ -27,6 +27,7 @@ namespace Ayaya {
         void EndScene();
 
         void SetEnvironment(EnvironmentComponent& envComp);
+        void SetEnvironmentSettings(float intensity, const glm::vec3& ambientColor);
 
         struct Statistics {
             uint32_t DrawCalls = 0;

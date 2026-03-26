@@ -90,6 +90,8 @@ namespace Ayaya {
         std::shared_ptr<Mesh> SkyboxCubeMesh;
         std::shared_ptr<TextureCube> PrefilterMap;
         std::shared_ptr<Texture2D>   BRDFLUT;
+        float EnvironmentIntensity = 1.0f;
+        glm::vec3 EnvironmentAmbientColor = { 0.1f, 0.1f, 0.1f };
 
         // 新增 UBO 相关的成员
         struct_CameraData CameraData;
@@ -237,6 +239,14 @@ namespace Ayaya {
     }
 
     void SceneRenderer::SetEnvironment(EnvironmentComponent& envComp) {
+        if (envComp.Type == EnvironmentType::None) {
+            m_Data->EnvironmentCubemap = nullptr;
+            m_Data->IrradianceMap = nullptr;
+            m_Data->PrefilterMap = nullptr;
+            envComp.IsDirty = false;
+            return;
+        }
+
         uint32_t baseCubemapID = 0;
 
         // ==========================================
@@ -287,6 +297,11 @@ namespace Ayaya {
             // 烘焙完成，清除脏标记
             envComp.IsDirty = false; 
         }
+    }
+
+    void SceneRenderer::SetEnvironmentSettings(float intensity, const glm::vec3& ambientColor) {
+        m_Data->EnvironmentIntensity = intensity;
+        m_Data->EnvironmentAmbientColor = ambientColor;
     }
 
     void SceneRenderer::OnWindowResize(uint32_t width, uint32_t height) {
@@ -351,7 +366,7 @@ namespace Ayaya {
             // ==========================================
             // 核心修复：将 UI 上的 AmbientStrength 打包进 w 通道
             // ==========================================
-            m_Data->LightData.DirLightDir = glm::vec4(dir, dlc.AmbientStrength);
+            m_Data->LightData.DirLightDir = glm::vec4(dir, 0.0f);
             m_Data->LightData.DirLightColor = glm::vec4(dlc.Color * dlc.Illuminance, 0.0f);
             hasDirLight = true;
             break; 
@@ -523,17 +538,24 @@ namespace Ayaya {
         glBindTexture(GL_TEXTURE_2D, m_Data->GeometryFBO->GetColorAttachmentRendererID(3));
 
         // 【新增】：绑定 IBL 漫反射贴图 (使用空闲的槽位，比如 4)
-        if (m_Data->IrradianceMap) {
+        bool envMapEnabled = false;
+        if (m_Data->IrradianceMap && m_Data->PrefilterMap) {
+            envMapEnabled = true;
             m_Data->IrradianceMap->Bind(4); 
             m_Data->DeferredLightingShader->SetInt("u_IrradianceMap", 4);
-            // 与天空盒保持一致的亮度倍增器！
-            m_Data->DeferredLightingShader->SetFloat("u_Intensity", 30000.0f); 
-        }
-
-        if (m_Data->PrefilterMap) {
+            
             m_Data->PrefilterMap->Bind(5); 
             m_Data->DeferredLightingShader->SetInt("u_PrefilteredMap", 5);
-        }
+            
+            m_Data->DeferredLightingShader->SetFloat("u_Intensity", m_Data->EnvironmentIntensity); 
+        } 
+        
+        // 传递开关状态，告诉显卡是否要采样天空盒
+        m_Data->DeferredLightingShader->SetBool("u_EnvMapEnabled", envMapEnabled);
+        
+        // 彻底解绑：不再乘以 EnvironmentIntensity，独立传递！
+        m_Data->DeferredLightingShader->SetFloat3("u_AmbientColor", m_Data->EnvironmentAmbientColor * m_Data->EnvironmentIntensity);
+
         if (m_Data->BRDFLUT) {
             m_Data->BRDFLUT->Bind(6); 
             m_Data->DeferredLightingShader->SetInt("u_BRDFLUT", 6);
@@ -569,7 +591,7 @@ namespace Ayaya {
         // ==========================================
         // AYAYA_CORE_ERROR("showSkybox: {0}", showSkybox);
         
-        if (showSkybox) {
+        if (showSkybox && m_Data->EnvironmentCubemap) {
             glDepthFunc(GL_LEQUAL);  
             m_Data->SkyboxShader->Bind();
             // ==========================================
@@ -577,7 +599,7 @@ namespace Ayaya {
             // ==========================================
             // 因为当前相机的 EV100 高达 14.5，我们需要极高的亮度才能被看见。
             // 这里暂定 30000.0f，后续可移入 Scene 的 Environment 属性中由用户调节。
-            m_Data->SkyboxShader->SetFloat("u_Intensity", 30000.0f);
+            m_Data->SkyboxShader->SetFloat("u_Intensity", m_Data->EnvironmentIntensity);
 
             glm::mat4 viewNoTranslation = glm::mat4(glm::mat3(m_Data->ViewMatrix));
             m_Data->SkyboxShader->SetMat4("u_View", viewNoTranslation);

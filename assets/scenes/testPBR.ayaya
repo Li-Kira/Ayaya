@@ -3,11 +3,11 @@ EditorState:
   ShowGrid: true
   ShowSkybox: true
   EnableMSAA: true
-  CameraPosition: [-3.3024545, 0.9672828, 6.769829]
+  CameraPosition: [-2.6121998, 0.89348406, 5.3472104]
   CameraDistance: 2.7294528
-  CameraPitch: -0.055711284
-  CameraYaw: -0.43894938
-  CameraFocalPoint: [-2.1442676, 0.8153001, 4.302965]
+  CameraPitch: -0.0627425
+  CameraYaw: -0.45227358
+  CameraFocalPoint: [-1.4217441, 0.7223437, 2.8970187]
 Entities:
   - Entity: 9207422813788464392
     TagComponent:
@@ -44,7 +44,6 @@ Entities:
     DirectionalLightComponent:
       Color: [1, 1, 1]
       Illuminance: 100000
-      AmbientStrength: 1500
     RelationshipComponent:
       Parent: 0
   - Entity: 941355425607113630
@@ -80,5 +79,27 @@ Entities:
     MeshRendererComponent:
       ModelPath: assets/models/backpack.obj
       MaterialPath: assets/materials/PBR.mat
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 2717292969850671077
+    TagComponent:
+      Tag: SkyBox
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    EnvironmentComponent:
+      Type: 1
+      EquirectangularPath: assets/textures/skybox/hdr/newport_loft.hdr
+      Intensity: 30000
+      AmbientColor: [0.1, 0.1, 0.1]
+      CubemapFaces:
+        - ""
+        - assets/textures/skybox/left.jpg
+        - ""
+        - assets/textures/skybox/bottom.jpg
+        - ""
+        - ""
     RelationshipComponent:
       Parent: 0

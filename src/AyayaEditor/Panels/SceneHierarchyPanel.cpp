@@ -101,6 +101,24 @@ namespace Ayaya {
                     ImGui::EndMenu();
                 }
 
+                // ==========================================
+                // 【新增】：一键创建天空盒！
+                // ==========================================
+                if (ImGui::MenuItem("Create Skybox")) {
+                    Entity skyEntity = m_Context->CreateEntity("Skybox");
+                    
+                    // 自动挂载环境组件
+                    auto& envComp = skyEntity.AddComponent<EnvironmentComponent>();
+                    
+                    // 给一个比较合理的默认初始状态 (比如默认不开启，等用户自己拖贴图)
+                    envComp.Type = EnvironmentType::None; 
+                    envComp.Intensity = 30000.0f;
+                    envComp.AmbientColor = { 0.0f, 0.0f, 0.0f };
+                    
+                    // 创建完毕后，自动将其设为当前选中项，方便美术直接在属性面板操作
+                    m_SelectedEntities.clear();
+                    m_SelectedEntities.push_back(skyEntity);
+                }
                 // --- 新增灯光分类 ---
                 if (ImGui::BeginMenu("Light")) {
                     if (ImGui::MenuItem("Directional Light")) {
@@ -108,7 +126,6 @@ namespace Ayaya {
                         auto& lightTransform = entity.GetComponent<TransformComponent>();
                         lightTransform.Rotation = glm::radians(glm::vec3(-45.0f, 45.0f, 0.0f));
                         entity.AddComponent<DirectionalLightComponent>();
-                        entity.GetComponent<DirectionalLightComponent>().AmbientStrength = 1500.0f;
                         SetSelectedEntity(entity);
                     }
                     if (ImGui::MenuItem("Point Light")) {
@@ -231,7 +248,8 @@ namespace Ayaya {
         else if (entity.HasComponent<SpriteRendererComponent>()) icon = ICON_FA_PAINT_BRUSH;
         else if (entity.HasComponent<MeshRendererComponent>()) icon = ICON_FA_PAINT_BRUSH;
         else if (entity.HasComponent<DirectionalLightComponent>()) icon = ICON_FA_LIGHTBULB; 
-        else if (entity.HasComponent<PointLightComponent>()) icon = ICON_FA_LIGHTBULB; 
+        else if (entity.HasComponent<PointLightComponent>()) icon = ICON_FA_LIGHTBULB;
+        else if (entity.HasComponent<EnvironmentComponent>()) icon = ICON_FA_CLOUD_SUN; 
 
         std::string displayString = icon + " " + tag;
 
@@ -652,11 +670,6 @@ namespace Ayaya {
                     for (auto e : m_SelectedEntities) e.GetComponent<DirectionalLightComponent>().Illuminance = illuminance;
                 }
 
-                float ambient = refDlc.AmbientStrength;
-                if (ImGui::DragFloat("Ambient (Sky) Light", &ambient, 100.0f, 0.0f, 50000.0f, "%.0f")) {
-                    for (auto e : m_SelectedEntities) e.GetComponent<DirectionalLightComponent>().AmbientStrength = ambient;
-                }
-
                 ImGui::TreePop();
             }
         }
@@ -680,6 +693,152 @@ namespace Ayaya {
                 }
 
                 ImGui::TreePop();
+            }
+        }
+
+        // --- 绘制 Environment (天空盒) 组件 ---
+        bool allHaveEnvironment = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<EnvironmentComponent>()) { allHaveEnvironment = false; break; }
+
+        if (allHaveEnvironment) {
+            bool opened = ImGui::TreeNodeEx((void*)typeid(EnvironmentComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Environment (Skybox)");
+            
+            bool removeComponent = false;
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Remove Component")) removeComponent = true;
+                ImGui::EndPopup();
+            }
+
+            if (opened) {
+                auto& refEnv = referenceEntity.GetComponent<EnvironmentComponent>();
+
+                // 1. 类型切换下拉框
+                const char* envTypeStrings[] = { "None", "HDR Equirectangular", "LDR Equirectangular", "Classic Cubemap" };
+                int currentTypeIdx = (int)refEnv.Type;
+                if (ImGui::Combo("Type", &currentTypeIdx, envTypeStrings, 4)) {
+                    for (auto e : m_SelectedEntities) {
+                        auto& comp = e.GetComponent<EnvironmentComponent>();
+                        comp.Type = (EnvironmentType)currentTypeIdx;
+                        comp.IsDirty = true; // 切换类型时触发重新烘焙
+                    }
+                }
+
+                // 2. 环境光亮度滑块
+                float intensity = refEnv.Intensity;
+                if (ImGui::DragFloat("Intensity", &intensity, 100.0f, 0.0f, 150000.0f)) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<EnvironmentComponent>().Intensity = intensity;
+                }
+
+                if (refEnv.Type != EnvironmentType::None) {
+                    // 3. 全景图 (HDR/JPG) 资源槽位与拖拽交互
+                    if (refEnv.Type == EnvironmentType::HDR_Equirectangular || refEnv.Type == EnvironmentType::LDR_Equirectangular) {
+                        ImGui::Spacing();
+                        ImGui::Text("Equirectangular Map");
+                        std::string pathDisplay = refEnv.EquirectangularPath.empty() ? "Drop .hdr / .jpg here" : refEnv.EquirectangularPath;
+                        
+                        // 做一个大按钮用来接收拖拽
+                        ImGui::Button(pathDisplay.c_str(), ImVec2(-1.0f, 30.0f));
+
+                        // ==========================================
+                        // 核心交互：支持从内容浏览器直接拖拽 .hdr 或 .jpg 进来！
+                        // ==========================================
+                        if (ImGui::BeginDragDropTarget()) {
+                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                                const char* pathStr = (const char*)payload->Data;
+                                std::filesystem::path texPath = std::filesystem::path("assets") / pathStr;
+                                
+                                if (texPath.extension() == ".hdr" || texPath.extension() == ".jpg" || texPath.extension() == ".png") {
+                                    for (auto e : m_SelectedEntities) {
+                                        auto& comp = e.GetComponent<EnvironmentComponent>();
+                                        comp.EquirectangularPath = texPath.string();
+                                        
+                                        // 智能判断格式并自动切换 Type
+                                        if (texPath.extension() == ".hdr") comp.Type = EnvironmentType::HDR_Equirectangular;
+                                        else comp.Type = EnvironmentType::LDR_Equirectangular;
+                                        
+                                        // 立即加载贴图并打上脏标记，渲染器会在下一帧自动抓取它去烘焙！
+                                        comp.EquirectangularTexture = Texture2D::Create(comp.EquirectangularPath);
+                                        comp.IsDirty = true;
+                                    }
+                                } else {
+                                    AYAYA_CORE_WARN("Invalid environment map format! Please use .hdr or .jpg/.png");
+                                }
+                            }
+                            ImGui::EndDragDropTarget();
+                        }
+                    } 
+                    // 4. 传统 6 面体贴图
+                    else if (refEnv.Type == EnvironmentType::Classic_Cubemap) {
+                        ImGui::Spacing();
+                        ImGui::Text("Cubemap Faces (Drag & Drop .jpg/.png)");
+                        const char* faceNames[] = { "Right (+X)", "Left (-X)", "Top (+Y)", "Bottom (-Y)", "Front (+Z)", "Back (-Z)" };
+                        
+                        for(int i = 0; i < 6; ++i) {
+                            ImGui::PushID(i);
+                            ImGui::Text("%s", faceNames[i]);
+                            
+                            // 把它做成一个接收拖拽的大按钮
+                            std::string faceDisplay = refEnv.CubemapFaces[i].empty() ? "Drop Image Here" : refEnv.CubemapFaces[i];
+                            ImGui::Button(faceDisplay.c_str(), ImVec2(-1.0f, 30.0f));
+
+                            // ==========================================
+                            // 核心：让每个面都支持从 Content Browser 拖入图片
+                            // ==========================================
+                            if (ImGui::BeginDragDropTarget()) {
+                                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                                    const char* pathStr = (const char*)payload->Data;
+                                    std::filesystem::path texPath = std::filesystem::path("assets") / pathStr;
+                                    if (texPath.extension() == ".jpg" || texPath.extension() == ".png") {
+                                        for (auto e : m_SelectedEntities) {
+                                            e.GetComponent<EnvironmentComponent>().CubemapFaces[i] = texPath.string();
+                                        }
+                                    } else {
+                                        AYAYA_CORE_WARN("Invalid cubemap face format! Please use .jpg or .png");
+                                    }
+                                }
+                                ImGui::EndDragDropTarget();
+                            }
+                            ImGui::PopID();
+                        }
+                        
+                        ImGui::Spacing();
+                        // 烘焙按钮：只有 6 个面都填满了才允许烘焙
+                        if (ImGui::Button("Load Cubemap & Bake", ImVec2(-1.0f, 35.0f))) {
+                            for (auto e : m_SelectedEntities) {
+                                auto& comp = e.GetComponent<EnvironmentComponent>();
+                                bool allFacesPresent = true;
+                                for (int i = 0; i < 6; i++) {
+                                    if (comp.CubemapFaces[i].empty()) allFacesPresent = false;
+                                }
+                                
+                                if (allFacesPresent) {
+                                    comp.ClassicCubemapTexture = std::make_shared<TextureCube>(comp.CubemapFaces);
+                                    comp.IsDirty = true; // 触发烘焙
+                                } else {
+                                    AYAYA_CORE_WARN("Please assign all 6 faces before baking!");
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 5. 基础环境底光颜色
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+                
+                ImGui::Text("Ambient Light (Flat)");
+                glm::vec3 ambientColor = refEnv.AmbientColor;
+                // 【绝妙修复】：使用 ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float 
+                // 这允许你在调色板点击 RGB 数值框，手动输入 30000, 50000 等超高动态范围的值！
+                if (ImGui::ColorEdit3("Ambient Color", glm::value_ptr(ambientColor), ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float)) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<EnvironmentComponent>().AmbientColor = ambientColor;
+                }
+
+                ImGui::TreePop();
+            }
+            if (removeComponent) {
+                for (auto e : m_SelectedEntities) e.RemoveComponent<EnvironmentComponent>();
             }
         }
 
@@ -1175,7 +1334,6 @@ namespace Ayaya {
                         if (!e.HasComponent<DirectionalLightComponent>()) 
                         {
                             auto& dlc = e.AddComponent<DirectionalLightComponent>();
-                            dlc.AmbientStrength = 1500.0f;
                         }
                     }
                     ImGui::CloseCurrentPopup();
@@ -1184,6 +1342,17 @@ namespace Ayaya {
             if (!referenceEntity.HasComponent<PointLightComponent>()) {
                 if (ImGui::MenuItem("Point Light")) {
                     for (auto e : m_SelectedEntities) if (!e.HasComponent<PointLightComponent>()) e.AddComponent<PointLightComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
+            if (!referenceEntity.HasComponent<EnvironmentComponent>()) {
+                if (ImGui::MenuItem("Environment (Skybox)")) {
+                    for (auto e : m_SelectedEntities) {
+                        if (!e.HasComponent<EnvironmentComponent>()) {
+                            e.AddComponent<EnvironmentComponent>();
+                        }
+                    }
                     ImGui::CloseCurrentPopup();
                 }
             }

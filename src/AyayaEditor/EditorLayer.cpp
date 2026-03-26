@@ -43,18 +43,22 @@ namespace Ayaya {
     }
 
     void EditorLayer::OnUpdate(Timestep ts) {
+        // ==========================================
+        // 1. 处理输入
+        // ==========================================
         HandleShortcuts();
 
+        // ==========================================
+        // 2. 处理UI窗口 的 Resize
+        // ==========================================
         // 获取窗口的缩放系数，用来适配 Mac 的 Retina 缩放
         float dpiScale = ImGui::GetIO().DisplayFramebufferScale.x;
         // AYAYA_CORE_ERROR("dpiScale: {0}", dpiScale);
-        
 
-        // ==========================================
+        // ------------------------------------------
         // 2.1 处理 Scene (上帝视口) 的 Resize
-        // ==========================================
+        // ------------------------------------------
         static glm::vec2 s_LastViewportSize = { 0.0f, 0.0f };
-        // 2.1 处理 Scene 的 Resize
         if (m_ViewportSize.x > 0.0f && m_ViewportSize.y > 0.0f && 
            (s_LastViewportSize.x != m_ViewportSize.x || s_LastViewportSize.y != m_ViewportSize.y)) {
             
@@ -66,9 +70,9 @@ namespace Ayaya {
             s_LastViewportSize = m_ViewportSize;
         }
 
-        // ==========================================
+        // ------------------------------------------
         // 2.2 处理 Game (游戏视口) 的 Resize
-        // ==========================================
+        // ------------------------------------------
         static glm::vec2 s_LastGameViewportSize = { 0.0f, 0.0f };
         if (m_GameViewportSize.x > 0.0f && m_GameViewportSize.y > 0.0f && 
            (s_LastGameViewportSize.x != m_GameViewportSize.x || s_LastGameViewportSize.y != m_GameViewportSize.y)) {
@@ -90,6 +94,9 @@ namespace Ayaya {
             s_LastGameViewportSize = m_GameViewportSize;
         }
 
+        // ==========================================
+        // 3. 处理runtime，包括物理引擎和Lua脚本系统
+        // ==========================================
         // 上帝相机只在 Edit 模式响应输入
         if (m_SceneState == SceneState::Edit) {
             m_EditorCamera.OnUpdate(ts, m_ViewportFocused);
@@ -101,32 +108,44 @@ namespace Ayaya {
 
 
         // ==========================================
-        // 环境光与 IBL 动态更新系统
+        // 4. 环境光与 IBL 动态更新系统
         // ==========================================
         auto envView = m_ActiveScene->Reg().view<EnvironmentComponent>();
+        bool hasEnvironment = false; // 记录场景里是否还有环境组件
+        
         for (auto entityID : envView) {
+            hasEnvironment = true;
             auto& envComp = envView.get<EnvironmentComponent>(entityID);
             
-            // 如果发现贴图被更改了 (脏标记为 true)
             if (envComp.IsDirty) {
-                // 1. 让 Scene 视口渲染器烘焙生成 IBL 贴图
                 m_SceneRenderer->SetEnvironment(envComp);
-                
-                // 2. 为了让 Game 游戏视口也能看到天空盒，让它也同步更新！
-                // （目前先让它也烘焙一次，未来我们可以把贴图直接存在 Component 里让两者共享，提升性能）
                 envComp.IsDirty = true;
                 m_GameRenderer->SetEnvironment(envComp);
-                
-                // 3. 两个视口都更新完毕，彻底清理脏标记
                 envComp.IsDirty = false; 
             }
             
-            break; // 目前只支持场景中存在一个全局天空盒
+            m_SceneRenderer->SetEnvironmentSettings(envComp.Intensity, envComp.AmbientColor);
+            m_GameRenderer->SetEnvironmentSettings(envComp.Intensity, envComp.AmbientColor);
+            break; 
+        }
+
+        // 【核心修复】：如果用户把天空盒实体直接删了，强制清空渲染器的光照数据！
+        if (!hasEnvironment) {
+            EnvironmentComponent emptyEnv;
+            emptyEnv.Type = EnvironmentType::None;
+            emptyEnv.AmbientColor = { 0.0f, 0.0f, 0.0f }; 
+            m_SceneRenderer->SetEnvironment(emptyEnv);
+            m_GameRenderer->SetEnvironment(emptyEnv);
+            m_SceneRenderer->SetEnvironmentSettings(0.0f, emptyEnv.AmbientColor);
+            m_GameRenderer->SetEnvironmentSettings(0.0f, emptyEnv.AmbientColor);
         }
 
         // ==========================================
-        // Pass 1: Game 窗口
+        // 5. 渲染管线
         // ==========================================
+        // ------------------------------------------
+        // 5.1: Game 窗口
+        // ------------------------------------------
         bool hasValidCamera = false;
         glm::mat4 cameraViewMatrix, cameraProjectionMatrix;
         glm::vec3 cameraPosition;
@@ -183,9 +202,9 @@ namespace Ayaya {
             m_GameRenderer->EndScene();
         }
 
-        // ==========================================
-        // Pass 2: 渲染 Scene 窗口
-        // ==========================================
+        // ------------------------------------------
+        // 5.2: 渲染 Scene 窗口
+        // ------------------------------------------
         m_SceneRenderer->BeginScene(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection(), m_EditorCamera.GetPosition());
         m_SceneRenderer->RenderScene(m_ActiveScene, m_HoveredEntity, m_ShowGrid, renderSkybox, clearColor);
         m_SceneRenderer->EndScene();
@@ -226,7 +245,6 @@ namespace Ayaya {
         auto& lightTransform = dirLight.GetComponent<TransformComponent>();
         lightTransform.Rotation = glm::radians(glm::vec3(-45.0f, 45.0f, 0.0f));
         dirLight.AddComponent<DirectionalLightComponent>();
-        dirLight.GetComponent<DirectionalLightComponent>().AmbientStrength = 1500.0f;
 
         // 创造天空盒/环境光
         Entity skyEntity = m_ActiveScene->CreateEntity("Skybox");
@@ -236,6 +254,7 @@ namespace Ayaya {
         envComp.EquirectangularPath = "assets/textures/skybox/hdr/newport_loft.hdr";
         envComp.EquirectangularTexture = Texture2D::Create(envComp.EquirectangularPath);
         envComp.Intensity = 30000.0f; 
+        envComp.AmbientColor = glm::vec3(0.0f, 0.0f, 0.0f);
         envComp.IsDirty = true;
 
         // 创造物体
@@ -272,7 +291,6 @@ namespace Ayaya {
             // ==========================================
             EditorState state;
             state.ShowGrid = m_ShowGrid;
-            state.ShowSkybox = m_ShowSkybox;
             state.EnableMSAA = m_EnableMSAA;
             state.CameraPosition = m_EditorCamera.GetPosition();
             state.CameraDistance = m_EditorCamera.GetDistance();
@@ -307,7 +325,6 @@ namespace Ayaya {
             // 收集当前状态
             EditorState state;
             state.ShowGrid = m_ShowGrid;
-            state.ShowSkybox = m_ShowSkybox;
             state.EnableMSAA = m_EnableMSAA;
             state.CameraPosition = m_EditorCamera.GetPosition();
             state.CameraDistance = m_EditorCamera.GetDistance();
@@ -355,7 +372,6 @@ namespace Ayaya {
                 m_EditorScene = m_ActiveScene;
                 
                 m_ShowGrid = state.ShowGrid;
-                m_ShowSkybox = state.ShowSkybox;
                 m_EditorCamera.SetPosition(state.CameraPosition);
                 m_EditorCamera.SetDistance(state.CameraDistance);
                 m_EditorCamera.SetPitch(state.CameraPitch);
@@ -549,7 +565,6 @@ namespace Ayaya {
 
             if (ImGui::BeginMenu("View")) {
                 ImGui::MenuItem("Show Grid", nullptr, &m_ShowGrid);
-                ImGui::MenuItem("Show Skybox", nullptr, &m_ShowSkybox);
                 ImGui::MenuItem("Show Statistics", nullptr, &m_ShowStatsPanel);
 
                 if (ImGui::MenuItem("Enable MSAA (4x)", nullptr, &m_EnableMSAA)) {

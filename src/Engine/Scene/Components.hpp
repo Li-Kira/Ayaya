@@ -122,7 +122,6 @@ namespace Ayaya {
     struct DirectionalLightComponent {
         glm::vec3 Color{ 1.0f, 1.0f, 1.0f }; // 默认纯白光
         float Illuminance = 100000.0f; 
-        float AmbientStrength = 0.0f; // 物理渲染中通常用天空盒做环境光，这个可以设为0或保留微调
 
         DirectionalLightComponent() = default;
         DirectionalLightComponent(const DirectionalLightComponent&) = default;
@@ -150,21 +149,20 @@ namespace Ayaya {
     struct EnvironmentComponent {
         EnvironmentType Type = EnvironmentType::HDR_Equirectangular;
         
-        // 1. 资源路径 (用于 Editor UI 显示和场景序列化保存)
         std::string EquirectangularPath = ""; 
         std::vector<std::string> CubemapFaces = {"", "", "", "", "", ""};
         
-        // 2. 资源指针 (运行时生成)
         std::shared_ptr<Texture2D> EquirectangularTexture = nullptr;
         std::shared_ptr<TextureCube> ClassicCubemapTexture = nullptr;
         
-        // 3. 控制参数
-        // 物理曝光倍增器 (HDR 通常 30000 左右，如果是 LDR 普通图片可能需要调到 80000 甚至更高)
         float Intensity = 30000.0f; 
-        float Lod = 0.0f;           // 天空盒背景的模糊程度 (控制采样 Prefilter 的层级)
-        
-        // 4. 脏标记：当用户在 UI 里更换了贴图时设为 true，通知渲染器重新烘焙！
+        float Lod = 0.0f;           
         bool IsDirty = false;       
+
+        // ==========================================
+        // 【新增】：当没有天空盒，或需要额外补光时的基础环境光颜色
+        // ==========================================
+        glm::vec3 AmbientColor = { 0.1f, 0.1f, 0.1f }; // 默认给一个微弱的暗灰色
 
         EnvironmentComponent() = default;
         EnvironmentComponent(const EnvironmentComponent&) = default;

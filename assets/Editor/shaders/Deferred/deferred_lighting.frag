@@ -15,7 +15,9 @@ uniform sampler2D g_PBR;
 uniform samplerCube u_IrradianceMap;
 uniform samplerCube u_PrefilteredMap;
 uniform sampler2D   u_BRDFLUT;
+uniform bool        u_EnvMapEnabled;
 uniform float       u_Intensity;
+uniform vec3        u_AmbientColor;
 
 // ==========================================
 // 引擎 UBO 接口
@@ -31,7 +33,7 @@ struct PointLight {
 };
 
 layout(std140) uniform LightData {
-    vec4 DirLightDir;   // xyz = dir, w = AmbientStrength
+    vec4 DirLightDir;   // xyz = dir, w = padding (已废弃的 AmbientStrength)
     vec4 DirLightColor; // xyz = color * illuminance
     PointLight PointLights[4];
     int PointLightCount;
@@ -163,20 +165,20 @@ void main() {
     kD_ambient *= 1.0 - Metallic; 
     
     // (Part 1): Diffuse 漫反射
-    vec3 irradiance = texture(u_IrradianceMap, N).rgb * u_Intensity;
-    vec3 diffuse    = irradiance * Albedo;
-    
-    // (Part 2): Specular 高光倒影 (Split-Sum)
-    const float MAX_REFLECTION_LOD = 4.0; 
-    // 技巧：根据粗糙度去采样不同模糊级别的预滤波环境图，并乘上亮度倍增器
-    vec3 R = reflect(-V, N);
-    vec3 prefilteredColor = textureLod(u_PrefilteredMap, R, Roughness * MAX_REFLECTION_LOD).rgb * u_Intensity;
-    
-    // 查表：提取 BRDF 积分的 Scale 和 Bias
-    vec2 brdf = texture(u_BRDFLUT, vec2(max(dot(N, V), 0.0), Roughness)).rg;
-    vec3 specular_ambient = prefilteredColor * (F_ambient * brdf.x + brdf.y);
+    vec3 irradiance = u_AmbientColor;
+    vec3 specular_ambient = vec3(0.0);
 
-    // 终极融合！
+    // 【核心修复】：只有当环境贴图存在时，才去采样天空盒！
+    if (u_EnvMapEnabled) {
+        irradiance += texture(u_IrradianceMap, N).rgb * u_Intensity;
+        
+        const float MAX_REFLECTION_LOD = 4.0; 
+        vec3 R = reflect(-V, N);
+        vec3 prefilteredColor = textureLod(u_PrefilteredMap, R, Roughness * MAX_REFLECTION_LOD).rgb * u_Intensity;
+        vec2 brdf = texture(u_BRDFLUT, vec2(max(dot(N, V), 0.0), Roughness)).rg;
+        specular_ambient = prefilteredColor * (F_ambient * brdf.x + brdf.y);
+    }
+    vec3 diffuse    = irradiance * Albedo;
     vec3 ambient = (kD_ambient * diffuse + specular_ambient) * AO;
     
     vec3 color = ambient + Lo;

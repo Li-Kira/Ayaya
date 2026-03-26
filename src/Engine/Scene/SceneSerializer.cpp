@@ -226,7 +226,6 @@ namespace Ayaya {
             out << YAML::Key << "Color" << YAML::Value << dlc.Color;
             // 新增：保存照度 (Lux)
             out << YAML::Key << "Illuminance" << YAML::Value << dlc.Illuminance; 
-            out << YAML::Key << "AmbientStrength" << YAML::Value << dlc.AmbientStrength;
             out << YAML::EndMap;
         }
 
@@ -240,6 +239,26 @@ namespace Ayaya {
             out << YAML::Key << "LuminousPower" << YAML::Value << plc.LuminousPower;
             
             out << YAML::EndMap; // PointLightComponent
+        }
+
+        // ==========================================
+        // 保存 Environment (天空盒) 组件
+        // ==========================================
+        if (entity.HasComponent<EnvironmentComponent>()) {
+            out << YAML::Key << "EnvironmentComponent";
+            out << YAML::BeginMap;
+            auto& env = entity.GetComponent<EnvironmentComponent>();
+            
+            out << YAML::Key << "Type" << YAML::Value << (int)env.Type;
+            out << YAML::Key << "EquirectangularPath" << YAML::Value << env.EquirectangularPath;
+            out << YAML::Key << "Intensity" << YAML::Value << env.Intensity;
+            out << YAML::Key << "AmbientColor" << YAML::Value << env.AmbientColor;
+            
+            out << YAML::Key << "CubemapFaces" << YAML::Value << YAML::BeginSeq;
+            for (const auto& face : env.CubemapFaces) out << face;
+            out << YAML::EndSeq;
+            
+            out << YAML::EndMap;
         }
 
         // ==========================================
@@ -529,7 +548,6 @@ namespace Ayaya {
             if (dirLightComponent) {
                 auto& dlc = deserializedEntity.AddComponent<DirectionalLightComponent>();
                 dlc.Color = dirLightComponent["Color"].as<glm::vec3>();
-                dlc.AmbientStrength = dirLightComponent["AmbientStrength"].as<float>();
 
                 // 兼容性检查：如果旧场景没有照度属性，默认给 100000 勒克斯 (正午阳光)
                 if (dirLightComponent["Illuminance"]) {
@@ -560,6 +578,45 @@ namespace Ayaya {
                 // 更老的场景连强度都没有，默认 1500 流明
                 else {
                     plc.LuminousPower = 1500.0f;
+                }
+            }
+
+            // ==========================================
+            // 读取 Environment (天空盒) 组件
+            // ==========================================
+            auto envComponent = entity["EnvironmentComponent"];
+            if (envComponent) {
+                auto& env = deserializedEntity.AddComponent<EnvironmentComponent>();
+                
+                env.Type = (EnvironmentType)envComponent["Type"].as<int>();
+                env.EquirectangularPath = envComponent["EquirectangularPath"].as<std::string>();
+                env.Intensity = envComponent["Intensity"].as<float>();
+
+                if (envComponent["AmbientColor"]) {
+                    env.AmbientColor = envComponent["AmbientColor"].as<glm::vec3>();
+                }
+
+                if (envComponent["CubemapFaces"]) {
+                    env.CubemapFaces.clear();
+                    for (auto face : envComponent["CubemapFaces"]) {
+                        env.CubemapFaces.push_back(face.as<std::string>());
+                    }
+                }
+
+                // ==========================================
+                // 核心：读取完毕后，立即在内存中加载纹理，并激活脏标记！
+                // 这样引擎在读完场景的第一帧，就会极其智能地在后台把 IBL 光照全部烘焙好！
+                // ==========================================
+                if ((env.Type == EnvironmentType::HDR_Equirectangular || env.Type == EnvironmentType::LDR_Equirectangular) 
+                    && !env.EquirectangularPath.empty()) 
+                {
+                    env.EquirectangularTexture = Texture2D::Create(env.EquirectangularPath);
+                    env.IsDirty = true; 
+                } 
+                else if (env.Type == EnvironmentType::Classic_Cubemap && !env.CubemapFaces[0].empty()) 
+                {
+                    env.ClassicCubemapTexture = std::make_shared<TextureCube>(env.CubemapFaces);
+                    env.IsDirty = true;
                 }
             }
 

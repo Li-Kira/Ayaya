@@ -22,7 +22,7 @@ Entities:
       FixedAspectRatio: false
       EV100: 0
       ClearFlag: 1
-      BackgroundColor: [0.013157904, 0.013157904, 0.013157904, 1]
+      BackgroundColor: [0.0071174502, 0.0071174502, 0.0071174502, 1]
       Camera:
         ProjectionType: 0
         PerspectiveFOV: 0.7853982
@@ -744,3 +744,25 @@ Entities:
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M100_R100_Mat.mat
     RelationshipComponent:
       Parent: 454681315911136007
+  - Entity: 6689003807538403353
+    TagComponent:
+      Tag: Skybox
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    EnvironmentComponent:
+      Type: 0
+      EquirectangularPath: ""
+      Intensity: 0
+      AmbientColor: [0, 0, 0]
+      CubemapFaces:
+        - ""
+        - ""
+        - ""
+        - ""
+        - ""
+        - ""
+    RelationshipComponent:
+      Parent: 0
