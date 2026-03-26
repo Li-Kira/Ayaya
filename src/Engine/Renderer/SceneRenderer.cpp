@@ -702,13 +702,6 @@ namespace Ayaya {
         RenderCommand::SetClearColor({ 0.0f, 0.0f, 0.0f, 1.0f });
         RenderCommand::Clear();
 
-        // float currentEV100 = 14.5f;
-        // auto cameraView = scene->Reg().view<CameraComponent>();
-        // for (auto entityID : cameraView) {
-        //     auto& cc = cameraView.get<CameraComponent>(entityID);
-        //     if (cc.Primary) { currentEV100 = cc.EV100; break; }
-        // }
-
         glDisable(GL_DEPTH_TEST); 
         m_Data->PostProcessShader->Bind();
         m_Data->PostProcessShader->SetInt("u_ScreenTexture", 0);

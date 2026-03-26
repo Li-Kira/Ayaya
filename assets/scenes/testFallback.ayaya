@@ -44,7 +44,6 @@ Entities:
     DirectionalLightComponent:
       Color: [1, 1, 1]
       Illuminance: 100000
-      AmbientStrength: 0.3
     RelationshipComponent:
       Parent: 0
   - Entity: 3087155304286953667
