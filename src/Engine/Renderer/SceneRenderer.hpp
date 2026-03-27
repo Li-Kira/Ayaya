@@ -35,6 +35,8 @@ namespace Ayaya {
             uint32_t ShaderBinds = 0;   // SetPass Calls
             uint32_t VertexCount = 0;
             uint32_t TriangleCount = 0; // Tris
+            float CPUTime = 0.0f; // C++ 准备指令的时间
+            float GPUTime = 0.0f; // 显卡真实渲染的时间
         };
         void ResetStats();
         Statistics GetStats();

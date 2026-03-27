@@ -17,40 +17,73 @@ namespace Ayaya {
     void SetDarkThemeColors() {
         auto& colors = ImGui::GetStyle().Colors;
         
-        // 核心背景色：深邃的黑灰色，类似 UE5
-        colors[ImGuiCol_WindowBg] = ImVec4{ 0.1f, 0.105f, 0.11f, 1.0f };
+        // =========================================================
+        // 1. 基础深色背景 (深邃的黑灰色，层次分明)
+        // =========================================================
+        colors[ImGuiCol_WindowBg]           = ImVec4{ 0.1f, 0.105f, 0.11f, 1.0f };
+        colors[ImGuiCol_ChildBg]            = ImVec4{ 0.12f, 0.125f, 0.13f, 1.0f };
+        colors[ImGuiCol_PopupBg]            = ImVec4{ 0.14f, 0.145f, 0.15f, 1.0f }; // 弹出菜单稍亮一点，有悬浮感
+        colors[ImGuiCol_MenuBarBg]          = ImVec4{ 0.1f, 0.105f, 0.11f, 1.0f };
 
-        // 面板头部（Title）的颜色
-        colors[ImGuiCol_Header] = ImVec4{ 0.2f, 0.205f, 0.21f, 1.0f };
-        colors[ImGuiCol_HeaderHovered] = ImVec4{ 0.3f, 0.305f, 0.31f, 1.0f };
-        colors[ImGuiCol_HeaderActive] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
+        // =========================================================
+        // 2. 灵魂点缀色 (Engine Accent Blue) 
+        // =========================================================
+        ImVec4 accentColor        = ImVec4{ 0.17f, 0.45f, 0.85f, 1.0f }; // 现代蓝
+        ImVec4 accentColorHovered = ImVec4{ 0.22f, 0.50f, 0.90f, 1.0f };
+        ImVec4 accentColorActive  = ImVec4{ 0.12f, 0.40f, 0.80f, 1.0f };
+
+        // 将点缀色应用到核心交互组件上
+        colors[ImGuiCol_Tab]                = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f }; // 未激活的标签（深色）
+        colors[ImGuiCol_TabHovered]         = ImVec4{ 0.38f, 0.3805f, 0.381f, 1.0f }; // 鼠标悬浮时的颜色
+        colors[ImGuiCol_TabActive]          = colors[ImGuiCol_WindowBg]; 
+        colors[ImGuiCol_TabUnfocused]       = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
+        colors[ImGuiCol_TabUnfocusedActive] = colors[ImGuiCol_WindowBg];
+
+        // =========================================================
+        // 3. 选项卡 (Tabs) - 融入点缀色
+        // =========================================================
+        colors[ImGuiCol_Tab]                = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f }; // 未激活：稍亮的灰色
+        colors[ImGuiCol_TabHovered]         = accentColor;                            // 鼠标滑过：亮起灵魂蓝色！
+        colors[ImGuiCol_TabActive]          = colors[ImGuiCol_WindowBg];              // 激活：下沉融入背景，线隐形
+        colors[ImGuiCol_TabUnfocused]       = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
+        colors[ImGuiCol_TabUnfocusedActive] = colors[ImGuiCol_WindowBg];
+
+        // =========================================================
+        // 4. 输入框与背景 (Frame)
+        // =========================================================
+        colors[ImGuiCol_FrameBg]            = ImVec4{ 0.18f, 0.185f, 0.19f, 1.0f }; // 比底色亮一点，区分出输入框
+        colors[ImGuiCol_FrameBgHovered]     = ImVec4{ 0.25f, 0.255f, 0.26f, 1.0f };
+        colors[ImGuiCol_FrameBgActive]      = ImVec4{ 0.2f, 0.205f, 0.21f, 1.0f };
+
+        // =========================================================
+        // 5. 按钮与表头 (Header & Button)
+        // =========================================================
+        colors[ImGuiCol_Header]             = ImVec4{ 0.22f, 0.225f, 0.23f, 1.0f }; // 比如大纲里的选中项
+        colors[ImGuiCol_HeaderHovered]      = ImVec4{ 0.28f, 0.285f, 0.29f, 1.0f };
+        colors[ImGuiCol_HeaderActive]       = ImVec4{ 0.18f, 0.185f, 0.19f, 1.0f };
         
-        // 按钮颜色
-        colors[ImGuiCol_Button] = ImVec4{ 0.2f, 0.205f, 0.21f, 1.0f };
-        colors[ImGuiCol_ButtonHovered] = ImVec4{ 0.3f, 0.305f, 0.31f, 1.0f };
-        colors[ImGuiCol_ButtonActive] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
+        colors[ImGuiCol_Button]             = ImVec4{ 0.22f, 0.225f, 0.23f, 1.0f };
+        colors[ImGuiCol_ButtonHovered]      = ImVec4{ 0.28f, 0.285f, 0.29f, 1.0f };
+        colors[ImGuiCol_ButtonActive]       = ImVec4{ 0.18f, 0.185f, 0.19f, 1.0f };
 
-        // 各种边框和输入框背景
-        colors[ImGuiCol_FrameBg] = ImVec4{ 0.2f, 0.205f, 0.21f, 1.0f };
-        colors[ImGuiCol_FrameBgHovered] = ImVec4{ 0.3f, 0.305f, 0.31f, 1.0f };
-        colors[ImGuiCol_FrameBgActive] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
-
-        // 选项卡 (Tabs)
-        colors[ImGuiCol_Tab] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
-        colors[ImGuiCol_TabHovered] = ImVec4{ 0.38f, 0.3805f, 0.381f, 1.0f };
-        colors[ImGuiCol_TabActive] = ImVec4{ 0.28f, 0.2805f, 0.281f, 1.0f };
-        colors[ImGuiCol_TabUnfocused] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
-        colors[ImGuiCol_TabUnfocusedActive] = ImVec4{ 0.2f, 0.205f, 0.21f, 1.0f };
-
-        // 窗口标题栏
-        colors[ImGuiCol_TitleBg] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
-        colors[ImGuiCol_TitleBgActive] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
-        colors[ImGuiCol_TitleBgCollapsed] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
+        // =========================================================
+        // 6. 边缘修饰与辅助
+        // =========================================================
+        colors[ImGuiCol_TitleBg]            = ImVec4{ 0.1f, 0.105f, 0.11f, 1.0f };
+        colors[ImGuiCol_TitleBgActive]      = ImVec4{ 0.12f, 0.125f, 0.13f, 1.0f };
+        colors[ImGuiCol_TitleBgCollapsed]   = ImVec4{ 0.1f, 0.105f, 0.11f, 1.0f };
         
-        // 分割线重置为暗色，避免太过突兀
-        colors[ImGuiCol_Separator] = ImVec4{ 0.2f, 0.205f, 0.21f, 1.0f };
-        colors[ImGuiCol_SeparatorHovered] = ImVec4{ 0.3f, 0.305f, 0.31f, 1.0f };
-        colors[ImGuiCol_SeparatorActive] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
+        colors[ImGuiCol_Separator]          = ImVec4{ 0.08f, 0.085f, 0.09f, 1.0f }; // 极暗的分割线，不抢眼
+        colors[ImGuiCol_SeparatorHovered]   = ImVec4{ 0.2f, 0.205f, 0.21f, 1.0f };
+        colors[ImGuiCol_SeparatorActive]    = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
+
+        // 窗口拖拽调整大小的右下角三角符号
+        colors[ImGuiCol_ResizeGrip]         = ImVec4{ 0.2f, 0.205f, 0.21f, 0.0f }; // 默认透明
+        colors[ImGuiCol_ResizeGripHovered]  = accentColorHovered;
+        colors[ImGuiCol_ResizeGripActive]   = accentColorActive;
+
+        // 停靠时的预览高亮色
+        colors[ImGuiCol_DockingPreview]     = ImVec4{ 0.17f, 0.45f, 0.85f, 0.4f };
     }
 
     void ImGuiLayer::OnAttach() {
@@ -78,6 +111,10 @@ namespace Ayaya {
         icons_config.PixelSnapH = true; 
         static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_16_FA, 0 };
         io.Fonts->AddFontFromFileTTF("assets/Editor/fonts/fa-solid-900.ttf", 14.0f, &icons_config, icons_ranges);
+
+        // 加载粗体作为辅助字体
+        ImFontConfig boldConfig;
+        io.Fonts->AddFontFromFileTTF("assets/Editor/fonts/Roboto-Bold.ttf", 18.0f, &boldConfig);
 
         // =========================================================
         // 2. 几何样式配置 (现代化圆角与间距)

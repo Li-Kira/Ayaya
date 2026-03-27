@@ -459,21 +459,28 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<TransformComponent>()) { allHaveTransform = false; break; }
 
         if (allHaveTransform) {
-            if (ImGui::TreeNodeEx((void*)typeid(TransformComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Transform")) {
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
+            bool opened = ImGui::TreeNodeEx((void*)typeid(TransformComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Transform");
+            ImGui::PopFont();
+            
+            if (opened) {
                 auto& refTransform = referenceEntity.GetComponent<TransformComponent>();
 
+                // 1. 绘制 Position (默认重置值为 0.0f)
                 glm::vec3 translation = refTransform.Translation;
-                if (ImGui::DragFloat3("Position", glm::value_ptr(translation), 0.1f)) {
+                if (UI::DrawVec3Control("Position", translation, 0.0f)) {
                     for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Translation = translation;
                 }
                 
+                // 2. 绘制 Rotation (注意：需要从弧度转为角度，修改后再转回弧度)
                 glm::vec3 rotation = glm::degrees(refTransform.Rotation);
-                if (ImGui::DragFloat3("Rotation", glm::value_ptr(rotation), 1.0f)) {
+                if (UI::DrawVec3Control("Rotation", rotation, 0.0f)) {
                     for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Rotation = glm::radians(rotation);
                 }
 
+                // 3. 绘制 Scale (默认重置值为 1.0f !)
                 glm::vec3 scale = refTransform.Scale;
-                if (ImGui::DragFloat3("Scale", glm::value_ptr(scale), 0.1f)) {
+                if (UI::DrawVec3Control("Scale", scale, 1.0f)) {
                     for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Scale = scale;
                 }
 
@@ -486,7 +493,11 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<SpriteRendererComponent>()) { allHaveSprite = false; break; }
 
         if (allHaveSprite) {
-            if (ImGui::TreeNodeEx((void*)typeid(SpriteRendererComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Sprite Renderer")) {
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
+            bool opened = ImGui::TreeNodeEx((void*)typeid(SpriteRendererComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Sprite Renderer");
+            ImGui::PopFont();
+
+            if (opened) {
                 auto& refSrc = referenceEntity.GetComponent<SpriteRendererComponent>();
                 
                 glm::vec4 color = refSrc.Color;
@@ -544,7 +555,11 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<CameraComponent>()) { allHaveCamera = false; break; }
 
         if (allHaveCamera) {
-            if (ImGui::TreeNodeEx((void*)typeid(CameraComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Camera")) {
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
+            bool opened = ImGui::TreeNodeEx((void*)typeid(CameraComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Camera");
+            ImGui::PopFont();
+
+            if (opened) {
                 auto& refCamera = referenceEntity.GetComponent<CameraComponent>();
                 
                 // 1. 投影模式 (预留扩展，目前我们固定透视，但可以展示出来)
@@ -657,7 +672,11 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<DirectionalLightComponent>()) { allHaveDirLight = false; break; }
 
         if (allHaveDirLight) {
-            if (ImGui::TreeNodeEx((void*)typeid(DirectionalLightComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Directional Light")) {
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
+            bool opened = ImGui::TreeNodeEx((void*)typeid(DirectionalLightComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Directional Light");
+            ImGui::PopFont();
+
+            if (opened) {
                 auto& refDlc = referenceEntity.GetComponent<DirectionalLightComponent>();
                 
                 glm::vec3 color = refDlc.Color;
@@ -679,7 +698,11 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<PointLightComponent>()) { allHavePointLight = false; break; }
 
         if (allHavePointLight) {
-            if (ImGui::TreeNodeEx((void*)typeid(PointLightComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Point Light")) {
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
+            bool opened = ImGui::TreeNodeEx((void*)typeid(PointLightComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Point Light");
+            ImGui::PopFont();
+
+            if (opened) {
                 auto& refPlc = referenceEntity.GetComponent<PointLightComponent>();
                 
                 glm::vec3 color = refPlc.Color;
@@ -701,8 +724,10 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<EnvironmentComponent>()) { allHaveEnvironment = false; break; }
 
         if (allHaveEnvironment) {
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
             bool opened = ImGui::TreeNodeEx((void*)typeid(EnvironmentComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Environment (Skybox)");
-            
+            ImGui::PopFont();
+
             bool removeComponent = false;
             if (ImGui::BeginPopupContextItem()) {
                 if (ImGui::MenuItem("Remove Component")) removeComponent = true;
@@ -847,7 +872,9 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<MeshRendererComponent>()) { allHaveMeshRenderer = false; break; }
 
         if (allHaveMeshRenderer) {
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
             bool opened = ImGui::TreeNodeEx((void*)typeid(MeshRendererComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Mesh Renderer");
+            ImGui::PopFont();
             
             bool removeComponent = false;
             if (ImGui::BeginPopupContextItem()) {
@@ -1110,7 +1137,9 @@ namespace Ayaya {
                         }
                     } 
                     else {
-                        ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "Warning: No Material Assigned!");
+                        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+                        ImGui::TextColored(ImVec4(1.0f, 0.2f, 0.6f, 1.0f), "Warning: No Material Assigned!");
+                        ImGui::PopFont();
                         if (ImGui::Button("Add Default Material", ImVec2(-1.0f, 30.0f))) {
                             for (auto e : m_SelectedEntities) {
                                 auto templateMat = std::make_shared<Material>();
@@ -1137,7 +1166,9 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<LuaScriptComponent>()) { allHaveLuaScript = false; break; }
 
         if (allHaveLuaScript) {
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
             bool opened = ImGui::TreeNodeEx((void*)typeid(LuaScriptComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Lua Script");
+            ImGui::PopFont();
             
             bool removeComponent = false;
             if (ImGui::BeginPopupContextItem()) {
@@ -1190,7 +1221,9 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<Rigidbody2DComponent>()) { allHaveRb2d = false; break; }
 
         if (allHaveRb2d) {
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
             bool opened = ImGui::TreeNodeEx((void*)typeid(Rigidbody2DComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Rigidbody 2D");
+            ImGui::PopFont();
             
             bool removeComponent = false;
             if (ImGui::BeginPopupContextItem()) {
@@ -1233,7 +1266,10 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<BoxCollider2DComponent>()) { allHaveBc2d = false; break; }
 
         if (allHaveBc2d) {
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
             bool opened = ImGui::TreeNodeEx((void*)typeid(BoxCollider2DComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Box Collider 2D");
+            ImGui::PopFont();
+            
             
             bool removeComponent = false;
             if (ImGui::BeginPopupContextItem()) {

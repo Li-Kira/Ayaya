@@ -115,6 +115,7 @@ namespace Ayaya {
         std::vector<RenderCommandData> OpaqueDrawList;
         // 新增：静态统计数据
         SceneRenderer::Statistics Stats;
+        uint32_t GPUTimeQuery = 0;
     };
 
     SceneRenderer::SceneRenderer() {
@@ -237,6 +238,8 @@ namespace Ayaya {
 
         // 创建一个空 VAO，供 gl_VertexID 魔法使用
         glGenVertexArrays(1, &m_Data->EmptyVAO);
+
+        glGenQueries(1, &m_Data->GPUTimeQuery);
     }
 
     void SceneRenderer::SetEnvironment(EnvironmentComponent& envComp) {
@@ -354,6 +357,14 @@ namespace Ayaya {
 
     void SceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene, Entity hoveredEntity, bool showGrid, bool showSkybox, const glm::vec4& clearColor) {
 
+        // ==========================================
+        // 统计CPU和GPU时间
+        // ==========================================
+        // 1. 记录 CPU 开始时间
+        auto cpuStartTime = std::chrono::high_resolution_clock::now();
+        // 2. 告诉显卡：开始硬件级时间统计！
+        glBeginQuery(GL_TIME_ELAPSED, m_Data->GPUTimeQuery);
+        
         // ==========================================
         // Pass 1: Lighting Setup Pass (收集场景灯光)
         // ==========================================
@@ -728,6 +739,21 @@ namespace Ayaya {
         glDrawArrays(GL_TRIANGLES, 0, 3);
         
         m_Data->PostProcessFBO->Unbind();
+
+
+        // ==========================================
+        // 统计CPU和GPU时间
+        // ==========================================
+        // 3. 告诉显卡：渲染结束，停止统计！
+        glEndQuery(GL_TIME_ELAPSED);
+        // 4. 从显卡硬件中取回耗时 (纳秒转毫秒)
+        // 注意：这会导致 CPU 稍微等待一下显卡 (Pipeline Stall)，在编辑器 UI 中完全可以接受
+        uint64_t gpuTimeNs = 0;
+        glGetQueryObjectui64v(m_Data->GPUTimeQuery, GL_QUERY_RESULT, &gpuTimeNs);
+        m_Data->Stats.GPUTime = (float)gpuTimeNs / 1000000.0f; 
+        // 5. 记录 CPU 结束时间并计算耗时
+        auto cpuEndTime = std::chrono::high_resolution_clock::now();
+        m_Data->Stats.CPUTime = std::chrono::duration<float, std::milli>(cpuEndTime - cpuStartTime).count();
     }
 
     uint32_t SceneRenderer::GetPostProcessFBORendererID() {

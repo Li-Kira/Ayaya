@@ -7,6 +7,7 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <ImGuizmo.h>
+#include <stb_image_write.h>
 #include <glm/gtc/type_ptr.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
@@ -210,6 +211,67 @@ namespace Ayaya {
         m_SceneRenderer->BeginScene(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection(), m_EditorCamera.GetPosition());
         m_SceneRenderer->RenderScene(m_ActiveScene, m_HoveredEntity, m_ShowGrid, renderSkybox, clearColor);
         m_SceneRenderer->EndScene();
+
+        // ------------------------------------------
+        // 5.3: 独立的高清截图执行器 (离线渲染 Pass)
+        // ------------------------------------------
+        if (m_ScreenshotPanel.ConsumePending()) {
+            uint32_t shotWidth = m_ScreenshotPanel.GetWidth();
+            uint32_t shotHeight = m_ScreenshotPanel.GetHeight();
+            std::string shotPath = m_ScreenshotPanel.GetPath();
+
+            auto cameraView = m_ActiveScene->Reg().view<TransformComponent, CameraComponent>();
+            for (auto entityID : cameraView) {
+                auto [transform, cameraComp] = cameraView.get<TransformComponent, CameraComponent>(entityID);
+                if (cameraComp.Primary) {
+                    // 1. 提取当前相机的世界坐标矩阵
+                    Entity cameraEntity{ entityID, m_ActiveScene.get() };
+                    glm::mat4 worldTransform = cameraEntity.GetWorldTransform();
+                    glm::vec3 scale, translation, skew;
+                    glm::quat rotation;
+                    glm::vec4 perspective;
+                    glm::decompose(worldTransform, scale, rotation, translation, skew, perspective);
+                    
+                    glm::vec3 camPos = translation;
+                    glm::mat4 unscaledTransform = glm::translate(glm::mat4(1.0f), translation) * glm::toMat4(rotation);
+                    glm::mat4 camViewMat = glm::inverse(unscaledTransform); 
+
+                    // 2. 备份当前的管线状态
+                    uint32_t oldFboWidth = (uint32_t)(m_GameViewportSize.x * dpiScale);
+                    uint32_t oldFboHeight = (uint32_t)(m_GameViewportSize.y * dpiScale);
+
+                    // 3. 临时篡改相机比例和渲染器尺寸
+                    cameraComp.Camera.SetViewportSize(shotWidth, shotHeight);
+                    glm::mat4 camProjMat = cameraComp.Camera.GetProjection();
+                    m_GameRenderer->OnWindowResize(shotWidth, shotHeight);
+                    m_GameRenderer->SetClearColor(cameraComp.BackgroundColor);
+
+                    // 4. 独立执行一帧专属渲染！
+                    bool drawSkybox = (cameraComp.ClearFlag == CameraComponent::ClearFlags::Skybox);
+                    m_GameRenderer->BeginScene(camViewMat, camProjMat, camPos);
+                    m_GameRenderer->RenderScene(m_ActiveScene, {}, false, drawSkybox, cameraComp.BackgroundColor);
+                    m_GameRenderer->EndScene();
+
+                    // 5. 从显存偷出像素数据
+                    uint32_t fboID = m_GameRenderer->GetPostProcessFBORendererID();
+                    glBindFramebuffer(GL_FRAMEBUFFER, fboID);
+                    std::vector<unsigned char> pixels(shotWidth * shotHeight * 4);
+                    glReadPixels(0, 0, shotWidth, shotHeight, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+                    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+                    // 6. 编码并写入硬盘
+                    stbi_flip_vertically_on_write(true);
+                    stbi_write_png(shotPath.c_str(), shotWidth, shotHeight, 4, pixels.data(), shotWidth * 4);
+                    AYAYA_CORE_INFO("High-Res Screenshot saved to: {0} ({1}x{2})", shotPath, shotWidth, shotHeight);
+
+                    // 7. 打扫战场：恢复相机和渲染器的原本状态
+                    cameraComp.Camera.SetViewportSize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);
+                    m_GameRenderer->OnWindowResize(oldFboWidth, oldFboHeight);
+
+                    break; // 截完图直接退出循环
+                }
+            }
+        }
     }
 
     void EditorLayer::OnImGuiRender() {
@@ -220,6 +282,7 @@ namespace Ayaya {
         m_SceneHierarchyPanel.OnImGuiRender();
         m_ContentBrowserPanel.OnImGuiRender();
         m_PreferencesPanel.OnImGuiRender();
+        m_ScreenshotPanel.OnImGuiRender();
 
         UIRenderViewport();
         UIRenderGameViewport();
@@ -406,11 +469,15 @@ namespace Ayaya {
     }
 
     void EditorLayer::HandleShortcuts() {
+        if (ImGui::GetIO().WantTextInput) {
+            return;
+        }
         // =====================================
         // 1. 视口焦点相关的快捷键 (Gizmo 等)
         // =====================================
         Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
-        if (selectedEntity && !Input::IsMouseButtonPressed(1)) {
+        bool canUseGizmoShortcuts = m_ViewportHovered || m_ViewportFocused;
+        if (canUseGizmoShortcuts && selectedEntity && !Input::IsMouseButtonPressed(1)) {
             if (Input::IsKeyPressed(Key::Q)) m_GizmoType = -1;
             if (Input::IsKeyPressed(Key::W)) m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
             if (Input::IsKeyPressed(Key::E)) m_GizmoType = ImGuizmo::OPERATION::ROTATE;
@@ -578,6 +645,13 @@ namespace Ayaya {
                 ImGui::EndMenu();
             }
 
+            if (ImGui::BeginMenu("Tools")) {
+                if (ImGui::MenuItem("High-Res Screenshot")) {
+                    m_ScreenshotPanel.Open(); // 唤出截图面板
+                }
+                ImGui::EndMenu();
+            }
+
             // 右侧状态文本...
             std::string sceneName = "Untitled";
             if (!m_CurrentScenePath.empty()) {
@@ -669,25 +743,43 @@ namespace Ayaya {
             ImGui::Indent(10.0f);        
 
             auto& io = ImGui::GetIO();
+            auto boldFont = io.Fonts->Fonts.Size > 1 ? io.Fonts->Fonts[1] : io.Fonts->Fonts[0];
 
+            // 获取我们刚刚写好的内存数据和渲染统计数据
+            float memoryMB = GetPhysicalMemoryUsageMB();
+            
+            // --- 显卡信息大类 ---
+            ImGui::PushFont(boldFont);
             ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Graphics");
+            ImGui::PopFont();
             ImGui::Separator();
             ImGui::Text("%.1f FPS (%.1f ms)", io.Framerate, 1000.0f / io.Framerate);
-            ImGui::Text("Screen: %dx%d", (int)m_GameViewportSize.x, (int)m_GameViewportSize.y);
+            ImGui::Text("CPU Time:"); ImGui::SameLine(100);
+            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%8.2f ms", m_GameStats.CPUTime);
+            ImGui::Text("GPU Time:"); ImGui::SameLine(100);
+            ImGui::TextColored(ImVec4(0.9f, 0.4f, 0.2f, 1.0f), "%8.2f ms", m_GameStats.GPUTime);
+            ImGui::Text("RAM Usage:"); ImGui::SameLine(100);
+            ImGui::TextColored(ImVec4(0.2f, 0.7f, 0.9f, 1.0f), "%8.1f MB", memoryMB);
+            ImGui::Text("Screen Size: %dx%d", (int)m_GameViewportSize.x, (int)m_GameViewportSize.y);
             ImGui::Spacing();
             
+            // --- 渲染调用大类 ---
+            ImGui::PushFont(boldFont);
             ImGui::TextColored(ImVec4(0.8f, 0.6f, 0.2f, 1.0f), "Rendering");
+            ImGui::PopFont();
             ImGui::Separator();
-            ImGui::Text("Batches: %d", m_GameStats.DrawCalls);
-            ImGui::Text("SetPass calls: %d", m_GameStats.ShaderBinds);
+            ImGui::Text("Draw Calls: %d", m_GameStats.DrawCalls);
+            ImGui::Text("Shader Binds: %d", m_GameStats.ShaderBinds);
             ImGui::Spacing();
 
-            ImGui::TextColored(ImVec4(0.3f, 0.6f, 0.9f, 1.0f), "Geometry & Scene");
+            ImGui::PushFont(boldFont);
+            ImGui::TextColored(ImVec4(0.3f, 0.6f, 0.9f, 1.0f), "Geometry");
+            ImGui::PopFont();
             ImGui::Separator();
             
-            ImGui::Text("Tris: %d", m_GameStats.TriangleCount); 
+            ImGui::Text("Triangle Count: %d", m_GameStats.TriangleCount); 
             ImGui::SameLine(0.0f, 15.0f); 
-            ImGui::Text("Verts: %d", m_GameStats.VertexCount);
+            ImGui::Text("Vertex Count: %d", m_GameStats.VertexCount);
 
             if (m_ActiveScene) {
                 size_t entityCount = 0;

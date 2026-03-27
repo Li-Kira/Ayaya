@@ -2,6 +2,7 @@
 
 #include "Engine/Scene/Scene.hpp"
 #include "Engine/Scene/Entity.hpp"
+#include "UI_Widgets.hpp"
 #include <memory>
 #include <vector>
 #include <algorithm>
