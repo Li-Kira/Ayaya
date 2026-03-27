@@ -377,7 +377,8 @@ namespace Ayaya {
     // =====================================================================
     // 核心逻辑：反序列化 (读取)
     // =====================================================================
-    bool SceneSerializer::Deserialize(const std::string& filepath, EditorState& outEditorState) {
+    bool SceneSerializer::Deserialize(const std::string& filepath, EditorState& outEditorState, std::function<void(float, const std::string&)> progressCallback) {
+
         YAML::Node data;
         try {
             data = YAML::LoadFile(filepath);
@@ -412,6 +413,10 @@ namespace Ayaya {
         auto entities = data["Entities"];
         if (!entities) return true;
 
+        // 【新增】：获取实体总数，用于计算进度百分比
+        int totalEntities = entities.size();
+        int currentEntityIndex = 0;
+
         // 建立一张表：UUID -> 刚刚在内存里创建的 EnTT Entity
         std::unordered_map<uint64_t, Entity> sceneEntities;
         
@@ -435,6 +440,12 @@ namespace Ayaya {
                 if (tagComponent["IsActive"]) {
                     isActive = tagComponent["IsActive"].as<bool>();
                 }
+            }
+
+            // 在这里调用回调，把进度和名字传给 UI 进度条
+            if (progressCallback) {
+                float progress = (float)currentEntityIndex / (float)totalEntities;
+                progressCallback(progress, "Spawning Entity: " + name);
             }
 
             AYAYA_CORE_TRACE("Deserialized entity with ID = {0}, name = {1}", uuid, name);
@@ -649,8 +660,12 @@ namespace Ayaya {
                 auto& lsc = deserializedEntity.AddComponent<LuaScriptComponent>();
                 lsc.ScriptPath = luaScriptComponent["ScriptPath"].as<std::string>();
             }
+
+            currentEntityIndex++; // 实体计数器 +1
         }
 
+        if (progressCallback) progressCallback(1.0f, "Resolving Relationships...");
+        
         // --- 第二遍：完美复原父子层级！ ---
         for (auto& rel : relationshipsToResolve) {
             if (sceneEntities.find(rel.ParentUUID) != sceneEntities.end()) {

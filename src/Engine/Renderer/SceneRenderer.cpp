@@ -92,7 +92,7 @@ namespace Ayaya {
         std::shared_ptr<Texture2D>   BRDFLUT;
         float EnvironmentIntensity = 1.0f;
         glm::vec3 EnvironmentAmbientColor = { 0.1f, 0.1f, 0.1f };
-        glm::vec4 ClearColor = { 0.12f, 0.12f, 0.14f, 1.0f };
+        glm::vec4 ClearColor = { 0.06f, 0.06f, 0.065f, 1.0f };
 
         // 新增 UBO 相关的成员
         struct_CameraData CameraData;
@@ -670,6 +670,8 @@ namespace Ayaya {
             glDisable(GL_CULL_FACE);
             
             m_Data->GridShader->Bind();
+            m_Data->GridShader->SetFloat("u_ExposureInverse", 1.0f / physicalExposure);
+            
             glm::mat4 gridTransform = glm::scale(glm::mat4(1.0f), glm::vec3(1000.0f, 1.0f, 1000.0f));
             Renderer::Submit(m_Data->GridShader, m_Data->GridMesh->GetVertexArray(), gridTransform);
             

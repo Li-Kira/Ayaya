@@ -6,6 +6,7 @@
 #include <string>
 // 新增头文件用于类型推导
 #include <type_traits>
+#include <functional>
 
 namespace Ayaya {
 
@@ -62,7 +63,7 @@ namespace Ayaya {
         void Serialize(const std::string& filepath, const EditorState& editorState);
 
         // 从 YAML 文本文件反序列化到当前场景
-        bool Deserialize(const std::string& filepath, EditorState& outEditorState);
+        bool Deserialize(const std::string& filepath, EditorState& outEditorState, std::function<void(float, const std::string&)> progressCallback = nullptr);
 
     private:
         std::shared_ptr<Scene> m_Scene;

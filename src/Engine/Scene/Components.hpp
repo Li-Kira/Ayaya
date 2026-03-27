@@ -83,7 +83,7 @@ namespace Ayaya {
         // ==========================================
         enum class ClearFlags { Skybox, SolidColor };
         ClearFlags ClearFlag = ClearFlags::Skybox;                // 默认渲染天空盒
-        glm::vec4 BackgroundColor = { 0.12f, 0.12f, 0.14f, 1.0f };// 如果是纯色模式的清屏颜色
+        glm::vec4 BackgroundColor = { 0.016f, 0.016f, 0.02f, 1.0f };
 
         CameraComponent() = default;
         CameraComponent(const CameraComponent&) = default;

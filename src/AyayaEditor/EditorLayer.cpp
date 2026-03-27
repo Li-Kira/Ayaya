@@ -13,6 +13,12 @@
 #include <glm/gtx/quaternion.hpp>
 #include <IconsFontAwesome5.h> 
 
+// 用于底层控制 ImGui 渲染泵，加载进度条
+#include <backends/imgui_impl_glfw.h>
+#include <backends/imgui_impl_opengl3.h>
+#include <GLFW/glfw3.h>
+#include "Engine/Core/Application.hpp"
+
 namespace Ayaya {
 
     EditorLayer::EditorLayer() : Layer("EditorLayer") {}
@@ -44,6 +50,14 @@ namespace Ayaya {
     }
 
     void EditorLayer::OnUpdate(Timestep ts) {
+        // ==========================================
+        // 0. 执行挂起的场景加载任务 (带实时进度条)
+        // ==========================================
+        if (!m_SceneToLoad.empty()) {
+            LoadSceneWithProgress(m_SceneToLoad);
+            m_SceneToLoad = ""; // 清空标记
+        }
+
         // ==========================================
         // 1. 处理输入
         // ==========================================
@@ -153,7 +167,7 @@ namespace Ayaya {
         
         // 用于接收当前玩家相机的环境配置
         bool renderSkybox = false; 
-        glm::vec4 clearColor = { 0.0f, 0.0f, 0.0f, 1.0f }; 
+        glm::vec4 clearColor = { 0.06f, 0.06f, 0.065f, 1.0f };
         
         auto view = m_ActiveScene->Reg().view<TransformComponent, CameraComponent>();
         for (auto entityID : view) {
@@ -207,7 +221,7 @@ namespace Ayaya {
         // ------------------------------------------
         // 5.2: 渲染 Scene 窗口
         // ------------------------------------------
-        m_SceneRenderer->SetClearColor({ 0.12f, 0.12f, 0.14f, 1.0f });
+        m_SceneRenderer->SetClearColor(clearColor);
         m_SceneRenderer->BeginScene(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection(), m_EditorCamera.GetPosition());
         m_SceneRenderer->RenderScene(m_ActiveScene, m_HoveredEntity, m_ShowGrid, renderSkybox, clearColor);
         m_SceneRenderer->EndScene();
@@ -429,42 +443,119 @@ namespace Ayaya {
     void EditorLayer::OpenScene() {
         std::string filepath = FileDialogs::OpenFile("ayaya"); 
         if (!filepath.empty()) { 
-            std::shared_ptr<Scene> newScene = std::make_shared<Scene>();
-            SceneSerializer serializer(newScene);
-            EditorState state;
-            if (serializer.Deserialize(filepath, state)) {
-                m_ActiveScene = newScene;
-                m_EditorScene = m_ActiveScene;
-                
-                m_ShowGrid = state.ShowGrid;
-                m_EditorCamera.SetPosition(state.CameraPosition);
-                m_EditorCamera.SetDistance(state.CameraDistance);
-                m_EditorCamera.SetPitch(state.CameraPitch);
-                m_EditorCamera.SetYaw(state.CameraYaw);
-                m_EditorCamera.SetFocalPoint(state.CameraFocalPoint);
-                m_EditorCamera.UpdateCameraView();
-                
-                // 【核心修改】：通知管线修改 MSAA 采样率
-                if (m_EnableMSAA != state.EnableMSAA) {
-                    m_EnableMSAA = state.EnableMSAA;
-                    m_SceneRenderer->SetMSAASamples(m_EnableMSAA ? 4 : 1);
-                    m_GameRenderer->SetMSAASamples(m_EnableMSAA ? 4 : 1);
-                }
-                
-                auto view = m_ActiveScene->Reg().view<CameraComponent>();
-                for (auto entityID : view) {
-                    auto& cameraComp = view.get<CameraComponent>(entityID);
-                    if (!cameraComp.FixedAspectRatio) {
-                        cameraComp.Camera.SetViewportSize((uint32_t)m_ViewportSize.x, (uint32_t)m_ViewportSize.y);
-                    }
-                }
+            // 【核心】：不在这里加载！只登记路径，推迟到帧开始时处理，防止 ImGui 崩溃！
+            m_SceneToLoad = filepath; 
+        }
+    }
 
-                m_SceneHierarchyPanel.SetContext(m_ActiveScene);
-                m_CurrentScenePath = filepath;
-                m_HoveredEntity = {};
-                m_SceneHierarchyPanel.SetSelectedEntity({});
-                AYAYA_CORE_INFO("Scene loaded successfully from {0}!", filepath);
+    void EditorLayer::LoadSceneWithProgress(const std::string& filepath) {
+        std::shared_ptr<Scene> newScene = std::make_shared<Scene>();
+        SceneSerializer serializer(newScene);
+        EditorState state;
+
+        // ==========================================
+        // 核心魔法：独立于引擎主循环的“渲染泵”
+        // ==========================================
+        auto progressCallback = [&](float progress, const std::string& message) {
+            // 1. 手动开启一个全新的 ImGui 帧
+            ImGui_ImplOpenGL3_NewFrame();
+            ImGui_ImplGlfw_NewFrame();
+            ImGui::NewFrame();
+
+            // 2. 绘制全屏暗色遮罩与进度条
+            ImGuiViewport* viewport = ImGui::GetMainViewport();
+            ImGui::SetNextWindowPos(viewport->Pos);
+            ImGui::SetNextWindowSize(viewport->Size);
+            
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.08f, 0.085f, 0.09f, 1.0f)); // 深色背景
+            ImGui::Begin("LoadingScreen", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+            // 让内容完美居中
+            ImVec2 windowSize = ImGui::GetWindowSize();
+            float barWidth = 600.0f;
+            ImGui::SetCursorPos(ImVec2((windowSize.x - barWidth) * 0.5f, windowSize.y * 0.5f - 50.0f));
+            
+            // 标题
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : ImGui::GetIO().Fonts->Fonts[0]);
+            ImGui::TextColored(ImVec4(0.17f, 0.45f, 0.85f, 1.0f), "Loading Scene...");
+            ImGui::PopFont();
+            
+            // 当前正在加载的数据提示
+            ImGui::SetCursorPosX((windowSize.x - barWidth) * 0.5f);
+            ImGui::TextDisabled("%s", message.c_str());
+
+            // 进度条本体
+            ImGui::SetCursorPosX((windowSize.x - barWidth) * 0.5f);
+            
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.17f, 0.45f, 0.85f, 1.0f)); 
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.04f, 0.04f, 0.045f, 1.0f));
+            ImGui::ProgressBar(progress, ImVec2(barWidth, 24.0f));
+            ImGui::PopStyleColor(2);
+
+            ImGui::End();
+            ImGui::PopStyleColor();
+
+            // 3. 强制推送到显卡并交换缓冲区！
+            ImGui::Render();
+            glClear(GL_COLOR_BUFFER_BIT); // 清理屏幕残影
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+            
+            // ==========================================
+            // 【核心修复】：处理 ImGui 多视口的后台窗口更新！
+            // 如果缺少这段代码，ImGui 会在开启下一帧时直接抛出断言崩溃！
+            // ==========================================
+            ImGuiIO& io = ImGui::GetIO();
+            if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+                GLFWwindow* backup_current_context = glfwGetCurrentContext();
+                ImGui::UpdatePlatformWindows();
+                ImGui::RenderPlatformWindowsDefault();
+                glfwMakeContextCurrent(backup_current_context);
             }
+            
+            // 4. 交换缓冲区并拉取系统事件
+            GLFWwindow* window = static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow());
+            glfwSwapBuffers(window);
+            glfwPollEvents();
+        };
+
+        // 通知第一帧：正在解析 YAML 文件...
+        progressCallback(0.0f, "Parsing YAML data structure...");
+
+        // ==========================================
+        // 开始真正的反序列化，并将回调传进去
+        // ==========================================
+        if (serializer.Deserialize(filepath, state, progressCallback)) {
+            // ... (下面是你原来 OpenScene() 里的所有逻辑，直接粘贴过来即可) ...
+            m_ActiveScene = newScene;
+            m_EditorScene = m_ActiveScene;
+            
+            m_ShowGrid = state.ShowGrid;
+            m_EditorCamera.SetPosition(state.CameraPosition);
+            m_EditorCamera.SetDistance(state.CameraDistance);
+            m_EditorCamera.SetPitch(state.CameraPitch);
+            m_EditorCamera.SetYaw(state.CameraYaw);
+            m_EditorCamera.SetFocalPoint(state.CameraFocalPoint);
+            m_EditorCamera.UpdateCameraView();
+            
+            if (m_EnableMSAA != state.EnableMSAA) {
+                m_EnableMSAA = state.EnableMSAA;
+                m_SceneRenderer->SetMSAASamples(m_EnableMSAA ? 4 : 1);
+                m_GameRenderer->SetMSAASamples(m_EnableMSAA ? 4 : 1);
+            }
+            
+            auto view = m_ActiveScene->Reg().view<CameraComponent>();
+            for (auto entityID : view) {
+                auto& cameraComp = view.get<CameraComponent>(entityID);
+                if (!cameraComp.FixedAspectRatio) {
+                    cameraComp.Camera.SetViewportSize((uint32_t)m_ViewportSize.x, (uint32_t)m_ViewportSize.y);
+                }
+            }
+
+            m_SceneHierarchyPanel.SetContext(m_ActiveScene);
+            m_CurrentScenePath = filepath;
+            m_HoveredEntity = {};
+            m_SceneHierarchyPanel.SetSelectedEntity({});
+            AYAYA_CORE_INFO("Scene loaded successfully from {0}!", filepath);
         }
     }
 

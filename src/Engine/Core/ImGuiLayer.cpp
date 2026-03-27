@@ -22,7 +22,7 @@ namespace Ayaya {
         // =========================================================
         colors[ImGuiCol_WindowBg]           = ImVec4{ 0.1f, 0.105f, 0.11f, 1.0f };
         colors[ImGuiCol_ChildBg]            = ImVec4{ 0.12f, 0.125f, 0.13f, 1.0f };
-        colors[ImGuiCol_PopupBg]            = ImVec4{ 0.14f, 0.145f, 0.15f, 1.0f }; // 弹出菜单稍亮一点，有悬浮感
+        colors[ImGuiCol_PopupBg]            = ImVec4{ 0.1f, 0.105f, 0.11f, 0.9f };
         colors[ImGuiCol_MenuBarBg]          = ImVec4{ 0.1f, 0.105f, 0.11f, 1.0f };
 
         // =========================================================
@@ -42,10 +42,10 @@ namespace Ayaya {
         // =========================================================
         // 3. 选项卡 (Tabs) - 融入点缀色
         // =========================================================
-        colors[ImGuiCol_Tab]                = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f }; // 未激活：稍亮的灰色
-        colors[ImGuiCol_TabHovered]         = accentColor;                            // 鼠标滑过：亮起灵魂蓝色！
-        colors[ImGuiCol_TabActive]          = colors[ImGuiCol_WindowBg];              // 激活：下沉融入背景，线隐形
-        colors[ImGuiCol_TabUnfocused]       = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
+        colors[ImGuiCol_Tab]                = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f }; // 未激活的标签
+        colors[ImGuiCol_TabHovered]         = accentColor; // 悬浮
+        colors[ImGuiCol_TabActive]          = colors[ImGuiCol_WindowBg];              // 激活：与背景融为一体
+        colors[ImGuiCol_TabUnfocused]       = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f }; // 未聚焦
         colors[ImGuiCol_TabUnfocusedActive] = colors[ImGuiCol_WindowBg];
 
         // =========================================================
