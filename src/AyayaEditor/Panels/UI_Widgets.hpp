@@ -30,7 +30,7 @@ namespace Ayaya {
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ 0, 0 });
 
             float lineHeight = ImGui::GetFrameHeight();
-            ImVec2 buttonSize = { lineHeight + 3.0f, lineHeight };
+            ImVec2 buttonSize = { lineHeight + 0.5f, lineHeight };
 
             // ==========================================
             // X 轴 (红色)

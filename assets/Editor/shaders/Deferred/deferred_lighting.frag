@@ -19,6 +19,10 @@ uniform bool        u_EnvMapEnabled;
 uniform float       u_Intensity;
 uniform vec3        u_AmbientColor;
 
+// 阴影
+uniform sampler2D u_ShadowMap;       // 我们等会传进来的影子贴图 (挂在槽位 7)
+uniform mat4 u_LightSpaceMatrix;     // 太阳视角的矩阵
+
 // ==========================================
 // 引擎 UBO 接口
 // ==========================================
@@ -80,6 +84,35 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
+// 带PCF的阴影算法
+float ShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
+    // 执行透视除法 (将坐标归一化到 -1 ~ 1)
+    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+    // 变换到 0 ~ 1 范围，方便去纹理里采样
+    projCoords = projCoords * 0.5 + 0.5;
+
+    // 如果超出了阴影视锥体的范围，默认没有阴影
+    if(projCoords.z > 1.0) return 0.0;
+
+    // 当前像素在太阳眼里的深度
+    float currentDepth = projCoords.z;
+
+    // 阴影偏移 (Bias) 魔法：防止表面出现极其丑陋的“阴影失真 (Shadow Acne)”条纹
+    float bias = max(0.0015 * (1.0 - dot(normal, lightDir)), 0.0002);
+
+    // PCF (Percentage-Closer Filtering) 软阴影：对周围 9 个像素进行采样求平均值
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(u_ShadowMap, 0);
+    for(int x = -1; x <= 1; ++x) {
+        for(int y = -1; y <= 1; ++y) {
+            float pcfDepth = texture(u_ShadowMap, projCoords.xy + vec2(x, y) * texelSize).r; 
+            shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;        
+        }    
+    }
+    shadow /= 9.0;
+    
+    return shadow;
+}
 
 void main() {
     // 1. 从 G-Buffer 提取当前像素的物理数据
@@ -91,7 +124,9 @@ void main() {
 
     vec3 FragPos = posData.rgb;
     vec3 Normal = texture(g_Normal, v_TexCoord).rgb;
-    vec3 Albedo = texture(g_Albedo, v_TexCoord).rgb;
+    vec4 albedoData = texture(g_Albedo, v_TexCoord);
+    vec3 Albedo = albedoData.rgb;
+    float ReceiveShadows = albedoData.a;
     vec4 pbrData = texture(g_PBR, v_TexCoord);
     
     float Metallic = pbrData.r;
@@ -116,7 +151,7 @@ void main() {
     float NDF = DistributionGGX(N, H, Roughness);
     float G   = GeometrySmith(N, V, L, Roughness);      
     vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);
-    
+
     vec3 numerator    = NDF * G * F;
     float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
     vec3 specular     = numerator / denominator;
@@ -125,8 +160,19 @@ void main() {
     vec3 kD = vec3(1.0) - kS;
     kD *= 1.0 - Metallic;     
     float NdotL = max(dot(N, L), 0.0);
-    Lo += (kD * Albedo / PI + specular) * radiance * NdotL;
 
+    // 1. 将当前像素的坐标转化为太阳眼里的坐标 (复用已有的 FragPos 即可，比额外采样 G-Buffer 更快)
+    vec4 fragPosLightSpace = u_LightSpaceMatrix * vec4(FragPos, 1.0);
+    // 2. 查字典，计算阴影遮蔽率 (0.0 是全亮，1.0 是死黑)
+    float shadow = ShadowCalculation(fragPosLightSpace, N, L);
+    // 3. 算出太阳光贡献
+    // 【终极绝杀】：乘以接收阴影的标记！
+    // 如果该物体 ReceiveShadows == 0.0，那么 shadow 强制归零，光照完全不受影响！
+    shadow *= ReceiveShadows; 
+    vec3 dirLightContribution = (kD * Albedo / PI + specular) * radiance * NdotL;
+    // 4. 乘上 (1.0 - shadow)！只有未被遮挡的光才能照亮像素！
+    Lo += dirLightContribution * (1.0 - shadow);
+    
     // ==========================================
     // 4. 计算所有点光源 (Point Lights)
     // ==========================================
@@ -185,5 +231,5 @@ void main() {
     FragColor = vec4(color, 1.0);
 
     // FragColor = vec4(texture(u_BRDFLUT, v_TexCoord).rg, 0.0, 1.0);
-    // FragColor = vec4(prefilteredColor / u_Intensity, 1.0); // 除以强度还原颜色
+    // FragColor = vec4(textureLod(u_PrefilteredMap, reflect(-V, N), Roughness * 4.0).rgb, 1.0); // 除以强度还原颜色
 }

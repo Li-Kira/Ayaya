@@ -108,6 +108,9 @@ namespace Ayaya {
         // ==========================================
         std::shared_ptr<Material> MaterialAsset;
 
+        bool CastShadows = false;     // 是否产生阴影
+        bool ReceiveShadows = false;  // 是否接收阴影
+
         MeshRendererComponent() {
             // 默认依然给它塞一个我们引擎自带的 1x1 正方体，确保不会空指针
             ModelAsset = std::make_shared<Model>(Mesh::CreateCube(1.0f));

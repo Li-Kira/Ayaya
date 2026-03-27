@@ -30,6 +30,8 @@ uniform sampler2D u_AOMap;
 uniform bool u_UseNormalMap;
 uniform sampler2D u_NormalMap;
 
+uniform float u_ReceiveShadows;
+
 // 从法线贴图中提取真实法线
 vec3 GetNormalFromMap() {
     vec3 tangentNormal = texture(u_NormalMap, v_TexCoord).xyz * 2.0 - 1.0;
@@ -54,7 +56,9 @@ void main() {
 
     // 3. 存入颜色
     vec3 albedo = u_UseAlbedoMap ? pow(texture(u_AlbedoMap, v_TexCoord).rgb, vec3(2.2)) : u_Albedo;
-    g_Albedo = vec4(albedo, 1.0);
+    // 【核心魔法】：把 u_ReceiveShadows 藏在颜色的 Alpha 通道里，偷渡到下一关！
+    g_Albedo = vec4(albedo, u_ReceiveShadows);
+    
     float metallic = u_UseMetallicMap ? texture(u_MetallicMap, v_TexCoord).r : u_Metallic;
     float roughness = u_UseRoughnessMap ? texture(u_RoughnessMap, v_TexCoord).r : u_Roughness;
     float ao = u_UseAOMap ? texture(u_AOMap, v_TexCoord).r : u_AO;

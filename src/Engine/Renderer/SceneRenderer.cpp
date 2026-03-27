@@ -45,6 +45,10 @@ namespace Ayaya {
         std::shared_ptr<Material> MaterialAsset;
         std::shared_ptr<Shader> ShaderAsset;
         Entity TargetEntity;
+
+        // 【新增】：携带阴影状态进入队列
+        bool CastShadows;
+        bool ReceiveShadows;
     };
 
     // 使用静态结构体管理管线内部的资源，不对外暴露
@@ -93,6 +97,12 @@ namespace Ayaya {
         float EnvironmentIntensity = 1.0f;
         glm::vec3 EnvironmentAmbientColor = { 0.1f, 0.1f, 0.1f };
         glm::vec4 ClearColor = { 0.06f, 0.06f, 0.065f, 1.0f };
+
+        // 阴影专属资源
+        std::shared_ptr<Shader> ShadowShader;
+        uint32_t ShadowMapFBO = 0;
+        uint32_t ShadowMapTexture = 0;
+        glm::mat4 LightSpaceMatrix;
 
         // 新增 UBO 相关的成员
         struct_CameraData CameraData;
@@ -236,9 +246,34 @@ namespace Ayaya {
         selSpec.Attachments = { FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::Depth };
         m_Data->SelectionFBO = Framebuffer::Create(selSpec);
 
+        // ==========================================
+        // 8. 初始化高精度阴影贴图 (2K 分辨率)
+        // ==========================================
+        m_Data->ShadowShader = Shader::Create("assets/Editor/shaders/Shadow/shadow_map.vert", "assets/Editor/shaders/Shadow/shadow_map.frag");
+        
+        glGenFramebuffers(1, &m_Data->ShadowMapFBO);
+        glGenTextures(1, &m_Data->ShadowMapTexture);
+        glBindTexture(GL_TEXTURE_2D, m_Data->ShadowMapTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, 2048, 2048, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        
+        // 【核心魔法】：设置边缘颜色为纯白！防止视锥体外围产生多余的死黑阴影
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, m_Data->ShadowMapFBO);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_Data->ShadowMapTexture, 0);
+        glDrawBuffer(GL_NONE); // 我们不需要画颜色！
+        glReadBuffer(GL_NONE);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        // 9. 其他资源
         // 创建一个空 VAO，供 gl_VertexID 魔法使用
         glGenVertexArrays(1, &m_Data->EmptyVAO);
-
+        // GPU统计
         glGenQueries(1, &m_Data->GPUTimeQuery);
     }
 
@@ -371,7 +406,7 @@ namespace Ayaya {
         // 清理旧数据
         memset(&m_Data->LightData, 0, sizeof(struct_LightData));
         
-        // 1. 收集平行光 (直接使用 Lux)
+        // 1.1 收集平行光 (直接使用 Lux)
         bool hasDirLight = false;
         auto dirLightGroup = scene->Reg().view<TransformComponent, DirectionalLightComponent>();
         for (auto entityID : dirLightGroup) {
@@ -393,7 +428,7 @@ namespace Ayaya {
             m_Data->LightData.DirLightDir = glm::vec4(0.0f, -1.0f, 0.0f, 0.03f);
         }
 
-        // 2. 收集点光源
+        // 1.2 收集点光源
         int pointLightIndex = 0;
         auto pointLightGroup = scene->Reg().view<TransformComponent, PointLightComponent>();
         for (auto entityID : pointLightGroup) {
@@ -409,6 +444,44 @@ namespace Ayaya {
         m_Data->LightData.PointLightCount = pointLightIndex;
         s_LightUniformBuffer->SetData(&m_Data->LightData, sizeof(struct_LightData));
 
+        // 1.3: Shadow Map Pass
+        if (hasDirLight) {
+            // 1. 算出太阳的位置和视角 (正交投影)
+            glm::vec3 lightDir = glm::normalize(glm::vec3(m_Data->LightData.DirLightDir));
+            glm::vec3 lightPos = -lightDir * 30.0f; // 假装太阳在场景中心上方 30 米处
+            
+            // 包围盒 40x40 米，深度视距 1.0~100.0 米
+            glm::mat4 lightProjection = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, 1.0f, 100.0f);
+            glm::mat4 lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            m_Data->LightSpaceMatrix = lightProjection * lightView;
+
+            // 2. 绑定阴影专属的 FBO
+            m_Data->ShadowShader->Bind();
+            m_Data->ShadowShader->SetMat4("u_LightSpaceMatrix", m_Data->LightSpaceMatrix);
+
+            glViewport(0, 0, 2048, 2048); // 强制把分辨率设为阴影图大小！
+            glBindFramebuffer(GL_FRAMEBUFFER, m_Data->ShadowMapFBO);
+            glClear(GL_DEPTH_BUFFER_BIT); // 只清空深度
+            glEnable(GL_DEPTH_TEST);
+            // glCullFace(GL_FRONT); // 核心魔法：剔除正面，只画背面，彻底根除漏光和阴影悬浮！
+            glCullFace(GL_BACK);
+
+            // 3. 把 OpaqueDrawList 里的所有物体，用最快的方式（没有颜色材质）渲染一遍！
+            for (const auto& cmd : m_Data->OpaqueDrawList) {
+                // 【核心实现】：如果不允许投影，直接跳过，不画入阴影贴图！
+                if (!cmd.CastShadows) continue; 
+
+                m_Data->ShadowShader->SetMat4("u_Transform", cmd.Transform);
+                cmd.MeshAsset->GetVertexArray()->Bind();
+                glDrawElements(GL_TRIANGLES, cmd.MeshAsset->GetIndexCount(), GL_UNSIGNED_INT, nullptr);
+            }
+
+            glCullFace(GL_BACK); // 画完阴影，恢复正常剔除
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            
+            // 【极其重要】：把视口尺寸改回 Game 窗口的真实大小，否则接下来的画面全部缩在左下角！
+            glViewport(0, 0, m_Data->GeometryFBO->GetSpecification().Width, m_Data->GeometryFBO->GetSpecification().Height);
+        }
 
         // ==========================================
         // Pass 2: Geometry Pass (G-Buffer)
@@ -451,7 +524,10 @@ namespace Ayaya {
             std::shared_ptr<Material> targetMaterial = isFallback ? nullptr : meshComp.MaterialAsset;
 
            for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
-                RenderCommandData cmd = { transform, mesh, targetMaterial, targetShader, entity };
+                RenderCommandData cmd = { 
+                    transform, mesh, targetMaterial, targetShader, entity, 
+                    meshComp.CastShadows, meshComp.ReceiveShadows 
+                };
                 m_Data->OpaqueDrawList.push_back(cmd);
             }
         }
@@ -510,6 +586,9 @@ namespace Ayaya {
                     }
                 }
             }
+
+            // 【核心实现】：向 G-Buffer Shader 实时传递当前物体是否接收阴影的标记
+            currentShader->SetFloat("u_ReceiveShadows", cmd.ReceiveShadows ? 1.0f : 0.0f);
 
             // 3. 提交绘制！(Renderer 会负责绑定 VAO 和上传 Transform 矩阵)
             Renderer::Submit(currentShader, cmd.MeshAsset->GetVertexArray(), cmd.Transform);
@@ -596,6 +675,13 @@ namespace Ayaya {
         if (m_Data->BRDFLUT) {
             m_Data->BRDFLUT->Bind(6); 
             m_Data->DeferredLightingShader->SetInt("u_BRDFLUT", 6);
+        }
+
+        if (hasDirLight) {
+            glActiveTexture(GL_TEXTURE7);
+            glBindTexture(GL_TEXTURE_2D, m_Data->ShadowMapTexture);
+            m_Data->DeferredLightingShader->SetInt("u_ShadowMap", 7);
+            m_Data->DeferredLightingShader->SetMat4("u_LightSpaceMatrix", m_Data->LightSpaceMatrix);
         }
 
         glBindVertexArray(m_Data->EmptyVAO);

@@ -214,6 +214,10 @@ namespace Ayaya {
 
                 // 3. 将最终确定的合法路径写入场景文件
                 out << YAML::Key << "MaterialPath" << YAML::Value << mat->AssetPath;
+
+                // 4. 阴影参数
+                out << YAML::Key << "CastShadows" << YAML::Value << mrc.CastShadows;
+                out << YAML::Key << "ReceiveShadows" << YAML::Value << mrc.ReceiveShadows;
             }
             
             out << YAML::EndMap; 
@@ -552,6 +556,19 @@ namespace Ayaya {
                         // 置空指针。SceneRenderer 看到 nullptr 会自动使用品红色的 Fallback Shader
                         mrc.MaterialAsset = nullptr; 
                     }
+                }
+
+                // 【新增】：安全读取阴影状态，如果旧版文件里没有这个节点，就默认给 false
+                if (meshRendererComponent["CastShadows"]) {
+                    mrc.CastShadows = meshRendererComponent["CastShadows"].as<bool>();
+                } else {
+                    mrc.CastShadows = false; 
+                }
+
+                if (meshRendererComponent["ReceiveShadows"]) {
+                    mrc.ReceiveShadows = meshRendererComponent["ReceiveShadows"].as<bool>();
+                } else {
+                    mrc.ReceiveShadows = false;
                 }
             }
 

@@ -887,7 +887,9 @@ namespace Ayaya {
             if (opened) {
                 auto& refMrc = referenceEntity.GetComponent<MeshRendererComponent>();
 
-                // --- 1. 模型资产管理 ---
+                // ==========================================
+                // 1. 模型资产管理
+                // ==========================================
                 ImGui::Spacing();
                 if (ImGui::TreeNodeEx("Model", ImGuiTreeNodeFlags_DefaultOpen)) {
                     
@@ -926,9 +928,7 @@ namespace Ayaya {
                         ImGui::EndDragDropTarget();
                     }
 
-                    // ==========================================
-                    // 新增：基础图元切换菜单
-                    // ==========================================
+                    // 基础图元切换菜单
                     if (ImGui::BeginPopup("ModelSelectionPopup")) {
                         ImGui::TextDisabled("Built-in Primitives");
                         ImGui::Separator();
@@ -960,7 +960,9 @@ namespace Ayaya {
                     ImGui::TreePop();
                 }
 
-                // --- 2. 材质资产管理 ---
+                // ==========================================
+                // 2. 材质资产管理
+                // ==========================================
                 ImGui::Spacing();
                 if (ImGui::TreeNodeEx("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
                     
@@ -1151,8 +1153,20 @@ namespace Ayaya {
                             }
                         }
                     }
+
+                    // ==========================================
+                    // 3. 投影管理参数
+                    // ==========================================
+                    ImGui::Spacing();
+                    ImGui::Separator();
+                    ImGui::Spacing();
+                    
+                    ImGui::Checkbox("Cast Shadows", &refMrc.CastShadows);
+                    ImGui::Checkbox("Receive Shadows", &refMrc.ReceiveShadows);
+
                     ImGui::TreePop(); 
                 }
+
                 ImGui::TreePop();
             }
 
