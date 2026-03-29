@@ -850,21 +850,58 @@ namespace Ayaya {
         RenderCommand::SetClearColor({ 0.0f, 0.0f, 0.0f, 0.0f });
         RenderCommand::Clear();
 
-        if (hoveredEntity && hoveredEntity.HasComponent<MeshRendererComponent>() && hoveredEntity.IsActiveInHierarchy()) {
+        if (hoveredEntity && hoveredEntity.IsActiveInHierarchy()) {
             
             // 关闭深度测试，实现穿透墙壁的 X-Ray 选择效果！
             glDisable(GL_DEPTH_TEST); 
-            m_Data->OutlineShader->Bind();
-            
-            // 直接输出纯白色剪影，不再需要算什么物理曝光！
-            m_Data->OutlineShader->SetFloat3("u_Color", glm::vec3(1.0f, 1.0f, 1.0f)); 
 
             glm::mat4 transform = hoveredEntity.GetWorldTransform();
-            auto& meshComp = hoveredEntity.GetComponent<MeshRendererComponent>();
-            if (meshComp.ModelAsset) {
-                for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
-                    Renderer::Submit(m_Data->OutlineShader, mesh->GetVertexArray(), transform);
+
+            // ==========================================
+            // 分支 1：处理 3D 模型的描边剪影
+            // ==========================================
+            if (hoveredEntity.HasComponent<MeshRendererComponent>()) {
+                m_Data->OutlineShader->Bind();
+                
+                // 直接输出纯白色剪影，不再需要算什么物理曝光！
+                m_Data->OutlineShader->SetFloat3("u_Color", glm::vec3(1.0f, 1.0f, 1.0f)); 
+
+                auto& meshComp = hoveredEntity.GetComponent<MeshRendererComponent>();
+                if (meshComp.ModelAsset) {
+                    for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
+                        Renderer::Submit(m_Data->OutlineShader, mesh->GetVertexArray(), transform);
+                    }
                 }
+            }
+            // ==========================================
+            // 分支 2：处理 2D 精灵的像素级描边剪影
+            // ==========================================
+            else if (hoveredEntity.HasComponent<SpriteRendererComponent>()) {
+                auto& spriteComp = hoveredEntity.GetComponent<SpriteRendererComponent>();
+
+                m_Data->SpriteShader->Bind();
+                m_Data->SpriteShader->SetMat4("u_Transform", transform);
+                
+                // 强行覆盖为纯白颜色，制造剪影
+                m_Data->SpriteShader->SetFloat4("u_Color", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+                // 剪影图不需要曝光衰减，维持 1.0 即可
+                m_Data->SpriteShader->SetFloat("u_ExposureInverse", 1.0f);
+
+                // 【绝妙核心】：必须绑定贴图，这样 fragment shader 里的 discard 逻辑 
+                // 才能把透明背景剔除，从而得到像素完美的角色边缘！
+                if (spriteComp.TextureHandle != 0 && AssetManager::IsAssetHandleValid(spriteComp.TextureHandle)) {
+                    auto tex = AssetManager::GetAsset<Texture2D>(spriteComp.TextureHandle);
+                    tex->Bind(0);
+                    m_Data->SpriteShader->SetInt("u_Texture", 0);
+                    m_Data->SpriteShader->SetBool("u_UseTexture", true);
+                } else {
+                    m_Data->WhiteTexture->Bind(0);
+                    m_Data->SpriteShader->SetInt("u_Texture", 0);
+                    m_Data->SpriteShader->SetBool("u_UseTexture", false);
+                }
+
+                glBindVertexArray(m_Data->EmptyVAO);
+                glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
             }
         }
         glEnable(GL_DEPTH_TEST);

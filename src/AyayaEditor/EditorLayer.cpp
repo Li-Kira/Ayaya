@@ -923,50 +923,131 @@ namespace Ayaya {
             float nx = (mx / viewportWidth) * 2.0f - 1.0f;
             float ny = (my / viewportHeight) * 2.0f - 1.0f;
 
-            glm::vec4 clipCoords = glm::vec4(nx, ny, -1.0f, 1.0f);
-            glm::vec4 eyeCoords = glm::inverse(cameraProjectionMatrix) * clipCoords;
-            eyeCoords = glm::vec4(eyeCoords.x, eyeCoords.y, -1.0f, 0.0f);
-            glm::vec3 rayWorldDir = glm::normalize(glm::vec3(glm::inverse(cameraViewMatrix) * eyeCoords));
-            glm::vec3 rayOrigin = glm::vec3(glm::inverse(cameraViewMatrix)[3]);
+            // ==========================================
+            // 【终极进化】：兼容正交(Ortho)和透视(Perspective)的万能射线生成法
+            // ==========================================
+            glm::mat4 inverseProj = glm::inverse(cameraProjectionMatrix);
+            glm::mat4 inverseView = glm::inverse(cameraViewMatrix);
+            
+            glm::vec4 rayStartNDC = glm::vec4(nx, ny, -1.0f, 1.0f);
+            glm::vec4 rayEndNDC = glm::vec4(nx, ny, 1.0f, 1.0f);
+
+            glm::vec4 rayStartWorld = inverseView * inverseProj * rayStartNDC;
+            rayStartWorld /= rayStartWorld.w;
+
+            glm::vec4 rayEndWorld = inverseView * inverseProj * rayEndNDC;
+            rayEndWorld /= rayEndWorld.w;
+
+            glm::vec3 rayWorldDir = glm::normalize(glm::vec3(rayEndWorld - rayStartWorld));
+            glm::vec3 rayOrigin = glm::vec3(rayStartWorld);
 
             float closestT = std::numeric_limits<float>::max();
-            auto renderGroup = m_ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
 
+            // ==========================================
+            // 1. 射线检测：3D 网格模型 (Mesh Renderer)
+            // ==========================================
+            auto renderGroup = m_ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
             for (auto entityID : renderGroup) {
                 Entity entity{ entityID, m_ActiveScene.get() };
-                // ==========================================
-                // 核心修复：射线检测直接无视被隐藏的物体，直接穿透过去！
-                // ==========================================
                 if (!entity.IsActiveInHierarchy()) continue;
 
                 auto& meshComp = entity.GetComponent<MeshRendererComponent>();
-                if (!meshComp.ModelAsset) continue; // 确保有模型
+                if (!meshComp.ModelAsset) continue; 
 
-                glm::mat4 inverseTransform = glm::inverse(entity.GetWorldTransform());
+                glm::mat4 transform = entity.GetWorldTransform();
+                
+                // 防御性编程：防止物体的某个轴缩放为 0 导致逆矩阵崩溃产生 NaN
+                if (std::abs(glm::determinant(transform)) < 0.00001f) continue;
+                
+                glm::mat4 inverseTransform = glm::inverse(transform);
                 glm::vec3 localRayOrigin = glm::vec3(inverseTransform * glm::vec4(rayOrigin, 1.0f));
                 glm::vec3 localRayDir = glm::normalize(glm::vec3(inverseTransform * glm::vec4(rayWorldDir, 0.0f)));
-                glm::vec3 invDir = 1.0f / localRayDir;
 
-                // ==========================================
-                // 核心修复：遍历模型的所有子网格，获取真实的 AABB
-                // ==========================================
                 for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
-                    // 假设你的 AABB 结构体有 Min 和 Max 属性
                     const auto& aabb = mesh->GetAABB(); 
+
+                    // 健壮的 AABB 相交测试（防除零引发的 INF 陷阱）
+                    float tmin = 0.0f;
+                    float tmax = std::numeric_limits<float>::max();
                     
-                    glm::vec3 t0 = (aabb.Min - localRayOrigin) * invDir; 
-                    glm::vec3 t1 = (aabb.Max - localRayOrigin) * invDir;
+                    glm::vec3 minAABB = aabb.Min;
+                    glm::vec3 maxAABB = aabb.Max;
+                    
+                    bool hit = true;
+                    for (int i = 0; i < 3; ++i) {
+                        if (std::abs(localRayDir[i]) < 0.00001f) {
+                            // 射线平行于该平面，检查起点是否在范围内
+                            if (localRayOrigin[i] < minAABB[i] || localRayOrigin[i] > maxAABB[i]) {
+                                hit = false; break;
+                            }
+                        } else {
+                            float t1 = (minAABB[i] - localRayOrigin[i]) / localRayDir[i];
+                            float t2 = (maxAABB[i] - localRayOrigin[i]) / localRayDir[i];
+                            if (t1 > t2) std::swap(t1, t2);
+                            tmin = glm::max(tmin, t1);
+                            tmax = glm::min(tmax, t2);
+                            if (tmin > tmax) { hit = false; break; }
+                        }
+                    }
 
-                    glm::vec3 tmin = glm::min(t0, t1);
-                    glm::vec3 tmax = glm::max(t0, t1);
+                    if (hit && tmax >= 0.0f) {
+                        glm::vec3 localIntersect = localRayOrigin + localRayDir * tmin;
+                        glm::vec3 worldIntersect = glm::vec3(transform * glm::vec4(localIntersect, 1.0f));
+                        float worldDistance = glm::length(worldIntersect - rayOrigin);
 
-                    float tNear = glm::max(glm::max(tmin.x, tmin.y), tmin.z);
-                    float tFar = glm::min(glm::min(tmax.x, tmax.y), tmax.z);
-
-                    if (tNear <= tFar && tFar >= 0.0f) {
-                        if (tNear < closestT) {
-                            closestT = tNear;
+                        if (worldDistance < closestT) {
+                            closestT = worldDistance;
                             m_HoveredEntity = entity;
+                        }
+                    }
+                }
+            }
+
+            // ==========================================
+            // 2. 射线检测：2D 精灵 (Sprite Renderer)
+            // ==========================================
+            auto spriteGroup = m_ActiveScene->Reg().view<TransformComponent, SpriteRendererComponent>();
+            for (auto entityID : spriteGroup) {
+                Entity entity{ entityID, m_ActiveScene.get() };
+                if (!entity.IsActiveInHierarchy()) continue;
+
+                glm::mat4 transform = entity.GetWorldTransform();
+                
+                // 【绝妙修复】：2D 游戏的美术很容易把 Z 缩放拖成 0！
+                // 遇到不可逆矩阵，我们强行解构，给 Z 轴一个极小的厚度并重组矩阵，保证运算不崩溃！
+                if (std::abs(glm::determinant(transform)) < 0.00001f) {
+                    glm::vec3 scale, translation, skew;
+                    glm::quat rotation;
+                    glm::vec4 perspective;
+                    glm::decompose(transform, scale, rotation, translation, skew, perspective);
+                    if (std::abs(scale.x) < 0.0001f) scale.x = 0.0001f;
+                    if (std::abs(scale.y) < 0.0001f) scale.y = 0.0001f;
+                    if (std::abs(scale.z) < 0.0001f) scale.z = 0.0001f; // 强行拉高 Z！
+                    transform = glm::translate(glm::mat4(1.0f), translation) * glm::toMat4(rotation) * glm::scale(glm::mat4(1.0f), scale);
+                }
+
+                glm::mat4 inverseTransform = glm::inverse(transform);
+                glm::vec3 localRayOrigin = glm::vec3(inverseTransform * glm::vec4(rayOrigin, 1.0f));
+                glm::vec3 localRayDir = glm::normalize(glm::vec3(inverseTransform * glm::vec4(rayWorldDir, 0.0f)));
+
+                // 【核心算法】：真正的 Ray-Quad (射线-平面) 相交算法！
+                // Sprite 永远渲染在自己局部坐标系的 Z=0 平面上
+                if (std::abs(localRayDir.z) > 0.00001f) {
+                    // 计算射线命中 Z=0 平面的距离 t
+                    float t = -localRayOrigin.z / localRayDir.z;
+                    if (t >= 0.0f) {
+                        glm::vec3 localIntersect = localRayOrigin + localRayDir * t;
+                        // 判断穿透点是否落在 -0.5 到 0.5 的图片框范围内
+                        if (localIntersect.x >= -0.5f && localIntersect.x <= 0.5f &&
+                            localIntersect.y >= -0.5f && localIntersect.y <= 0.5f) {
+                            
+                            glm::vec3 worldIntersect = glm::vec3(transform * glm::vec4(localIntersect, 1.0f));
+                            float worldDistance = glm::length(worldIntersect - rayOrigin);
+
+                            if (worldDistance < closestT) {
+                                closestT = worldDistance;
+                                m_HoveredEntity = entity;
+                            }
                         }
                     }
                 }
