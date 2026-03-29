@@ -83,6 +83,7 @@ namespace Ayaya {
         std::shared_ptr<Shader> DefaultShader;
         std::shared_ptr<Shader> OutlineShader;
         std::shared_ptr<Shader> GridShader;
+        std::shared_ptr<Shader> SpriteShader;
 
         std::shared_ptr<Shader> FallbackShader;
         std::shared_ptr<Material> FallbackMaterial;
@@ -146,6 +147,7 @@ namespace Ayaya {
         m_Data->DefaultShader = Shader::Create("assets/Editor/shaders/PBR/pbr.vert", "assets/Editor/shaders/PBR/pbr.frag");
         m_Data->OutlineShader = Shader::Create("assets/Editor/shaders/UI/outline.vert", "assets/Editor/shaders/UI/outline.frag");
         m_Data->GridShader    = Shader::Create("assets/Editor/shaders/UI/grid.vert", "assets/Editor/shaders/UI/grid.frag");
+        m_Data->SpriteShader  = Shader::Create("assets/Editor/shaders/2D/sprite.vert", "assets/Editor/shaders/2D/sprite.frag");
         // ==========================================
         // 加载全新的延迟渲染 Shader
         // ==========================================
@@ -766,6 +768,83 @@ namespace Ayaya {
             glDisable(GL_BLEND); 
         }
 
+        // ==========================================
+        // 【新增】：渲染 2D Sprites (支持透明度与画家算法排序)
+        // ==========================================
+        {
+            // 开启混合模式，处理 PNG 的透明度 (Alpha Blending)
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            // 极度关键：关闭深度写入！防止透明物体的黑色边缘互相遮挡
+            glDepthMask(GL_FALSE); 
+            // 极度关键：关闭背面剔除！纸片人应该是双面可见的
+            glDisable(GL_CULL_FACE); 
+
+            m_Data->SpriteShader->Bind();
+
+            // 1. 定义一个收集指令的结构体
+            struct SpriteDrawCommand {
+                glm::mat4 Transform;
+                SpriteRendererComponent SpriteComp;
+                float DistanceToCamera;
+            };
+            std::vector<SpriteDrawCommand> spriteDrawList;
+
+            // 2. 遍历场景收集所有的 Sprite
+            auto spriteGroup = scene->Reg().view<TransformComponent, SpriteRendererComponent>();
+            for (auto entityID : spriteGroup) {
+                Entity entity{ entityID, scene.get() };
+                if (!entity.IsActiveInHierarchy()) continue; // 剔除被隐藏的物体
+
+                auto [transformComp, spriteComp] = spriteGroup.get<TransformComponent, SpriteRendererComponent>(entityID);
+                glm::mat4 transform = entity.GetWorldTransform();
+                
+                // 计算该 Sprite 距离相机的距离，为排序做准备
+                float distance = glm::length(m_Data->CameraPosition - glm::vec3(transform[3]));
+                spriteDrawList.push_back({ transform, spriteComp, distance });
+            }
+
+            // 3. 核心排序 (Painter's Algorithm)：由远及近绘制！(距离大的排在前面)
+            std::sort(spriteDrawList.begin(), spriteDrawList.end(), [](const SpriteDrawCommand& a, const SpriteDrawCommand& b) {
+                return a.DistanceToCamera > b.DistanceToCamera; 
+            });
+
+            // 4. 批量执行绘制 (利用 EmptyVAO 和 gl_VertexID 魔法，无需任何 Mesh！)
+            glBindVertexArray(m_Data->EmptyVAO); 
+            
+            for (const auto& cmd : spriteDrawList) {
+                m_Data->SpriteShader->SetMat4("u_Transform", cmd.Transform);
+                m_Data->SpriteShader->SetFloat4("u_Color", cmd.SpriteComp.Color);
+
+                // 判断是否挂载了贴图
+                if (cmd.SpriteComp.TextureHandle != 0 && AssetManager::IsAssetHandleValid(cmd.SpriteComp.TextureHandle)) {
+                    auto tex = AssetManager::GetAsset<Texture2D>(cmd.SpriteComp.TextureHandle);
+                    tex->Bind(0);
+                    m_Data->SpriteShader->SetInt("u_Texture", 0);
+                    m_Data->SpriteShader->SetBool("u_UseTexture", true);
+                } else {
+                    m_Data->WhiteTexture->Bind(0);
+                    m_Data->SpriteShader->SetInt("u_Texture", 0);
+                    m_Data->SpriteShader->SetBool("u_UseTexture", false);
+                }
+
+                // physicalExposure 是你在 Pass 3 算好的局部变量，直接拿来用！
+                m_Data->SpriteShader->SetFloat("u_ExposureInverse", 1.0f / physicalExposure);
+
+                // 核心魔法：绘制 4 个顶点，生成 Triangle Strip！
+                glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+                m_Data->Stats.DrawCalls++;
+                m_Data->Stats.TriangleCount += 2;
+                m_Data->Stats.VertexCount += 4;
+            }
+
+            // 恢复渲染器的初始状态，防止污染后续管线
+            glEnable(GL_CULL_FACE);
+            glDepthMask(GL_TRUE);
+            glDisable(GL_BLEND);
+        }
+
         m_Data->SelectionFBO->Bind();
         // 清空为纯透明黑色
         RenderCommand::SetClearColor({ 0.0f, 0.0f, 0.0f, 0.0f });
@@ -792,6 +871,8 @@ namespace Ayaya {
         m_Data->SelectionFBO->Unbind();
 
         m_Data->LightingFBO->Unbind();
+
+        
 
         // ==========================================
         // Pass 6: Post-Processing Pass
