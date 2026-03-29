@@ -6,15 +6,16 @@
 #include "Panels/ContentBrowserPanel.hpp"
 #include "Panels/PreferencesPanel.hpp"
 #include "Panels/ScreenshotPanel.hpp"
+#include "Panels/HistoryPanel.hpp"
 #include "Renderer/SceneRenderer.hpp"
+#include "Renderer/Framebuffer.hpp"
 #include <Renderer/Renderer.hpp>
 #include <Renderer/Texture.hpp>
-// --- 新增：引入场景序列化器 ---
-#include "Scene/SceneSerializer.hpp"
-#include "Renderer/Framebuffer.hpp"
 #include "Renderer/MaterialSerializer.hpp"
+#include "Scene/SceneSerializer.hpp"
 #include "Utils/PlatformUtils.hpp"
 #include "Asset/AssetManager.hpp"
+#include "Engine/Core/CommandHistory.hpp"
 
 #include <imgui.h>
 
@@ -35,11 +36,14 @@ namespace Ayaya {
     public:
         EditorLayer();
         virtual ~EditorLayer() = default;
+        static EditorLayer& Get();
 
         virtual void OnAttach() override;
         virtual void OnUpdate(Timestep ts) override;
         virtual void OnImGuiRender() override;
         virtual void OnEvent(Event& event) override;
+
+        CommandHistory& GetCommandHistory() { return m_CommandHistory; }
 
     private:
         void SetupScene();
@@ -68,6 +72,8 @@ namespace Ayaya {
         void OnSceneStop();
 
     private:
+        static EditorLayer* s_Instance;
+
         EditorCamera m_EditorCamera;
         std::shared_ptr<Scene> m_ActiveScene;
         std::shared_ptr<Scene> m_EditorScene; 
@@ -89,6 +95,7 @@ namespace Ayaya {
         ContentBrowserPanel m_ContentBrowserPanel;
         PreferencesPanel m_PreferencesPanel;
         ScreenshotPanel m_ScreenshotPanel;
+        HistoryPanel m_HistoryPanel;
 
         bool m_ViewportFocused = false;
         bool m_ViewportHovered = false;
@@ -109,6 +116,9 @@ namespace Ayaya {
         // 进度条加载系统
         std::string m_SceneToLoad = ""; // 存放等待加载的路径
         void LoadSceneWithProgress(const std::string& filepath); // 真正的加载执行器
+
+        // 命令系统
+        CommandHistory m_CommandHistory;
     };
 
 

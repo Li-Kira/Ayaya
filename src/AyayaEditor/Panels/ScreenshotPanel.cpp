@@ -32,7 +32,7 @@ namespace Ayaya {
             
             ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 
-            if (ImGui::Button("Save as PNG", ImVec2(120, 0))) {
+            if (ImGui::Button("Save as PNG", ImVec2(200, 0))) {
                 std::string filepath = FileDialogs::SaveFile("png", "screenshot.png");
                 if (!filepath.empty()) {
                     m_Path = filepath;

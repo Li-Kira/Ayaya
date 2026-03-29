@@ -2,6 +2,7 @@
 #include "Renderer/Mesh.hpp"
 #include "Events/MouseEvent.hpp"
 #include "Scripting/ScriptEngine.hpp"
+#include "Engine/Core/EditorCommands.hpp"
 
 #include <glad/glad.h>
 #include <imgui.h>
@@ -21,7 +22,15 @@
 
 namespace Ayaya {
 
-    EditorLayer::EditorLayer() : Layer("EditorLayer") {}
+    EditorLayer* EditorLayer::s_Instance = nullptr;
+
+    EditorLayer::EditorLayer() : Layer("EditorLayer") {
+        s_Instance = this;
+    }
+
+    EditorLayer& EditorLayer::Get() {
+        return *s_Instance;
+    }
 
     void EditorLayer::OnAttach() {
         // ==========================================
@@ -297,7 +306,8 @@ namespace Ayaya {
         m_ContentBrowserPanel.OnImGuiRender();
         m_PreferencesPanel.OnImGuiRender();
         m_ScreenshotPanel.OnImGuiRender();
-
+        m_HistoryPanel.OnImGuiRender();
+        
         UIRenderViewport();
         UIRenderGameViewport();
 
@@ -560,88 +570,81 @@ namespace Ayaya {
     }
 
     void EditorLayer::HandleShortcuts() {
-        if (ImGui::GetIO().WantTextInput) {
+        ImGuiIO& io = ImGui::GetIO();
+
+        // 1. 如果当前正在输入文本（比如在 Tag 里打字），把快捷键让给 ImGui 自带的文本撤回
+        if (io.WantTextInput) {
             return;
         }
+
         // =====================================
         // 1. 视口焦点相关的快捷键 (Gizmo 等)
         // =====================================
         Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
         bool canUseGizmoShortcuts = m_ViewportHovered || m_ViewportFocused;
-        if (canUseGizmoShortcuts && selectedEntity && !Input::IsMouseButtonPressed(1)) {
-            if (Input::IsKeyPressed(Key::Q)) m_GizmoType = -1;
-            if (Input::IsKeyPressed(Key::W)) m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
-            if (Input::IsKeyPressed(Key::E)) m_GizmoType = ImGuizmo::OPERATION::ROTATE;
-            if (Input::IsKeyPressed(Key::R)) m_GizmoType = ImGuizmo::OPERATION::SCALE;
+        
+        // 【核心修复】：全部改用 ImGui 的按键枚举，无视操作系统焦点丢失！
+        if (canUseGizmoShortcuts && selectedEntity && !ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
+            if (ImGui::IsKeyPressed(ImGuiKey_Q, false)) m_GizmoType = -1;
+            if (ImGui::IsKeyPressed(ImGuiKey_W, false)) m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
+            if (ImGui::IsKeyPressed(ImGuiKey_E, false)) m_GizmoType = ImGuizmo::OPERATION::ROTATE;
+            if (ImGui::IsKeyPressed(ImGuiKey_R, false)) m_GizmoType = ImGuizmo::OPERATION::SCALE;
 
             // 按下 F 键聚焦到选中物体 (Focus)
-            static bool s_F_Pressed = false;
-            if (Input::IsKeyPressed(Key::F)) {
-                if (!s_F_Pressed) {
-                    glm::mat4 transform = selectedEntity.GetWorldTransform();
-                    glm::vec3 targetPos = glm::vec3(transform[3]); 
-                    
-                    // 只需要设置焦点和距离，相机内部会自动算出自己的新 Position！
-                    m_EditorCamera.SetFocalPoint(targetPos);
-                    m_EditorCamera.SetDistance(5.0f);
-                    m_EditorCamera.UpdateCameraView(); 
-                    
-                    AYAYA_CORE_INFO("Camera focused on entity.");
-                }
-                s_F_Pressed = true;
+            if (ImGui::IsKeyPressed(ImGuiKey_F, false)) {
+                glm::mat4 transform = selectedEntity.GetWorldTransform();
+                glm::vec3 targetPos = glm::vec3(transform[3]); 
+                m_EditorCamera.SetFocalPoint(targetPos);
+                m_EditorCamera.SetDistance(5.0f);
+                m_EditorCamera.UpdateCameraView(); 
+                AYAYA_CORE_INFO("Camera focused on entity.");
+            }
+        }
+
+        // =====================================
+        // 2. 全局场景快捷键 (撤销、保存等)
+        // =====================================
+        bool control = io.KeyCtrl;   // 获取全局 Ctrl 状态
+        bool shift   = io.KeyShift;  // 获取全局 Shift 状态
+
+        // --- New Scene (Ctrl + N) ---
+        if (ImGui::IsKeyPressed(ImGuiKey_N, false) && control) {
+            AYAYA_CORE_INFO("👉 Shortcut Triggered: New Scene");
+            NewScene();
+        }
+
+        // --- Open Scene (Ctrl + O) ---
+        if (ImGui::IsKeyPressed(ImGuiKey_O, false) && control) {
+            AYAYA_CORE_INFO("👉 Shortcut Triggered: Open Scene");
+            OpenScene();
+        }
+
+        // --- Save / Save As (Ctrl + S / Ctrl + Shift + S) ---
+        if (ImGui::IsKeyPressed(ImGuiKey_S, false) && control) {
+            if (shift) {
+                AYAYA_CORE_INFO("👉 Shortcut Triggered: Save Scene As...");
+                SaveSceneAs();
             } else {
-                s_F_Pressed = false;
+                AYAYA_CORE_INFO("👉 Shortcut Triggered: Save Scene");
+                SaveScene();
             }
         }
 
-        // =====================================
-        // 2. 全局场景快捷键 (绕过 ImGui 事件拦截)
-        // =====================================
-        bool control = Input::IsKeyPressed(Key::LeftControl) || Input::IsKeyPressed(Key::RightControl) ||
-                       Input::IsKeyPressed(Key::LeftSuper)   || Input::IsKeyPressed(Key::RightSuper);
-        bool shift   = Input::IsKeyPressed(Key::LeftShift)   || Input::IsKeyPressed(Key::RightShift);
-
-        // 使用静态变量记录上一帧的按键状态，实现“按下瞬间”单次触发 (Edge Detection)
-        static bool s_N_Pressed = false;
-        static bool s_O_Pressed = false;
-        static bool s_S_Pressed = false;
-
-        // --- New Scene (Cmd + N) ---
-        if (Input::IsKeyPressed(Key::N)) {
-            if (!s_N_Pressed && control) {
-                AYAYA_CORE_INFO("👉 Shortcut Triggered: New Scene");
-                NewScene();
+        // --- 撤销 (Ctrl + Z) ---
+        if (ImGui::IsKeyPressed(ImGuiKey_Z, false) && control) {
+            if (shift) {
+                m_CommandHistory.Redo();
+                AYAYA_CORE_INFO("👉 Redo");
+            } else {
+                m_CommandHistory.Undo();
+                AYAYA_CORE_INFO("👉 Undo");
             }
-            s_N_Pressed = true; // 锁定，只要不松手就不会再次触发
-        } else {
-            s_N_Pressed = false; // 松手后解锁
         }
 
-        // --- Open Scene (Cmd + O) ---
-        if (Input::IsKeyPressed(Key::O)) {
-            if (!s_O_Pressed && control) {
-                AYAYA_CORE_INFO("👉 Shortcut Triggered: Open Scene");
-                OpenScene();
-            }
-            s_O_Pressed = true;
-        } else {
-            s_O_Pressed = false;
-        }
-
-        // --- Save / Save As (Cmd + S / Cmd + Shift + S) ---
-        if (Input::IsKeyPressed(Key::S)) {
-            if (!s_S_Pressed && control) {
-                if (shift) {
-                    AYAYA_CORE_INFO("👉 Shortcut Triggered: Save Scene As...");
-                    SaveSceneAs();
-                } else {
-                    AYAYA_CORE_INFO("👉 Shortcut Triggered: Save Scene");
-                    SaveScene();
-                }
-            }
-            s_S_Pressed = true;
-        } else {
-            s_S_Pressed = false;
+        // --- 重做 (Ctrl + Y) ---
+        if (ImGui::IsKeyPressed(ImGuiKey_Y, false) && control) {
+            m_CommandHistory.Redo();
+            AYAYA_CORE_INFO("👉 Redo");
         }
     }
 
@@ -726,12 +729,13 @@ namespace Ayaya {
             if (ImGui::BeginMenu("View")) {
                 ImGui::MenuItem("Show Grid", nullptr, &m_ShowGrid);
                 ImGui::MenuItem("Show Statistics", nullptr, &m_ShowStatsPanel);
+                ImGui::MenuItem("Show History", nullptr, &m_HistoryPanel.IsOpen);
 
-                if (ImGui::MenuItem("Enable MSAA (4x)", nullptr, &m_EnableMSAA)) {
-                    m_SceneRenderer->SetMSAASamples(m_EnableMSAA ? 4 : 1);
-                    m_GameRenderer->SetMSAASamples(m_EnableMSAA ? 4 : 1);
-                    AYAYA_CORE_INFO("MSAA state changed: {0}", m_EnableMSAA ? "Enabled (4x)" : "Disabled");
-                }
+                // if (ImGui::MenuItem("Enable MSAA (4x)", nullptr, &m_EnableMSAA)) {
+                //     m_SceneRenderer->SetMSAASamples(m_EnableMSAA ? 4 : 1);
+                //     m_GameRenderer->SetMSAASamples(m_EnableMSAA ? 4 : 1);
+                //     AYAYA_CORE_INFO("MSAA state changed: {0}", m_EnableMSAA ? "Enabled (4x)" : "Disabled");
+                // }
 
                 ImGui::EndMenu();
             }
@@ -997,7 +1001,20 @@ namespace Ayaya {
             (ImGuizmo::OPERATION)m_GizmoType, ImGuizmo::LOCAL, glm::value_ptr(transform),
             nullptr, snap ? snapValues : nullptr);
 
+        // ==========================================
+        // 【核心魔法】：Gizmo 状态拦截器
+        // ==========================================
+        static bool s_IsDragging = false;
+        static TransformComponent s_OldTransform;
+
         if (ImGuizmo::IsUsing()) {
+            // 拦截 1：鼠标刚按下 Gizmo 的第一帧，备份旧状态！
+            if (!s_IsDragging) {
+                s_OldTransform = tc;
+                s_IsDragging = true;
+            }
+
+            // 实时应用矩阵变换
             auto& rel = selectedEntity.GetComponent<RelationshipComponent>();
             glm::mat4 localTransform = transform;
             
@@ -1015,6 +1032,26 @@ namespace Ayaya {
             tc.Translation = translation;
             tc.Rotation = glm::eulerAngles(rotation);
             tc.Scale = scale;
+        } 
+        else {
+            // 拦截 2：松开鼠标的第一帧，打包并推送撤回命令！
+            if (s_IsDragging) {
+                s_IsDragging = false;
+                
+                // 动态生成高级命令名字
+                std::string actionName = "Modify Transform";
+                std::string entityName = selectedEntity.GetComponent<TagComponent>().Tag;
+                if (m_GizmoType == ImGuizmo::OPERATION::TRANSLATE) actionName = "Translate '" + entityName + "'";
+                else if (m_GizmoType == ImGuizmo::OPERATION::ROTATE) actionName = "Rotate '" + entityName + "'";
+                else if (m_GizmoType == ImGuizmo::OPERATION::SCALE) actionName = "Scale '" + entityName + "'";
+
+                auto macroCmd = std::make_shared<MacroCommand>(actionName);
+                macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<TransformComponent>>(
+                    selectedEntity, s_OldTransform, tc
+                ));
+                
+                m_CommandHistory.AddCommand(macroCmd);
+            }
         }
     }
 

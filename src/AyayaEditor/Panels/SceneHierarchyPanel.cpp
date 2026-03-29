@@ -1,9 +1,12 @@
 #include "ayapch.h"
+#include "../EditorLayer.hpp"
 #include "SceneHierarchyPanel.hpp"
 #include "Engine/Scene/Components.hpp"
+#include "Engine/Core/EditorCommands.hpp"
 #include "Asset/AssetManager.hpp"
 #include "Renderer/Texture.hpp"
 #include "Renderer/MaterialSerializer.hpp"
+
 
 #include <imgui.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -44,6 +47,12 @@ namespace Ayaya {
     }
 
     void SceneHierarchyPanel::OnImGuiRender() {
+        ImGui::Begin("Properties");
+        if (!m_SelectedEntities.empty()) {
+            DrawComponents(); 
+        }
+        ImGui::End();
+
         ImGui::Begin("Scene Hierarchy");
 
         // 每次渲染大纲前，清空可见节点顺序列表
@@ -188,15 +197,6 @@ namespace Ayaya {
             }
             m_ShiftClickTarget = {}; // 结算完毕，清空标记
         }
-        
-        // ==========================================
-        // 属性面板调用
-        // ==========================================
-        ImGui::Begin("Properties");
-        if (!m_SelectedEntities.empty()) {
-            DrawComponents(); 
-        }
-        ImGui::End();
 
         // ==========================================
         // 批量处理复制
@@ -430,31 +430,99 @@ namespace Ayaya {
         // 取第一个实体作为展示和同步的基准
         Entity referenceEntity = m_SelectedEntities[0];
 
+        // ==========================================
         // --- 绘制 Tag 组件 ---
+        // ==========================================
         bool allHaveTag = true;
         for (auto e : m_SelectedEntities) if (!e.HasComponent<TagComponent>()) { allHaveTag = false; break; }
         
         if (allHaveTag) {
             auto& refTagComp = referenceEntity.GetComponent<TagComponent>();
 
+            // ==========================================
+            // 1. Checkbox 的撤回逻辑 (单次点击触发)
+            // ==========================================
             bool isActive = refTagComp.IsActive;
             if (ImGui::Checkbox("##IsActive", &isActive)) {
-                for (auto e : m_SelectedEntities) e.GetComponent<TagComponent>().IsActive = isActive;
+                
+                // 【绝妙细节 1】：根据单选/多选，以及勾选状态，动态生成命令名字！
+                std::string cmdName;
+                std::string actionStr = isActive ? "Enable " : "Disable ";
+                if (m_SelectedEntities.size() == 1) {
+                    cmdName = actionStr + "'" + refTagComp.Tag + "'"; // 例如："Disable 'Enemy'"
+                } else {
+                    cmdName = actionStr + std::to_string(m_SelectedEntities.size()) + " Entities"; // 例如："Enable 3 Entities"
+                }
+
+                auto macroCmd = std::make_shared<MacroCommand>(cmdName);
+                
+                for (auto e : m_SelectedEntities) {
+                    TagComponent oldComp = e.GetComponent<TagComponent>(); 
+                    TagComponent newComp = oldComp;
+                    newComp.IsActive = isActive;
+                    
+                    e.GetComponent<TagComponent>().IsActive = isActive;
+                    
+                    macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<TagComponent>>(e, oldComp, newComp));
+                }
+                EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
             }
+            
             ImGui::SameLine();
 
+            // ==========================================
+            // 2. InputText 的撤回逻辑 (持续输入状态拦截)
+            // ==========================================
             char buffer[256];
             memset(buffer, 0, sizeof(buffer));
             strncpy(buffer, refTagComp.Tag.c_str(), sizeof(buffer) - 1);
             
+            static std::vector<std::string> s_OldTags;
+            
             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+            
             if (ImGui::InputText("##Tag", buffer, sizeof(buffer))) {
                 for (auto e : m_SelectedEntities) e.GetComponent<TagComponent>().Tag = std::string(buffer);
+            }
+
+            if (ImGui::IsItemActivated()) {
+                s_OldTags.clear();
+                for (auto e : m_SelectedEntities) {
+                    s_OldTags.push_back(e.GetComponent<TagComponent>().Tag);
+                }
+            }
+
+            if (ImGui::IsItemDeactivatedAfterEdit()) {
+                
+                // 【绝妙细节 2】：精确播报名字的变更！
+                std::string cmdName;
+                if (m_SelectedEntities.size() == 1) {
+                    // 例如："Rename 'Cube' to 'Enemy'"
+                    cmdName = "Rename '" + s_OldTags[0] + "' to '" + m_SelectedEntities[0].GetComponent<TagComponent>().Tag + "'";
+                } else {
+                    // 例如："Rename 5 Entities"
+                    cmdName = "Rename " + std::to_string(m_SelectedEntities.size()) + " Entities";
+                }
+
+                auto macroCmd = std::make_shared<MacroCommand>(cmdName);
+                
+                for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                    Entity e = m_SelectedEntities[i];
+                    
+                    TagComponent oldComp = e.GetComponent<TagComponent>();
+                    oldComp.Tag = s_OldTags[i]; 
+                    TagComponent newComp = e.GetComponent<TagComponent>(); 
+                    
+                    macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<TagComponent>>(e, oldComp, newComp));
+                }
+                EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
             }
         }
         ImGui::Separator();
 
+        // ==========================================
         // --- 绘制 Transform 组件 ---
+        // ==========================================
         bool allHaveTransform = true;
         for (auto e : m_SelectedEntities) if (!e.HasComponent<TransformComponent>()) { allHaveTransform = false; break; }
 
@@ -466,22 +534,79 @@ namespace Ayaya {
             if (opened) {
                 auto& refTransform = referenceEntity.GetComponent<TransformComponent>();
 
-                // 1. 绘制 Position (默认重置值为 0.0f)
+                auto getTargetName = [&]() -> std::string {
+                    if (m_SelectedEntities.size() == 1) return "'" + m_SelectedEntities[0].GetComponent<TagComponent>().Tag + "'";
+                    return std::to_string(m_SelectedEntities.size()) + " Entities";
+                };
+
+                static std::vector<TransformComponent> s_OldTransforms;
+
+                // 【物理快照】：在控件绘制前，提取最纯净的上一帧状态，防止拖拽瞬间数据被篡改！
+                std::vector<TransformComponent> tempTransforms;
+                for (auto e : m_SelectedEntities) tempTransforms.push_back(e.GetComponent<TransformComponent>());
+
+                bool activated = false, deactivated = false;
+
+                // ------------------------------------------
+                // 1. 绘制 Position
+                // ------------------------------------------
                 glm::vec3 translation = refTransform.Translation;
-                if (UI::DrawVec3Control("Position", translation, 0.0f)) {
+                if (UI::DrawVec3Control("Position", translation, 0.0f, 100.0f, &activated, &deactivated)) {
                     for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Translation = translation;
                 }
                 
-                // 2. 绘制 Rotation (注意：需要从弧度转为角度，修改后再转回弧度)
-                glm::vec3 rotation = glm::degrees(refTransform.Rotation);
-                if (UI::DrawVec3Control("Rotation", rotation, 0.0f)) {
-                    for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Rotation = glm::radians(rotation);
+                if (activated) s_OldTransforms = tempTransforms; // 拖动开始：装填纯净的快照
+                if (deactivated) { // 拖动结束：结算命令
+                    auto macroCmd = std::make_shared<MacroCommand>("Change Position of " + getTargetName());
+                    for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                        Entity e = m_SelectedEntities[i];
+                        macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<TransformComponent>>(
+                            e, s_OldTransforms[i], e.GetComponent<TransformComponent>()
+                        ));
+                    }
+                    EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                 }
 
-                // 3. 绘制 Scale (默认重置值为 1.0f !)
+                // ------------------------------------------
+                // 2. 绘制 Rotation
+                // ------------------------------------------
+                activated = false; deactivated = false;
+                glm::vec3 rotation = glm::degrees(refTransform.Rotation);
+                if (UI::DrawVec3Control("Rotation", rotation, 0.0f, 100.0f, &activated, &deactivated)) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Rotation = glm::radians(rotation);
+                }
+                
+                if (activated) s_OldTransforms = tempTransforms;
+                if (deactivated) {
+                    auto macroCmd = std::make_shared<MacroCommand>("Change Rotation of " + getTargetName());
+                    for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                        Entity e = m_SelectedEntities[i];
+                        macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<TransformComponent>>(
+                            e, s_OldTransforms[i], e.GetComponent<TransformComponent>()
+                        ));
+                    }
+                    EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
+                }
+
+                // ------------------------------------------
+                // 3. 绘制 Scale
+                // ------------------------------------------
+                activated = false; deactivated = false;
                 glm::vec3 scale = refTransform.Scale;
-                if (UI::DrawVec3Control("Scale", scale, 1.0f)) {
+                if (UI::DrawVec3Control("Scale", scale, 1.0f, 100.0f, &activated, &deactivated)) {
                     for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Scale = scale;
+                }
+                
+                if (activated) s_OldTransforms = tempTransforms;
+                if (deactivated) {
+                    auto macroCmd = std::make_shared<MacroCommand>("Change Scale of " + getTargetName());
+                    for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                        Entity e = m_SelectedEntities[i];
+                        macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<TransformComponent>>(
+                            e, s_OldTransforms[i], e.GetComponent<TransformComponent>()
+                        ));
+                    }
+                    EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                 }
 
                 ImGui::TreePop();
@@ -1355,10 +1480,18 @@ namespace Ayaya {
                     ImGui::CloseCurrentPopup();
                 }
             }
-            if (!referenceEntity.HasComponent<MeshRendererComponent>()) {
+
+            // ==========================================
+            // 【核心架构锁】：MeshRenderer 和 SpriteRenderer 互斥
+            // ==========================================
+            bool hasMesh = referenceEntity.HasComponent<MeshRendererComponent>();
+            bool hasSprite = referenceEntity.HasComponent<SpriteRendererComponent>();
+
+            if (!hasMesh && !hasSprite) {
+                // 如果两个都没有，则两个都可以选
                 if (ImGui::MenuItem("Mesh Renderer")) {
                     for (auto e : m_SelectedEntities) {
-                        if (!e.HasComponent<MeshRendererComponent>()) {
+                        if (!e.HasComponent<MeshRendererComponent>() && !e.HasComponent<SpriteRendererComponent>()) {
                             auto& mrc = e.AddComponent<MeshRendererComponent>();
                             auto templateMat = std::make_shared<Material>();
                             if (MaterialSerializer::Deserialize(templateMat, "assets/Editor/materials/DefaultPBR.mat")) {
@@ -1370,13 +1503,23 @@ namespace Ayaya {
                     }
                     ImGui::CloseCurrentPopup();
                 }
-            }
-            if (!referenceEntity.HasComponent<SpriteRendererComponent>()) {
+
                 if (ImGui::MenuItem("Sprite Renderer")) {
-                    for (auto e : m_SelectedEntities) if (!e.HasComponent<SpriteRendererComponent>()) e.AddComponent<SpriteRendererComponent>();
+                    for (auto e : m_SelectedEntities) {
+                        if (!e.HasComponent<SpriteRendererComponent>() && !e.HasComponent<MeshRendererComponent>()) {
+                            e.AddComponent<SpriteRendererComponent>();
+                        }
+                    }
                     ImGui::CloseCurrentPopup();
                 }
+            } else if (hasMesh) {
+                // 如果已经有了 MeshRenderer，菜单里用灰色文本提示互斥
+                ImGui::TextDisabled("Sprite Renderer (Conflicts with Mesh)");
+            } else if (hasSprite) {
+                // 如果已经有了 SpriteRenderer，菜单里用灰色文本提示互斥
+                ImGui::TextDisabled("Mesh Renderer (Conflicts with Sprite)");
             }
+
             if (!referenceEntity.HasComponent<DirectionalLightComponent>()) {
                 if (ImGui::MenuItem("Directional Light")) {
                     for (auto e : m_SelectedEntities)
