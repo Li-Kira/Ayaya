@@ -2,7 +2,6 @@ Scene: Untitled
 EditorState:
   ShowGrid: false
   ShowSkybox: true
-  EnableMSAA: true
   CameraPosition: [-9.775329, 1.5885788, 10.90554]
   CameraDistance: 9.266289
   CameraPitch: -0.035509698
@@ -44,9 +43,13 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/NewMaterial (1).mat
+      CastShadows: false
+      ReceiveShadows: false
     PointLightComponent:
       Color: [1, 1, 1]
       LuminousPower: 1500
+      Radius: 109.2
+      Falloff: 1
     RelationshipComponent:
       Parent: 0
   - Entity: 18134488219967424044
@@ -60,9 +63,13 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/NewMaterial (2).mat
+      CastShadows: false
+      ReceiveShadows: false
     PointLightComponent:
       Color: [1, 1, 1]
       LuminousPower: 1500
+      Radius: 109.2
+      Falloff: 1
     RelationshipComponent:
       Parent: 0
   - Entity: 16967919021197220176
@@ -76,9 +83,13 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/NewMaterial (3).mat
+      CastShadows: false
+      ReceiveShadows: false
     PointLightComponent:
       Color: [1, 1, 1]
       LuminousPower: 1500
+      Radius: 109.2
+      Falloff: 1
     RelationshipComponent:
       Parent: 0
   - Entity: 7776252869593817873
@@ -92,9 +103,13 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/NewMaterial (4).mat
+      CastShadows: false
+      ReceiveShadows: false
     PointLightComponent:
       Color: [1, 1, 1]
       LuminousPower: 1500
+      Radius: 109.2
+      Falloff: 1
     RelationshipComponent:
       Parent: 0
   - Entity: 454681315911136007
@@ -118,6 +133,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M0_R5_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 11304064241039315965
@@ -131,6 +148,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M0_R16_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 10103244382630039209
@@ -144,6 +163,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M0_R33_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 16702459296978883351
@@ -157,6 +178,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M0_R50_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 2467157189256502405
@@ -170,6 +193,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M0_R66_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 17741071141692052095
@@ -183,6 +208,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M0_R83_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 17740591265077510907
@@ -196,6 +223,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M0_R100_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 10464699468366235916
@@ -209,6 +238,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M16_R5_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 4080826509765440307
@@ -222,6 +253,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M16_R16_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 9724380828745411508
@@ -235,6 +268,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M16_R33_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 10783664929510380957
@@ -248,6 +283,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M16_R50_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 6236941920131156724
@@ -261,6 +298,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M16_R66_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 17008038194438138920
@@ -274,6 +313,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M16_R83_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 9904271597798751397
@@ -287,6 +328,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M16_R100_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 12454745608770059806
@@ -300,6 +343,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M33_R5_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 18401491765531654327
@@ -313,6 +358,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M33_R16_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 9348027648776900782
@@ -326,6 +373,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M33_R33_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 17751290344493326145
@@ -339,6 +388,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M33_R50_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 2196336093993331587
@@ -352,6 +403,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M33_R66_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 12524165893417908058
@@ -365,6 +418,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M33_R83_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 14888776582807275225
@@ -378,6 +433,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M33_R100_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 7712548751370405178
@@ -391,6 +448,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M50_R5_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 17062175257226599934
@@ -404,6 +463,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M50_R16_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 5630167432543382369
@@ -417,6 +478,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M50_R33_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 10031530543579594372
@@ -430,6 +493,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M50_R50_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 13696111789324161207
@@ -443,6 +508,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M50_R66_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 4092345181773180402
@@ -456,6 +523,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M50_R83_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 12139174842283467893
@@ -469,6 +538,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M50_R100_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 554932139284313008
@@ -482,6 +553,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M66_R5_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 641220254051612622
@@ -495,6 +568,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M66_R16_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 16845992191887604492
@@ -508,6 +583,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M66_R33_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 2429917273015710460
@@ -521,6 +598,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M66_R50_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 3633832020812006239
@@ -534,6 +613,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M66_R66_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 7722587756968172135
@@ -547,6 +628,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M66_R83_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 18121561528972126915
@@ -560,6 +643,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M66_R100_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 5557376298992102553
@@ -573,6 +658,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M83_R5_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 14232831882245990189
@@ -586,6 +673,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M83_R16_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 3565561095305945668
@@ -599,6 +688,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M83_R33_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 596952473056353486
@@ -612,6 +703,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M83_R50_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 12116363593392979293
@@ -625,6 +718,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M83_R66_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 10071468536417815098
@@ -638,6 +733,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M83_R83_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 15831100693101426757
@@ -651,6 +748,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M83_R100_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 10908765520439904052
@@ -664,6 +763,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M100_R5_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 16759778860054133429
@@ -677,6 +778,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M100_R16_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 15224640695126231657
@@ -690,6 +793,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M100_R33_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 5150654801832263055
@@ -703,6 +808,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M100_R50_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 15593721669897890867
@@ -716,6 +823,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M100_R66_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 7805305103125184721
@@ -729,6 +838,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M100_R83_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 3556057618848213169
@@ -742,6 +853,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
       MaterialPath: assets/materials/testPBRbySphere_textured/Sphere_M100_R100_Mat.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 454681315911136007
   - Entity: 6689003807538403353

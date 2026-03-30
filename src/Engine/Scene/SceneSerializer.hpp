@@ -16,7 +16,6 @@ namespace Ayaya {
     struct EditorState {
         bool ShowGrid = true;
         bool ShowSkybox = true;
-        bool EnableMSAA = true;
         
         glm::vec3 CameraPosition = {0.0f, 0.0f, 0.0f};
         float CameraDistance = 10.0f;
@@ -32,7 +31,6 @@ namespace Ayaya {
         void ForEach(Action&& action) {
             action("ShowGrid", ShowGrid);
             action("ShowSkybox", ShowSkybox);
-            action("EnableMSAA", EnableMSAA);
             action("CameraPosition", CameraPosition);
             action("CameraDistance", CameraDistance);
             action("CameraPitch", CameraPitch);
@@ -46,7 +44,6 @@ namespace Ayaya {
         void ForEach(Action&& action) const {
             action("ShowGrid", ShowGrid);
             action("ShowSkybox", ShowSkybox);
-            action("EnableMSAA", EnableMSAA);
             action("CameraPosition", CameraPosition);
             action("CameraDistance", CameraDistance);
             action("CameraPitch", CameraPitch);

@@ -1099,6 +1099,18 @@ namespace Ayaya {
                 }
                 handleDragState("Change Luminous Power");
 
+                float radius = refPlc.Radius;
+                if (ImGui::DragFloat("Radius (m)", &radius, 0.1f, 0.1f, 1000.0f, "%.1f")) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<PointLightComponent>().Radius = radius;
+                }
+                handleDragState("Change PointLight Radius");
+
+                float falloff = refPlc.Falloff;
+                if (ImGui::DragFloat("Falloff", &falloff, 0.05f, 0.0f, 10.0f, "%.2f")) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<PointLightComponent>().Falloff = falloff;
+                }
+                handleDragState("Change PointLight Falloff");
+
                 ImGui::TreePop();
             }
 

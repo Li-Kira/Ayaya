@@ -436,11 +436,14 @@ namespace Ayaya {
         for (auto entityID : pointLightGroup) {
             if (pointLightIndex >= 4) break; 
             auto [transform, plc] = pointLightGroup.get<TransformComponent, PointLightComponent>(entityID);
-            m_Data->LightData.PointLights[pointLightIndex].Position = glm::vec4(transform.Translation, 1.0f);
             
-            // 物理换算：流明 (Lumens) 转换为 坎德拉 (Candelas)，供 shader 做平方反比衰减
+            // 【核心修改】：把 Radius 塞进 Position 的 W 通道！
+            m_Data->LightData.PointLights[pointLightIndex].Position = glm::vec4(transform.Translation, plc.Radius);
+            
             float candelas = plc.LuminousPower / (4.0f * glm::pi<float>());
-            m_Data->LightData.PointLights[pointLightIndex].Color = glm::vec4(plc.Color * candelas, 1.0f);
+            
+            // 【核心修改】：把 Falloff 塞进 Color 的 W 通道！
+            m_Data->LightData.PointLights[pointLightIndex].Color = glm::vec4(plc.Color * candelas, plc.Falloff);
             pointLightIndex++;
         }
         m_Data->LightData.PointLightCount = pointLightIndex;

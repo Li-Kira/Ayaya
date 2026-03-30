@@ -375,7 +375,6 @@ namespace Ayaya {
             // ==========================================
             EditorState state;
             state.ShowGrid = m_ShowGrid;
-            state.EnableMSAA = m_EnableMSAA;
             state.CameraPosition = m_EditorCamera.GetPosition();
             state.CameraDistance = m_EditorCamera.GetDistance();
             state.CameraPitch = m_EditorCamera.GetPitch();
@@ -409,7 +408,6 @@ namespace Ayaya {
             // 收集当前状态
             EditorState state;
             state.ShowGrid = m_ShowGrid;
-            state.EnableMSAA = m_EnableMSAA;
             state.CameraPosition = m_EditorCamera.GetPosition();
             state.CameraDistance = m_EditorCamera.GetDistance();
             state.CameraPitch = m_EditorCamera.GetPitch();
@@ -515,12 +513,6 @@ namespace Ayaya {
             m_EditorCamera.SetYaw(state.CameraYaw);
             m_EditorCamera.SetFocalPoint(state.CameraFocalPoint);
             m_EditorCamera.UpdateCameraView();
-            
-            if (m_EnableMSAA != state.EnableMSAA) {
-                m_EnableMSAA = state.EnableMSAA;
-                m_SceneRenderer->SetMSAASamples(m_EnableMSAA ? 4 : 1);
-                m_GameRenderer->SetMSAASamples(m_EnableMSAA ? 4 : 1);
-            }
             
             auto view = m_ActiveScene->Reg().view<CameraComponent>();
             for (auto entityID : view) {
@@ -700,11 +692,9 @@ namespace Ayaya {
                 ImGui::MenuItem("Show Statistics", nullptr, &m_ShowStatsPanel);
                 ImGui::MenuItem("Show History", nullptr, &m_HistoryPanel.IsOpen);
 
-                // if (ImGui::MenuItem("Enable MSAA (4x)", nullptr, &m_EnableMSAA)) {
-                //     m_SceneRenderer->SetMSAASamples(m_EnableMSAA ? 4 : 1);
-                //     m_GameRenderer->SetMSAASamples(m_EnableMSAA ? 4 : 1);
-                //     AYAYA_CORE_INFO("MSAA state changed: {0}", m_EnableMSAA ? "Enabled (4x)" : "Disabled");
-                // }
+                // 【新增】：给 Gizmo 提供极其方便的全局独立开关
+                ImGui::MenuItem("Show Camera Gizmos", nullptr, &m_ShowCameraGizmos);
+                ImGui::MenuItem("Show Light Gizmos", nullptr, &m_ShowLightGizmos);
 
                 ImGui::EndMenu();
             }
@@ -766,6 +756,7 @@ namespace Ayaya {
 
         HandleMousePicking(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
         HandleGizmo(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
+        UIRenderDebugGizmos(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
 
         ImGui::End();
         ImGui::PopStyleVar();
@@ -1101,6 +1092,126 @@ namespace Ayaya {
                 ));
                 
                 m_CommandHistory.AddCommand(macroCmd);
+            }
+        }
+    }
+
+    void EditorLayer::UIRenderDebugGizmos(const glm::mat4& cameraViewMatrix, const glm::mat4& cameraProjectionMatrix) {
+        // 【修改】：不再因为没有选中物体就 return，我们需要获取它用来做“高亮区分”
+        Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
+
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        glm::mat4 viewProj = cameraProjectionMatrix * cameraViewMatrix;
+
+        auto ProjectToScreen = [&](const glm::vec3& worldPos, ImVec2& outScreenPos) -> bool {
+            glm::vec4 clipPos = viewProj * glm::vec4(worldPos, 1.0f);
+            if (clipPos.w < 0.01f) return false; 
+            glm::vec3 ndcPos = glm::vec3(clipPos) / clipPos.w;
+            float viewportWidth = m_ViewportBounds[1].x - m_ViewportBounds[0].x;
+            float viewportHeight = m_ViewportBounds[1].y - m_ViewportBounds[0].y;
+            outScreenPos.x = m_ViewportBounds[0].x + (ndcPos.x + 1.0f) * 0.5f * viewportWidth;
+            outScreenPos.y = m_ViewportBounds[0].y + (1.0f - ndcPos.y) * 0.5f * viewportHeight;
+            return true;
+        };
+
+        // ==========================================
+        // 1. 遍历并绘制所有 Camera 的视锥体
+        // ==========================================
+        if (m_ShowCameraGizmos) {
+            auto view = m_ActiveScene->Reg().view<TransformComponent, CameraComponent>();
+            for (auto entityID : view) {
+                Entity entity{ entityID, m_ActiveScene.get() };
+                if (!entity.IsActiveInHierarchy()) continue;
+
+                // 【绝妙细节】：被选中的相机白线加粗，未选中的相机变成半透明灰线
+                bool isSelected = (entity == selectedEntity);
+                ImU32 color = isSelected ? IM_COL32(255, 255, 255, 255) : IM_COL32(200, 200, 200, 200);
+                float thickness = isSelected ? 2.0f : 1.0f;
+
+                auto& cameraComp = entity.GetComponent<CameraComponent>();
+                glm::mat4 transform = entity.GetWorldTransform();
+                glm::mat4 proj = cameraComp.Camera.GetProjection();
+                
+                glm::mat4 invViewProj = transform * glm::inverse(proj); 
+
+                glm::vec3 frustumCornersNDC[8] = {
+                    {-1.0f, -1.0f, -1.0f}, { 1.0f, -1.0f, -1.0f}, { 1.0f,  1.0f, -1.0f}, {-1.0f,  1.0f, -1.0f}, 
+                    {-1.0f, -1.0f,  1.0f}, { 1.0f, -1.0f,  1.0f}, { 1.0f,  1.0f,  1.0f}, {-1.0f,  1.0f,  1.0f}  
+                };
+
+                ImVec2 screenPoints[8];
+                bool pointsValid[8];
+                for (int i = 0; i < 8; i++) {
+                    glm::vec4 worldPos = invViewProj * glm::vec4(frustumCornersNDC[i], 1.0f);
+                    worldPos /= worldPos.w; 
+                    pointsValid[i] = ProjectToScreen(glm::vec3(worldPos), screenPoints[i]);
+                }
+
+                auto DrawLineIfValid = [&](int p1, int p2) {
+                    if (pointsValid[p1] && pointsValid[p2]) drawList->AddLine(screenPoints[p1], screenPoints[p2], color, thickness);
+                };
+
+                DrawLineIfValid(0, 1); DrawLineIfValid(1, 2); DrawLineIfValid(2, 3); DrawLineIfValid(3, 0);
+                DrawLineIfValid(4, 5); DrawLineIfValid(5, 6); DrawLineIfValid(6, 7); DrawLineIfValid(7, 4);
+                DrawLineIfValid(0, 4); DrawLineIfValid(1, 5); DrawLineIfValid(2, 6); DrawLineIfValid(3, 7);
+            }
+        }
+
+        // ==========================================
+        // 2. 遍历并绘制所有 Point Light 的光照球体
+        // ==========================================
+        if (m_ShowLightGizmos) {
+            auto view = m_ActiveScene->Reg().view<TransformComponent, PointLightComponent>();
+            for (auto entityID : view) {
+                Entity entity{ entityID, m_ActiveScene.get() };
+                if (!entity.IsActiveInHierarchy()) continue;
+
+                bool isSelected = (entity == selectedEntity);
+                
+                auto& lightComp = entity.GetComponent<PointLightComponent>();
+                glm::mat4 transform = entity.GetWorldTransform();
+                glm::vec3 worldPos = glm::vec3(transform[3]);
+
+                ImVec2 screenPos;
+                if (ProjectToScreen(worldPos, screenPos)) {
+                    ImU32 lightColor = IM_COL32((int)(lightComp.Color.r * 255), (int)(lightComp.Color.g * 255), (int)(lightComp.Color.b * 255), 255);
+                    drawList->AddCircleFilled(screenPos, 6.0f, lightColor);
+                    
+                    // 中心圆点的选中反馈：选中白边加粗，未选中给个黑边
+                    ImU32 outlineColor = isSelected ? IM_COL32(255, 255, 255, 255) : IM_COL32(0, 0, 0, 255);
+                    float outlineThick = isSelected ? 2.0f : 1.0f;
+                    drawList->AddCircle(screenPos, 8.0f, outlineColor, 0, outlineThick);
+                }
+
+                // 【绝妙细节】：未选中的光环透明度极低，防止场景里灯太多导致画面被淹没！
+                int alpha = isSelected ? 150 : 25; 
+                float lineThick = isSelected ? 1.5f : 1.0f;
+                ImU32 ringColor = IM_COL32((int)(lightComp.Color.r * 255), (int)(lightComp.Color.g * 255), (int)(lightComp.Color.b * 255), alpha);
+
+                float radius = lightComp.Radius;
+
+                const int segments = 48; 
+                for (int plane = 0; plane < 3; plane++) {
+                    ImVec2 prevScreenPos;
+                    bool prevValid = false;
+                    for (int i = 0; i <= segments; i++) {
+                        float angle = (float)i / (float)segments * 2.0f * 3.14159265f;
+                        glm::vec3 offset;
+                        
+                        if (plane == 0) offset = glm::vec3(glm::cos(angle), glm::sin(angle), 0.0f) * radius;     
+                        else if (plane == 1) offset = glm::vec3(glm::cos(angle), 0.0f, glm::sin(angle)) * radius; 
+                        else offset = glm::vec3(0.0f, glm::cos(angle), glm::sin(angle)) * radius;                 
+
+                        ImVec2 currScreenPos;
+                        bool currValid = ProjectToScreen(worldPos + offset, currScreenPos);
+
+                        if (i > 0 && prevValid && currValid) {
+                            drawList->AddLine(prevScreenPos, currScreenPos, ringColor, lineThick);
+                        }
+                        prevScreenPos = currScreenPos;
+                        prevValid = currValid;
+                    }
+                }
             }
         }
     }

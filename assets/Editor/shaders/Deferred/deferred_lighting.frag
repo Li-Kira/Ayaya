@@ -178,19 +178,33 @@ void main() {
     // ==========================================
     for(int i = 0; i < PointLightCount; ++i) {
         vec3 lightPos = PointLights[i].Position.xyz;
+        float radius = PointLights[i].Position.w; // 提取 Radius
+        
         vec3 lightColor = PointLights[i].Color.rgb;
+        float falloff = PointLights[i].Color.w;   // 提取 Falloff
         
         vec3 L_point = normalize(lightPos - FragPos);
         vec3 H_point = normalize(V + L_point);
-        
         float distance = length(lightPos - FragPos);
-        float attenuation = 1.0 / (distance * distance);
+        
+        // 物理平方反比衰减 (加极小值防止除以0爆炸)
+        float attenuation = 1.0 / (distance * distance + 0.0001);
+        
+        // 【核心魔法】：Unreal Engine 4 窗函数衰减 (Windowing Falloff)
+        // 保证光线在到达 Radius 时，非常平滑且物理正确地降为 0
+        float distanceByRadius = distance / radius;
+        float distanceByRadius4 = pow(distanceByRadius, 4.0);
+        float windowing = clamp(1.0 - distanceByRadius4, 0.0, 1.0);
+        windowing = pow(windowing, falloff + 1.0); // 利用 Falloff 微调边缘柔和度
+        
+        attenuation *= windowing; // 最终衰减 = 物理衰减 * 截断窗函数
+        
         vec3 radiance_point = lightColor * attenuation;
-
+        
         float NDF_p = DistributionGGX(N, H_point, Roughness);   
-        float G_p   = GeometrySmith(N, V, L_point, Roughness);      
-        vec3 F_p    = fresnelSchlick(max(dot(H_point, V), 0.0), F0);       
-
+        float G_p   = GeometrySmith(N, V, L_point, Roughness);
+        vec3 F_p    = fresnelSchlick(max(dot(H_point, V), 0.0), F0);
+        
         vec3 numerator_p    = NDF_p * G_p * F_p;
         float denominator_p = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L_point), 0.0) + 0.0001;
         vec3 specular_p     = numerator_p / denominator_p;
@@ -198,7 +212,8 @@ void main() {
         vec3 kS_p = F_p;
         vec3 kD_p = vec3(1.0) - kS_p;
         kD_p *= 1.0 - Metallic;     
-        float NdotL_p = max(dot(N, L_point), 0.0);        
+        float NdotL_p = max(dot(N, L_point), 0.0);
+        
         Lo += (kD_p * Albedo / PI + specular_p) * radiance_point * NdotL_p;
     }
 

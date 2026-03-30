@@ -38,7 +38,7 @@ cmake --build . --config Release --target Sandbox
 ```
 
 ## Project Overview
-* **Core Architecture**: ECS (Entity-Component-System) based on EnTT, Layer-based update loop, Graphics API-agnostic rendering wrapper.  
-* **Rendering Pipeline**: Modern Data-Driven Forward Rendering with PBR (Physically Based Rendering), Frustum Culling, Render Queues (State Sorting), and hardware MSAA.  
-* **Physics Backend**: Box2D (2D rigid body physics, fully integrated with the ECS lifecycle).
+* **Core Architecture**: ECS (Entity-Component-System) based on EnTT, Layer-based update loop, Graphics API-agnostic rendering wrapper, with an advanced **Command Pattern Undo/Redo System**.  
+* **Rendering Pipeline**: Modern Data-Driven **Deferred Rendering** (G-Buffer, PBR, IBL), hardware MSAA, Painter's Algorithm for 2D Sprites, Frustum Culling, Render Queues (State Sorting), and Unreal Engine 4 style Physical Light Attenuation.  
+* **Physics Backend**: Box2D (2D rigid body physics, fully integrated with the ECS lifecycle).  
 * **Scripting System**: "Dual-Track" Architecture (Runtime Lua + Editor Python). The runtime logic is powered by **Lua 5.4** and **Sol2**, deeply integrated with the ECS via `LuaScriptComponent`. It features per-entity sandboxed execution environments, real-time script hot-reloading (zero C++ recompilation), and seamless bindings to native C++ APIs (Transform, Input, etc.). Python integration for Editor automation and asset pipeline is currently in the roadmap.

@@ -2,7 +2,6 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  EnableMSAA: true
   CameraPosition: [-2.6121998, 0.89348406, 5.3472104]
   CameraDistance: 2.7294528
   CameraPitch: -0.0627425
@@ -65,7 +64,7 @@ Entities:
       Rotation: [0, -0, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
-      MaterialPath: assets/materials/NewMaterial.mat
+      MaterialPath: assets/materials/testPBR/NewMaterial.mat
     RelationshipComponent:
       Parent: 941355425607113630
   - Entity: 2260445115966781348
@@ -78,7 +77,7 @@ Entities:
       Scale: [1, 1, 1]
     MeshRendererComponent:
       ModelPath: assets/models/backpack.obj
-      MaterialPath: assets/materials/PBR.mat
+      MaterialPath: assets/materials/testPBR/PBR.mat
     RelationshipComponent:
       Parent: 0
   - Entity: 2717292969850671077

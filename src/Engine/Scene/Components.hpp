@@ -135,6 +135,9 @@ namespace Ayaya {
         // 替换原来的 Intensity，改用光通量 (Lumens)，默认 1500 (家用灯泡)
         float LuminousPower = 1500.0f;
 
+        float Radius = 10.0f;          // 强制衰减半径 (米)
+        float Falloff = 1.0f;          // 衰减指数 (控制边缘平滑度)
+
         PointLightComponent() = default;
         PointLightComponent(const PointLightComponent&) = default;
     };

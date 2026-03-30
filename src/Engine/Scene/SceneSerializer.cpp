@@ -239,9 +239,11 @@ namespace Ayaya {
             
             auto& plc = entity.GetComponent<PointLightComponent>();
             out << YAML::Key << "Color" << YAML::Value << plc.Color;
-            // 修改：将原来的 Intensity 替换为光通量 (LuminousPower)
             out << YAML::Key << "LuminousPower" << YAML::Value << plc.LuminousPower;
             
+            out << YAML::Key << "Radius" << YAML::Value << plc.Radius;
+            out << YAML::Key << "Falloff" << YAML::Value << plc.Falloff;
+
             out << YAML::EndMap; // PointLightComponent
         }
 
@@ -592,21 +594,17 @@ namespace Ayaya {
             if (pointLightComponent) {
                 auto& plc = deserializedEntity.AddComponent<PointLightComponent>();
                 
-                plc.Color = pointLightComponent["Color"].as<glm::vec3>();
-                
-                // 兼容性检查：如果是新版物理系统，读取 LuminousPower
-                if (pointLightComponent["LuminousPower"]) {
+                if (pointLightComponent["Color"])
+                        plc.Color = pointLightComponent["Color"].as<glm::vec3>();
+                        
+                if (pointLightComponent["LuminousPower"])
                     plc.LuminousPower = pointLightComponent["LuminousPower"].as<float>();
-                } 
-                // 兼容性检查：如果是之前测试时的旧场景 (存的是 Intensity)
-                else if (pointLightComponent["Intensity"]) {
-                    // 把旧版的 1.0~10.0 的虚假强度，粗略换算成几百流明的家用灯泡亮度，防止读取后完全看不见
-                    plc.LuminousPower = pointLightComponent["Intensity"].as<float>() * 300.0f; 
-                } 
-                // 更老的场景连强度都没有，默认 1500 流明
-                else {
-                    plc.LuminousPower = 1500.0f;
-                }
+
+                if (pointLightComponent["Radius"])
+                    plc.Radius = pointLightComponent["Radius"].as<float>();
+                    
+                if (pointLightComponent["Falloff"])
+                    plc.Falloff = pointLightComponent["Falloff"].as<float>();
             }
 
             // ==========================================

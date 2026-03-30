@@ -2,7 +2,6 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  EnableMSAA: true
   CameraPosition: [-1.1888458, 1.3107232, 4.7002063]
   CameraDistance: 0.5723075
   CameraPitch: -0.30888462
@@ -103,12 +102,12 @@ Entities:
       Tag: Sphere
       IsActive: true
     TransformComponent:
-      Translation: [1.644043, -0.042358413, 1.622345]
+      Translation: [1.644043, -0.04235842, 1.622345]
       Rotation: [0, -0, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
       ModelPath: Primitive::Sphere
-      MaterialPath: assets/materials/New Material.mat
+      MaterialPath: assets/materials/testShadow/NewMaterial (2).mat
       CastShadows: true
       ReceiveShadows: true
     RelationshipComponent:
@@ -123,7 +122,7 @@ Entities:
       Scale: [0.99999946, 1, 1]
     MeshRendererComponent:
       ModelPath: Primitive::Plane
-      MaterialPath: assets/materials/New Material (1).mat
+      MaterialPath: assets/materials/testShadow/NewMaterial (2).mat
       CastShadows: true
       ReceiveShadows: true
     RelationshipComponent:

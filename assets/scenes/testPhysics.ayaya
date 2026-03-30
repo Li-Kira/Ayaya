@@ -2,7 +2,6 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  EnableMSAA: true
   CameraPosition: [-5.1704745, 3.7611105, 7.6889687]
   CameraDistance: 10
   CameraPitch: -0.3855956
