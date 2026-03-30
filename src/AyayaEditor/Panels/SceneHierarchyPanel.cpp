@@ -247,7 +247,7 @@ namespace Ayaya {
         if (entity.HasComponent<CameraComponent>()) icon = ICON_FA_VIDEO; 
         else if (entity.HasComponent<SpriteRendererComponent>()) icon = ICON_FA_PAINT_BRUSH;
         else if (entity.HasComponent<MeshRendererComponent>()) icon = ICON_FA_PAINT_BRUSH;
-        else if (entity.HasComponent<DirectionalLightComponent>()) icon = ICON_FA_LIGHTBULB; 
+        else if (entity.HasComponent<DirectionalLightComponent>()) icon = ICON_FA_SUN; 
         else if (entity.HasComponent<PointLightComponent>()) icon = ICON_FA_LIGHTBULB;
         else if (entity.HasComponent<EnvironmentComponent>()) icon = ICON_FA_CLOUD_SUN; 
 
@@ -530,7 +530,7 @@ namespace Ayaya {
 
         if (allHaveTransform) {
             ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(TransformComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Transform");
+            bool opened = ImGui::TreeNodeEx((void*)typeid(TransformComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_ARROWS_ALT " Transform");
             ImGui::PopFont();
             
             if (opened) {
@@ -624,7 +624,9 @@ namespace Ayaya {
 
         if (allHaveSprite) {
             ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(SpriteRendererComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Sprite Renderer");
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.3f, 0.8f, 1.0f)); 
+            bool opened = ImGui::TreeNodeEx((void*)typeid(SpriteRendererComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_IMAGE " Sprite Renderer");
+            ImGui::PopStyleColor();
             ImGui::PopFont();
 
             // 新增：允许通过右键菜单移除组件
@@ -762,7 +764,9 @@ namespace Ayaya {
 
         if (allHaveCamera) {
             ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(CameraComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Camera");
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.6f, 0.9f, 1.0f)); 
+            bool opened = ImGui::TreeNodeEx((void*)typeid(CameraComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_VIDEO " Camera");
+            ImGui::PopStyleColor();
             ImGui::PopFont();
 
             // 新增：右键移除组件支持
@@ -975,7 +979,9 @@ namespace Ayaya {
 
         if (allHaveDirLight) {
             ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(DirectionalLightComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Directional Light");
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.8f, 0.2f, 1.0f)); 
+            bool opened = ImGui::TreeNodeEx((void*)typeid(DirectionalLightComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_SUN " Directional Light");
+            ImGui::PopStyleColor();
             ImGui::PopFont();
 
             bool removeComponent = false;
@@ -1044,7 +1050,9 @@ namespace Ayaya {
 
         if (allHavePointLight) {
             ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(PointLightComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Point Light");
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.6f, 0.1f, 1.0f)); 
+            bool opened = ImGui::TreeNodeEx((void*)typeid(PointLightComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_LIGHTBULB " Point Light");
+            ImGui::PopStyleColor();
             ImGui::PopFont();
 
             // 新增：右键移除组件支持
@@ -1129,7 +1137,9 @@ namespace Ayaya {
 
         if (allHaveEnvironment) {
             ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(EnvironmentComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Environment (Skybox)");
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.8f, 0.9f, 1.0f)); 
+            bool opened = ImGui::TreeNodeEx((void*)typeid(EnvironmentComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_GLOBE " Environment (Skybox)");
+            ImGui::PopStyleColor();
             ImGui::PopFont();
 
             bool removeComponent = false;
@@ -1357,7 +1367,9 @@ namespace Ayaya {
 
         if (allHaveMeshRenderer) {
             ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(MeshRendererComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Mesh Renderer");
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.8f, 0.4f, 1.0f)); 
+            bool opened = ImGui::TreeNodeEx((void*)typeid(MeshRendererComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_CUBE " Mesh Renderer");
+            ImGui::PopStyleColor();
             ImGui::PopFont();
             
             bool removeComponent = false;
@@ -1690,7 +1702,9 @@ namespace Ayaya {
 
         if (allHaveLuaScript) {
             ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(LuaScriptComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Lua Script");
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.2f, 0.5f, 1.0f)); 
+            bool opened = ImGui::TreeNodeEx((void*)typeid(LuaScriptComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_FILE_CODE " Lua Script");
+            ImGui::PopStyleColor();
             ImGui::PopFont();
             
             bool removeComponent = false;
@@ -1794,7 +1808,9 @@ namespace Ayaya {
 
         if (allHaveRb2d) {
             ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(Rigidbody2DComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Rigidbody 2D");
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.3f, 0.3f, 1.0f)); 
+            bool opened = ImGui::TreeNodeEx((void*)typeid(Rigidbody2DComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_BULLSEYE " Rigidbody 2D");
+            ImGui::PopStyleColor();
             ImGui::PopFont();
             
             bool removeComponent = false;
@@ -1871,7 +1887,9 @@ namespace Ayaya {
 
         if (allHaveBc2d) {
             ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(BoxCollider2DComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, "Box Collider 2D");
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.9f, 0.3f, 1.0f)); 
+            bool opened = ImGui::TreeNodeEx((void*)typeid(BoxCollider2DComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_VECTOR_SQUARE " Box Collider 2D");
+            ImGui::PopStyleColor();
             ImGui::PopFont();
             
             bool removeComponent = false;

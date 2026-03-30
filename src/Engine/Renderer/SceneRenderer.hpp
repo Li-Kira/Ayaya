@@ -30,6 +30,9 @@ namespace Ayaya {
         void SetEnvironmentSettings(float intensity, const glm::vec3& ambientColor);
         void SetClearColor(const glm::vec4& color);
 
+        void SetExposure(float exposure) { m_Exposure = exposure; }
+        void SetToneMappingType(int type) { m_ToneMappingType = type; }
+
         struct Statistics {
             uint32_t DrawCalls = 0;
             uint32_t ShaderBinds = 0;   // SetPass Calls
@@ -43,6 +46,9 @@ namespace Ayaya {
     private:
         // 每个 Renderer 实例独有的数据指针！
         std::unique_ptr<SceneRendererData> m_Data;
+
+        float m_Exposure = 1.0f;
+        int m_ToneMappingType = 1; // 默认使用更高级的 1: ACES
     };
 
 }

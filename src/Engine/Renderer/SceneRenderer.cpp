@@ -925,8 +925,9 @@ namespace Ayaya {
         glDisable(GL_DEPTH_TEST); 
         m_Data->PostProcessShader->Bind();
         m_Data->PostProcessShader->SetInt("u_ScreenTexture", 0);
-        // float physicalExposure = 1.0f / (1.2f * std::exp2(currentEV100));
-        m_Data->PostProcessShader->SetFloat("u_Exposure", physicalExposure);
+        float finalExposure = physicalExposure * m_Exposure;
+        m_Data->PostProcessShader->SetFloat("u_Exposure", finalExposure);
+        m_Data->PostProcessShader->SetInt("u_ToneMappingType", m_ToneMappingType);
         m_Data->PostProcessShader->SetInt("u_SelectionTexture", 1);
 
         glm::vec2 texelSize = {

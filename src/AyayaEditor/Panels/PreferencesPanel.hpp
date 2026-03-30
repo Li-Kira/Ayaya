@@ -15,6 +15,8 @@ namespace Ayaya {
         void SetOpen(bool isOpen);
         bool IsOpen() const { return m_IsOpen; }
 
+        int ToneMappingType = 0; 
+        float Exposure = 1.0f;
     private:
         // 新增：保存和读取配置的私有方法
         void SavePreferences();
@@ -22,13 +24,14 @@ namespace Ayaya {
 
     private:
         bool m_IsOpen = false;
+        // 配置文件的保存路径
+        std::string m_PrefsFilePath = "assets/Editor/settings/EditorPreferences.yaml";
         
         int m_WindowWidth = 1280;
         int m_WindowHeight = 720;
-        float m_UIScale = 1.0f; // 新增：缓存 UI 缩放
+        float m_UIScale = 1.0f;
 
-        // 配置文件的保存路径
-        std::string m_PrefsFilePath = "assets/Editor/settings/EditorPreferences.yaml";
+        
     };
 
 }

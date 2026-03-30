@@ -159,6 +159,18 @@ namespace Ayaya {
             m_GameRenderer->SetEnvironmentSettings(0.0f, emptyEnv.AmbientColor);
         }
 
+        // 从偏好设置面板获取实时的后处理参数
+        float currentExposure = m_PreferencesPanel.Exposure;
+        int currentToneMapping = m_PreferencesPanel.ToneMappingType;
+
+        // 同步给 Scene(编辑器) 渲染器
+        m_SceneRenderer->SetExposure(currentExposure);
+        m_SceneRenderer->SetToneMappingType(currentToneMapping);
+
+        // 同步给 Game(游戏) 渲染器
+        m_GameRenderer->SetExposure(currentExposure);
+        m_GameRenderer->SetToneMappingType(currentToneMapping);
+
         // ==========================================
         // 5. 渲染管线
         // ==========================================
@@ -802,18 +814,20 @@ namespace Ayaya {
 
             // 获取我们刚刚写好的内存数据和渲染统计数据
             float memoryMB = GetPhysicalMemoryUsageMB();
-            
+            float uiScale = io.FontGlobalScale;
+            float alignOffset = 100.0f * uiScale;
+
             // --- 显卡信息大类 ---
             ImGui::PushFont(boldFont);
             ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Graphics");
             ImGui::PopFont();
             ImGui::Separator();
             ImGui::Text("%.1f FPS (%.1f ms)", io.Framerate, 1000.0f / io.Framerate);
-            ImGui::Text("CPU Time:"); ImGui::SameLine(100);
+            ImGui::Text("CPU Time:"); ImGui::SameLine(alignOffset);
             ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%8.2f ms", m_GameStats.CPUTime);
-            ImGui::Text("GPU Time:"); ImGui::SameLine(100);
+            ImGui::Text("GPU Time:"); ImGui::SameLine(alignOffset);
             ImGui::TextColored(ImVec4(0.9f, 0.4f, 0.2f, 1.0f), "%8.2f ms", m_GameStats.GPUTime);
-            ImGui::Text("RAM Usage:"); ImGui::SameLine(100);
+            ImGui::Text("RAM Usage:"); ImGui::SameLine(alignOffset);
             ImGui::TextColored(ImVec4(0.2f, 0.7f, 0.9f, 1.0f), "%8.1f MB", memoryMB);
             ImGui::Text("Screen Size: %dx%d", (int)m_GameViewportSize.x, (int)m_GameViewportSize.y);
             ImGui::Spacing();
@@ -833,7 +847,7 @@ namespace Ayaya {
             ImGui::Separator();
             
             ImGui::Text("Triangle Count: %d", m_GameStats.TriangleCount); 
-            ImGui::SameLine(0.0f, 15.0f); 
+            ImGui::SameLine(0.0f, 15.0f * uiScale); 
             ImGui::Text("Vertex Count: %d", m_GameStats.VertexCount);
 
             if (m_ActiveScene) {

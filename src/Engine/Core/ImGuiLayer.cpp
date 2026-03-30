@@ -115,6 +115,7 @@ namespace Ayaya {
         // 加载粗体作为辅助字体
         ImFontConfig boldConfig;
         io.Fonts->AddFontFromFileTTF("assets/Editor/fonts/Roboto-Bold.ttf", 18.0f, &boldConfig);
+        io.Fonts->AddFontFromFileTTF("assets/Editor/fonts/fa-solid-900.ttf", 14.0f, &icons_config, icons_ranges);
 
         // =========================================================
         // 2. 几何样式配置 (现代化圆角与间距)
