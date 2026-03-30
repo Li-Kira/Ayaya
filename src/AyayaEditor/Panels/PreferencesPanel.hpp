@@ -17,6 +17,11 @@ namespace Ayaya {
 
         int ToneMappingType = 0; 
         float Exposure = 1.0f;
+        bool EnableBloom = false;
+        float BloomThreshold = 1.0f;
+        float BloomIntensity = 1.0f;
+
+        bool EnableFXAA = false;
     private:
         // 新增：保存和读取配置的私有方法
         void SavePreferences();
@@ -31,9 +36,7 @@ namespace Ayaya {
         int m_WindowHeight = 720;
         float m_UIScale = 1.0f;
 
-        bool EnableBloom = true;
-        float BloomThreshold = 1.0f;
-        float BloomIntensity = 1.0f;
+        
     };
 
 }

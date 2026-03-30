@@ -171,6 +171,11 @@ namespace Ayaya {
         m_GameRenderer->SetExposure(currentExposure);
         m_GameRenderer->SetToneMappingType(currentToneMapping);
 
+        m_SceneRenderer->SetBloomSettings(m_PreferencesPanel.EnableBloom, m_PreferencesPanel.BloomThreshold, m_PreferencesPanel.BloomIntensity);
+        m_GameRenderer->SetBloomSettings(m_PreferencesPanel.EnableBloom, m_PreferencesPanel.BloomThreshold, m_PreferencesPanel.BloomIntensity);
+        m_SceneRenderer->SetFXAAEnabled(m_PreferencesPanel.EnableFXAA);
+        m_GameRenderer->SetFXAAEnabled(m_PreferencesPanel.EnableFXAA);
+        
         // ==========================================
         // 5. 渲染管线
         // ==========================================

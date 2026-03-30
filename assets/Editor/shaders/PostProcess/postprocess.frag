@@ -10,6 +10,10 @@ uniform vec2 u_TexelSize;
 // 【新增】：色调映射算法选择器 (0 = Reinhard/Exposure, 1 = ACES)
 uniform int u_ToneMappingType = 1; 
 
+uniform sampler2D u_BloomTexture;
+uniform bool u_EnableBloom;
+uniform float u_BloomIntensity;
+
 // ACES 电影级色调映射曲线
 vec3 ACESFilm(vec3 x) {
     float a = 2.51f; float b = 0.03f; float c = 2.43f; float d = 0.59f; float e = 0.14f;
@@ -19,9 +23,15 @@ vec3 ACESFilm(vec3 x) {
 void main() {
     // 读取带有 Alpha 的完整数据 (G-Buffer 传过来的 HDR 颜色)
     vec4 hdrData = texture(u_ScreenTexture, v_TexCoord);
-    
+    vec3 hdrColor = hdrData.rgb;
+
+    if (u_EnableBloom) {
+        vec3 bloomColor = texture(u_BloomTexture, v_TexCoord).rgb;
+        hdrColor += bloomColor * u_BloomIntensity; // 加法混合
+    }
+
     // 1. 物理曝光缩放
-    vec3 hdrColor = hdrData.rgb * u_Exposure;
+    hdrColor *= u_Exposure;
     
     vec3 mapped = vec3(0.0);
     

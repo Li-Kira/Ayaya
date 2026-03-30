@@ -35,6 +35,7 @@ namespace Ayaya {
         }
         void SetExposure(float exposure) { m_Exposure = exposure; }
         void SetToneMappingType(int type) { m_ToneMappingType = type; }
+        void SetFXAAEnabled(bool enable) { m_EnableFXAA = enable; }
 
         struct Statistics {
             uint32_t DrawCalls = 0;
@@ -53,9 +54,11 @@ namespace Ayaya {
         float m_Exposure = 1.0f;
         int m_ToneMappingType = 1; // 默认使用更高级的 1: ACES
 
-        bool m_EnableBloom = true;
+        bool m_EnableBloom = false;
         float m_BloomThreshold = 1.0f; // 亮度超过 1.0 (纯白) 就泛光
         float m_BloomIntensity = 1.0f;
+
+        bool m_EnableFXAA = false;
     };
 
 }

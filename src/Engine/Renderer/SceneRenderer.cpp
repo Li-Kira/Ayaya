@@ -125,6 +125,9 @@ namespace Ayaya {
         std::shared_ptr<Shader> BloomExtractShader;
         std::shared_ptr<Shader> BloomBlurShader;
 
+        std::shared_ptr<Framebuffer> FXAAFBO;        
+        std::shared_ptr<Shader> FXAAShader;
+
         // ==========================================
         // 新增：全局渲染队列
         // ==========================================
@@ -255,8 +258,8 @@ namespace Ayaya {
 
         // 7.5 Bloom
         // 加载 Shader
-        m_Data->BloomExtractShader = Shader::Create("assets/Editor/shaders/PostProcess/bloom.vert", "assets/Editor/shaders/PostProcess/bloom_extract.frag");
-        m_Data->BloomBlurShader = Shader::Create("assets/Editor/shaders/PostProcess/bloom.vert", "assets/Editor/shaders/PostProcess/bloom_blur.frag");
+        m_Data->BloomExtractShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/bloom_extract.frag");
+        m_Data->BloomBlurShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/bloom_blur.frag");
         
         // 创建 Bloom FBO (为了性能和更大的光晕，通常设为屏幕分辨率的 1/2)
         FramebufferSpecification bloomSpec;
@@ -265,6 +268,10 @@ namespace Ayaya {
         bloomSpec.Attachments = { FramebufferTextureFormat::RGBA16F, FramebufferTextureFormat::Depth }; // 必须是 16F 兜住 HDR
         m_Data->BloomFBO[0] = Framebuffer::Create(bloomSpec);
         m_Data->BloomFBO[1] = Framebuffer::Create(bloomSpec);
+
+        // 7.6 FXAA
+        m_Data->FXAAFBO = Framebuffer::Create(postSpec); // 直接复用 PostProcess 的规格 (LDR, 8位颜色即可)
+        m_Data->FXAAShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/fxaa.frag");
 
         // ==========================================
         // 8. 初始化高精度阴影贴图 (2K 分辨率)
@@ -376,6 +383,7 @@ namespace Ayaya {
         // Bloom 降低一半分辨率
         m_Data->BloomFBO[0]->Resize(width / 2, height / 2);
         m_Data->BloomFBO[1]->Resize(width / 2, height / 2);
+        m_Data->FXAAFBO->Resize(width, height); // 【新增】
     }
 
     void SceneRenderer::SetMSAASamples(uint32_t samples) {
@@ -387,6 +395,10 @@ namespace Ayaya {
     }
 
     uint32_t SceneRenderer::GetFinalColorAttachmentRendererID() {
+        // 如果开启了 FXAA，视口就去拿 FXAAFBO；否则拿旧的 PostProcessFBO
+        if (m_EnableFXAA) {
+            return m_Data->FXAAFBO->GetColorAttachmentRendererID();
+        }
         return m_Data->PostProcessFBO->GetColorAttachmentRendererID();
     }
 
@@ -939,7 +951,6 @@ namespace Ayaya {
         }
         glEnable(GL_DEPTH_TEST);
         m_Data->SelectionFBO->Unbind();
-
         m_Data->LightingFBO->Unbind();
 
         // ------------------------------------------
@@ -957,6 +968,8 @@ namespace Ayaya {
             m_Data->BloomExtractShader->SetInt("u_ScreenTexture", 0);
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, m_Data->LightingFBO->GetColorAttachmentRendererID(0));
+            
+            // 传入 UI 设置的阈值，并且附带物理相机的曝光系数进行校准
             m_Data->BloomExtractShader->SetFloat("u_Threshold", m_BloomThreshold);
             m_Data->BloomExtractShader->SetFloat("u_Exposure", physicalExposure * m_Exposure);
             
@@ -994,31 +1007,81 @@ namespace Ayaya {
         glDisable(GL_DEPTH_TEST); 
         m_Data->PostProcessShader->Bind();
         m_Data->PostProcessShader->SetInt("u_ScreenTexture", 0);
+
+        // ==========================================
+        // ToneMapping
+        // ==========================================
         float finalExposure = physicalExposure * m_Exposure;
         m_Data->PostProcessShader->SetFloat("u_Exposure", finalExposure);
         m_Data->PostProcessShader->SetInt("u_ToneMappingType", m_ToneMappingType);
         m_Data->PostProcessShader->SetInt("u_SelectionTexture", 1);
 
-        glm::vec2 texelSize = {
-            1.0f / (float)m_Data->PostProcessFBO->GetSpecification().Width,
-            1.0f / (float)m_Data->PostProcessFBO->GetSpecification().Height
-        };
-        // AYAYA_CORE_ERROR("Width: {0}, Height: {1}", m_Data->PostProcessFBO->GetSpecification().Width, m_Data->PostProcessFBO->GetSpecification().Height);
-        m_Data->PostProcessShader->SetFloat2("u_TexelSize", texelSize);
+        // ==========================================
+        // Bloom
+        // ==========================================
+        m_Data->PostProcessShader->SetBool("u_EnableBloom", bloomActive);
+        if (bloomActive) {
+            m_Data->PostProcessShader->SetFloat("u_BloomIntensity", m_BloomIntensity);
+            m_Data->PostProcessShader->SetInt("u_BloomTexture", 2); // 让 Bloom 贴图占用 2 号槽位
+        }
 
         // 绑定 0 号槽位：Lighting FBO 的 HDR 输出
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_Data->LightingFBO->GetColorAttachmentRendererID(0));
 
-        // 【新增】绑定 1 号槽位：刚刚画好的剪影图
+        // 绑定 1 号槽位：刚刚画好的剪影图
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, m_Data->SelectionFBO->GetColorAttachmentRendererID(0));
+
+        // ==========================================
+        // 绑定 2 号槽位：把刚才乒乓模糊好的泛光图塞进去！
+        // ==========================================
+        if (bloomActive) {
+            glActiveTexture(GL_TEXTURE2);
+            // 因为 amount 是偶数 (10)，所以结果一定回到了 BloomFBO[0]
+            glBindTexture(GL_TEXTURE_2D, m_Data->BloomFBO[0]->GetColorAttachmentRendererID(0));
+        }
 
         glBindVertexArray(m_Data->EmptyVAO);
         glDrawArrays(GL_TRIANGLES, 0, 3);
         
         m_Data->PostProcessFBO->Unbind();
 
+        // ==========================================
+        // 【新增】Pass 7: FXAA 抗锯齿 (管线的终极护城河)
+        // ==========================================
+        if (m_EnableFXAA) {
+            m_Data->FXAAFBO->Bind();
+            RenderCommand::SetClearColor({ 0.0f, 0.0f, 0.0f, 1.0f });
+            RenderCommand::Clear();
+            glDisable(GL_DEPTH_TEST);
+
+            m_Data->FXAAShader->Bind();
+            m_Data->FXAAShader->SetInt("u_ScreenTexture", 0);
+            
+            // ==========================================
+            // 【修正】：严格从 FXAAFBO 获取自身的像素尺寸，防止未来的缩放 Bug
+            // ==========================================
+            glm::vec2 fxaaTexelSize = {
+                1.0f / (float)m_Data->FXAAFBO->GetSpecification().Width,
+                1.0f / (float)m_Data->FXAAFBO->GetSpecification().Height
+            };
+            m_Data->FXAAShader->SetFloat2("u_TexelSize", fxaaTexelSize); 
+            // AYAYA_CORE_ERROR("Width: {0}, Height: {1}", m_Data->FXAAFBO->GetSpecification().Width, m_Data->FXAAFBO->GetSpecification().Height);
+
+            // 将刚才画好的、带有色调映射和 Bloom 的 PostProcessFBO 作为输入图喂给 FXAA！
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, m_Data->PostProcessFBO->GetColorAttachmentRendererID(0));
+
+            glBindVertexArray(m_Data->EmptyVAO);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+            
+            m_Data->FXAAFBO->Unbind();
+
+            m_Data->Stats.DrawCalls++;
+            m_Data->Stats.VertexCount += 3;
+            m_Data->Stats.TriangleCount += 1;
+        }
 
         // ==========================================
         // 统计CPU和GPU时间
