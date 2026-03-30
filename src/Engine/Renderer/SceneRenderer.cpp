@@ -116,9 +116,14 @@ namespace Ayaya {
         std::shared_ptr<Framebuffer> LightingFBO;    // 装载光照合成结果 (HDR)
         std::shared_ptr<Framebuffer> PostProcessFBO; // 装载最终 LDR 画布
         std::shared_ptr<Framebuffer> SelectionFBO;   // 选中物体的剪影
-        
+        std::shared_ptr<Framebuffer> BloomFBO[2];    
+    
         std::shared_ptr<Shader> PostProcessShader;   // 后期 Shader
         uint32_t EmptyVAO;                           // 用于全屏绘制的空 VAO
+
+        // 【新增】：Bloom 专属着色器
+        std::shared_ptr<Shader> BloomExtractShader;
+        std::shared_ptr<Shader> BloomBlurShader;
 
         // ==========================================
         // 新增：全局渲染队列
@@ -248,6 +253,19 @@ namespace Ayaya {
         selSpec.Attachments = { FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::Depth };
         m_Data->SelectionFBO = Framebuffer::Create(selSpec);
 
+        // 7.5 Bloom
+        // 加载 Shader
+        m_Data->BloomExtractShader = Shader::Create("assets/Editor/shaders/PostProcess/bloom.vert", "assets/Editor/shaders/PostProcess/bloom_extract.frag");
+        m_Data->BloomBlurShader = Shader::Create("assets/Editor/shaders/PostProcess/bloom.vert", "assets/Editor/shaders/PostProcess/bloom_blur.frag");
+        
+        // 创建 Bloom FBO (为了性能和更大的光晕，通常设为屏幕分辨率的 1/2)
+        FramebufferSpecification bloomSpec;
+        bloomSpec.Samples = 1; 
+        bloomSpec.Width = 1280 / 2; bloomSpec.Height = 720 / 2;
+        bloomSpec.Attachments = { FramebufferTextureFormat::RGBA16F, FramebufferTextureFormat::Depth }; // 必须是 16F 兜住 HDR
+        m_Data->BloomFBO[0] = Framebuffer::Create(bloomSpec);
+        m_Data->BloomFBO[1] = Framebuffer::Create(bloomSpec);
+
         // ==========================================
         // 8. 初始化高精度阴影贴图 (2K 分辨率)
         // ==========================================
@@ -354,6 +372,10 @@ namespace Ayaya {
         m_Data->LightingFBO->Resize(width, height);
         m_Data->PostProcessFBO->Resize(width, height);
         m_Data->SelectionFBO->Resize(width, height);
+
+        // Bloom 降低一半分辨率
+        m_Data->BloomFBO[0]->Resize(width / 2, height / 2);
+        m_Data->BloomFBO[1]->Resize(width / 2, height / 2);
     }
 
     void SceneRenderer::SetMSAASamples(uint32_t samples) {
@@ -717,8 +739,10 @@ namespace Ayaya {
         // ==========================================
         // Pass 5: Forward Pass (天空盒、网格、描边)
         // ==========================================
-        // AYAYA_CORE_ERROR("showSkybox: {0}", showSkybox);
         
+        // ------------------------------------------
+        // Pass 5.1: 天空盒
+        // ------------------------------------------
         if (showSkybox && m_Data->EnvironmentCubemap) {
             glDepthFunc(GL_LEQUAL);  
             m_Data->SkyboxShader->Bind();
@@ -753,6 +777,9 @@ namespace Ayaya {
             m_Data->Stats.VertexCount += 36; 
         }
 
+        // ------------------------------------------
+        // Pass 5.2: 网格
+        // ------------------------------------------
         if (showGrid) {
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -771,9 +798,9 @@ namespace Ayaya {
             glDisable(GL_BLEND); 
         }
 
-        // ==========================================
-        // 【新增】：渲染 2D Sprites (支持透明度与画家算法排序)
-        // ==========================================
+        // ------------------------------------------
+        // Pass 5.3:【新增】：渲染 2D Sprites (支持透明度与画家算法排序)
+        // ------------------------------------------
         {
             // 开启混合模式，处理 PNG 的透明度 (Alpha Blending)
             glEnable(GL_BLEND);
@@ -853,6 +880,9 @@ namespace Ayaya {
         RenderCommand::SetClearColor({ 0.0f, 0.0f, 0.0f, 0.0f });
         RenderCommand::Clear();
 
+        // ------------------------------------------
+        // Pass 5.4:鼠标拾取物体描边，包括Mesh 和 Sprite
+        // ------------------------------------------
         if (hoveredEntity && hoveredEntity.IsActiveInHierarchy()) {
             
             // 关闭深度测试，实现穿透墙壁的 X-Ray 选择效果！
@@ -912,8 +942,47 @@ namespace Ayaya {
 
         m_Data->LightingFBO->Unbind();
 
+        // ------------------------------------------
+        // 【新增】Pass 5.5: Bloom 泛光系统
+        // ------------------------------------------
+        bool bloomActive = m_EnableBloom;
+        if (bloomActive) {
+            // 阶段 1：高光提取 (提取 LightingFBO 的内容到 BloomFBO[0])
+            m_Data->BloomFBO[0]->Bind();
+            RenderCommand::SetClearColor({ 0.0f, 0.0f, 0.0f, 1.0f });
+            RenderCommand::Clear();
+            glDisable(GL_DEPTH_TEST);
+            
+            m_Data->BloomExtractShader->Bind();
+            m_Data->BloomExtractShader->SetInt("u_ScreenTexture", 0);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, m_Data->LightingFBO->GetColorAttachmentRendererID(0));
+            m_Data->BloomExtractShader->SetFloat("u_Threshold", m_BloomThreshold);
+            m_Data->BloomExtractShader->SetFloat("u_Exposure", physicalExposure * m_Exposure);
+            
+            glBindVertexArray(m_Data->EmptyVAO);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+            
+            // 阶段 2：乒乓高斯模糊 (Ping-Pong Blur)
+            bool horizontal = true, first_iteration = true;
+            int amount = 10; // 模糊次数，数值越大光晕越扩散 (必须是偶数)
+            m_Data->BloomBlurShader->Bind();
+            m_Data->BloomBlurShader->SetInt("u_Image", 0);
+            
+            for (int i = 0; i < amount; i++) {
+                m_Data->BloomFBO[horizontal]->Bind();
+                m_Data->BloomBlurShader->SetBool("u_Horizontal", horizontal);
+                
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, first_iteration ? m_Data->BloomFBO[0]->GetColorAttachmentRendererID(0) : m_Data->BloomFBO[!horizontal]->GetColorAttachmentRendererID(0));
+                
+                glDrawArrays(GL_TRIANGLES, 0, 3);
+                horizontal = !horizontal;
+                if (first_iteration) first_iteration = false;
+            }
+            m_Data->BloomFBO[0]->Unbind();
+        }
         
-
         // ==========================================
         // Pass 6: Post-Processing Pass
         // ==========================================

@@ -31,7 +31,9 @@ namespace Ayaya {
         int m_WindowHeight = 720;
         float m_UIScale = 1.0f;
 
-        
+        bool EnableBloom = true;
+        float BloomThreshold = 1.0f;
+        float BloomIntensity = 1.0f;
     };
 
 }

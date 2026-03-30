@@ -138,6 +138,15 @@ namespace Ayaya {
                 ImGui::TextWrapped("ACES provides a cinematic color curve that handles ultra-bright highlights better than standard Reinhard.");
                 ImGui::PopStyleColor();
 
+                ImGui::TextDisabled("Bloom (Optical Flare)");
+                ImGui::Separator(); 
+                ImGui::Checkbox("Enable Bloom", &EnableBloom);
+                if (EnableBloom) {
+                    ImGui::DragFloat("Threshold", &BloomThreshold, 0.05f, 0.0f, 10.0f, "%.2f");
+                    ImGui::DragFloat("Intensity", &BloomIntensity, 0.05f, 0.0f, 5.0f, "%.2f");
+                }
+                ImGui::Spacing();
+                
                 ImGui::EndTabItem();
             }
 
