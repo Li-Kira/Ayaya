@@ -1,4 +1,11 @@
 #include "ayapch.h"
+
+// 1. 核心系统 (必须最先包含，确保 entt::entity 等底层类型被提前识别)
+#include "Engine/Scene/Scene.hpp"
+#include "Engine/Scene/Entity.hpp"
+#include "Engine/Scene/Components.hpp"
+
+// 2. 渲染管线与引擎基础设施
 #include "Renderer/SceneRenderer.hpp"
 #include "Renderer/Renderer.hpp"
 #include "Renderer/RenderCommand.hpp"
@@ -9,10 +16,10 @@
 #include "Renderer/UniformBuffer.hpp"
 #include "Renderer/Frustum.hpp"
 #include "Renderer/IBLBuilder.hpp"
+#include "Renderer/Passes/FXAAPass.hpp"
 #include "Asset/AssetManager.hpp"
-#include "Engine/Scene/Components.hpp"
 
-
+// 3. 第三方库
 #include <glad/glad.h>
 #include <glm/gtc/type_ptr.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
@@ -124,9 +131,6 @@ namespace Ayaya {
         // 【新增】：Bloom 专属着色器
         std::shared_ptr<Shader> BloomExtractShader;
         std::shared_ptr<Shader> BloomBlurShader;
-
-        std::shared_ptr<Framebuffer> FXAAFBO;        
-        std::shared_ptr<Shader> FXAAShader;
 
         // ==========================================
         // 新增：全局渲染队列
@@ -269,9 +273,8 @@ namespace Ayaya {
         m_Data->BloomFBO[0] = Framebuffer::Create(bloomSpec);
         m_Data->BloomFBO[1] = Framebuffer::Create(bloomSpec);
 
-        // 7.6 FXAA
-        m_Data->FXAAFBO = Framebuffer::Create(postSpec); // 直接复用 PostProcess 的规格 (LDR, 8位颜色即可)
-        m_Data->FXAAShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/fxaa.frag");
+        m_Pipeline.AddPass(std::make_shared<FXAAPass>());
+        m_Pipeline.Init();
 
         // ==========================================
         // 8. 初始化高精度阴影贴图 (2K 分辨率)
@@ -383,8 +386,10 @@ namespace Ayaya {
         // Bloom 降低一半分辨率
         m_Data->BloomFBO[0]->Resize(width / 2, height / 2);
         m_Data->BloomFBO[1]->Resize(width / 2, height / 2);
-        m_Data->FXAAFBO->Resize(width, height); // 【新增】
+
+        m_Pipeline.OnResize(width, height);
     }
+    
 
     void SceneRenderer::SetMSAASamples(uint32_t samples) {
         // 延迟管线暂不开启硬件 MSAA，我们强制锁死为 1，后期用 FXAA 替代
@@ -395,11 +400,9 @@ namespace Ayaya {
     }
 
     uint32_t SceneRenderer::GetFinalColorAttachmentRendererID() {
-        // 如果开启了 FXAA，视口就去拿 FXAAFBO；否则拿旧的 PostProcessFBO
-        if (m_EnableFXAA) {
-            return m_Data->FXAAFBO->GetColorAttachmentRendererID();
-        }
-        return m_Data->PostProcessFBO->GetColorAttachmentRendererID();
+        // 直接从渲染上下文中获取最后一个 Pass 写回来的结果！
+        // 如果新管线没干活，兜底返回 PostProcessFBO 的结果。
+        return m_RenderContext.Get<uint32_t>("Final_Output", m_Data->PostProcessFBO->GetColorAttachmentRendererID(0));
     }
 
    void SceneRenderer::BeginScene(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, const glm::vec3& cameraPosition) {
@@ -1048,40 +1051,16 @@ namespace Ayaya {
         m_Data->PostProcessFBO->Unbind();
 
         // ==========================================
-        // 【新增】Pass 7: FXAA 抗锯齿 (管线的终极护城河)
+        // 7. 【架构升级】：通过新管线执行后处理 (目前只有 FXAA)
         // ==========================================
-        if (m_EnableFXAA) {
-            m_Data->FXAAFBO->Bind();
-            RenderCommand::SetClearColor({ 0.0f, 0.0f, 0.0f, 1.0f });
-            RenderCommand::Clear();
-            glDisable(GL_DEPTH_TEST);
+        // 1. 填充数据黑板
+        m_RenderContext.ActiveScene = scene;
+        m_RenderContext.Set("EnableFXAA", m_EnableFXAA);
+        // 将旧管线算完的 PostProcessFBO 贴图 ID 挂到黑板上，交接给新管线
+        m_RenderContext.Set("PostProcess_Output", m_Data->PostProcessFBO->GetColorAttachmentRendererID(0));
 
-            m_Data->FXAAShader->Bind();
-            m_Data->FXAAShader->SetInt("u_ScreenTexture", 0);
-            
-            // ==========================================
-            // 【修正】：严格从 FXAAFBO 获取自身的像素尺寸，防止未来的缩放 Bug
-            // ==========================================
-            glm::vec2 fxaaTexelSize = {
-                1.0f / (float)m_Data->FXAAFBO->GetSpecification().Width,
-                1.0f / (float)m_Data->FXAAFBO->GetSpecification().Height
-            };
-            m_Data->FXAAShader->SetFloat2("u_TexelSize", fxaaTexelSize); 
-            // AYAYA_CORE_ERROR("Width: {0}, Height: {1}", m_Data->FXAAFBO->GetSpecification().Width, m_Data->FXAAFBO->GetSpecification().Height);
-
-            // 将刚才画好的、带有色调映射和 Bloom 的 PostProcessFBO 作为输入图喂给 FXAA！
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, m_Data->PostProcessFBO->GetColorAttachmentRendererID(0));
-
-            glBindVertexArray(m_Data->EmptyVAO);
-            glDrawArrays(GL_TRIANGLES, 0, 3);
-            
-            m_Data->FXAAFBO->Unbind();
-
-            m_Data->Stats.DrawCalls++;
-            m_Data->Stats.VertexCount += 3;
-            m_Data->Stats.TriangleCount += 1;
-        }
+        // 2. 一键轰鸣，执行管线里注册的所有 Pass！
+        m_Pipeline.Execute(m_RenderContext);
 
         // ==========================================
         // 统计CPU和GPU时间

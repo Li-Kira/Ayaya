@@ -8,18 +8,14 @@
 #include <filesystem>
 #include <algorithm>
 
-// 【新增】：引入图标库让左侧标签更美观
 #include <IconsFontAwesome5.h> 
 
 namespace Ayaya {
 
     void PreferencesPanel::Init() {
         LoadPreferences();
-
-        // 在初始化时（引擎刚启动），立刻应用保存好的窗口大小和 UI 缩放！
         Application::Get().GetWindow().SetSize(m_WindowWidth, m_WindowHeight);
         ImGui::GetIO().FontGlobalScale = m_UIScale;
-        
         AYAYA_CORE_INFO("Preferences loaded and applied.");
     }
 
@@ -87,48 +83,34 @@ namespace Ayaya {
     void PreferencesPanel::OnImGuiRender() {
         if (!m_IsOpen) return;
 
-        // 设置面板推荐的初始大小
-        ImGui::SetNextWindowSize(ImVec2(750.0f * m_UIScale, 550.0f * m_UIScale), ImGuiCond_FirstUseEver);
+        // ==========================================
+        // 【核心修复】：抽取当前真实生效的缩放系数，用于所有的排版计算！
+        // ==========================================
+        float currentScale = ImGui::GetIO().FontGlobalScale;
+
+        ImGui::SetNextWindowSize(ImVec2(750.0f * currentScale, 550.0f * currentScale), ImGuiCond_FirstUseEver);
         ImGui::Begin("Preferences", &m_IsOpen);
 
-        // ==========================================
-        // 动态尺寸计算 (完美兼容任何分辨率和缩放)
-        // ==========================================
-        float buttonHeight = 30.0f * m_UIScale;
-        // 底部保留空间：按钮高度 + 分割线 + 上下边距
-        float bottomReserved = buttonHeight + 25.0f * m_UIScale; 
-        // 左侧导航栏宽度
-        float leftPaneWidth = 180.0f * m_UIScale;
+        float buttonHeight = 30.0f * currentScale;
+        float bottomReserved = buttonHeight + 25.0f * currentScale; 
+        float leftPaneWidth = 180.0f * currentScale;
 
-        // 记录当前选中的标签页 (0 = Window & UI, 1 = Rendering)
         static int s_ActiveTab = 0;
 
-        // ==========================================
-        // 1. 左侧导航面板 (Left Pane)
-        // ==========================================
-        // true 代表带有一圈轻微的内边框，更像一个独立的列表框
         ImGui::BeginChild("LeftPane", ImVec2(leftPaneWidth, -bottomReserved), true);
-        
-        // 美化标签项：文本垂直居中，增加上下间距
         ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 8.0f));
 
-        if (ImGui::Selectable("  " ICON_FA_DESKTOP "   Window & UI", s_ActiveTab == 0, 0, ImVec2(0, 32.0f * m_UIScale))) s_ActiveTab = 0;
-        if (ImGui::Selectable("  " ICON_FA_PALETTE "   Rendering", s_ActiveTab == 1, 0, ImVec2(0, 32.0f * m_UIScale))) s_ActiveTab = 1;
+        if (ImGui::Selectable("  " ICON_FA_DESKTOP "   Window & UI", s_ActiveTab == 0, 0, ImVec2(0, 32.0f * currentScale))) s_ActiveTab = 0;
+        if (ImGui::Selectable("  " ICON_FA_PALETTE "   Rendering", s_ActiveTab == 1, 0, ImVec2(0, 32.0f * currentScale))) s_ActiveTab = 1;
         
         ImGui::PopStyleVar(2);
         ImGui::EndChild();
 
-        // 极度关键：让右侧面板和左侧面板在同一行！
         ImGui::SameLine();
 
-        // ==========================================
-        // 2. 右侧内容面板 (Right Pane)
-        // ==========================================
         ImGui::BeginChild("RightPane", ImVec2(0, -bottomReserved), true);
-        
-        // 为了右侧内容不显得拥挤，给它加一点内边距推移
-        ImGui::Indent(8.0f * m_UIScale);
+        ImGui::Indent(8.0f * currentScale);
         ImGui::Spacing();
 
         if (s_ActiveTab == 0) {
@@ -139,7 +121,10 @@ namespace Ayaya {
             ImGui::Spacing();
 
             if (ImGui::TreeNodeEx("Appearance", ImGuiTreeNodeFlags_DefaultOpen)) {
-                if (ImGui::SliderFloat("UI Scale", &m_UIScale, 0.5f, 3.0f, "%.1fx")) {
+                // 滑杆修改的是 m_UIScale，不影响这帧的排版 currentScale
+                ImGui::SliderFloat("UI Scale", &m_UIScale, 0.5f, 3.0f, "%.1fx");
+                
+                if (ImGui::IsItemDeactivatedAfterEdit()) {
                     ImGui::GetIO().FontGlobalScale = m_UIScale;
                 }
                 ImGui::SameLine();
@@ -155,14 +140,38 @@ namespace Ayaya {
             ImGui::Spacing();
 
             if (ImGui::TreeNodeEx("Window", ImGuiTreeNodeFlags_DefaultOpen)) {
+                // ==========================================
+                // 【新增】：常用的分辨率预设下拉框
+                // ==========================================
+                const char* resOptions[] = { 
+                    "1280 x 720 (HD 720p)", 
+                    "1600 x 900 (HD+)",
+                    "1920 x 1080 (FHD 1080p)", 
+                    "2560 x 1440 (QHD 2K)", 
+                    "3840 x 2160 (UHD 4K)" 
+                };
+                
+                static int currentResIndex = -1; // -1 代表用户自定义分辨率
+                
+                if (ImGui::Combo("Presets", &currentResIndex, resOptions, IM_ARRAYSIZE(resOptions))) {
+                    switch (currentResIndex) {
+                        case 0: m_WindowWidth = 1280; m_WindowHeight = 720; break;
+                        case 1: m_WindowWidth = 1600; m_WindowHeight = 900; break;
+                        case 2: m_WindowWidth = 1920; m_WindowHeight = 1080; break;
+                        case 3: m_WindowWidth = 2560; m_WindowHeight = 1440; break;
+                        case 4: m_WindowWidth = 3840; m_WindowHeight = 2160; break;
+                    }
+                }
+
                 int size[2] = { m_WindowWidth, m_WindowHeight };
                 if (ImGui::InputInt2("Resolution", size)) {
                     m_WindowWidth = std::max(800, size[0]);
                     m_WindowHeight = std::max(600, size[1]);
+                    currentResIndex = -1; // 手动修改时重置 Preset 下拉框状态
                 }
 
                 ImGui::Spacing();
-                if (ImGui::Button("Apply Window Size", ImVec2(150.0f * m_UIScale, 0))) {
+                if (ImGui::Button("Apply Window Size", ImVec2(150.0f * currentScale, 0))) {
                     Application::Get().GetWindow().SetSize(m_WindowWidth, m_WindowHeight);
                     AYAYA_CORE_INFO("Changed window size to {0}x{1}", m_WindowWidth, m_WindowHeight);
                 }
@@ -197,10 +206,10 @@ namespace Ayaya {
             
             ImGui::Checkbox("Enable Bloom", &EnableBloom);
             if (EnableBloom) {
-                ImGui::Indent(10.0f * m_UIScale);
+                ImGui::Indent(10.0f * currentScale);
                 ImGui::DragFloat("Threshold", &BloomThreshold, 0.05f, 0.0f, 10.0f, "%.2f");
                 ImGui::DragFloat("Intensity", &BloomIntensity, 0.05f, 0.0f, 5.0f, "%.2f");
-                ImGui::Unindent(10.0f * m_UIScale);
+                ImGui::Unindent(10.0f * currentScale);
             }
 
             ImGui::Spacing();
@@ -216,21 +225,17 @@ namespace Ayaya {
             ImGui::Spacing();
         }
 
-        ImGui::Unindent(8.0f * m_UIScale);
+        ImGui::Unindent(8.0f * currentScale);
         ImGui::EndChild();
 
-        // ==========================================
-        // 3. 底部操作栏 (Bottom Bar)
-        // ==========================================
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
         
-        // 右对齐保存按钮的魔法
-        float btnWidth = 200.0f * m_UIScale;
+        float btnWidth = 200.0f * currentScale;
         ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - btnWidth);
         
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.17f, 0.45f, 0.85f, 1.0f)); // 引擎主色调的保存按钮
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.17f, 0.45f, 0.85f, 1.0f)); 
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.50f, 0.90f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.12f, 0.40f, 0.80f, 1.0f));
         
@@ -238,13 +243,10 @@ namespace Ayaya {
             m_WindowWidth = (int)ImGui::GetMainViewport()->Size.x;
             m_WindowHeight = (int)ImGui::GetMainViewport()->Size.y;
             m_UIScale = ImGui::GetIO().FontGlobalScale;
-            
             SavePreferences();
         }
         
         ImGui::PopStyleColor(3);
-
         ImGui::End();
     }
-
 }

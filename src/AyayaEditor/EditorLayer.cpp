@@ -175,7 +175,7 @@ namespace Ayaya {
         m_GameRenderer->SetBloomSettings(m_PreferencesPanel.EnableBloom, m_PreferencesPanel.BloomThreshold, m_PreferencesPanel.BloomIntensity);
         m_SceneRenderer->SetFXAAEnabled(m_PreferencesPanel.EnableFXAA);
         m_GameRenderer->SetFXAAEnabled(m_PreferencesPanel.EnableFXAA);
-        
+
         // ==========================================
         // 5. 渲染管线
         // ==========================================
@@ -350,7 +350,6 @@ namespace Ayaya {
         // 创造天空盒/环境光
         Entity skyEntity = m_ActiveScene->CreateEntity("Skybox");
         auto& envComp = skyEntity.AddComponent<EnvironmentComponent>();
-        
         envComp.Type = EnvironmentType::HDR_Equirectangular;
         envComp.EquirectangularPath = "assets/textures/skybox/hdr/newport_loft.hdr";
         envComp.EquirectangularTexture = Texture2D::Create(envComp.EquirectangularPath);

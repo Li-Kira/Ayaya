@@ -5,6 +5,8 @@
 #include <string>
 #include <vector> // --- 新增：为了存储子节点列表 ---
 
+#include <entt/entt.hpp>
+
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 

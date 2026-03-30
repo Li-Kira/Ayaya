@@ -3,6 +3,7 @@
 #include "Engine/Scene/Scene.hpp"
 #include "Engine/Scene/Entity.hpp"
 #include "Renderer/Framebuffer.hpp"
+#include "Renderer/RenderPipeline.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 
@@ -51,13 +52,14 @@ namespace Ayaya {
         // 每个 Renderer 实例独有的数据指针！
         std::unique_ptr<SceneRendererData> m_Data;
 
+        RenderPipeline m_Pipeline; 
+        RenderContext  m_RenderContext; // 持有一份上下文
+
         float m_Exposure = 1.0f;
         int m_ToneMappingType = 1; // 默认使用更高级的 1: ACES
-
         bool m_EnableBloom = false;
         float m_BloomThreshold = 1.0f; // 亮度超过 1.0 (纯白) 就泛光
         float m_BloomIntensity = 1.0f;
-
         bool m_EnableFXAA = false;
     };
 

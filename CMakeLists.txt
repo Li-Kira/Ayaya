@@ -61,6 +61,7 @@ add_subdirectory(${BOX2D_DIR})
 # 我们的 SceneHierarchyPanel 已经被移到了 AyayaEditor/Panels 下，所以不会被编译进核心库里
 file(GLOB CORE_SOURCES "${ENGINE_DIR}/Core/*.cpp")
 file(GLOB RENDERER_SOURCES "${ENGINE_DIR}/Renderer/*.cpp")
+file(GLOB RENDERER_PASSES_SOURCES "${ENGINE_DIR}/Renderer/Passes/*.cpp")
 file(GLOB OPENGL_SOURCES "${ENGINE_DIR}/Platform/OpenGL/*.cpp")
 file(GLOB SCENE_SOURCES "${ENGINE_DIR}/Scene/*.cpp")
 file(GLOB SCRIPTING_SOURCES "${ENGINE_DIR}/Scripting/*.cpp")
@@ -87,6 +88,7 @@ set(IMGUIZMO_SOURCES
 set(AYAYA_SOURCES 
     ${CORE_SOURCES} 
     ${RENDERER_SOURCES} 
+    ${RENDERER_PASSES_SOURCES} 
     ${OPENGL_SOURCES}
     ${SCENE_SOURCES}
     ${SCRIPTING_SOURCES}
