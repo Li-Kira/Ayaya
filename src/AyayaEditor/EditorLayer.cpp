@@ -3,6 +3,7 @@
 #include "Events/MouseEvent.hpp"
 #include "Scripting/ScriptEngine.hpp"
 #include "Engine/Core/EditorCommands.hpp"
+#include "Engine/Core/ImGuiBackend.hpp"
 
 #include <glad/glad.h>
 #include <imgui.h>
@@ -13,12 +14,6 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 #include <IconsFontAwesome5.h> 
-
-// 用于底层控制 ImGui 渲染泵，加载进度条
-#include <backends/imgui_impl_glfw.h>
-#include <backends/imgui_impl_opengl3.h>
-#include <GLFW/glfw3.h>
-#include "Engine/Core/Application.hpp"
 
 namespace Ayaya {
 
@@ -467,36 +462,29 @@ namespace Ayaya {
         // 核心魔法：独立于引擎主循环的“渲染泵”
         // ==========================================
         auto progressCallback = [&](float progress, const std::string& message) {
-            // 1. 手动开启一个全新的 ImGui 帧
-            ImGui_ImplOpenGL3_NewFrame();
-            ImGui_ImplGlfw_NewFrame();
-            ImGui::NewFrame();
+            // 1. 手动开启一个全新的 ImGui 帧 (已封装)
+            ImGuiBackend::BeginFrame();
 
-            // 2. 绘制全屏暗色遮罩与进度条
+            // 2. 绘制全屏暗色遮罩与进度条 (UI 逻辑保留在 EditorLayer)
             ImGuiViewport* viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(viewport->Pos);
             ImGui::SetNextWindowSize(viewport->Size);
             
-            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.08f, 0.085f, 0.09f, 1.0f)); // 深色背景
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.08f, 0.085f, 0.09f, 1.0f)); 
             ImGui::Begin("LoadingScreen", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-            // 让内容完美居中
             ImVec2 windowSize = ImGui::GetWindowSize();
             float barWidth = 600.0f;
             ImGui::SetCursorPos(ImVec2((windowSize.x - barWidth) * 0.5f, windowSize.y * 0.5f - 50.0f));
             
-            // 标题
             ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : ImGui::GetIO().Fonts->Fonts[0]);
             ImGui::TextColored(ImVec4(0.17f, 0.45f, 0.85f, 1.0f), "Loading Scene...");
             ImGui::PopFont();
             
-            // 当前正在加载的数据提示
             ImGui::SetCursorPosX((windowSize.x - barWidth) * 0.5f);
             ImGui::TextDisabled("%s", message.c_str());
 
-            // 进度条本体
             ImGui::SetCursorPosX((windowSize.x - barWidth) * 0.5f);
-            
             ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.17f, 0.45f, 0.85f, 1.0f)); 
             ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.04f, 0.04f, 0.045f, 1.0f));
             ImGui::ProgressBar(progress, ImVec2(barWidth, 24.0f));
@@ -505,27 +493,8 @@ namespace Ayaya {
             ImGui::End();
             ImGui::PopStyleColor();
 
-            // 3. 强制推送到显卡并交换缓冲区！
-            ImGui::Render();
-            glClear(GL_COLOR_BUFFER_BIT); // 清理屏幕残影
-            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-            
-            // ==========================================
-            // 【核心修复】：处理 ImGui 多视口的后台窗口更新！
-            // 如果缺少这段代码，ImGui 会在开启下一帧时直接抛出断言崩溃！
-            // ==========================================
-            ImGuiIO& io = ImGui::GetIO();
-            if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-                GLFWwindow* backup_current_context = glfwGetCurrentContext();
-                ImGui::UpdatePlatformWindows();
-                ImGui::RenderPlatformWindowsDefault();
-                glfwMakeContextCurrent(backup_current_context);
-            }
-            
-            // 4. 交换缓冲区并拉取系统事件
-            GLFWwindow* window = static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow());
-            glfwSwapBuffers(window);
-            glfwPollEvents();
+            // 3. 强制推送渲染、处理多视口并交换缓冲区 (已封装)
+            ImGuiBackend::EndFrameAndSwapBuffers();
         };
 
         // 通知第一帧：正在解析 YAML 文件...
@@ -535,7 +504,7 @@ namespace Ayaya {
         // 开始真正的反序列化，并将回调传进去
         // ==========================================
         if (serializer.Deserialize(filepath, state, progressCallback)) {
-            // ... (下面是你原来 OpenScene() 里的所有逻辑，直接粘贴过来即可) ...
+            // 原 OpenScene()代码
             m_ActiveScene = newScene;
             m_EditorScene = m_ActiveScene;
             
