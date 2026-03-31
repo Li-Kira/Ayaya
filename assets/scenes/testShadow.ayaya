@@ -19,7 +19,7 @@ Entities:
     CameraComponent:
       Primary: true
       FixedAspectRatio: false
-      EV100: 14.5
+      EV100: 14.4
       ClearFlag: 0
       BackgroundColor: [0.016, 0.016, 0.02, 1]
       Camera:

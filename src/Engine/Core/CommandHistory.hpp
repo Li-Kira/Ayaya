@@ -8,16 +8,23 @@ namespace Ayaya {
     public:
         CommandHistory() = default;
 
+        // 【新增】：动态设置最大撤回步数，并自动裁剪超出部分
+        void SetCapacity(size_t capacity) {
+            m_Capacity = std::max((size_t)1, capacity);
+            while (m_Commands.size() > m_Capacity) {
+                m_Commands.erase(m_Commands.begin());
+                m_CommandIndex--;
+            }
+            if (m_CommandIndex < -1) m_CommandIndex = -1;
+        }
+
         void AddCommand(std::shared_ptr<Command> command) {
-            // 执行命令
             command->Execute();
 
-            // 如果我们在撤回了一些操作后，又执行了新操作，必须截断未来的历史！
             if (m_CommandIndex < (int)m_Commands.size() - 1) {
                 m_Commands.erase(m_Commands.begin() + m_CommandIndex + 1, m_Commands.end());
             }
 
-            // 合并连续操作（可选，用于优化拖拽）
             if (!m_Commands.empty() && m_Commands.back()->MergeWith(command.get())) {
                 return; 
             }
@@ -25,8 +32,8 @@ namespace Ayaya {
             m_Commands.push_back(command);
             m_CommandIndex++;
 
-            // 限制最大步数，防止内存爆炸
-            if (m_Commands.size() > 100) {
+            // 【修改】：使用动态设定的容量 m_Capacity，而不是硬编码的 100
+            if (m_Commands.size() > m_Capacity) {
                 m_Commands.erase(m_Commands.begin());
                 m_CommandIndex--;
             }
@@ -60,6 +67,7 @@ namespace Ayaya {
     private:
         std::vector<std::shared_ptr<Command>> m_Commands;
         int m_CommandIndex = -1;
+        size_t m_Capacity = 100; // 【新增】：默认容量 100
     };
 
 }

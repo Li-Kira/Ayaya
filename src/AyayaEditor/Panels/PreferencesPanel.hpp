@@ -22,6 +22,8 @@ namespace Ayaya {
         float BloomIntensity = 1.0f;
 
         bool EnableFXAA = false;
+
+        int MaxUndoSteps = 100;
     private:
         // 新增：保存和读取配置的私有方法
         void SavePreferences();

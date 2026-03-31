@@ -1,6 +1,7 @@
 #include "ayapch.h"
 #include "PreferencesPanel.hpp"
 #include "Engine/Core/Application.hpp"
+#include "../EditorLayer.hpp"
 
 #include <imgui.h>
 #include <yaml-cpp/yaml.h>
@@ -16,6 +17,10 @@ namespace Ayaya {
         LoadPreferences();
         Application::Get().GetWindow().SetSize(m_WindowWidth, m_WindowHeight);
         ImGui::GetIO().FontGlobalScale = m_UIScale;
+        
+        // 【新增】：初始化时同步从 yaml 读到的历史容量！
+        EditorLayer::Get().GetCommandHistory().SetCapacity((size_t)MaxUndoSteps);
+        
         AYAYA_CORE_INFO("Preferences loaded and applied.");
     }
 
@@ -36,6 +41,8 @@ namespace Ayaya {
         out << YAML::Key << "WindowWidth" << YAML::Value << m_WindowWidth;
         out << YAML::Key << "WindowHeight" << YAML::Value << m_WindowHeight;
         out << YAML::Key << "UIScale" << YAML::Value << m_UIScale;
+
+        out << YAML::Key << "MaxUndoSteps" << YAML::Value << MaxUndoSteps;
 
         out << YAML::Key << "ToneMappingType" << YAML::Value << ToneMappingType;
         out << YAML::Key << "Exposure" << YAML::Value << Exposure;
@@ -65,6 +72,8 @@ namespace Ayaya {
                 if (prefs["WindowWidth"]) m_WindowWidth = prefs["WindowWidth"].as<int>();
                 if (prefs["WindowHeight"]) m_WindowHeight = prefs["WindowHeight"].as<int>();
                 if (prefs["UIScale"]) m_UIScale = prefs["UIScale"].as<float>();
+
+                if (prefs["MaxUndoSteps"]) MaxUndoSteps = prefs["MaxUndoSteps"].as<int>();
 
                 if (prefs["ToneMappingType"]) ToneMappingType = prefs["ToneMappingType"].as<int>();
                 if (prefs["Exposure"]) Exposure = prefs["Exposure"].as<float>();
@@ -103,7 +112,8 @@ namespace Ayaya {
 
         if (ImGui::Selectable("  " ICON_FA_DESKTOP "   Window & UI", s_ActiveTab == 0, 0, ImVec2(0, 32.0f * currentScale))) s_ActiveTab = 0;
         if (ImGui::Selectable("  " ICON_FA_PALETTE "   Rendering", s_ActiveTab == 1, 0, ImVec2(0, 32.0f * currentScale))) s_ActiveTab = 1;
-        
+        if (ImGui::Selectable("  " ICON_FA_ROCKET "   Performance", s_ActiveTab == 2, 0, ImVec2(0, 32.0f * currentScale))) s_ActiveTab = 2;
+
         ImGui::PopStyleVar(2);
         ImGui::EndChild();
 
@@ -223,6 +233,30 @@ namespace Ayaya {
             
             ImGui::Checkbox("Enable FXAA (Fast Approximate)", &EnableFXAA);
             ImGui::Spacing();
+        }
+        else if (s_ActiveTab == 2) {
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+            ImGui::Text("Memory & History");
+            ImGui::PopFont();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            if (ImGui::TreeNodeEx("Command History", ImGuiTreeNodeFlags_DefaultOpen)) {
+                
+                if (ImGui::InputInt("Max Undo Steps", &MaxUndoSteps)) {
+                    MaxUndoSteps = std::max(10, MaxUndoSteps); // 强制设置下限，防止用户乱调导致撤回失效
+                    // 实时同步给引擎
+                    EditorLayer::Get().GetCommandHistory().SetCapacity((size_t)MaxUndoSteps);
+                }
+                
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+                ImGui::TextWrapped("Higher values consume more RAM but allow longer undo history.");
+                ImGui::PopStyleColor();
+                
+                ImGui::TreePop();
+            }
+
+            // (预留：未来可以在这里继续添加：纹理显存限制、阴影分辨率预设、物理引擎 Tick Rate 等性能相关选项)
         }
 
         ImGui::Unindent(8.0f * currentScale);

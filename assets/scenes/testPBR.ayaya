@@ -2,11 +2,11 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition: [-2.6121998, 0.89348406, 5.3472104]
+  CameraPosition: [-4.174923, 1.7154443, 4.4294667]
   CameraDistance: 2.7294528
-  CameraPitch: -0.0627425
-  CameraYaw: -0.45227358
-  CameraFocalPoint: [-1.4217441, 0.7223437, 2.8970187]
+  CameraPitch: -0.33259016
+  CameraYaw: -0.6896365
+  CameraFocalPoint: [-2.5334578, 0.82429886, 2.439149]
 Entities:
   - Entity: 9207422813788464392
     TagComponent:
@@ -65,6 +65,8 @@ Entities:
       Scale: [1, 1, 1]
     MeshRendererComponent:
       MaterialPath: assets/materials/testPBR/NewMaterial.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 941355425607113630
   - Entity: 2260445115966781348
@@ -78,6 +80,8 @@ Entities:
     MeshRendererComponent:
       ModelPath: assets/models/backpack.obj
       MaterialPath: assets/materials/testPBR/PBR.mat
+      CastShadows: false
+      ReceiveShadows: false
     RelationshipComponent:
       Parent: 0
   - Entity: 2717292969850671077

@@ -139,69 +139,12 @@ namespace Ayaya {
         glGenQueries(1, &m_Data->GPUTimeQuery);
     }
 
-    void SceneRenderer::SetEnvironment(EnvironmentComponent& envComp) {
-        if (envComp.Type == EnvironmentType::None) {
-            m_Data->EnvironmentCubemap = nullptr;
-            m_Data->IrradianceMap = nullptr;
-            m_Data->PrefilterMap = nullptr;
-            envComp.IsDirty = false;
-            return;
-        }
-
-        uint32_t baseCubemapID = 0;
-
-        if (envComp.Type == EnvironmentType::HDR_Equirectangular || envComp.Type == EnvironmentType::LDR_Equirectangular) {
-            if (!envComp.EquirectangularTexture) return;
-            std::shared_ptr<Shader> convertShader = Shader::Create("assets/Editor/shaders/IBL/equirectangular_to_cubemap.vert", "assets/Editor/shaders/IBL/equirectangular_to_cubemap.frag");
-            baseCubemapID = IBLBuilder::ConvertEquirectangularToCubemap(envComp.EquirectangularTexture, s_SkyboxMesh, convertShader);
-            m_Data->EnvironmentCubemap = std::make_shared<TextureCube>(baseCubemapID, 1024, 1024);
-        }
-        else if (envComp.Type == EnvironmentType::Classic_Cubemap) {
-            if (!envComp.ClassicCubemapTexture) return;
-            baseCubemapID = envComp.ClassicCubemapTexture->GetRendererID();
-            m_Data->EnvironmentCubemap = envComp.ClassicCubemapTexture;
-            glBindTexture(GL_TEXTURE_CUBE_MAP, baseCubemapID);
-            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); 
-            glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
-            glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-        }
-
-        if (baseCubemapID != 0) {
-            std::shared_ptr<Shader> irradianceShader = Shader::Create("assets/Editor/shaders/IBL/cubemap.vert", "assets/Editor/shaders/IBL/irradiance_convolution.frag");
-            uint32_t irrID = IBLBuilder::CreateIrradianceMap(baseCubemapID, s_SkyboxMesh, irradianceShader);
-            m_Data->IrradianceMap = std::make_shared<TextureCube>(irrID, 32, 32);
-
-            std::shared_ptr<Shader> prefilterShader = Shader::Create("assets/Editor/shaders/IBL/cubemap.vert", "assets/Editor/shaders/IBL/prefilter.frag");
-            uint32_t preID = IBLBuilder::CreatePrefilterMap(baseCubemapID, s_SkyboxMesh, prefilterShader);
-            m_Data->PrefilterMap = std::make_shared<TextureCube>(preID, 128, 128);
-            
-            envComp.IsDirty = false; 
-        }
-    }
-
-    void SceneRenderer::SetEnvironmentSettings(float intensity, const glm::vec3& ambientColor) {
-        m_Data->EnvironmentIntensity = intensity;
-        m_Data->EnvironmentAmbientColor = ambientColor;
-    }
-
-    void SceneRenderer::SetClearColor(const glm::vec4& color) {
-        m_Data->ClearColor = color;
-    }
-
     void SceneRenderer::OnWindowResize(uint32_t width, uint32_t height) {
         m_Data->ViewportWidth = width;
         m_Data->ViewportHeight = height;
         m_Pipeline.OnResize(width, height);
     }
     
-    void SceneRenderer::SetMSAASamples(uint32_t samples) {
-        m_RenderContext.Set("MSAASamples", 1u);
-    }
-
-    uint32_t SceneRenderer::GetFinalColorAttachmentRendererID() {
-        return m_RenderContext.Get<uint32_t>("Final_Output", 0);
-    }
-
     void SceneRenderer::BeginScene(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, const glm::vec3& cameraPosition) {
         ResetStats();
 
@@ -353,11 +296,68 @@ namespace Ayaya {
         return 0; 
     }
 
+    uint32_t SceneRenderer::GetFinalColorAttachmentRendererID() {
+        return m_RenderContext.Get<uint32_t>("Final_Output", 0);
+    }
+
     void SceneRenderer::ResetStats() {
         memset(&m_Data->Stats, 0, sizeof(Statistics));
     }
 
     SceneRenderer::Statistics SceneRenderer::GetStats() {
         return m_Data->Stats;
+    }
+
+    void SceneRenderer::SetMSAASamples(uint32_t samples) {
+        m_RenderContext.Set("MSAASamples", 1u);
+    }
+
+    void SceneRenderer::SetEnvironment(EnvironmentComponent& envComp) {
+        if (envComp.Type == EnvironmentType::None) {
+            m_Data->EnvironmentCubemap = nullptr;
+            m_Data->IrradianceMap = nullptr;
+            m_Data->PrefilterMap = nullptr;
+            envComp.IsDirty = false;
+            return;
+        }
+
+        uint32_t baseCubemapID = 0;
+
+        if (envComp.Type == EnvironmentType::HDR_Equirectangular || envComp.Type == EnvironmentType::LDR_Equirectangular) {
+            if (!envComp.EquirectangularTexture) return;
+            std::shared_ptr<Shader> convertShader = Shader::Create("assets/Editor/shaders/IBL/equirectangular_to_cubemap.vert", "assets/Editor/shaders/IBL/equirectangular_to_cubemap.frag");
+            baseCubemapID = IBLBuilder::ConvertEquirectangularToCubemap(envComp.EquirectangularTexture, s_SkyboxMesh, convertShader);
+            m_Data->EnvironmentCubemap = std::make_shared<TextureCube>(baseCubemapID, 1024, 1024);
+        }
+        else if (envComp.Type == EnvironmentType::Classic_Cubemap) {
+            if (!envComp.ClassicCubemapTexture) return;
+            baseCubemapID = envComp.ClassicCubemapTexture->GetRendererID();
+            m_Data->EnvironmentCubemap = envComp.ClassicCubemapTexture;
+            glBindTexture(GL_TEXTURE_CUBE_MAP, baseCubemapID);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); 
+            glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+        }
+
+        if (baseCubemapID != 0) {
+            std::shared_ptr<Shader> irradianceShader = Shader::Create("assets/Editor/shaders/IBL/cubemap.vert", "assets/Editor/shaders/IBL/irradiance_convolution.frag");
+            uint32_t irrID = IBLBuilder::CreateIrradianceMap(baseCubemapID, s_SkyboxMesh, irradianceShader);
+            m_Data->IrradianceMap = std::make_shared<TextureCube>(irrID, 32, 32);
+
+            std::shared_ptr<Shader> prefilterShader = Shader::Create("assets/Editor/shaders/IBL/cubemap.vert", "assets/Editor/shaders/IBL/prefilter.frag");
+            uint32_t preID = IBLBuilder::CreatePrefilterMap(baseCubemapID, s_SkyboxMesh, prefilterShader);
+            m_Data->PrefilterMap = std::make_shared<TextureCube>(preID, 128, 128);
+            
+            envComp.IsDirty = false; 
+        }
+    }
+
+    void SceneRenderer::SetEnvironmentSettings(float intensity, const glm::vec3& ambientColor) {
+        m_Data->EnvironmentIntensity = intensity;
+        m_Data->EnvironmentAmbientColor = ambientColor;
+    }
+
+    void SceneRenderer::SetClearColor(const glm::vec4& color) {
+        m_Data->ClearColor = color;
     }
 }

@@ -866,8 +866,8 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     EnvironmentComponent:
-      Type: 0
-      EquirectangularPath: ""
+      Type: 1
+      EquirectangularPath: assets/textures/skybox/hdr/newport_loft.hdr
       Intensity: 0.1
       AmbientColor: [0, 0, 0]
       CubemapFaces:

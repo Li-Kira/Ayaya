@@ -2,3 +2,10 @@ EditorPreferences:
   WindowWidth: 1512
   WindowHeight: 921
   UIScale: 1
+  MaxUndoSteps: 100
+  ToneMappingType: 0
+  Exposure: 1
+  EnableBloom: false
+  BloomThreshold: 1
+  BloomIntensity: 1
+  EnableFXAA: false

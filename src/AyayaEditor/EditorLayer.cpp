@@ -456,6 +456,10 @@ namespace Ayaya {
         m_CurrentScenePath = std::string(); 
         m_HoveredEntity = {};
         m_SceneHierarchyPanel.SetSelectedEntity({});
+
+        // 【核心修复】：新建场景时，彻底清空撤销历史！
+        m_CommandHistory.Clear();
+
         AYAYA_CORE_INFO("Created a new empty scene with default camera.");
     }
 
@@ -542,6 +546,10 @@ namespace Ayaya {
             m_CurrentScenePath = filepath;
             m_HoveredEntity = {};
             m_SceneHierarchyPanel.SetSelectedEntity({});
+
+            // 【核心修复】：加载新场景成功时，彻底清空上一个场景残留的撤销历史！
+            m_CommandHistory.Clear();
+            
             AYAYA_CORE_INFO("Scene loaded successfully from {0}!", filepath);
         }
     }
