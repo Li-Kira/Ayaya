@@ -69,8 +69,10 @@ namespace Ayaya {
         glBindTexture(GL_TEXTURE_2D, inputTextureID);
 
         glBindVertexArray(m_EmptyVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
-        context.Stats.DrawCalls++; context.Stats.TriangleCount += 1; context.Stats.VertexCount += 3;
+        // 【拦截验证】：抗锯齿处理
+        if (context.RecordAndCheckDrawCall("FXAA Pass", "Anti-Aliasing", "FXAA Shader", 1)) {
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+        }
         
         m_FXAAFBO->Unbind();
 

@@ -61,8 +61,9 @@ namespace Ayaya {
         m_BloomExtractShader->SetFloat("u_Exposure", physicalExposure * exposureComp);
         
         glBindVertexArray(m_EmptyVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
-        context.Stats.DrawCalls++; context.Stats.TriangleCount += 1; context.Stats.VertexCount += 3;
+        if (context.RecordAndCheckDrawCall("Bloom Pass", "Extract Highlights", "Bloom Extract Shader", 1)) {
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+        }
         
         // --- 2. 乒乓高斯模糊 ---
         bool horizontal = true, first_iteration = true;
@@ -78,8 +79,11 @@ namespace Ayaya {
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, first_iteration ? m_BloomFBO[0]->GetColorAttachmentRendererID(0) : m_BloomFBO[!horizontal]->GetColorAttachmentRendererID(0));
             
-            glDrawArrays(GL_TRIANGLES, 0, 3);
-            context.Stats.DrawCalls++; context.Stats.TriangleCount += 1; context.Stats.VertexCount += 3;
+            std::string targetName = "Blur Iteration " + std::to_string(i);
+            // 【拦截验证】
+            if (context.RecordAndCheckDrawCall("Bloom Pass", targetName, "Bloom Blur Shader", 1)) {
+                glDrawArrays(GL_TRIANGLES, 0, 3);
+            }
             horizontal = !horizontal;
             if (first_iteration) first_iteration = false;
         }

@@ -136,11 +136,14 @@ namespace Ayaya {
                 }
             }
             currentShader->SetFloat("u_ReceiveShadows", cmd.ReceiveShadows ? 1.0f : 0.0f);
-            Renderer::Submit(currentShader, cmd.MeshAsset->GetVertexArray(), cmd.Transform);
+            
+            std::string tag = cmd.TargetEntity.GetComponent<TagComponent>().Tag;
+            uint32_t tris = cmd.MeshAsset->GetIndexCount() / 3;
 
-            context.Stats.DrawCalls++;
-            context.Stats.TriangleCount += cmd.MeshAsset->GetIndexCount() / 3;
-            context.Stats.VertexCount += cmd.MeshAsset->GetIndexCount();
+            // 【拦截验证】
+            if (context.RecordAndCheckDrawCall("G-Buffer Pass", tag, "GBuffer Shader", tris)) {
+                Renderer::Submit(currentShader, cmd.MeshAsset->GetVertexArray(), cmd.Transform);
+            }
         }
 
         m_GeometryFBO->Unbind();

@@ -74,11 +74,14 @@ namespace Ayaya {
             m_ShadowShader->SetMat4("u_Transform", entity.GetWorldTransform());
             for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
                 mesh->GetVertexArray()->Bind();
-                glDrawElements(GL_TRIANGLES, mesh->GetIndexCount(), GL_UNSIGNED_INT, nullptr);
+                
+                std::string tag = entity.GetComponent<TagComponent>().Tag;
+                uint32_t tris = mesh->GetIndexCount() / 3;
 
-                context.Stats.DrawCalls++;
-                context.Stats.TriangleCount += mesh->GetIndexCount() / 3;
-                context.Stats.VertexCount += mesh->GetIndexCount(); 
+                // 【拦截验证】
+                if (context.RecordAndCheckDrawCall("Shadow Pass", tag, "Shadow Map", tris)) {
+                    glDrawElements(GL_TRIANGLES, mesh->GetIndexCount(), GL_UNSIGNED_INT, nullptr);
+                }
             }
         }
         

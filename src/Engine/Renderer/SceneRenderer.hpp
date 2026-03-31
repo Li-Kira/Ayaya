@@ -51,6 +51,9 @@ namespace Ayaya {
         };
         void ResetStats();
         Statistics GetStats();
+
+        void SetDebugStepLimit(int limit) { m_RenderContext.DebugStepLimit = limit; }
+        const RenderContext& GetRenderContext() const { return m_RenderContext; }
     private:
         // 每个 Renderer 实例独有的数据指针！
         std::unique_ptr<SceneRendererData> m_Data;

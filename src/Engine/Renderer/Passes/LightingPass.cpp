@@ -127,8 +127,9 @@ namespace Ayaya {
 
         // 轰炸全屏
         glBindVertexArray(m_EmptyVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
-        context.Stats.DrawCalls++; context.Stats.TriangleCount += 1; context.Stats.VertexCount += 3;
+        if (context.RecordAndCheckDrawCall("Lighting Pass", "Deferred Combine", "DeferredLighting", 2)) {
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+        }
         
         glEnable(GL_DEPTH_TEST); // 画完恢复深度测试
 
@@ -177,8 +178,9 @@ namespace Ayaya {
                 m_SkyboxShader->SetInt("u_Skybox", 0);
 
                 glDisable(GL_CULL_FACE); 
-                Renderer::Submit(m_SkyboxShader, skyMesh->GetVertexArray(), glm::mat4(1.0f));
-                context.Stats.DrawCalls++; context.Stats.TriangleCount += 12; context.Stats.VertexCount += 36;
+                if (context.RecordAndCheckDrawCall("Lighting Pass", "Skybox", "Skybox", 12)) {
+                    Renderer::Submit(m_SkyboxShader, skyMesh->GetVertexArray(), glm::mat4(1.0f));
+                }
                 glEnable(GL_CULL_FACE);
                 glDepthFunc(GL_LESS);
             }
@@ -252,8 +254,10 @@ namespace Ayaya {
                 }
 
                 m_SpriteShader->SetFloat("u_ExposureInverse", 1.0f / physicalExposure);
-                glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-                context.Stats.DrawCalls++; context.Stats.TriangleCount += 2; context.Stats.VertexCount += 4;
+                std::string tag = cmd.SpriteComp.TextureHandle == 0 ? "White Sprite" : "Texture Sprite";
+                if (context.RecordAndCheckDrawCall("Lighting Pass", tag, "Sprite Shader", 2)) {
+                    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+                }
             }
 
             glEnable(GL_CULL_FACE);
@@ -324,5 +328,8 @@ namespace Ayaya {
         // ==========================================
         context.Set("Lighting_Output", m_LightingFBO->GetColorAttachmentRendererID(0));
         context.Set("Selection_Output", m_SelectionFBO->GetColorAttachmentRendererID(0));
+
+        context.Framebuffers["Lighting"] = m_LightingFBO;
+        context.Framebuffers["Selection"] = m_SelectionFBO;
     }
 }

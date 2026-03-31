@@ -81,8 +81,10 @@ namespace Ayaya {
         }
 
         glBindVertexArray(m_EmptyVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
-        context.Stats.DrawCalls++; context.Stats.TriangleCount += 1; context.Stats.VertexCount += 3;
+        // 【拦截验证】：色调映射与 Bloom 合成
+        if (context.RecordAndCheckDrawCall("Post Process Pass", "Tone Mapping & Combine", "PostProcess Shader", 1)) {
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+        }
         
         m_PostProcessFBO->Unbind();
 

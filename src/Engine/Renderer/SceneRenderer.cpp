@@ -195,6 +195,8 @@ namespace Ayaya {
         m_RenderContext.Stats.ShaderBinds = 0;
         m_RenderContext.Stats.VertexCount = 0;
         m_RenderContext.Stats.TriangleCount = 0;
+
+        m_RenderContext.FrameSteps.clear(); // 【新增】：每帧清空流水账本！
         
         memset(&m_Data->LightData, 0, sizeof(struct_LightData));
         

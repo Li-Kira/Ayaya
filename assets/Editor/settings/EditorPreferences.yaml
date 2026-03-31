@@ -5,7 +5,7 @@ EditorPreferences:
   MaxUndoSteps: 100
   ToneMappingType: 0
   Exposure: 1
-  EnableBloom: false
+  EnableBloom: true
   BloomThreshold: 1
   BloomIntensity: 1
-  EnableFXAA: false
+  EnableFXAA: true
