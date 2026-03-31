@@ -300,6 +300,10 @@ namespace Ayaya {
         return m_RenderContext.Get<uint32_t>("Final_Output", 0);
     }
 
+    uint32_t SceneRenderer::GetBlackboardTextureID(std::string_view key) {
+        return m_RenderContext.Get<uint32_t>(key, 0);
+    }
+
     void SceneRenderer::ResetStats() {
         memset(&m_Data->Stats, 0, sizeof(Statistics));
     }

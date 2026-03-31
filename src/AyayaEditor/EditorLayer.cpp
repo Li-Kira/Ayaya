@@ -44,6 +44,9 @@ namespace Ayaya {
         
         m_GameRenderer = std::make_shared<SceneRenderer>();
         m_GameRenderer->Init();
+
+        // 【新增】：将 GameRenderer 交给帧调试器
+        m_FrameDebuggerPanel.SetContext(m_GameRenderer);
         
         SetupScene();
 
@@ -319,6 +322,7 @@ namespace Ayaya {
         m_PreferencesPanel.OnImGuiRender();
         m_ScreenshotPanel.OnImGuiRender();
         m_HistoryPanel.OnImGuiRender();
+        m_FrameDebuggerPanel.OnImGuiRender();
         
         UIRenderViewport();
         UIRenderGameViewport();
@@ -549,7 +553,7 @@ namespace Ayaya {
 
             // 【核心修复】：加载新场景成功时，彻底清空上一个场景残留的撤销历史！
             m_CommandHistory.Clear();
-            
+
             AYAYA_CORE_INFO("Scene loaded successfully from {0}!", filepath);
         }
     }
@@ -713,12 +717,14 @@ namespace Ayaya {
 
             if (ImGui::BeginMenu("View")) {
                 ImGui::MenuItem("Show Grid", nullptr, &m_ShowGrid);
-                ImGui::MenuItem("Show Statistics", nullptr, &m_ShowStatsPanel);
-                ImGui::MenuItem("Show History", nullptr, &m_HistoryPanel.IsOpen);
-
-                // 【新增】：给 Gizmo 提供极其方便的全局独立开关
                 ImGui::MenuItem("Show Camera Gizmos", nullptr, &m_ShowCameraGizmos);
                 ImGui::MenuItem("Show Light Gizmos", nullptr, &m_ShowLightGizmos);
+
+                ImGui::Separator();
+
+                ImGui::MenuItem("Show Statistics", nullptr, &m_ShowStatsPanel);
+                ImGui::MenuItem("Show History", nullptr, &m_HistoryPanel.IsOpen);
+                ImGui::MenuItem("Frame Debugger", nullptr, &m_FrameDebuggerPanel.IsOpen);
 
                 ImGui::EndMenu();
             }

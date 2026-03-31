@@ -38,6 +38,9 @@ namespace Ayaya {
         void SetToneMappingType(int type) { m_ToneMappingType = type; }
         void SetFXAAEnabled(bool enable) { m_EnableFXAA = enable; }
 
+        // 获取黑板上的中间阶段贴图 ID (用于帧调试器)
+        uint32_t GetBlackboardTextureID(std::string_view key);
+
         struct Statistics {
             uint32_t DrawCalls = 0;
             uint32_t ShaderBinds = 0;   // SetPass Calls
