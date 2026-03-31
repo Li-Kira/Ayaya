@@ -31,8 +31,8 @@ namespace Ayaya {
         void SetEnvironmentSettings(float intensity, const glm::vec3& ambientColor);
         void SetClearColor(const glm::vec4& color);
 
-        void SetBloomSettings(bool enable, float threshold, float intensity) {
-            m_EnableBloom = enable; m_BloomThreshold = threshold; m_BloomIntensity = intensity;
+        void SetBloomSettings(bool enable, float threshold, float intensity, float knee, float radius) {
+            m_EnableBloom = enable; m_BloomThreshold = threshold; m_BloomIntensity = intensity; m_BloomKnee = knee; m_BloomRadius = radius;
         }
         void SetExposure(float exposure) { m_Exposure = exposure; }
         void SetToneMappingType(int type) { m_ToneMappingType = type; }
@@ -66,6 +66,8 @@ namespace Ayaya {
         bool m_EnableBloom = false;
         float m_BloomThreshold = 1.0f; // 亮度超过 1.0 (纯白) 就泛光
         float m_BloomIntensity = 1.0f;
+        float m_BloomKnee = 0.1f;
+        float m_BloomRadius = 0.005f;
         bool m_EnableFXAA = false;
     };
 

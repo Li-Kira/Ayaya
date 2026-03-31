@@ -174,19 +174,6 @@ namespace Ayaya {
     void SceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene, Entity hoveredEntity, bool showGrid, bool showSkybox, const glm::vec4& clearColor) {
         // 统计初始化
         auto cpuStartTime = std::chrono::high_resolution_clock::now();
-        // ==========================================
-        // 【核心修复】：在开启新一帧的统计前，先去问显卡“上一帧”的成绩出没出！
-        // 这时显卡已经经过了一整帧的时间，大概率已经算完了，而且绝对不会阻塞 CPU
-        // ==========================================
-        uint32_t available = 0;
-        glGetQueryObjectuiv(m_Data->GPUTimeQuery, GL_QUERY_RESULT_AVAILABLE, &available);
-        if (available) {
-            uint64_t gpuTimeNs = 0;
-            glGetQueryObjectui64v(m_Data->GPUTimeQuery, GL_QUERY_RESULT, &gpuTimeNs);
-            m_Data->Stats.GPUTime = (float)gpuTimeNs / 1000000.0f;
-        }
-        // 成绩收完，现在可以安全地重置并开启这一帧的新统计了
-        glBeginQuery(GL_TIME_ELAPSED, m_Data->GPUTimeQuery);
 
         // ==========================================
         // 每次渲染前，清空黑板上的统计板
@@ -272,6 +259,8 @@ namespace Ayaya {
         m_RenderContext.Set("EnableBloom", m_EnableBloom);
         m_RenderContext.Set("BloomThreshold", m_BloomThreshold);
         m_RenderContext.Set("BloomIntensity", m_BloomIntensity);
+        m_RenderContext.Set("BloomKnee", m_BloomKnee);
+        m_RenderContext.Set("BloomRadius", m_BloomRadius);
         m_RenderContext.Set("EnableFXAA", m_EnableFXAA);
 
         m_Pipeline.Execute(m_RenderContext);
@@ -283,7 +272,13 @@ namespace Ayaya {
         m_Data->Stats.VertexCount = m_RenderContext.Stats.VertexCount;
 
         // 性能统计
-        glEndQuery(GL_TIME_ELAPSED);
+        float totalGPUTime = 0.0f;
+        for (const auto& [name, profile] : m_RenderContext.PassProfiles) {
+            totalGPUTime += profile.GPUTime;
+        }
+        m_Data->Stats.GPUTime = totalGPUTime;
+
+        // 结算真正的 C++ 准备指令耗时
         auto cpuEndTime = std::chrono::high_resolution_clock::now();
         m_Data->Stats.CPUTime = std::chrono::duration<float, std::milli>(cpuEndTime - cpuStartTime).count();
     }

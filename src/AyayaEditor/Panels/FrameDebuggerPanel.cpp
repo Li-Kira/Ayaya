@@ -5,7 +5,26 @@
 namespace Ayaya {
 
     void FrameDebuggerPanel::OnImGuiRender() {
-        if (!IsOpen) return;
+        // ==========================================
+        // 【核心修复】：将状态变量提前声明，以便在关闭窗口时也能访问它们
+        // ==========================================
+        static bool s_IsCaptured = false;
+        static std::vector<DrawCallStep> s_CapturedSteps;
+        static std::unordered_map<std::string, PassProfileData> s_CapturedProfiles;
+        static int s_CurrentStep = -1;
+
+        // ==========================================
+        // 如果窗口处于关闭状态，强制释放所有拦截器状态！
+        // ==========================================
+        if (!IsOpen) {
+            if (s_IsCaptured) {
+                s_IsCaptured = false;
+                s_CurrentStep = -1;
+                // 安全释放引擎管线，恢复 Live 满帧渲染
+                if (m_Renderer) m_Renderer->SetDebugStepLimit(-1); 
+            }
+            return;
+        }
 
         ImGui::SetNextWindowSize(ImVec2(1050, 750), ImGuiCond_FirstUseEver);
         ImGui::Begin("Frame Debugger", &IsOpen);
@@ -18,13 +37,6 @@ namespace Ayaya {
 
         auto& liveContext = m_Renderer->GetRenderContext();
 
-        // ==========================================
-        // 工业级截帧快照 (Frame Capture)
-        // ==========================================
-        static bool s_IsCaptured = false;
-        static std::vector<DrawCallStep> s_CapturedSteps;
-        static std::unordered_map<std::string, PassProfileData> s_CapturedProfiles;
-        
         ImGui::PushStyleColor(ImGuiCol_Button, s_IsCaptured ? ImVec4(0.8f, 0.2f, 0.2f, 1.0f) : ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, s_IsCaptured ? ImVec4(0.9f, 0.3f, 0.3f, 1.0f) : ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
         if (ImGui::Button(s_IsCaptured ? "Release Frame (Live)" : "Capture Frame (Freeze)", ImVec2(220, 30))) {

@@ -20,8 +20,11 @@ namespace Ayaya {
         bool EnableBloom = false;
         float BloomThreshold = 1.0f;
         float BloomIntensity = 1.0f;
+        float BloomKnee = 0.1f;
+        float BloomRadius = 0.005f;
 
         bool EnableFXAA = false;
+        bool EnableVSync = false;
 
         int MaxUndoSteps = 100;
     private:

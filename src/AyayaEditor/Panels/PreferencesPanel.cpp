@@ -50,6 +50,8 @@ namespace Ayaya {
         out << YAML::Key << "EnableBloom" << YAML::Value << EnableBloom;
         out << YAML::Key << "BloomThreshold" << YAML::Value << BloomThreshold;
         out << YAML::Key << "BloomIntensity" << YAML::Value << BloomIntensity;
+        out << YAML::Key << "BloomKnee" << YAML::Value << BloomKnee;
+        out << YAML::Key << "BloomRadius" << YAML::Value << BloomRadius;
         
         out << YAML::Key << "EnableFXAA" << YAML::Value << EnableFXAA;
         
@@ -81,6 +83,8 @@ namespace Ayaya {
                 if (prefs["EnableBloom"]) EnableBloom = prefs["EnableBloom"].as<bool>();
                 if (prefs["BloomThreshold"]) BloomThreshold = prefs["BloomThreshold"].as<float>();
                 if (prefs["BloomIntensity"]) BloomIntensity = prefs["BloomIntensity"].as<float>();
+                if (prefs["BloomKnee"]) BloomKnee = prefs["BloomKnee"].as<float>();
+                if (prefs["BloomRadius"]) BloomRadius = prefs["BloomRadius"].as<float>();
                 
                 if (prefs["EnableFXAA"]) EnableFXAA = prefs["EnableFXAA"].as<bool>();
             }
@@ -150,6 +154,14 @@ namespace Ayaya {
             ImGui::Spacing();
 
             if (ImGui::TreeNodeEx("Window", ImGuiTreeNodeFlags_DefaultOpen)) {
+                // 【新增】：垂直同步开关
+                if (ImGui::Checkbox("Enable VSync (Limit to Monitor Refresh Rate)", &EnableVSync)) {
+                    // 通知底层窗口系统更改 VSync 状态
+                    Application::Get().GetWindow().SetVSync(EnableVSync);
+                }
+
+                ImGui::Spacing();
+                
                 // ==========================================
                 // 【新增】：常用的分辨率预设下拉框
                 // ==========================================
@@ -219,6 +231,8 @@ namespace Ayaya {
                 ImGui::Indent(10.0f * currentScale);
                 ImGui::DragFloat("Threshold", &BloomThreshold, 0.05f, 0.0f, 10.0f, "%.2f");
                 ImGui::DragFloat("Intensity", &BloomIntensity, 0.05f, 0.0f, 5.0f, "%.2f");
+                ImGui::DragFloat("Knee", &BloomKnee, 0.01f, 0.0f, 1.0f, "%.2f");
+                ImGui::DragFloat("Radius", &BloomRadius, 0.0005f, 0.001f, 0.02f, "%.4f");
                 ImGui::Unindent(10.0f * currentScale);
             }
 
