@@ -24,7 +24,7 @@ Properties:
   - UniformName: u_Metallic
     DisplayName: Metallic
     Type: 0
-    FloatValue: 0
+    FloatValue: 0.894
   - UniformName: u_UseMetallicMap
     DisplayName: Enable Metallic Map
     Type: 2

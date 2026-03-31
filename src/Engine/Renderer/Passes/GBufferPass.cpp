@@ -1,5 +1,6 @@
 #include "ayapch.h"
 #include "GBufferPass.hpp"
+#include "Asset/AssetManager.hpp"
 #include "Renderer/RenderCommand.hpp"
 #include "Renderer/Renderer.hpp"
 #include "Renderer/Frustum.hpp"
@@ -100,16 +101,32 @@ namespace Ayaya {
                     int textureSlot = 0; 
                     for (auto& prop : currentMaterial->Properties) {
                         switch (prop.Type) {
-                            case MaterialPropertyType::Float: currentShader->SetFloat(prop.UniformName, prop.FloatValue); break;
-                            case MaterialPropertyType::Vec3:  currentShader->SetFloat3(prop.UniformName, prop.Vec3Value); break;
+                            case MaterialPropertyType::Float: 
+                                currentShader->SetFloat(prop.UniformName, prop.FloatValue); 
+                                break;
+                            case MaterialPropertyType::Int:   // 【新增】：修复整型传递
+                                currentShader->SetInt(prop.UniformName, prop.IntValue); 
+                                break;
+                            case MaterialPropertyType::Bool:  // 【核心修复】：修复 u_UseAlbedoMap 等贴图开关！
+                                currentShader->SetBool(prop.UniformName, prop.BoolValue); 
+                                break;
+                            case MaterialPropertyType::Vec2:  // 【新增】：修复 UV 偏移等参数传递
+                                currentShader->SetFloat2(prop.UniformName, prop.Vec2Value); 
+                                break;
+                            case MaterialPropertyType::Vec3:  
+                                currentShader->SetFloat3(prop.UniformName, prop.Vec3Value); 
+                                break;
+                            case MaterialPropertyType::Vec4:  // 【新增】：修复 RGBA 颜色传递
+                                currentShader->SetFloat4(prop.UniformName, prop.Vec4Value); 
+                                break;
                             case MaterialPropertyType::Texture2D:
                                 currentShader->SetInt(prop.UniformName, textureSlot);
-                                if (prop.TextureHandle != 0) {
-                                    // 未来你接入 AssetManager 后应该是: AssetManager::GetAsset<Texture2D>(prop.TextureHandle)->Bind(textureSlot);
-                                    // 现在作为 Fallback，直接使用外部已经取好的局部变量！
-                                    whiteTexture->Bind(textureSlot);
+                                // 【修复】：真正的物理贴图加载逻辑！
+                                if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
+                                    auto tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
+                                    tex->Bind(textureSlot);
                                 } else {
-                                    whiteTexture->Bind(textureSlot); 
+                                    if (whiteTexture) whiteTexture->Bind(textureSlot); 
                                 }
                                 textureSlot++;
                                 break;

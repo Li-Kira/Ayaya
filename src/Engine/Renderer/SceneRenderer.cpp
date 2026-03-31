@@ -19,6 +19,7 @@
 #include "Asset/AssetManager.hpp"
 
 // 管线 Passes
+#include "Renderer/Passes/ShadowPass.hpp"
 #include "Renderer/Passes/GBufferPass.hpp"
 #include "Renderer/Passes/LightingPass.hpp"
 #include "Renderer/Passes/PostProcessPass.hpp"
@@ -81,12 +82,6 @@ namespace Ayaya {
         glm::vec3 EnvironmentAmbientColor = { 0.1f, 0.1f, 0.1f };
         glm::vec4 ClearColor = { 0.06f, 0.06f, 0.065f, 1.0f };
 
-        // 阴影专属资源 (临时保留在总管中，未来可拆分为 ShadowPass)
-        std::shared_ptr<Shader> ShadowShader;
-        uint32_t ShadowMapFBO = 0;
-        uint32_t ShadowMapTexture = 0;
-        glm::mat4 LightSpaceMatrix;
-
         struct_CameraData CameraData;
         struct_LightData LightData;
 
@@ -132,32 +127,13 @@ namespace Ayaya {
         // ==========================================
         // 核心：组装次世代渲染管线！
         // ==========================================
+        m_Pipeline.AddPass(std::make_shared<ShadowPass>());
         m_Pipeline.AddPass(std::make_shared<GBufferPass>());
         m_Pipeline.AddPass(std::make_shared<LightingPass>());
         m_Pipeline.AddPass(std::make_shared<BloomPass>());
         m_Pipeline.AddPass(std::make_shared<PostProcessPass>());
         m_Pipeline.AddPass(std::make_shared<FXAAPass>());
         m_Pipeline.Init();
-
-        // 高精度阴影贴图 (2K)
-        m_Data->ShadowShader = Shader::Create("assets/Editor/shaders/Shadow/shadow_map.vert", "assets/Editor/shaders/Shadow/shadow_map.frag");
-        
-        glGenFramebuffers(1, &m_Data->ShadowMapFBO);
-        glGenTextures(1, &m_Data->ShadowMapTexture);
-        glBindTexture(GL_TEXTURE_2D, m_Data->ShadowMapTexture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, 2048, 2048, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-        float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
-
-        glBindFramebuffer(GL_FRAMEBUFFER, m_Data->ShadowMapFBO);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_Data->ShadowMapTexture, 0);
-        glDrawBuffer(GL_NONE); 
-        glReadBuffer(GL_NONE);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         glGenVertexArrays(1, &m_Data->EmptyVAO);
         glGenQueries(1, &m_Data->GPUTimeQuery);
@@ -320,52 +296,15 @@ namespace Ayaya {
         m_Data->LightData.PointLightCount = pointLightIndex;
         s_LightUniformBuffer->SetData(&m_Data->LightData, sizeof(struct_LightData));
 
-        if (hasDirLight) {
-            glm::vec3 lightDir = glm::normalize(glm::vec3(m_Data->LightData.DirLightDir));
-            glm::vec3 lightPos = -lightDir * 30.0f; 
-            
-            glm::mat4 lightProjection = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, 1.0f, 100.0f);
-            glm::mat4 lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-            m_Data->LightSpaceMatrix = lightProjection * lightView;
-
-            m_Data->ShadowShader->Bind();
-            m_RenderContext.Stats.ShaderBinds++;
-            m_Data->ShadowShader->SetMat4("u_LightSpaceMatrix", m_Data->LightSpaceMatrix);
-
-            glViewport(0, 0, 2048, 2048); 
-            glBindFramebuffer(GL_FRAMEBUFFER, m_Data->ShadowMapFBO);
-            glClear(GL_DEPTH_BUFFER_BIT); 
-            glEnable(GL_DEPTH_TEST);
-            glCullFace(GL_BACK);
-
-            auto meshView = scene->Reg().view<TransformComponent, MeshRendererComponent>();
-            for (auto entityID : meshView) {
-                Entity entity{ entityID, scene.get() };
-                if (!entity.IsActiveInHierarchy()) continue;
-                
-                auto& meshComp = entity.GetComponent<MeshRendererComponent>();
-                if (!meshComp.ModelAsset || !meshComp.CastShadows) continue; 
-
-                m_Data->ShadowShader->SetMat4("u_Transform", entity.GetWorldTransform());
-                for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
-                    mesh->GetVertexArray()->Bind();
-                    glDrawElements(GL_TRIANGLES, mesh->GetIndexCount(), GL_UNSIGNED_INT, nullptr);
-
-                    m_RenderContext.Stats.DrawCalls++;
-                    m_RenderContext.Stats.TriangleCount += mesh->GetIndexCount() / 3;
-                    m_RenderContext.Stats.VertexCount += mesh->GetIndexCount(); 
-                }
-            }
-            glCullFace(GL_BACK); 
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
-            
-            glViewport(0, 0, m_Data->ViewportWidth, m_Data->ViewportHeight);
-        }
 
         // ==========================================
         // 布置 Render Graph 数据黑板并轰鸣管线！
         // ==========================================
         m_RenderContext.ActiveScene = scene;
+        m_RenderContext.Set("ViewportWidth", m_Data->ViewportWidth);
+        m_RenderContext.Set("ViewportHeight", m_Data->ViewportHeight);
+        m_RenderContext.Set("HasDirLight", hasDirLight);
+        m_RenderContext.Set("DirLightDir", glm::vec3(m_Data->LightData.DirLightDir));
 
         m_RenderContext.SetTexture("WhiteTexture", m_Data->WhiteTexture);
         m_RenderContext.Set<std::shared_ptr<Mesh>>("SkyboxMesh", m_Data->SkyboxMesh);
@@ -381,10 +320,6 @@ namespace Ayaya {
         m_RenderContext.Set("HoveredEntity", hoveredEntity);
         m_RenderContext.Set("EnvironmentIntensity", m_Data->EnvironmentIntensity);
         m_RenderContext.Set("EnvironmentAmbientColor", m_Data->EnvironmentAmbientColor);
-
-        m_RenderContext.Set("HasDirLight", hasDirLight);
-        m_RenderContext.Set("ShadowMap", m_Data->ShadowMapTexture);
-        m_RenderContext.Set("LightSpaceMatrix", m_Data->LightSpaceMatrix);
 
         m_RenderContext.Set("PhysicalExposure", physicalExposure);
         m_RenderContext.Set("ExposureCompensation", m_Exposure);

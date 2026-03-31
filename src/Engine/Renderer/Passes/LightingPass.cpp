@@ -112,7 +112,7 @@ namespace Ayaya {
         
         m_DeferredLightingShader->SetFloat3("u_AmbientColor", context.Get<glm::vec3>("EnvironmentAmbientColor") * context.Get<float>("EnvironmentIntensity", 1.0f));
 
-        auto brdfLUT = context.Get<std::shared_ptr<Texture2D>>("BRDFLUT");
+        auto brdfLUT = context.GetTexture("BRDFLUT");
         if (brdfLUT) {
             brdfLUT->Bind(6); m_DeferredLightingShader->SetInt("u_BRDFLUT", 6);
         }
@@ -245,7 +245,8 @@ namespace Ayaya {
                     m_SpriteShader->SetInt("u_Texture", 0);
                     m_SpriteShader->SetBool("u_UseTexture", true);
                 } else {
-                    if (whiteTex) whiteTex->Bind(0);
+                    auto whiteTex = context.GetTexture("WhiteTexture");
+                    if(whiteTex) whiteTex->Bind(0);
                     m_SpriteShader->SetInt("u_Texture", 0);
                     m_SpriteShader->SetBool("u_UseTexture", false);
                 }
@@ -303,7 +304,7 @@ namespace Ayaya {
                     m_SpriteShader->SetInt("u_Texture", 0);
                     m_SpriteShader->SetBool("u_UseTexture", true);
                 } else {
-                    auto whiteTex = context.Get<std::shared_ptr<Texture2D>>("WhiteTexture");
+                    auto whiteTex = context.GetTexture("WhiteTexture");
                     if(whiteTex) whiteTex->Bind(0);
                     m_SpriteShader->SetInt("u_Texture", 0);
                     m_SpriteShader->SetBool("u_UseTexture", false);
