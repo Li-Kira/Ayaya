@@ -55,6 +55,7 @@ namespace Ayaya {
         glDisable(GL_DEPTH_TEST);
 
         m_FXAAShader->Bind();
+        context.Stats.ShaderBinds++;
         m_FXAAShader->SetInt("u_ScreenTexture", 0);
         
         glm::vec2 texelSize = {

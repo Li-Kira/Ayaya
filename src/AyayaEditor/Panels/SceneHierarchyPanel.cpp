@@ -54,6 +54,7 @@ namespace Ayaya {
         ImGui::End();
 
         ImGui::Begin("Scene Hierarchy");
+        float uiScale = ImGui::GetIO().FontGlobalScale;
 
         // 每次渲染大纲前，清空可见节点顺序列表
         m_VisibleNodes.clear();
@@ -365,8 +366,10 @@ namespace Ayaya {
             ImGui::PopStyleColor();
         }
 
+        float uiScale = ImGui::GetIO().FontGlobalScale;
+
         // 处理节点右侧的可视化按钮
-        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 20.0f);
+        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 24.0f * uiScale);
         ImGui::SetCursorPosY(cursorY);
 
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
@@ -382,7 +385,7 @@ namespace Ayaya {
 
         ImGui::PushID((uint32_t)entity); 
         
-        if (ImGui::Button(eyeIcon.c_str(), ImVec2(24.0f, ImGui::GetTextLineHeight()))) {
+        if (ImGui::Button(eyeIcon.c_str(), ImVec2(24.0f * uiScale, ImGui::GetTextLineHeight()))) {
             tagComp.IsActive = !tagComp.IsActive; 
         }
         
@@ -415,6 +418,8 @@ namespace Ayaya {
 
     void SceneHierarchyPanel::DrawComponents() {
         if (m_SelectedEntities.empty()) return;
+
+        float uiScale = ImGui::GetIO().FontGlobalScale;
 
         // ==========================================
         // 多选顶部提示 UI
@@ -673,7 +678,7 @@ namespace Ayaya {
                 ImGui::Spacing();
                 ImGui::Text("Texture");
 
-                ImVec2 textureSlotSize = { 64.0f, 64.0f };
+                ImVec2 textureSlotSize = { 64.0f * uiScale, 64.0f * uiScale };
                 
                 if (refSrc.TextureHandle != 0 && AssetManager::IsAssetHandleValid(refSrc.TextureHandle)) {
                     auto tex = AssetManager::GetAsset<Texture2D>(refSrc.TextureHandle);
@@ -726,7 +731,7 @@ namespace Ayaya {
                 // ------------------------------------------
                 if (refSrc.TextureHandle != 0) {
                     ImGui::SameLine();
-                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textureSlotSize.y * 0.5f - 10.0f);
+                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textureSlotSize.y * 0.5f - 10.0f * uiScale);
                     if (ImGui::Button("Remove")) {
                         // 【撤回拦截】：点击瞬间，备份旧状态
                         std::vector<SpriteRendererComponent> oldComps;
@@ -1548,7 +1553,7 @@ namespace Ayaya {
                             ImGui::Separator();
 
                             ImGui::Columns(2, "MaterialProperties", false);
-                            ImGui::SetColumnWidth(0, 140.0f); 
+                            ImGui::SetColumnWidth(0, 140.0f * uiScale);
                             std::string lastCategory = ""; 
 
                             // 材质属性修改区：保留原有逻辑
@@ -1583,7 +1588,7 @@ namespace Ayaya {
                                     case MaterialPropertyType::Vec4: propChanged = ImGui::ColorEdit4("##val", glm::value_ptr(prop.Vec4Value), ImGuiColorEditFlags_NoInputs); break;
                                     case MaterialPropertyType::Texture2D:
                                     {
-                                        ImVec2 textureSlotSize = { 64.0f, 64.0f }; 
+                                        ImVec2 textureSlotSize = { 64.0f * uiScale, 64.0f * uiScale };
                                         if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
                                             auto tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
                                             ImGui::Image((ImTextureID)(intptr_t)tex->GetRendererID(), textureSlotSize, {0, 1}, {1, 0});
@@ -1972,10 +1977,17 @@ namespace Ayaya {
         ImGui::Separator();
         ImGui::Spacing();
 
-        ImVec2 contentRegionAvailable = ImGui::GetContentRegionAvail();
-        ImGui::SetCursorPosX(contentRegionAvailable.x * 0.5f - 60.0f);
+        // 动态计算按钮大小
+        float addBtnWidth = 150.0f * uiScale;
+        float addBtnHeight = 30.0f * uiScale; 
         
-        if (ImGui::Button("Add Component", ImVec2(150, 25))) {
+        float minX = ImGui::GetWindowContentRegionMin().x;
+        float maxX = ImGui::GetWindowContentRegionMax().x;
+        float trueContentWidth = maxX - minX;
+        
+        ImGui::SetCursorPosX(minX + (trueContentWidth - addBtnWidth) * 0.5f);
+        
+        if (ImGui::Button("Add Component", ImVec2(addBtnWidth, addBtnHeight))) {
             ImGui::OpenPopup("AddComponentPopup");
         }
 
