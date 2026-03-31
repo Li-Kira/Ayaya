@@ -69,12 +69,15 @@ namespace Ayaya {
 
         glBindVertexArray(m_EmptyVAO);
         glDrawArrays(GL_TRIANGLES, 0, 3);
+        context.Stats.DrawCalls++; context.Stats.TriangleCount += 1; context.Stats.VertexCount += 3;
         
         m_FXAAFBO->Unbind();
 
         // 4. 将抗锯齿后的结果，写回黑板，供 EditorLayer 视口读取！
         context.Set("Final_Output", m_FXAAFBO->GetColorAttachmentRendererID(0));
 
+        // 【新增】：将 FBO 实体挂载到黑板，供高清截图读取像素！
+        context.Framebuffers["FXAA"] = m_FXAAFBO;
         // TODO: 未来可以通过 Context 将 Stats 回传给渲染器统计
     }
 

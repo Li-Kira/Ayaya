@@ -5,6 +5,7 @@
 #include <vector>
 #include <memory>
 #include <any>
+#include <string_view>
 #include <glm/glm.hpp>
 
 #include "Renderer/Texture.hpp"
@@ -24,20 +25,36 @@ namespace Ayaya {
         glm::mat4 ProjectionMatrix;
         glm::vec3 CameraPosition;
 
-        // 资源黑板：Pass 之间通过字符串名字存取贴图和缓冲
-        std::unordered_map<std::string, std::shared_ptr<Texture2D>> Textures;
-        std::unordered_map<std::string, std::shared_ptr<Framebuffer>> Framebuffers;
+        // 【核心修复】：使用 std::string_view，彻底消灭每帧数百次的字符串堆分配！
+        std::unordered_map<std::string_view, std::shared_ptr<Texture2D>> Textures;
+        std::unordered_map<std::string_view, std::shared_ptr<Framebuffer>> Framebuffers;
         
         // 参数黑板：存储 UI 面板传过来的任意类型变量 (如开关、浮点数)
-        std::unordered_map<std::string, std::any> Settings;
+        std::unordered_map<std::string_view, std::any> Settings;
+
+        struct {
+            uint32_t DrawCalls = 0;
+            uint32_t ShaderBinds = 0;
+            uint32_t VertexCount = 0;
+            uint32_t TriangleCount = 0;
+        } Stats;
 
         template<typename T>
-        void Set(const std::string& key, const T& value) { Settings[key] = value; }
+        void Set(std::string_view key, const T& value) { Settings[key] = value; }
         
         template<typename T>
-        T Get(const std::string& key, T defaultValue = T()) {
-            if (Settings.find(key) != Settings.end()) return std::any_cast<T>(Settings[key]);
+        T Get(std::string_view key, T defaultValue = T()) {
+            auto it = Settings.find(key);
+            if (it != Settings.end()) return std::any_cast<T>(it->second);
             return defaultValue;
+        }
+
+        void SetTexture(std::string_view key, const std::shared_ptr<Texture2D>& tex) { Textures[key] = tex; }
+        
+        std::shared_ptr<Texture2D> GetTexture(std::string_view key) {
+            auto it = Textures.find(key);
+            if (it != Textures.end()) return it->second;
+            return nullptr;
         }
     };
 
