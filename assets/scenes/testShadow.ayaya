@@ -2,11 +2,11 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition: [-1.4244976, 1.2508776, 4.837389]
-  CameraDistance: 0.5723075
-  CameraPitch: -0.28271663
-  CameraYaw: -0.5065084
-  CameraFocalPoint: [-1.1578778, 1.0912236, 4.356806]
+  CameraPosition: [-1.4011785, 1.4229293, 3.8456283]
+  CameraDistance: 4.0768633
+  CameraPitch: -0.2347161
+  CameraYaw: -0.8515272
+  CameraFocalPoint: [1.5816995, 0.47478592, 1.2332964]
 Entities:
   - Entity: 13032611445651691836
     TagComponent:

@@ -133,10 +133,12 @@ namespace Ayaya {
         // ==========================================
         // 3. 告诉 OpenGL 我们要同时绘制到哪些缓冲！
         // ==========================================
-        if (m_ColorAttachments.size() > 1) {
-            // 支持同时绘制到 4 张贴图
-            GLenum buffers[4] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3 };
-            glDrawBuffers((GLsizei)m_ColorAttachments.size(), buffers);
+        if (m_ColorAttachments.size() > 0) {
+            std::vector<GLenum> buffers(m_ColorAttachments.size());
+            for (size_t i = 0; i < m_ColorAttachments.size(); i++) {
+                buffers[i] = GL_COLOR_ATTACHMENT0 + i;
+            }
+            glDrawBuffers((GLsizei)m_ColorAttachments.size(), buffers.data());
         } else if (m_ColorAttachments.empty()) {
             glDrawBuffer(GL_NONE); // 只有深度测试的 pass
         }

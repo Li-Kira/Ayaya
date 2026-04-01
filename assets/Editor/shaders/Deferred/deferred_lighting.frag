@@ -10,6 +10,7 @@ uniform sampler2D g_Position;
 uniform sampler2D g_Normal;
 uniform sampler2D g_Albedo;
 uniform sampler2D g_PBR; 
+uniform sampler2D g_CustomData;
 
 // 【新增】：IBL 专属采样器
 uniform samplerCube u_IrradianceMap;
@@ -126,12 +127,14 @@ void main() {
     vec3 Normal = texture(g_Normal, v_TexCoord).rgb;
     vec4 albedoData = texture(g_Albedo, v_TexCoord);
     vec3 Albedo = albedoData.rgb;
-    float ReceiveShadows = albedoData.a;
-    vec4 pbrData = texture(g_PBR, v_TexCoord);
     
+    vec4 pbrData = texture(g_PBR, v_TexCoord);
     float Metallic = pbrData.r;
     float Roughness = pbrData.g;
     float AO = pbrData.b;
+
+    vec4 customData = texture(g_CustomData, v_TexCoord);
+    float ReceiveShadows = customData.r;
 
     // 2. 基础 PBR 变量准备
     vec3 N = normalize(Normal);

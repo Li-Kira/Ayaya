@@ -28,11 +28,12 @@ namespace Ayaya {
         geoSpec.Samples = 1;
         geoSpec.Width = 1280; geoSpec.Height = 720;
         geoSpec.Attachments = { 
-            FramebufferTextureFormat::RGBA32F, // Position
-            FramebufferTextureFormat::RGBA16F, // Normal
-            FramebufferTextureFormat::RGBA8,   // Albedo
-            FramebufferTextureFormat::RGBA8,   // PBR (Metal, Rough, AO)
-            FramebufferTextureFormat::Depth    // Depth
+            FramebufferTextureFormat::RGBA32F, // 0: Position
+            FramebufferTextureFormat::RGBA16F, // 1: Normal
+            FramebufferTextureFormat::RGBA8,   // 2: Albedo
+            FramebufferTextureFormat::RGBA8,   // 3: PBR (Metal, Rough, AO)
+            FramebufferTextureFormat::RGBA8,   // 4: 【新增】CustomData (R:接收阴影, G:预留ID)
+            FramebufferTextureFormat::Depth    // 5: Depth
         };
         m_GeometryFBO = Framebuffer::Create(geoSpec);
     }
@@ -147,6 +148,7 @@ namespace Ayaya {
         context.Set("GBuffer_Normal", m_GeometryFBO->GetColorAttachmentRendererID(1));
         context.Set("GBuffer_Albedo", m_GeometryFBO->GetColorAttachmentRendererID(2));
         context.Set("GBuffer_PBR", m_GeometryFBO->GetColorAttachmentRendererID(3));
-        context.Framebuffers["Geometry"] = m_GeometryFBO; 
+        context.Set("GBuffer_CustomData", m_GeometryFBO->GetColorAttachmentRendererID(4)); // 【新增】
+        context.Framebuffers["Geometry"] = m_GeometryFBO;
     }
 }

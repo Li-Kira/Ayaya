@@ -5,6 +5,7 @@ layout(location = 0) out vec4 g_Position;
 layout(location = 1) out vec4 g_Normal;
 layout(location = 2) out vec4 g_Albedo;
 layout(location = 3) out vec4 g_PBR; 
+layout(location = 4) out vec4 g_CustomData; // 【新增】
 
 in vec3 v_FragPos;
 in vec3 v_Normal;
@@ -47,21 +48,20 @@ vec3 GetNormalFromMap() {
 }
 
 void main() {
-    // 1. 存入世界坐标 (透明度通道填 1.0 表示这里有物体)
     g_Position = vec4(v_FragPos, 1.0);
 
-    // 2. 存入法线
     vec3 finalNormal = u_UseNormalMap ? GetNormalFromMap() : normalize(v_Normal);
     g_Normal = vec4(finalNormal, 1.0);
 
-    // 3. 存入颜色
+    // 【修复】：彻底解放 Albedo 和 PBR 的 Alpha，给 1.0 防止调试器隐身
     vec3 albedo = u_UseAlbedoMap ? pow(texture(u_AlbedoMap, v_TexCoord).rgb, vec3(2.2)) : u_Albedo;
-    // 【核心魔法】：把 u_ReceiveShadows 藏在颜色的 Alpha 通道里，偷渡到下一关！
-    g_Albedo = vec4(albedo, u_ReceiveShadows);
+    g_Albedo = vec4(albedo, 1.0);
     
     float metallic = u_UseMetallicMap ? texture(u_MetallicMap, v_TexCoord).r : u_Metallic;
     float roughness = u_UseRoughnessMap ? texture(u_RoughnessMap, v_TexCoord).r : u_Roughness;
     float ao = u_UseAOMap ? texture(u_AOMap, v_TexCoord).r : u_AO;
-    
     g_PBR = vec4(metallic, roughness, ao, 1.0);
+
+    // 【新增】：将阴影标记存在 CustomData 的 R 通道，A 设为 1.0 保证调试可见
+    g_CustomData = vec4(u_ReceiveShadows, 0.0, 0.0, 1.0); 
 }

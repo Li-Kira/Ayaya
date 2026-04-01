@@ -154,12 +154,14 @@ namespace Ayaya {
                 uint32_t queryID = m_PassQueries[passName];
 
                 // 2. 读取上一帧的 GPU 耗时 (异步非阻塞)
-                uint32_t available = 0;
-                glGetQueryObjectuiv(queryID, GL_QUERY_RESULT_AVAILABLE, &available);
-                if (available) {
-                    uint64_t gpuTimeNs = 0;
-                    glGetQueryObjectui64v(queryID, GL_QUERY_RESULT, &gpuTimeNs);
-                    context.PassProfiles[passName].GPUTime = (float)gpuTimeNs / 1000000.0f;
+                if (m_QueryIssued[passName]) {
+                    uint32_t available = 0;
+                    glGetQueryObjectuiv(queryID, GL_QUERY_RESULT_AVAILABLE, &available);
+                    if (available) {
+                        uint64_t gpuTimeNs = 0;
+                        glGetQueryObjectui64v(queryID, GL_QUERY_RESULT, &gpuTimeNs);
+                        context.PassProfiles[passName].GPUTime = (float)gpuTimeNs / 1000000.0f;
+                    }
                 }
 
                 // 3. 记录初始的全局状态
@@ -175,6 +177,7 @@ namespace Ayaya {
                 // ==========================================
 
                 glEndQuery(GL_TIME_ELAPSED);
+                m_QueryIssued[passName] = true;
                 auto cpuEnd = std::chrono::high_resolution_clock::now();
 
                 // 5. 结算数据并登记到黑板上
@@ -187,5 +190,6 @@ namespace Ayaya {
     private:
         std::vector<std::shared_ptr<RenderPass>> m_Passes;
         std::unordered_map<std::string, uint32_t> m_PassQueries; // 管理所有 GPU 查询器
+        std::unordered_map<std::string, bool> m_QueryIssued;
     };
 }

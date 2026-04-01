@@ -15,31 +15,26 @@ namespace Ayaya {
     }
 
     void LightingPass::OnAttach() {
-        // 使用引擎的智能指针 VAO
         m_EmptyVAO.reset(VertexArray::Create());
 
-        // 1. 加载所有涉及光照与正向渲染的 Shader
         m_DeferredLightingShader = Shader::Create("assets/Editor/shaders/Deferred/deferred_lighting.vert", "assets/Editor/shaders/Deferred/deferred_lighting.frag");
         m_SkyboxShader           = Shader::Create("assets/Editor/shaders/Skybox/skybox.vert", "assets/Editor/shaders/Skybox/skybox.frag");
         m_GridShader             = Shader::Create("assets/Editor/shaders/UI/grid.vert", "assets/Editor/shaders/UI/grid.frag");
         m_SpriteShader           = Shader::Create("assets/Editor/shaders/2D/sprite.vert", "assets/Editor/shaders/2D/sprite.frag");
         m_OutlineShader          = Shader::Create("assets/Editor/shaders/UI/outline.vert", "assets/Editor/shaders/UI/outline.frag");
 
-        // 绑定 UBO
         m_DeferredLightingShader->BindUniformBlock("Camera", 0);
         m_DeferredLightingShader->BindUniformBlock("LightData", 1);
         m_SkyboxShader->BindUniformBlock("Camera", 0);
         m_GridShader->BindUniformBlock("Camera", 0);
         m_OutlineShader->BindUniformBlock("Camera", 0);
 
-        // 2. 创建 Lighting FBO (合成光照，HDR 精度)
         FramebufferSpecification lightSpec;
         lightSpec.Samples = 1; 
         lightSpec.Width = 1280; lightSpec.Height = 720;
         lightSpec.Attachments = { FramebufferTextureFormat::RGBA16F, FramebufferTextureFormat::Depth };
         m_LightingFBO = Framebuffer::Create(lightSpec);
 
-        // 3. 创建 Selection FBO (选中物体的纯色剪影)
         FramebufferSpecification selSpec;
         selSpec.Samples = 1; 
         selSpec.Width = 1280; selSpec.Height = 720;
@@ -56,10 +51,11 @@ namespace Ayaya {
         // ==========================================
         // 0. 从黑板提取前置依赖数据
         // ==========================================
-        uint32_t gPosition = context.Get<uint32_t>("GBuffer_Position", 0);
-        uint32_t gNormal   = context.Get<uint32_t>("GBuffer_Normal", 0);
-        uint32_t gAlbedo   = context.Get<uint32_t>("GBuffer_Albedo", 0);
-        uint32_t gPBR      = context.Get<uint32_t>("GBuffer_PBR", 0);
+        uint32_t gPosition   = context.Get<uint32_t>("GBuffer_Position", 0);
+        uint32_t gNormal     = context.Get<uint32_t>("GBuffer_Normal", 0);
+        uint32_t gAlbedo     = context.Get<uint32_t>("GBuffer_Albedo", 0);
+        uint32_t gPBR        = context.Get<uint32_t>("GBuffer_PBR", 0);
+        uint32_t gCustomData = context.Get<uint32_t>("GBuffer_CustomData", 0); 
         
         if (gPosition == 0) return;
 
@@ -84,36 +80,37 @@ namespace Ayaya {
         m_DeferredLightingShader->Bind();
         context.Stats.ShaderBinds++;
 
-        // 【精准还原 1】：G-Buffer 绑定 0, 1, 2, 3
-        cmd.BindTexture2D(0, gPosition); m_DeferredLightingShader->SetInt("g_Position", 0);
-        cmd.BindTexture2D(1, gNormal);   m_DeferredLightingShader->SetInt("g_Normal", 1);
-        cmd.BindTexture2D(2, gAlbedo);   m_DeferredLightingShader->SetInt("g_Albedo", 2);
-        cmd.BindTexture2D(3, gPBR);      m_DeferredLightingShader->SetInt("g_PBR", 3);
+        // --- 纹理槽位分配 (严格对齐!) ---
+        // 槽位 0~4: G-Buffer
+        cmd.BindTexture2D(0, gPosition);   m_DeferredLightingShader->SetInt("g_Position", 0);
+        cmd.BindTexture2D(1, gNormal);     m_DeferredLightingShader->SetInt("g_Normal", 1);
+        cmd.BindTexture2D(2, gAlbedo);     m_DeferredLightingShader->SetInt("g_Albedo", 2);
+        cmd.BindTexture2D(3, gPBR);        m_DeferredLightingShader->SetInt("g_PBR", 3);
+        cmd.BindTexture2D(4, gCustomData); m_DeferredLightingShader->SetInt("g_CustomData", 4);
 
-        // 【精准还原 2】：IBL 绑定 4, 5, 6
+        // 槽位 5: 阴影贴图
+        if (context.Get<bool>("HasDirLight", false)) {
+            cmd.BindTexture2D(5, context.Get<uint32_t>("ShadowMap_Output", 0));
+            m_DeferredLightingShader->SetInt("u_ShadowMap", 5); 
+            m_DeferredLightingShader->SetMat4("u_LightSpaceMatrix", context.Get<glm::mat4>("LightSpaceMatrix"));
+        }
+
+        // 槽位 6, 7, 8: IBL 环境光
         auto irrMap = context.Get<std::shared_ptr<TextureCube>>("IrradianceMap", nullptr);
         auto preMap = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap", nullptr);
         if (irrMap && preMap) {
-            irrMap->Bind(4); m_DeferredLightingShader->SetInt("u_IrradianceMap", 4);
-            preMap->Bind(5); m_DeferredLightingShader->SetInt("u_PrefilteredMap", 5);
+            irrMap->Bind(6); m_DeferredLightingShader->SetInt("u_IrradianceMap", 6);
+            preMap->Bind(7); m_DeferredLightingShader->SetInt("u_PrefilteredMap", 7);
             m_DeferredLightingShader->SetBool("u_EnvMapEnabled", true);
             m_DeferredLightingShader->SetFloat("u_Intensity", context.Get<float>("EnvironmentIntensity", 1.0f));
         } else {
             m_DeferredLightingShader->SetBool("u_EnvMapEnabled", false);
         }
-        
         m_DeferredLightingShader->SetFloat3("u_AmbientColor", context.Get<glm::vec3>("EnvironmentAmbientColor", glm::vec3(0.1f)) * context.Get<float>("EnvironmentIntensity", 1.0f));
 
         auto brdfLUT = context.GetTexture("BRDFLUT");
         if (brdfLUT) {
-            brdfLUT->Bind(6); m_DeferredLightingShader->SetInt("u_BRDFLUT", 6);
-        }
-
-        // 【精准还原 3】：阴影贴图绑定 7
-        if (context.Get<bool>("HasDirLight", false)) {
-            cmd.BindTexture2D(7, context.Get<uint32_t>("ShadowMap_Output", 0));
-            m_DeferredLightingShader->SetInt("u_ShadowMap", 7);
-            m_DeferredLightingShader->SetMat4("u_LightSpaceMatrix", context.Get<glm::mat4>("LightSpaceMatrix"));
+            brdfLUT->Bind(8); m_DeferredLightingShader->SetInt("u_BRDFLUT", 8); // 【核心修复】：绑在 8，别抢 6！
         }
 
         if (context.RecordAndCheckDrawCall("Lighting Pass", "Deferred Combine", "DeferredLighting Shader", 2)) {
@@ -159,13 +156,12 @@ namespace Ayaya {
                 }
                 m_SkyboxShader->SetMat4("u_Projection", skyProjection);
                 
-                // 【精准还原 4】：天空盒贴图绑在 0，变量名叫 u_Skybox
                 envMap->Bind(0); 
                 m_SkyboxShader->SetInt("u_Skybox", 0);
 
                 cmd.SetCullFace(false); 
                 if (context.RecordAndCheckDrawCall("Lighting Pass", "Skybox", "Skybox Shader", skyMesh->GetIndexCount() / 3)) {
-                    m_SkyboxShader->SetMat4("u_Transform", glm::mat4(1.0f)); // 接管 Renderer::Submit 逻辑
+                    m_SkyboxShader->SetMat4("u_Transform", glm::mat4(1.0f));
                     cmd.DrawIndexed(skyMesh->GetVertexArray(), skyMesh->GetIndexCount());
                 }
                 cmd.SetCullFace(true);
@@ -267,10 +263,9 @@ namespace Ayaya {
         Entity hoveredEntity = context.Get<Entity>("HoveredEntity", Entity{});
         if (hoveredEntity && hoveredEntity.IsActiveInHierarchy()) {
             
-            cmd.SetDepthTest(false); // X-Ray 穿透墙壁效果
+            cmd.SetDepthTest(false); 
             glm::mat4 transform = hoveredEntity.GetWorldTransform();
 
-            // 【精准还原 5】：直接绘制实心剪影，绝对不能开启 cmd.SetPolygonModeLine()，否则会毁掉后处理边缘检测！
             if (hoveredEntity.HasComponent<MeshRendererComponent>()) {
                 m_OutlineShader->Bind();
                 m_OutlineShader->SetFloat3("u_Color", glm::vec3(1.0f, 1.0f, 1.0f)); 

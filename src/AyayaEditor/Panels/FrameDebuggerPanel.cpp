@@ -139,7 +139,7 @@ namespace Ayaya {
                     // 根据当前的 Pass 动态生成可查看的贴图列表
                     if (step.PassName == "Shadow Map Pass" || step.PassName == "Shadow Pass") {
                         availableTargets = { "Shadow Depth Map" };
-                        targetKeys = { "ShadowMap" };
+                        targetKeys = { "ShadowMap_Output" };
                     }
                     else if (step.PassName == "G-Buffer Geometry Pass" || step.PassName == "G-Buffer Pass") {
                         availableTargets = { "Albedo (RGB)", "World Normal (RGB)", "World Position (RGB)", "PBR Data (M/R/AO)" };
