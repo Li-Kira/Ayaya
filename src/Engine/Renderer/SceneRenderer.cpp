@@ -290,7 +290,13 @@ namespace Ayaya {
         m_RenderContext.Set("BloomIntensity", bIntensity);
         m_RenderContext.Set("EnableFXAA", enableFXAA);
 
-        m_Pipeline.Execute(m_RenderContext);
+        RenderCommandBuffer cmd;
+        cmd.Begin();
+
+        // 将黑板和指令记录器一并传给管线
+        m_Pipeline.Execute(m_RenderContext, cmd);
+
+        cmd.End();
 
         // 【新增】：将管线里各个 Pass 汇报的成绩，抄写到总管的统计表里供 UI 显示
         m_Data->Stats.DrawCalls = m_RenderContext.Stats.DrawCalls;

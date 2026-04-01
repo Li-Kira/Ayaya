@@ -1,13 +1,9 @@
 #include "ayapch.h"
 #include "LightingPass.hpp"
 #include "Asset/AssetManager.hpp"
-#include "Renderer/RenderCommand.hpp"
-#include "Renderer/Renderer.hpp"
 #include "Engine/Scene/Components.hpp"
 #include "Engine/Scene/Scene.hpp"
 #include "Engine/Scene/Entity.hpp"
-
-#include <glad/glad.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 
@@ -17,12 +13,8 @@ namespace Ayaya {
         m_PassName = "Lighting & Forward Pass";
     }
 
-    LightingPass::~LightingPass() {
-        if (m_EmptyVAO != 0) glDeleteVertexArrays(1, &m_EmptyVAO);
-    }
-
     void LightingPass::OnAttach() {
-        glGenVertexArrays(1, &m_EmptyVAO);
+        m_EmptyVAO.reset(VertexArray::Create());
 
         // 1. 加载所有涉及光照与正向渲染的 Shader
         m_DeferredLightingShader = Shader::Create("assets/Editor/shaders/Deferred/deferred_lighting.vert", "assets/Editor/shaders/Deferred/deferred_lighting.frag");
@@ -58,7 +50,7 @@ namespace Ayaya {
         m_SelectionFBO->Resize(width, height);
     }
 
-    void LightingPass::Execute(RenderContext& context) {
+    void LightingPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
         // ==========================================
         // 0. 从黑板提取前置依赖数据
         // ==========================================
@@ -84,23 +76,29 @@ namespace Ayaya {
         hdrClearColor.g /= physicalExposure;
         hdrClearColor.b /= physicalExposure;
 
-        RenderCommand::SetClearColor(hdrClearColor);
-        RenderCommand::Clear();
+        cmd.SetViewport(0, 0, m_LightingFBO->GetSpecification().Width, m_LightingFBO->GetSpecification().Height);
+        cmd.SetClearColor(hdrClearColor);
+        cmd.Clear();
 
         // 画全屏四边形合成光照，绝对不能开启深度测试！
-        glDisable(GL_DEPTH_TEST);
+        cmd.SetDepthTest(false);
         m_DeferredLightingShader->Bind();
         context.Stats.ShaderBinds++;
 
-        // 绑定 G-Buffer 贴图
-        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, gPosition); m_DeferredLightingShader->SetInt("g_Position", 0);
-        glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, gNormal);   m_DeferredLightingShader->SetInt("g_Normal", 1);
-        glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, gAlbedo);   m_DeferredLightingShader->SetInt("g_Albedo", 2);
-        glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D, gPBR);      m_DeferredLightingShader->SetInt("g_PBR", 3);
+        // 【核心修复】：使用你原本正确的变量名！
+        m_DeferredLightingShader->SetInt("g_Position", 0);
+        m_DeferredLightingShader->SetInt("g_Normal", 1);
+        m_DeferredLightingShader->SetInt("g_Albedo", 2);
+        m_DeferredLightingShader->SetInt("g_PBR", 3);
+
+        cmd.BindTexture2D(0, gPosition);
+        cmd.BindTexture2D(1, gNormal);
+        cmd.BindTexture2D(2, gAlbedo);
+        cmd.BindTexture2D(3, gPBR);
 
         // 绑定 IBL 漫反射与高光贴图
-        auto irrMap = context.Get<std::shared_ptr<TextureCube>>("IrradianceMap");
-        auto preMap = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap");
+        auto irrMap = context.Get<std::shared_ptr<TextureCube>>("IrradianceMap", nullptr);
+        auto preMap = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap", nullptr);
         if (irrMap && preMap) {
             irrMap->Bind(4); m_DeferredLightingShader->SetInt("u_IrradianceMap", 4);
             preMap->Bind(5); m_DeferredLightingShader->SetInt("u_PrefilteredMap", 5);
@@ -110,7 +108,7 @@ namespace Ayaya {
             m_DeferredLightingShader->SetBool("u_EnvMapEnabled", false);
         }
         
-        m_DeferredLightingShader->SetFloat3("u_AmbientColor", context.Get<glm::vec3>("EnvironmentAmbientColor") * context.Get<float>("EnvironmentIntensity", 1.0f));
+        m_DeferredLightingShader->SetFloat3("u_AmbientColor", context.Get<glm::vec3>("EnvironmentAmbientColor", {0.1f, 0.1f, 0.1f}) * context.Get<float>("EnvironmentIntensity", 1.0f));
 
         auto brdfLUT = context.GetTexture("BRDFLUT");
         if (brdfLUT) {
@@ -119,34 +117,27 @@ namespace Ayaya {
 
         // 绑定阴影贴图
         if (context.Get<bool>("HasDirLight", false)) {
-            glActiveTexture(GL_TEXTURE7);
-            glBindTexture(GL_TEXTURE_2D, context.Get<uint32_t>("ShadowMap", 0));
+            cmd.BindTexture2D(7, context.Get<uint32_t>("ShadowMap_Output", 0)); // 修复：必须读 Output
             m_DeferredLightingShader->SetInt("u_ShadowMap", 7);
             m_DeferredLightingShader->SetMat4("u_LightSpaceMatrix", context.Get<glm::mat4>("LightSpaceMatrix"));
         }
 
         // 轰炸全屏
-        glBindVertexArray(m_EmptyVAO);
         if (context.RecordAndCheckDrawCall("Lighting Pass", "Deferred Combine", "DeferredLighting", 2)) {
-            glDrawArrays(GL_TRIANGLES, 0, 3);
+            cmd.DrawArrays(m_EmptyVAO, 3);
         }
         
-        glEnable(GL_DEPTH_TEST); // 画完恢复深度测试
+        cmd.SetDepthTest(true); // 画完恢复深度测试
 
         // ==========================================
         // 2. 深度拷贝 (Blit Depth)
-        // 把 G-Buffer 的深度抄过来，供后续 Forward Pass 遮挡使用
         // ==========================================
         auto geoFBO = context.Framebuffers["Geometry"];
         if (geoFBO) {
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, geoFBO->GetRendererID());
-            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_LightingFBO->GetRendererID());
             uint32_t width = geoFBO->GetSpecification().Width;
             uint32_t height = geoFBO->GetSpecification().Height;
-            glBlitFramebuffer(0, 0, width, height,
-                              0, 0, width, height,
-                              GL_DEPTH_BUFFER_BIT, GL_NEAREST);
-            glBindFramebuffer(GL_FRAMEBUFFER, m_LightingFBO->GetRendererID());
+            cmd.BlitDepth(geoFBO->GetRendererID(), m_LightingFBO->GetRendererID(), width, height);
+            m_LightingFBO->Bind(); // Blit 后重新绑定
         }
 
         // ==========================================
@@ -155,10 +146,12 @@ namespace Ayaya {
         
         // 3.1 渲染天空盒
         if (context.Get<bool>("ShowSkybox", false)) {
-            auto envMap = context.Get<std::shared_ptr<TextureCube>>("EnvironmentCubemap");
-            auto skyMesh = context.Get<std::shared_ptr<Mesh>>("SkyboxMesh");
+            auto envMap = context.Get<std::shared_ptr<TextureCube>>("EnvironmentCubemap", nullptr);
+            auto skyMesh = context.Get<std::shared_ptr<Mesh>>("SkyboxMesh", nullptr);
             if (envMap && skyMesh) {
-                glDepthFunc(GL_LEQUAL);  
+                cmd.SetDepthFuncLEqual();  
+                cmd.SetDepthWrite(false);
+
                 m_SkyboxShader->Bind();
                 context.Stats.ShaderBinds++;
                 m_SkyboxShader->SetFloat("u_Intensity", context.Get<float>("EnvironmentIntensity", 1.0f));
@@ -167,7 +160,6 @@ namespace Ayaya {
                 m_SkyboxShader->SetMat4("u_View", viewNoTranslation);
                 
                 glm::mat4 skyProjection = context.ProjectionMatrix;
-                // 修复正交相机下天空盒消失的问题
                 if (skyProjection[3][3] == 1.0f) {
                     float aspect = (float)m_LightingFBO->GetSpecification().Width / (float)m_LightingFBO->GetSpecification().Height;
                     skyProjection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10.0f);
@@ -177,39 +169,45 @@ namespace Ayaya {
                 envMap->Bind(0); 
                 m_SkyboxShader->SetInt("u_Skybox", 0);
 
-                glDisable(GL_CULL_FACE); 
+                cmd.SetCullFace(false); 
                 if (context.RecordAndCheckDrawCall("Lighting Pass", "Skybox", "Skybox", 12)) {
-                    Renderer::Submit(m_SkyboxShader, skyMesh->GetVertexArray(), glm::mat4(1.0f));
+                    // 自行绑定 Transform 并绘制
+                    m_SkyboxShader->SetMat4("u_Transform", glm::mat4(1.0f));
+                    cmd.DrawIndexed(skyMesh->GetVertexArray(), skyMesh->GetIndexCount());
                 }
-                glEnable(GL_CULL_FACE);
-                glDepthFunc(GL_LESS);
+                cmd.SetCullFace(true);
+                cmd.SetDepthFuncLess();
+                cmd.SetDepthWrite(true);
             }
         }
 
         // 3.2 渲染网格地基
         if (context.Get<bool>("ShowGrid", false)) {
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            glDepthMask(GL_FALSE); 
-            glDisable(GL_CULL_FACE);
+            cmd.SetBlend(true);
+            cmd.SetBlendFuncAlpha();
+            cmd.SetDepthWrite(false); 
+            cmd.SetCullFace(false);
             
             m_GridShader->Bind();
             m_GridShader->SetFloat("u_ExposureInverse", 1.0f / physicalExposure);
             
             glm::mat4 gridTransform = glm::scale(glm::mat4(1.0f), glm::vec3(1000.0f, 1.0f, 1000.0f));
-            Renderer::Submit(m_GridShader, context.Get<std::shared_ptr<Mesh>>("GridMesh")->GetVertexArray(), gridTransform);
+            m_GridShader->SetMat4("u_Transform", gridTransform);
             
-            glEnable(GL_CULL_FACE);
-            glDepthMask(GL_TRUE); 
-            glDisable(GL_BLEND); 
+            auto gridMesh = context.Get<std::shared_ptr<Mesh>>("GridMesh", nullptr);
+            if (gridMesh) cmd.DrawIndexed(gridMesh->GetVertexArray(), gridMesh->GetIndexCount());
+            
+            cmd.SetCullFace(true);
+            cmd.SetDepthWrite(true); 
+            cmd.SetBlend(false); 
         }
 
         // 3.3 渲染 2D 纸片人 (Sprites) - 采用 Painter's Algorithm 透明度排序
         {
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            glDepthMask(GL_FALSE); // 防止透明物体的黑边互相遮挡
-            glDisable(GL_CULL_FACE); 
+            cmd.SetBlend(true);
+            cmd.SetBlendFuncAlpha();
+            cmd.SetDepthWrite(false); 
+            cmd.SetCullFace(false); 
 
             m_SpriteShader->Bind();
             context.Stats.ShaderBinds++;
@@ -224,25 +222,20 @@ namespace Ayaya {
                 auto [transformComp, spriteComp] = spriteGroup.get<TransformComponent, SpriteRendererComponent>(entityID);
                 glm::mat4 transform = entity.GetWorldTransform();
                 
-                // 计算该 Sprite 距离相机的距离
                 float distance = glm::length(context.CameraPosition - glm::vec3(transform[3]));
                 m_SpriteDrawList.push_back({ transform, spriteComp, distance });
             }
 
-            // 由远及近排序！(距离大的排在前面)
             std::sort(m_SpriteDrawList.begin(), m_SpriteDrawList.end(), [](const SpriteDrawCommand& a, const SpriteDrawCommand& b) {
                 return a.DistanceToCamera > b.DistanceToCamera; 
             });
-
-            glBindVertexArray(m_EmptyVAO); 
-            auto whiteTex = context.GetTexture("WhiteTexture");
             
-            for (const auto& cmd : m_SpriteDrawList) {
-                m_SpriteShader->SetMat4("u_Transform", cmd.Transform);
-                m_SpriteShader->SetFloat4("u_Color", cmd.SpriteComp.Color);
+            for (const auto& drawCmd : m_SpriteDrawList) {
+                m_SpriteShader->SetMat4("u_Transform", drawCmd.Transform);
+                m_SpriteShader->SetFloat4("u_Color", drawCmd.SpriteComp.Color);
 
-                if (cmd.SpriteComp.TextureHandle != 0 && AssetManager::IsAssetHandleValid(cmd.SpriteComp.TextureHandle)) {
-                    auto tex = AssetManager::GetAsset<Texture2D>(cmd.SpriteComp.TextureHandle);
+                if (drawCmd.SpriteComp.TextureHandle != 0 && AssetManager::IsAssetHandleValid(drawCmd.SpriteComp.TextureHandle)) {
+                    auto tex = AssetManager::GetAsset<Texture2D>(drawCmd.SpriteComp.TextureHandle);
                     tex->Bind(0);
                     m_SpriteShader->SetInt("u_Texture", 0);
                     m_SpriteShader->SetBool("u_UseTexture", true);
@@ -254,15 +247,15 @@ namespace Ayaya {
                 }
 
                 m_SpriteShader->SetFloat("u_ExposureInverse", 1.0f / physicalExposure);
-                std::string tag = cmd.SpriteComp.TextureHandle == 0 ? "White Sprite" : "Texture Sprite";
+                std::string tag = drawCmd.SpriteComp.TextureHandle == 0 ? "White Sprite" : "Texture Sprite";
                 if (context.RecordAndCheckDrawCall("Lighting Pass", tag, "Sprite Shader", 2)) {
-                    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+                    cmd.DrawTriangleStrip(m_EmptyVAO, 4);
                 }
             }
 
-            glEnable(GL_CULL_FACE);
-            glDepthMask(GL_TRUE);
-            glDisable(GL_BLEND);
+            cmd.SetCullFace(true);
+            cmd.SetDepthWrite(true);
+            cmd.SetBlend(false);
         }
 
         m_LightingFBO->Unbind();
@@ -271,13 +264,13 @@ namespace Ayaya {
         // 4. 选择轮廓描边 (Selection Pass)
         // ==========================================
         m_SelectionFBO->Bind();
-        RenderCommand::SetClearColor({ 0.0f, 0.0f, 0.0f, 0.0f });
-        RenderCommand::Clear();
+        cmd.SetClearColor({ 0.0f, 0.0f, 0.0f, 0.0f });
+        cmd.Clear();
 
         Entity hoveredEntity = context.Get<Entity>("HoveredEntity");
         if (hoveredEntity && hoveredEntity.IsActiveInHierarchy()) {
             
-            glDisable(GL_DEPTH_TEST); // X-Ray 穿透墙壁效果
+            cmd.SetDepthTest(false); // X-Ray 穿透墙壁效果
 
             glm::mat4 transform = hoveredEntity.GetWorldTransform();
 
@@ -288,8 +281,9 @@ namespace Ayaya {
 
                 auto& meshComp = hoveredEntity.GetComponent<MeshRendererComponent>();
                 if (meshComp.ModelAsset) {
+                    m_OutlineShader->SetMat4("u_Transform", transform);
                     for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
-                        Renderer::Submit(m_OutlineShader, mesh->GetVertexArray(), transform);
+                        cmd.DrawIndexed(mesh->GetVertexArray(), mesh->GetIndexCount());
                     }
                 }
             }
@@ -314,10 +308,9 @@ namespace Ayaya {
                     m_SpriteShader->SetBool("u_UseTexture", false);
                 }
 
-                glBindVertexArray(m_EmptyVAO);
-                glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+                cmd.DrawTriangleStrip(m_EmptyVAO, 4);
             }
-            glEnable(GL_DEPTH_TEST);
+            cmd.SetDepthTest(true);
         }
         
         m_SelectionFBO->Unbind();

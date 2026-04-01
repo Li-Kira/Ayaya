@@ -12,6 +12,7 @@
 
 #include "Renderer/Texture.hpp"
 #include "Renderer/Framebuffer.hpp"
+#include "Renderer/RenderCommandBuffer.hpp"
 
 namespace Ayaya {
 
@@ -101,7 +102,7 @@ namespace Ayaya {
         virtual ~RenderPass() = default;
         virtual void OnAttach() = 0; 
         virtual void OnResize(uint32_t width, uint32_t height) {}
-        virtual void Execute(RenderContext& context) = 0;
+        virtual void Execute(RenderContext& context, RenderCommandBuffer& cmd) = 0;
 
         void SetEnabled(bool enabled) { m_Enabled = enabled; }
         bool IsEnabled() const { return m_Enabled; }
@@ -138,7 +139,7 @@ namespace Ayaya {
             m_Passes.push_back(pass);
         }
 
-        void Execute(RenderContext& context) {
+        void Execute(RenderContext& context, RenderCommandBuffer& cmd) {
             for (auto& pass : m_Passes) {
                 if (!pass->IsEnabled()) continue;
 
@@ -170,7 +171,7 @@ namespace Ayaya {
                 glBeginQuery(GL_TIME_ELAPSED, queryID);
 
                 // ==========================================
-                pass->Execute(context); // 真正的渲染
+                pass->Execute(context, cmd);
                 // ==========================================
 
                 glEndQuery(GL_TIME_ELAPSED);

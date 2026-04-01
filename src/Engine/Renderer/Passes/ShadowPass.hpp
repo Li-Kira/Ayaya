@@ -1,21 +1,22 @@
 #pragma once
 #include "Renderer/RenderPipeline.hpp"
 #include "Renderer/Shader.hpp"
+#include "Renderer/Framebuffer.hpp"
+#include "Renderer/RenderCommandBuffer.hpp"
 
 namespace Ayaya {
 
     class ShadowPass : public RenderPass {
     public:
         ShadowPass();
-        virtual ~ShadowPass() override;
+        virtual ~ShadowPass() override = default;
 
         virtual void OnAttach() override;
-        virtual void Execute(RenderContext& context) override;
+        virtual void Execute(RenderContext& context, RenderCommandBuffer& cmd) override;
 
     private:
         std::shared_ptr<Shader> m_ShadowShader;
-        uint32_t m_ShadowMapFBO = 0;
-        uint32_t m_ShadowMapTexture = 0;
+        std::shared_ptr<Framebuffer> m_ShadowMapFBO;
     };
 
 }

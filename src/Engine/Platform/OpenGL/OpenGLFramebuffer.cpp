@@ -206,4 +206,5 @@ namespace Ayaya {
         // 由于我们目前只有 OpenGL 后端，直接返回 OpenGLFramebuffer
         return std::make_shared<OpenGLFramebuffer>(spec);
     }
+    
 }

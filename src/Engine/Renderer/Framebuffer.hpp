@@ -64,6 +64,7 @@ namespace Ayaya {
         // 修改：现在可以根据索引获取对应的 G-Buffer 贴图了！
         // ==========================================
         virtual uint32_t GetColorAttachmentRendererID(uint32_t index = 0) const = 0;
+        virtual uint32_t GetDepthAttachmentRendererID() const = 0;
         
         virtual uint32_t GetRendererID() const = 0;
         virtual const FramebufferSpecification& GetSpecification() const = 0;

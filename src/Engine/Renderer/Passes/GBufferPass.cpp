@@ -1,13 +1,10 @@
 #include "ayapch.h"
 #include "GBufferPass.hpp"
 #include "Asset/AssetManager.hpp"
-#include "Renderer/RenderCommand.hpp"
-#include "Renderer/Renderer.hpp"
 #include "Renderer/Frustum.hpp"
 #include "Engine/Scene/Components.hpp"
 #include "Engine/Scene/Scene.hpp"
 
-#include <glad/glad.h>
 #include <algorithm>
 
 namespace Ayaya {
@@ -33,7 +30,7 @@ namespace Ayaya {
             FramebufferTextureFormat::RGBA32F, // Position
             FramebufferTextureFormat::RGBA16F, // Normal
             FramebufferTextureFormat::RGBA8,   // Albedo
-            FramebufferTextureFormat::RGBA8,   // PBR (Metal, Rough, AO)
+            FramebufferTextureFormat::RGBA8,   // PBR (R:AO, G:Rough, B:Metal)
             FramebufferTextureFormat::Depth    // Depth
         };
         m_GeometryFBO = Framebuffer::Create(geoSpec);
@@ -43,87 +40,75 @@ namespace Ayaya {
         m_GeometryFBO->Resize(width, height);
     }
 
-    void GBufferPass::Execute(RenderContext& context) {
-        m_GeometryFBO->Bind();
-        // Alpha 清 0 代表天空
-        RenderCommand::SetClearColor({ 0.0f, 0.0f, 0.0f, 0.0f });
-        RenderCommand::Clear();
-        glEnable(GL_DEPTH_TEST);
-
+    void GBufferPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
+        // 1. 视锥体剔除与数据收集
         m_OpaqueDrawList.clear();
-        glm::mat4 viewProj = context.ProjectionMatrix * context.ViewMatrix;
-        Frustum cameraFrustum(viewProj);
-
-        // 1. 收集与剔除
-        auto meshGroup = context.ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
-        for (auto entityID : meshGroup) {
+        Frustum frustum(context.ProjectionMatrix * context.ViewMatrix);
+        
+        auto meshView = context.ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
+        for (auto entityID : meshView) {
             Entity entity{ entityID, context.ActiveScene.get() };
+            if (!entity.IsActiveInHierarchy()) continue;
+            
+            auto& tc = entity.GetComponent<TransformComponent>();
             auto& meshComp = entity.GetComponent<MeshRendererComponent>();
-            if (!meshComp.ModelAsset || !entity.IsActiveInHierarchy()) continue;
 
-            glm::mat4 transform = entity.GetWorldTransform();
-            bool isVisible = false;
-            for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
-                if (cameraFrustum.IsBoxVisible(mesh->GetAABB(), transform)) { isVisible = true; break; }
+            if (!meshComp.ModelAsset) continue;
+
+            glm::mat4 transform = tc.GetTransform();
+            
+            // 剔除判定
+            bool isInside = false;
+            if (meshComp.ModelAsset->GetMeshes().size() > 0) {
+                const auto& aabb = meshComp.ModelAsset->GetMeshes()[0]->GetAABB();
+                isInside = frustum.IsBoxVisible(aabb, transform);
             }
-            if (!isVisible) continue;
 
-            bool isFallback = (!meshComp.MaterialAsset || meshComp.MaterialAsset->Properties.empty());
-            auto targetShader = isFallback ? m_FallbackShader : m_GBufferShader;
-            auto targetMaterial = isFallback ? m_FallbackMaterial : meshComp.MaterialAsset;
+            if (isInside) {
+                RenderCommandData drawCmd;
+                drawCmd.Transform = transform;
+                drawCmd.TargetEntity = entity;
+                drawCmd.CastShadows = meshComp.CastShadows;
+                drawCmd.ReceiveShadows = meshComp.ReceiveShadows;
 
-            for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
-                m_OpaqueDrawList.push_back({ transform, mesh, targetMaterial, targetShader, entity, meshComp.CastShadows, meshComp.ReceiveShadows });
+                for (size_t i = 0; i < meshComp.ModelAsset->GetMeshes().size(); i++) {
+                    drawCmd.MeshAsset = meshComp.ModelAsset->GetMeshes()[i];
+                    drawCmd.MaterialAsset = m_FallbackMaterial;
+                    drawCmd.ShaderAsset = m_GBufferShader;
+                    m_OpaqueDrawList.push_back(drawCmd);
+                }
             }
         }
 
-        // 2. 状态排序 (Shader -> Material -> Mesh)
-        std::sort(m_OpaqueDrawList.begin(), m_OpaqueDrawList.end(), [](const auto& a, const auto& b) {
-            if (a.ShaderAsset.get() != b.ShaderAsset.get()) return a.ShaderAsset.get() < b.ShaderAsset.get();
-            if (a.MaterialAsset.get() != b.MaterialAsset.get()) return a.MaterialAsset.get() < b.MaterialAsset.get();
-            return a.MeshAsset.get() < b.MeshAsset.get();
-        });
+        // 2. 状态准备
+        m_GeometryFBO->Bind();
+        cmd.SetViewport(0, 0, m_GeometryFBO->GetSpecification().Width, m_GeometryFBO->GetSpecification().Height);
+        cmd.SetClearColor({ 0.0f, 0.0f, 0.0f, 1.0f });
+        cmd.Clear();
+        cmd.SetDepthTest(true);
 
-        // 3. 批量执行
-        std::shared_ptr<Shader> currentShader = nullptr;
-        std::shared_ptr<Material> currentMaterial = nullptr;
         auto whiteTexture = context.GetTexture("WhiteTexture");
 
-        for (const auto& cmd : m_OpaqueDrawList) {
-            if (currentShader != cmd.ShaderAsset) {
-                currentShader = cmd.ShaderAsset;
-                currentShader->Bind();
-                context.Stats.ShaderBinds++;
-            }
-            if (currentMaterial != cmd.MaterialAsset) {
-                currentMaterial = cmd.MaterialAsset;
-                if (currentMaterial) {
-                    int textureSlot = 0; 
-                    for (auto& prop : currentMaterial->Properties) {
+        // 3. 几何渲染
+        for (const auto& drawCmd : m_OpaqueDrawList) {
+            auto currentShader = drawCmd.ShaderAsset ? drawCmd.ShaderAsset : m_GBufferShader;
+            currentShader->Bind();
+            context.Stats.ShaderBinds++;
+
+            if (drawCmd.MaterialAsset) {
+                uint32_t textureSlot = 0;
+                for (const auto& prop : drawCmd.MaterialAsset->Properties) {
                         switch (prop.Type) {
-                            case MaterialPropertyType::Float: 
-                                currentShader->SetFloat(prop.UniformName, prop.FloatValue); 
-                                break;
-                            case MaterialPropertyType::Int:   // 【新增】：修复整型传递
-                                currentShader->SetInt(prop.UniformName, prop.IntValue); 
-                                break;
-                            case MaterialPropertyType::Bool:  // 【核心修复】：修复 u_UseAlbedoMap 等贴图开关！
-                                currentShader->SetBool(prop.UniformName, prop.BoolValue); 
-                                break;
-                            case MaterialPropertyType::Vec2:  // 【新增】：修复 UV 偏移等参数传递
-                                currentShader->SetFloat2(prop.UniformName, prop.Vec2Value); 
-                                break;
-                            case MaterialPropertyType::Vec3:  
-                                currentShader->SetFloat3(prop.UniformName, prop.Vec3Value); 
-                                break;
-                            case MaterialPropertyType::Vec4:  // 【新增】：修复 RGBA 颜色传递
-                                currentShader->SetFloat4(prop.UniformName, prop.Vec4Value); 
-                                break;
+                            case MaterialPropertyType::Float: currentShader->SetFloat(prop.UniformName, prop.FloatValue); break;
+                            case MaterialPropertyType::Vec2: currentShader->SetFloat2(prop.UniformName, prop.Vec2Value); break;
+                            case MaterialPropertyType::Vec3: currentShader->SetFloat3(prop.UniformName, prop.Vec3Value); break;
+                            case MaterialPropertyType::Vec4: currentShader->SetFloat4(prop.UniformName, prop.Vec4Value); break;
+                            case MaterialPropertyType::Bool: currentShader->SetBool(prop.UniformName, prop.BoolValue); break;
                             case MaterialPropertyType::Texture2D:
                                 currentShader->SetInt(prop.UniformName, textureSlot);
-                                // 【修复】：真正的物理贴图加载逻辑！
                                 if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
                                     auto tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
+                                    // 引擎内部的 Texture 抽象依然可以直接 Bind，暂不破坏
                                     tex->Bind(textureSlot);
                                 } else {
                                     if (whiteTexture) whiteTexture->Bind(textureSlot); 
@@ -132,17 +117,19 @@ namespace Ayaya {
                                 break;
                             default: break;
                         }
-                    }
                 }
             }
-            currentShader->SetFloat("u_ReceiveShadows", cmd.ReceiveShadows ? 1.0f : 0.0f);
+            currentShader->SetFloat("u_ReceiveShadows", drawCmd.ReceiveShadows ? 1.0f : 0.0f);
             
-            std::string tag = cmd.TargetEntity.GetComponent<TagComponent>().Tag;
-            uint32_t tris = cmd.MeshAsset->GetIndexCount() / 3;
+            // 【核心替换】：告别 Renderer::Submit，直接下令绘制！
+            currentShader->SetMat4("u_Transform", drawCmd.Transform);
+            
+            std::string tag = drawCmd.TargetEntity.GetComponent<TagComponent>().Tag;
+            uint32_t tris = drawCmd.MeshAsset->GetIndexCount() / 3;
 
-            // 【拦截验证】
             if (context.RecordAndCheckDrawCall("G-Buffer Pass", tag, "GBuffer Shader", tris)) {
-                Renderer::Submit(currentShader, cmd.MeshAsset->GetVertexArray(), cmd.Transform);
+                // 指挥权完全移交给 CommandBuffer
+                cmd.DrawIndexed(drawCmd.MeshAsset->GetVertexArray(), drawCmd.MeshAsset->GetIndexCount());
             }
         }
 
@@ -153,6 +140,6 @@ namespace Ayaya {
         context.Set("GBuffer_Normal", m_GeometryFBO->GetColorAttachmentRendererID(1));
         context.Set("GBuffer_Albedo", m_GeometryFBO->GetColorAttachmentRendererID(2));
         context.Set("GBuffer_PBR", m_GeometryFBO->GetColorAttachmentRendererID(3));
-        context.Framebuffers["Geometry"] = m_GeometryFBO; // 传整个 FBO 为了拷贝深度
+        context.Framebuffers["Geometry"] = m_GeometryFBO; 
     }
 }

@@ -1,7 +1,5 @@
 #include "ayapch.h"
 #include "PostProcessPass.hpp"
-#include "Renderer/RenderCommand.hpp"
-#include <glad/glad.h>
 
 namespace Ayaya {
 
@@ -9,12 +7,8 @@ namespace Ayaya {
         m_PassName = "Post Process Pass";
     }
 
-    PostProcessPass::~PostProcessPass() {
-        if (m_EmptyVAO != 0) glDeleteVertexArrays(1, &m_EmptyVAO);
-    }
-
     void PostProcessPass::OnAttach() {
-        glGenVertexArrays(1, &m_EmptyVAO);
+        m_EmptyVAO.reset(VertexArray::Create());
 
         m_PostProcessShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/postprocess.frag");
 
@@ -29,32 +23,26 @@ namespace Ayaya {
         m_PostProcessFBO->Resize(width, height);
     }
 
-    void PostProcessPass::Execute(RenderContext& context) {
-        // 视锥体剔除、排序、画网格，然后传递 4 张 G-Buffer 贴图和深度图
+    void PostProcessPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
         uint32_t lightingTexID = context.Get<uint32_t>("Lighting_Output", 0);
-        uint32_t selectionTexID = context.Get<uint32_t>("Selection_Output", 0);
         uint32_t bloomTexID = context.Get<uint32_t>("Bloom_Output", 0);
-        
+
         if (lightingTexID == 0) return;
 
         m_PostProcessFBO->Bind();
-        RenderCommand::SetClearColor({ 0.0f, 0.0f, 0.0f, 1.0f });
-        RenderCommand::Clear();
-        glDisable(GL_DEPTH_TEST); 
+        
+        // 使用 cmd 控制管线状态
+        cmd.SetViewport(0, 0, m_PostProcessFBO->GetSpecification().Width, m_PostProcessFBO->GetSpecification().Height);
+        cmd.SetClearColor({ 0.0f, 0.0f, 0.0f, 1.0f });
+        cmd.Clear();
+        cmd.SetDepthTest(false);
 
         m_PostProcessShader->Bind();
         context.Stats.ShaderBinds++;
 
-        // 基础贴图
         m_PostProcessShader->SetInt("u_ScreenTexture", 0);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, lightingTexID);
+        cmd.BindTexture2D(0, lightingTexID);
 
-        m_PostProcessShader->SetInt("u_SelectionTexture", 1);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, selectionTexID);
-
-        // 参数注入
         float physicalExposure = context.Get<float>("PhysicalExposure", 1.0f);
         float exposureComp = context.Get<float>("ExposureCompensation", 1.0f);
         m_PostProcessShader->SetFloat("u_Exposure", physicalExposure * exposureComp);
@@ -68,7 +56,6 @@ namespace Ayaya {
         };
         m_PostProcessShader->SetFloat2("u_TexelSize", texelSize);
 
-        // Bloom 合成
         bool enableBloom = bloomTexID != 0;
         m_PostProcessShader->SetBool("u_EnableBloom", enableBloom);
         if (enableBloom) {
@@ -76,22 +63,15 @@ namespace Ayaya {
             m_PostProcessShader->SetFloat("u_BloomIntensity", bloomIntensity);
             
             m_PostProcessShader->SetInt("u_BloomTexture", 2); 
-            glActiveTexture(GL_TEXTURE2);
-            glBindTexture(GL_TEXTURE_2D, bloomTexID);
+            cmd.BindTexture2D(2, bloomTexID);
         }
 
-        glBindVertexArray(m_EmptyVAO);
-        // 【拦截验证】：色调映射与 Bloom 合成
         if (context.RecordAndCheckDrawCall("Post Process Pass", "Tone Mapping & Combine", "PostProcess Shader", 1)) {
-            glDrawArrays(GL_TRIANGLES, 0, 3);
+            // 通过 cmd 发送绘制指令
+            cmd.DrawArrays(m_EmptyVAO, 3);
         }
         
         m_PostProcessFBO->Unbind();
-
-        // 最终结果写回黑板，供 FXAAPass 读取！
         context.Set("PostProcess_Output", m_PostProcessFBO->GetColorAttachmentRendererID(0));
-
-        // 【新增】：将 FBO 实体也挂载到黑板，供高清截图读取像素！
-        context.Framebuffers["PostProcess"] = m_PostProcessFBO;
     }
 }

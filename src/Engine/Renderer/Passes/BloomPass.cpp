@@ -1,15 +1,13 @@
 #include "ayapch.h"
 #include "BloomPass.hpp"
-#include "Renderer/RenderCommand.hpp"
-#include <glad/glad.h>
+#include <glad/glad.h> // 暂时保留，仅用于 GL_ONE 混合模式枚举
 
 namespace Ayaya {
 
     BloomPass::BloomPass() { m_PassName = "Bloom Pass"; }
-    BloomPass::~BloomPass() { if (m_EmptyVAO != 0) glDeleteVertexArrays(1, &m_EmptyVAO); }
 
     void BloomPass::OnAttach() {
-        glGenVertexArrays(1, &m_EmptyVAO);
+        m_EmptyVAO.reset(VertexArray::Create());
         m_DownsampleShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/bloom_downsample.frag");
         m_UpsampleShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/bloom_upsample.frag");
     }
@@ -34,7 +32,7 @@ namespace Ayaya {
         }
     }
 
-    void BloomPass::Execute(RenderContext& context) {
+    void BloomPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
         bool enableBloom = context.Get<bool>("EnableBloom", true);
         if (!enableBloom || m_MipChain.empty()) {
             context.Set("Bloom_Output", (uint32_t)0); 
@@ -55,8 +53,7 @@ namespace Ayaya {
         
         float bloomRadius = context.Get<float>("BloomRadius", 0.005f);
 
-        glBindVertexArray(m_EmptyVAO);
-        glDisable(GL_DEPTH_TEST);
+        cmd.SetDepthTest(false);
         
         // 1. 降采样
         m_DownsampleShader->Bind();
@@ -66,20 +63,18 @@ namespace Ayaya {
         for (size_t i = 0; i < m_MipChain.size(); i++) {
             auto& mip = m_MipChain[i];
             mip.FBO->Bind();
-            glViewport(0, 0, mip.IntSize.x, mip.IntSize.y);
-            RenderCommand::SetClearColor({ 0.0f, 0.0f, 0.0f, 1.0f });
-            RenderCommand::Clear();
+            cmd.SetViewport(0, 0, mip.IntSize.x, mip.IntSize.y);
+            cmd.SetClearColor({ 0.0f, 0.0f, 0.0f, 1.0f });
+            cmd.Clear();
 
-            // 精准传入层级，让 Shader 决定是否执行提取
             m_DownsampleShader->SetInt("u_MipLevel", (int)i);
 
-            glActiveTexture(GL_TEXTURE0);
             if (i == 0) {
                 m_DownsampleShader->SetFloat("u_Threshold", threshold);
                 m_DownsampleShader->SetFloat3("u_Curve", curve);
-                glBindTexture(GL_TEXTURE_2D, inputTextureID);
+                cmd.BindTexture2D(0, inputTextureID);
             } else {
-                glBindTexture(GL_TEXTURE_2D, m_MipChain[i - 1].FBO->GetColorAttachmentRendererID(0));
+                cmd.BindTexture2D(0, m_MipChain[i - 1].FBO->GetColorAttachmentRendererID(0));
             }
 
             glm::vec2 srcTexelSize = (i == 0) ? 
@@ -89,14 +84,14 @@ namespace Ayaya {
 
             std::string stepName = "Downsample Mip " + std::to_string(i);
             if (context.RecordAndCheckDrawCall("Bloom Pass", stepName, "Downsample Shader", 1)) {
-                glDrawArrays(GL_TRIANGLES, 0, 3);
+                cmd.DrawArrays(m_EmptyVAO, 3);
             }
         }
 
         // 2. 升采样与混合
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_ONE, GL_ONE);
-        glBlendEquation(GL_FUNC_ADD);
+        cmd.SetBlend(true);
+        glBlendFunc(GL_ONE, GL_ONE); // 暂时保留
+        glBlendEquation(GL_FUNC_ADD); // 暂时保留
 
         m_UpsampleShader->Bind();
         context.Stats.ShaderBinds++;
@@ -108,20 +103,19 @@ namespace Ayaya {
             auto& prevMip = m_MipChain[i + 1];
 
             currentMip.FBO->Bind(); 
-            glViewport(0, 0, currentMip.IntSize.x, currentMip.IntSize.y);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, prevMip.FBO->GetColorAttachmentRendererID(0));
+            cmd.SetViewport(0, 0, currentMip.IntSize.x, currentMip.IntSize.y);
+            cmd.BindTexture2D(0, prevMip.FBO->GetColorAttachmentRendererID(0));
 
             std::string stepName = "Upsample Mip " + std::to_string(i);
             if (context.RecordAndCheckDrawCall("Bloom Pass", stepName, "Upsample Shader", 1)) {
-                glDrawArrays(GL_TRIANGLES, 0, 3);
+                cmd.DrawArrays(m_EmptyVAO, 3);
             }
         }
 
-        glDisable(GL_BLEND);
+        cmd.SetBlend(false);
         m_MipChain[0].FBO->Unbind();
 
-        glViewport(0, 0, context.Get<uint32_t>("ViewportWidth", 1280), context.Get<uint32_t>("ViewportHeight", 720));
+        cmd.SetViewport(0, 0, context.Get<uint32_t>("ViewportWidth", 1280), context.Get<uint32_t>("ViewportHeight", 720));
         context.Set("Bloom_Output", m_MipChain[0].FBO->GetColorAttachmentRendererID(0));
     }
 }

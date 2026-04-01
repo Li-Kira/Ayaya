@@ -22,6 +22,8 @@ namespace Ayaya {
             return m_Specification.Samples > 1 ? m_ResolveColorAttachments[index] : m_ColorAttachments[index]; 
         }
 
+        virtual uint32_t GetDepthAttachmentRendererID() const override { return m_DepthAttachment; }
+
         virtual uint32_t GetRendererID() const override { return m_RendererID; }
         virtual const FramebufferSpecification& GetSpecification() const override { return m_Specification; }
 
