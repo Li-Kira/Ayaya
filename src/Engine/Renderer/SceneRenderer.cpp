@@ -254,14 +254,41 @@ namespace Ayaya {
         m_RenderContext.Set("EnvironmentAmbientColor", m_Data->EnvironmentAmbientColor);
 
         m_RenderContext.Set("PhysicalExposure", physicalExposure);
-        m_RenderContext.Set("ExposureCompensation", m_Exposure);
-        m_RenderContext.Set("ToneMappingType", m_ToneMappingType);
-        m_RenderContext.Set("EnableBloom", m_EnableBloom);
-        m_RenderContext.Set("BloomThreshold", m_BloomThreshold);
-        m_RenderContext.Set("BloomIntensity", m_BloomIntensity);
-        m_RenderContext.Set("BloomKnee", m_BloomKnee);
-        m_RenderContext.Set("BloomRadius", m_BloomRadius);
-        m_RenderContext.Set("EnableFXAA", m_EnableFXAA);
+        // ==========================================
+        // ECS 驱动的后处理体积 (Post-Process Volume)
+        // ==========================================
+        // 赋予默认值 (防止场景里没有任何 Volume)
+        int   tmType = 0;
+        float exposure = 1.0f;
+        bool  enableBloom = false;
+        float bThreshold = 1.0f, bKnee = 0.1f, bRadius = 0.005f, bIntensity = 1.0f;
+        bool  enableFXAA = false;
+
+        // 遍历场景，寻找全局的 Volume (目前暂时只取找到的第一个)
+        auto volumeView = scene->Reg().view<PostProcessVolumeComponent>();
+        for (auto entityID : volumeView) {
+            auto& volume = volumeView.get<PostProcessVolumeComponent>(entityID);
+            if (volume.IsGlobal) {
+                tmType = volume.ToneMappingType;
+                exposure = volume.Exposure;
+                enableBloom = volume.EnableBloom;
+                bThreshold = volume.BloomThreshold;
+                bKnee = volume.BloomKnee;
+                bRadius = volume.BloomRadius;
+                bIntensity = volume.BloomIntensity;
+                enableFXAA = volume.EnableFXAA;
+                break; // 找到全局体积后退出循环
+            }
+        }
+
+        m_RenderContext.Set("ToneMappingType", tmType);
+        m_RenderContext.Set("ExposureCompensation", exposure);
+        m_RenderContext.Set("EnableBloom", enableBloom);
+        m_RenderContext.Set("BloomThreshold", bThreshold);
+        m_RenderContext.Set("BloomKnee", bKnee);
+        m_RenderContext.Set("BloomRadius", bRadius);
+        m_RenderContext.Set("BloomIntensity", bIntensity);
+        m_RenderContext.Set("EnableFXAA", enableFXAA);
 
         m_Pipeline.Execute(m_RenderContext);
 
@@ -284,7 +311,9 @@ namespace Ayaya {
     }
 
     uint32_t SceneRenderer::GetPostProcessFBORendererID() {
-        if (m_EnableFXAA && m_RenderContext.Framebuffers.count("FXAA")) {
+        bool enableFXAA = m_RenderContext.Get<bool>("EnableFXAA", false);
+        
+        if (enableFXAA && m_RenderContext.Framebuffers.count("FXAA")) {
             return m_RenderContext.Framebuffers["FXAA"]->GetRendererID();
         }
         if (m_RenderContext.Framebuffers.count("PostProcess")) {

@@ -3,9 +3,5 @@ EditorPreferences:
   WindowHeight: 921
   UIScale: 1
   MaxUndoSteps: 100
-  ToneMappingType: 0
-  Exposure: 1
-  EnableBloom: true
-  BloomThreshold: 1
-  BloomIntensity: 1
-  EnableFXAA: true
+  EnableVSync: false
+  GraphicsAPI: 0

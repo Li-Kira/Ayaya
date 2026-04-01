@@ -268,6 +268,30 @@ namespace Ayaya {
         }
 
         // ==========================================
+        // 保存 后处理体积组件 (Post Process Volume)
+        // ==========================================
+        if (entity.HasComponent<PostProcessVolumeComponent>()) {
+            out << YAML::Key << "PostProcessVolumeComponent";
+            out << YAML::BeginMap; 
+            
+            auto& ppv = entity.GetComponent<PostProcessVolumeComponent>();
+            out << YAML::Key << "IsGlobal" << YAML::Value << ppv.IsGlobal;
+            
+            out << YAML::Key << "ToneMappingType" << YAML::Value << ppv.ToneMappingType;
+            out << YAML::Key << "Exposure" << YAML::Value << ppv.Exposure;
+            
+            out << YAML::Key << "EnableBloom" << YAML::Value << ppv.EnableBloom;
+            out << YAML::Key << "BloomThreshold" << YAML::Value << ppv.BloomThreshold;
+            out << YAML::Key << "BloomKnee" << YAML::Value << ppv.BloomKnee;
+            out << YAML::Key << "BloomRadius" << YAML::Value << ppv.BloomRadius;
+            out << YAML::Key << "BloomIntensity" << YAML::Value << ppv.BloomIntensity;
+            
+            out << YAML::Key << "EnableFXAA" << YAML::Value << ppv.EnableFXAA;
+            
+            out << YAML::EndMap; 
+        }
+
+        // ==========================================
         // 保存 2D 刚体组件
         // ==========================================
         if (entity.HasComponent<Rigidbody2DComponent>()) {
@@ -644,6 +668,27 @@ namespace Ayaya {
                     env.ClassicCubemapTexture = std::make_shared<TextureCube>(env.CubemapFaces);
                     env.IsDirty = true;
                 }
+            }
+
+            // ==========================================
+            // 读取 后处理体积组件 (Post Process Volume)
+            // ==========================================
+            auto ppvComponent = entity["PostProcessVolumeComponent"];
+            if (ppvComponent) {
+                auto& ppv = deserializedEntity.AddComponent<PostProcessVolumeComponent>();
+                
+                ppv.IsGlobal = ppvComponent["IsGlobal"].as<bool>();
+                
+                ppv.ToneMappingType = ppvComponent["ToneMappingType"].as<int>();
+                ppv.Exposure = ppvComponent["Exposure"].as<float>();
+                
+                ppv.EnableBloom = ppvComponent["EnableBloom"].as<bool>();
+                ppv.BloomThreshold = ppvComponent["BloomThreshold"].as<float>();
+                ppv.BloomKnee = ppvComponent["BloomKnee"].as<float>();
+                ppv.BloomRadius = ppvComponent["BloomRadius"].as<float>();
+                ppv.BloomIntensity = ppvComponent["BloomIntensity"].as<float>();
+                
+                ppv.EnableFXAA = ppvComponent["EnableFXAA"].as<bool>();
             }
 
             // ==========================================

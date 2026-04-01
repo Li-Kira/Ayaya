@@ -162,35 +162,6 @@ namespace Ayaya {
             m_GameRenderer->SetEnvironmentSettings(0.0f, emptyEnv.AmbientColor);
         }
 
-        // 从偏好设置面板获取实时的后处理参数
-        float currentExposure = m_PreferencesPanel.Exposure;
-        int currentToneMapping = m_PreferencesPanel.ToneMappingType;
-
-        // 同步给 Scene(编辑器) 渲染器
-        m_SceneRenderer->SetExposure(currentExposure);
-        m_SceneRenderer->SetToneMappingType(currentToneMapping);
-
-        // 同步给 Game(游戏) 渲染器
-        m_GameRenderer->SetExposure(currentExposure);
-        m_GameRenderer->SetToneMappingType(currentToneMapping);
-
-        m_SceneRenderer->SetBloomSettings(
-            m_PreferencesPanel.EnableBloom, 
-            m_PreferencesPanel.BloomThreshold, 
-            m_PreferencesPanel.BloomIntensity, 
-            m_PreferencesPanel.BloomKnee, 
-            m_PreferencesPanel.BloomRadius
-        );
-        m_GameRenderer->SetBloomSettings(
-            m_PreferencesPanel.EnableBloom, 
-            m_PreferencesPanel.BloomThreshold, 
-            m_PreferencesPanel.BloomIntensity, 
-            m_PreferencesPanel.BloomKnee, 
-            m_PreferencesPanel.BloomRadius
-        );
-        m_SceneRenderer->SetFXAAEnabled(m_PreferencesPanel.EnableFXAA);
-        m_GameRenderer->SetFXAAEnabled(m_PreferencesPanel.EnableFXAA);
-
         // ==========================================
         // 5. 渲染管线
         // ==========================================

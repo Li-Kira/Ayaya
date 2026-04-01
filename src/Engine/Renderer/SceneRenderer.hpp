@@ -31,12 +31,7 @@ namespace Ayaya {
         void SetEnvironmentSettings(float intensity, const glm::vec3& ambientColor);
         void SetClearColor(const glm::vec4& color);
 
-        void SetBloomSettings(bool enable, float threshold, float intensity, float knee, float radius) {
-            m_EnableBloom = enable; m_BloomThreshold = threshold; m_BloomIntensity = intensity; m_BloomKnee = knee; m_BloomRadius = radius;
-        }
         void SetExposure(float exposure) { m_Exposure = exposure; }
-        void SetToneMappingType(int type) { m_ToneMappingType = type; }
-        void SetFXAAEnabled(bool enable) { m_EnableFXAA = enable; }
 
         // 获取黑板上的中间阶段贴图 ID (用于帧调试器)
         uint32_t GetBlackboardTextureID(std::string_view key);
@@ -62,13 +57,6 @@ namespace Ayaya {
         RenderContext  m_RenderContext; // 持有一份上下文
 
         float m_Exposure = 1.0f;
-        int m_ToneMappingType = 1; // 默认使用更高级的 1: ACES
-        bool m_EnableBloom = false;
-        float m_BloomThreshold = 1.0f; // 亮度超过 1.0 (纯白) 就泛光
-        float m_BloomIntensity = 1.0f;
-        float m_BloomKnee = 0.1f;
-        float m_BloomRadius = 0.005f;
-        bool m_EnableFXAA = false;
     };
 
 }

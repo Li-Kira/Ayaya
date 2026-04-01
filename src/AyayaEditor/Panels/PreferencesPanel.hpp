@@ -7,7 +7,7 @@ namespace Ayaya {
     public:
         PreferencesPanel() = default;
 
-        // 新增：初始化方法（在引擎启动时调用）
+        // 初始化方法（在引擎启动时调用）
         void Init();
 
         void OnImGuiRender();
@@ -15,33 +15,24 @@ namespace Ayaya {
         void SetOpen(bool isOpen);
         bool IsOpen() const { return m_IsOpen; }
 
-        int ToneMappingType = 0; 
-        float Exposure = 1.0f;
-        bool EnableBloom = false;
-        float BloomThreshold = 1.0f;
-        float BloomIntensity = 1.0f;
-        float BloomKnee = 0.1f;
-        float BloomRadius = 0.005f;
-
-        bool EnableFXAA = false;
+        // 【新增】：全局底层渲染配置 (Hardware / Backend)
+        int GraphicsAPI = 0; // 0 = OpenGL, 1 = Vulkan, 2 = DirectX 12
         bool EnableVSync = false;
 
+        // 编辑器历史配置
         int MaxUndoSteps = 100;
+        
     private:
-        // 新增：保存和读取配置的私有方法
         void SavePreferences();
         void LoadPreferences();
 
     private:
         bool m_IsOpen = false;
-        // 配置文件的保存路径
         std::string m_PrefsFilePath = "assets/Editor/settings/EditorPreferences.yaml";
         
         int m_WindowWidth = 1280;
         int m_WindowHeight = 720;
         float m_UIScale = 1.0f;
-
-        
     };
 
 }

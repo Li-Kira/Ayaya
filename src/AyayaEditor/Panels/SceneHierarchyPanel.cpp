@@ -156,6 +156,19 @@ namespace Ayaya {
                     SetSelectedEntity(entity);
                 }
 
+                // ==========================================
+                // 【新增】：一键创建后处理体积对象！
+                // ==========================================
+                if (ImGui::MenuItem("Post Process Volume")) {
+                    Entity ppvEntity = m_Context->CreateEntity("Post Process Volume");
+                    
+                    // 自动挂载后处理体积组件
+                    ppvEntity.AddComponent<PostProcessVolumeComponent>();
+                    
+                    // 创建完毕后自动选中，方便立即编辑参数
+                    SetSelectedEntity(ppvEntity);
+                }
+
                 ImGui::EndPopup();
             }
 
@@ -251,6 +264,7 @@ namespace Ayaya {
         else if (entity.HasComponent<DirectionalLightComponent>()) icon = ICON_FA_SUN; 
         else if (entity.HasComponent<PointLightComponent>()) icon = ICON_FA_LIGHTBULB;
         else if (entity.HasComponent<EnvironmentComponent>()) icon = ICON_FA_CLOUD_SUN; 
+        else if (entity.HasComponent<PostProcessVolumeComponent>()) icon = ICON_FA_MAGIC;
 
         std::string displayString = icon + " " + tag;
 
@@ -1699,6 +1713,166 @@ namespace Ayaya {
         }
 
         // ==========================================
+        // --- 绘制 Post Process Volume 组件 ---
+        // ==========================================
+        // 记录的命令：全局体积(Is Global)的切换、色调映射算法(Tone Mapping)的下拉切换、曝光补偿(Exposure)的拖拽修改、Bloom开关及其各项核心参数(阈值、平滑度、半径、强度)的拖拽修改、FXAA抗锯齿开关的切换
+        bool allHavePPV = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<PostProcessVolumeComponent>()) { allHavePPV = false; break; }
+
+        if (allHavePPV) {
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.4f, 0.9f, 1.0f)); // 优雅的紫色以区分后期特效
+            bool opened = ImGui::TreeNodeEx((void*)typeid(PostProcessVolumeComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_MAGIC " Post Process Volume");
+            ImGui::PopStyleColor();
+            ImGui::PopFont();
+            
+            // 右键菜单支持移除组件
+            bool removeComponent = false;
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Remove Component")) removeComponent = true;
+                ImGui::EndPopup();
+            }
+
+            if (opened) {
+                auto& refPPV = referenceEntity.GetComponent<PostProcessVolumeComponent>();
+
+                // 动态名字生成器
+                auto getTargetName = [&]() -> std::string {
+                    if (m_SelectedEntities.size() == 1) return "'" + m_SelectedEntities[0].GetComponent<TagComponent>().Tag + "'";
+                    return std::to_string(m_SelectedEntities.size()) + " Entities";
+                };
+
+                // 【物理快照】：捕获绝对纯净的旧状态
+                std::vector<PostProcessVolumeComponent> pureOldPPVs;
+                for (auto e : m_SelectedEntities) pureOldPPVs.push_back(e.GetComponent<PostProcessVolumeComponent>());
+
+                // 【一键打包】：用于瞬时交互状态(如 Checkbox, Combo)的撤回打包
+                auto commitInstantCommand = [&](const std::string& actionName, const std::vector<PostProcessVolumeComponent>& oldComps) {
+                    auto macroCmd = std::make_shared<MacroCommand>(actionName + " of " + getTargetName());
+                    for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                        macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<PostProcessVolumeComponent>>(
+                            m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<PostProcessVolumeComponent>()
+                        ));
+                    }
+                    EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
+                };
+
+                // 【复用 Lambda】：处理连续拖拽(如 DragFloat)的状态拦截
+                static std::vector<PostProcessVolumeComponent> s_OldPPVs;
+                auto handleDragState = [&](const std::string& actionName) {
+                    if (ImGui::IsItemActivated()) {
+                        s_OldPPVs = pureOldPPVs; // 激活瞬间载入纯净快照
+                    }
+                    if (ImGui::IsItemDeactivatedAfterEdit()) {
+                        auto macroCmd = std::make_shared<MacroCommand>(actionName + " of " + getTargetName());
+                        for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                            macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<PostProcessVolumeComponent>>(
+                                m_SelectedEntities[i], s_OldPPVs[i], m_SelectedEntities[i].GetComponent<PostProcessVolumeComponent>()
+                            ));
+                        }
+                        EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
+                    }
+                };
+
+                // ------------------------------------------
+                // 1. 体积类型
+                // ------------------------------------------
+                bool isGlobal = refPPV.IsGlobal;
+                if (ImGui::Checkbox("Is Global", &isGlobal)) {
+                    std::vector<PostProcessVolumeComponent> oldComps = pureOldPPVs;
+                    for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().IsGlobal = isGlobal;
+                    commitInstantCommand("Toggle Is Global", oldComps);
+                }
+                if (!refPPV.IsGlobal) {
+                    ImGui::TextDisabled("Local volumes (Bounding Box Blending) coming soon...");
+                }
+
+                ImGui::Separator();
+                ImGui::Text("Tone Mapping & Exposure");
+
+                // ------------------------------------------
+                // 2. 色调映射与曝光
+                // ------------------------------------------
+                const char* tmTypes[] = { "None", "ACES (Filmic)", "Reinhard" };
+                int currentTmType = refPPV.ToneMappingType;
+                if (ImGui::Combo("Algorithm", &currentTmType, tmTypes, 3)) {
+                    std::vector<PostProcessVolumeComponent> oldComps = pureOldPPVs;
+                    for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().ToneMappingType = currentTmType;
+                    commitInstantCommand("Change Tone Mapping Type", oldComps);
+                }
+
+                float exposure = refPPV.Exposure;
+                if (ImGui::DragFloat("Exposure Comp.", &exposure, 0.05f, 0.0f, 10.0f, "%.2f")) {
+                    for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().Exposure = exposure;
+                }
+                handleDragState("Change Exposure");
+
+                ImGui::Separator();
+                ImGui::Text("Bloom (Dual-Filtering)");
+
+                // ------------------------------------------
+                // 3. Bloom 参数组
+                // ------------------------------------------
+                bool enableBloom = refPPV.EnableBloom;
+                if (ImGui::Checkbox("Enable Bloom", &enableBloom)) {
+                    std::vector<PostProcessVolumeComponent> oldComps = pureOldPPVs;
+                    for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().EnableBloom = enableBloom;
+                    commitInstantCommand("Toggle Enable Bloom", oldComps);
+                }
+
+                if (refPPV.EnableBloom) {
+                    ImGui::Indent(10.0f * uiScale);
+
+                    float threshold = refPPV.BloomThreshold;
+                    if (ImGui::DragFloat("Threshold", &threshold, 0.05f, 0.0f, 10.0f, "%.2f")) {
+                        for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().BloomThreshold = threshold;
+                    }
+                    handleDragState("Change Bloom Threshold");
+
+                    float knee = refPPV.BloomKnee;
+                    if (ImGui::DragFloat("Soft Knee", &knee, 0.01f, 0.0001f, 1.0f, "%.2f")) {
+                        for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().BloomKnee = knee;
+                    }
+                    handleDragState("Change Bloom Knee");
+
+                    float radius = refPPV.BloomRadius;
+                    if (ImGui::DragFloat("Filter Radius", &radius, 0.0005f, 0.001f, 0.02f, "%.4f")) {
+                        for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().BloomRadius = radius;
+                    }
+                    handleDragState("Change Bloom Radius");
+
+                    float intensity = refPPV.BloomIntensity;
+                    if (ImGui::DragFloat("Intensity", &intensity, 0.05f, 0.0f, 5.0f, "%.2f")) {
+                        for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().BloomIntensity = intensity;
+                    }
+                    handleDragState("Change Bloom Intensity");
+
+                    ImGui::Unindent(10.0f * uiScale);
+                }
+
+                ImGui::Separator();
+                ImGui::Text("Anti-Aliasing");
+
+                // ------------------------------------------
+                // 4. FXAA
+                // ------------------------------------------
+                bool enableFXAA = refPPV.EnableFXAA;
+                if (ImGui::Checkbox("Enable FXAA", &enableFXAA)) {
+                    std::vector<PostProcessVolumeComponent> oldComps = pureOldPPVs;
+                    for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().EnableFXAA = enableFXAA;
+                    commitInstantCommand("Toggle Enable FXAA", oldComps);
+                }
+
+                ImGui::TreePop();
+            }
+
+            // 处理组件移除结算
+            if (removeComponent) {
+                for (auto e : m_SelectedEntities) e.RemoveComponent<PostProcessVolumeComponent>();
+            }
+        }
+
+        // ==========================================
         // --- 绘制 Lua Script 组件 ---
         // ==========================================
         // 记录的命令：脚本文件(.lua)的拖入分配、手动输入脚本路径的修改
@@ -2072,6 +2246,13 @@ namespace Ayaya {
                             e.AddComponent<EnvironmentComponent>();
                         }
                     }
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
+            if (!referenceEntity.HasComponent<PostProcessVolumeComponent>()) {
+                if (ImGui::MenuItem("Post Process Volume")) {
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<PostProcessVolumeComponent>()) e.AddComponent<PostProcessVolumeComponent>();
                     ImGui::CloseCurrentPopup();
                 }
             }

@@ -177,6 +177,30 @@ namespace Ayaya {
     };
 
     // ==========================================
+    // 后处理体积组件 (Post-Process Volume)
+    // ==========================================
+    struct PostProcessVolumeComponent {
+        bool IsGlobal = true; // 是否为全局体积（未来可以扩展局部体积和混合权重）
+        
+        // --- 色调映射与曝光 ---
+        int ToneMappingType = 0; // 0: None, 1: ACES, 2: Reinhard
+        float Exposure = 1.0f;
+
+        // --- Bloom ---
+        bool EnableBloom = false;
+        float BloomThreshold = 1.0f;
+        float BloomKnee = 0.1f;
+        float BloomRadius = 0.005f;
+        float BloomIntensity = 1.0f;
+
+        // --- FXAA ---
+        bool EnableFXAA = false;
+
+        PostProcessVolumeComponent() = default;
+        PostProcessVolumeComponent(const PostProcessVolumeComponent&) = default;
+    };
+
+    // ==========================================
     // Box2D 物理组件
     // ==========================================
     struct Rigidbody2DComponent {

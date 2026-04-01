@@ -43,17 +43,10 @@ namespace Ayaya {
         out << YAML::Key << "UIScale" << YAML::Value << m_UIScale;
 
         out << YAML::Key << "MaxUndoSteps" << YAML::Value << MaxUndoSteps;
+        out << YAML::Key << "EnableVSync" << YAML::Value << EnableVSync;
 
-        out << YAML::Key << "ToneMappingType" << YAML::Value << ToneMappingType;
-        out << YAML::Key << "Exposure" << YAML::Value << Exposure;
-        
-        out << YAML::Key << "EnableBloom" << YAML::Value << EnableBloom;
-        out << YAML::Key << "BloomThreshold" << YAML::Value << BloomThreshold;
-        out << YAML::Key << "BloomIntensity" << YAML::Value << BloomIntensity;
-        out << YAML::Key << "BloomKnee" << YAML::Value << BloomKnee;
-        out << YAML::Key << "BloomRadius" << YAML::Value << BloomRadius;
-        
-        out << YAML::Key << "EnableFXAA" << YAML::Value << EnableFXAA;
+        // 【更新】：保存全局底层配置，删除了旧的后处理配置
+        out << YAML::Key << "GraphicsAPI" << YAML::Value << GraphicsAPI;
         
         out << YAML::EndMap;
         out << YAML::EndMap;
@@ -76,17 +69,10 @@ namespace Ayaya {
                 if (prefs["UIScale"]) m_UIScale = prefs["UIScale"].as<float>();
 
                 if (prefs["MaxUndoSteps"]) MaxUndoSteps = prefs["MaxUndoSteps"].as<int>();
+                if (prefs["EnableVSync"]) EnableVSync = prefs["EnableVSync"].as<bool>();
 
-                if (prefs["ToneMappingType"]) ToneMappingType = prefs["ToneMappingType"].as<int>();
-                if (prefs["Exposure"]) Exposure = prefs["Exposure"].as<float>();
-                
-                if (prefs["EnableBloom"]) EnableBloom = prefs["EnableBloom"].as<bool>();
-                if (prefs["BloomThreshold"]) BloomThreshold = prefs["BloomThreshold"].as<float>();
-                if (prefs["BloomIntensity"]) BloomIntensity = prefs["BloomIntensity"].as<float>();
-                if (prefs["BloomKnee"]) BloomKnee = prefs["BloomKnee"].as<float>();
-                if (prefs["BloomRadius"]) BloomRadius = prefs["BloomRadius"].as<float>();
-                
-                if (prefs["EnableFXAA"]) EnableFXAA = prefs["EnableFXAA"].as<bool>();
+                // 【更新】：读取全局底层配置
+                if (prefs["GraphicsAPI"]) GraphicsAPI = prefs["GraphicsAPI"].as<int>();
             }
         } catch (YAML::ParserException e) {
             AYAYA_CORE_ERROR("Failed to load preferences: {0}", e.what());
@@ -202,51 +188,46 @@ namespace Ayaya {
         }
         else if (s_ActiveTab == 1) {
             ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
-            ImGui::Text("Tone Mapping & Color Grading");
+            ImGui::Text("Graphics API & Backend");
             ImGui::PopFont();
             ImGui::Separator();
             ImGui::Spacing();
 
-            ImGui::DragFloat("Exposure Compensation", &Exposure, 0.05f, 0.1f, 10.0f, "%.2fx");
-            
-            const char* tmTypes[] = { "Reinhard (Classic)", "ACES (Filmic)" };
-            ImGui::Combo("Tone Mapping Algorithm", &ToneMappingType, tmTypes, 2);
+            // ==========================================
+            // 图形 API 切换预留位
+            // ==========================================
+            const char* apis[] = { "OpenGL 4.1 (Current)", "Vulkan (Experimental)", "DirectX 12 (Planned)" };
+            if (ImGui::Combo("Hardware API", &GraphicsAPI, apis, 3)) {
+                // TODO: 未来如果要支持实时热切换，可能需要彻底重建 Renderer 上下文，通常建议提示用户重启引擎。
+            }
 
-            ImGui::Spacing();
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
-            ImGui::TextWrapped("ACES provides a cinematic color curve that handles ultra-bright highlights better than standard Reinhard.");
-            ImGui::PopStyleColor();
-
-            ImGui::Spacing();
-            ImGui::Spacing();
-            
-            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
-            ImGui::Text("Bloom (Optical Flare)");
-            ImGui::PopFont();
-            ImGui::Separator();
-            ImGui::Spacing();
-            
-            ImGui::Checkbox("Enable Bloom", &EnableBloom);
-            if (EnableBloom) {
-                ImGui::Indent(10.0f * currentScale);
-                ImGui::DragFloat("Threshold", &BloomThreshold, 0.05f, 0.0f, 10.0f, "%.2f");
-                ImGui::DragFloat("Intensity", &BloomIntensity, 0.05f, 0.0f, 5.0f, "%.2f");
-                ImGui::DragFloat("Knee", &BloomKnee, 0.01f, 0.0f, 1.0f, "%.2f");
-                ImGui::DragFloat("Radius", &BloomRadius, 0.0005f, 0.001f, 0.02f, "%.4f");
-                ImGui::Unindent(10.0f * currentScale);
+            if (GraphicsAPI != 0) {
+                ImGui::Spacing();
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.6f, 0.2f, 1.0f));
+                ImGui::TextWrapped(ICON_FA_EXCLAMATION_TRIANGLE " Vulkan and DirectX 12 backends are currently under active development. Selecting them may cause engine instability. Changing the backend requires an engine restart to take effect.");
+                ImGui::PopStyleColor();
             }
 
             ImGui::Spacing();
             ImGui::Spacing();
 
+            // ==========================================
+            // 预留给未来的全局硬件/质量上限配置
+            // ==========================================
             ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
-            ImGui::Text("Anti-Aliasing");
+            ImGui::Text("Global Rendering Quality");
             ImGui::PopFont();
             ImGui::Separator();
             ImGui::Spacing();
             
-            ImGui::Checkbox("Enable FXAA (Fast Approximate)", &EnableFXAA);
+            ImGui::TextDisabled("Note: Post-Processing effects (Bloom, Tone Mapping, FXAA) have been moved to the ECS.");
+            ImGui::TextDisabled("Please use a 'Post Process Volume' component in your scene.");
+            
             ImGui::Spacing();
+            ImGui::TextDisabled("[Future Updates]");
+            ImGui::TextDisabled(" - Global MSAA Target");
+            ImGui::TextDisabled(" - Maximum Shadow Map Resolution (VRAM Limit)");
+            ImGui::TextDisabled(" - Texture Streaming Budget");
         }
         else if (s_ActiveTab == 2) {
             ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
