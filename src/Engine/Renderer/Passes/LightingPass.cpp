@@ -4,6 +4,7 @@
 #include "Engine/Scene/Components.hpp"
 #include "Engine/Scene/Scene.hpp"
 #include "Engine/Scene/Entity.hpp"
+
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 
@@ -14,6 +15,7 @@ namespace Ayaya {
     }
 
     void LightingPass::OnAttach() {
+        // 使用引擎的智能指针 VAO
         m_EmptyVAO.reset(VertexArray::Create());
 
         // 1. 加载所有涉及光照与正向渲染的 Shader
@@ -59,18 +61,16 @@ namespace Ayaya {
         uint32_t gAlbedo   = context.Get<uint32_t>("GBuffer_Albedo", 0);
         uint32_t gPBR      = context.Get<uint32_t>("GBuffer_PBR", 0);
         
-        // 如果前面 G-Buffer 没干活，本 Pass 直接罢工
         if (gPosition == 0) return;
 
         float physicalExposure = context.Get<float>("PhysicalExposure", 1.0f);
-        glm::vec4 clearColor   = context.Get<glm::vec4>("ClearColor", {0.06f, 0.06f, 0.065f, 1.0f});
+        glm::vec4 clearColor   = context.Get<glm::vec4>("ClearColor", glm::vec4(0.06f, 0.06f, 0.065f, 1.0f));
 
         // ==========================================
         // 1. 延迟光照核爆合成 (Deferred Lighting)
         // ==========================================
         m_LightingFBO->Bind();
         
-        // 为背景色注入物理能量，抵消后期曝光
         glm::vec4 hdrClearColor = clearColor;
         hdrClearColor.r /= physicalExposure;
         hdrClearColor.g /= physicalExposure;
@@ -80,23 +80,17 @@ namespace Ayaya {
         cmd.SetClearColor(hdrClearColor);
         cmd.Clear();
 
-        // 画全屏四边形合成光照，绝对不能开启深度测试！
         cmd.SetDepthTest(false);
         m_DeferredLightingShader->Bind();
         context.Stats.ShaderBinds++;
 
-        // 【核心修复】：使用你原本正确的变量名！
-        m_DeferredLightingShader->SetInt("g_Position", 0);
-        m_DeferredLightingShader->SetInt("g_Normal", 1);
-        m_DeferredLightingShader->SetInt("g_Albedo", 2);
-        m_DeferredLightingShader->SetInt("g_PBR", 3);
+        // 【精准还原 1】：G-Buffer 绑定 0, 1, 2, 3
+        cmd.BindTexture2D(0, gPosition); m_DeferredLightingShader->SetInt("g_Position", 0);
+        cmd.BindTexture2D(1, gNormal);   m_DeferredLightingShader->SetInt("g_Normal", 1);
+        cmd.BindTexture2D(2, gAlbedo);   m_DeferredLightingShader->SetInt("g_Albedo", 2);
+        cmd.BindTexture2D(3, gPBR);      m_DeferredLightingShader->SetInt("g_PBR", 3);
 
-        cmd.BindTexture2D(0, gPosition);
-        cmd.BindTexture2D(1, gNormal);
-        cmd.BindTexture2D(2, gAlbedo);
-        cmd.BindTexture2D(3, gPBR);
-
-        // 绑定 IBL 漫反射与高光贴图
+        // 【精准还原 2】：IBL 绑定 4, 5, 6
         auto irrMap = context.Get<std::shared_ptr<TextureCube>>("IrradianceMap", nullptr);
         auto preMap = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap", nullptr);
         if (irrMap && preMap) {
@@ -108,26 +102,25 @@ namespace Ayaya {
             m_DeferredLightingShader->SetBool("u_EnvMapEnabled", false);
         }
         
-        m_DeferredLightingShader->SetFloat3("u_AmbientColor", context.Get<glm::vec3>("EnvironmentAmbientColor", {0.1f, 0.1f, 0.1f}) * context.Get<float>("EnvironmentIntensity", 1.0f));
+        m_DeferredLightingShader->SetFloat3("u_AmbientColor", context.Get<glm::vec3>("EnvironmentAmbientColor", glm::vec3(0.1f)) * context.Get<float>("EnvironmentIntensity", 1.0f));
 
         auto brdfLUT = context.GetTexture("BRDFLUT");
         if (brdfLUT) {
             brdfLUT->Bind(6); m_DeferredLightingShader->SetInt("u_BRDFLUT", 6);
         }
 
-        // 绑定阴影贴图
+        // 【精准还原 3】：阴影贴图绑定 7
         if (context.Get<bool>("HasDirLight", false)) {
-            cmd.BindTexture2D(7, context.Get<uint32_t>("ShadowMap_Output", 0)); // 修复：必须读 Output
+            cmd.BindTexture2D(7, context.Get<uint32_t>("ShadowMap_Output", 0));
             m_DeferredLightingShader->SetInt("u_ShadowMap", 7);
             m_DeferredLightingShader->SetMat4("u_LightSpaceMatrix", context.Get<glm::mat4>("LightSpaceMatrix"));
         }
 
-        // 轰炸全屏
-        if (context.RecordAndCheckDrawCall("Lighting Pass", "Deferred Combine", "DeferredLighting", 2)) {
+        if (context.RecordAndCheckDrawCall("Lighting Pass", "Deferred Combine", "DeferredLighting Shader", 2)) {
             cmd.DrawArrays(m_EmptyVAO, 3);
         }
         
-        cmd.SetDepthTest(true); // 画完恢复深度测试
+        cmd.SetDepthTest(true); 
 
         // ==========================================
         // 2. 深度拷贝 (Blit Depth)
@@ -137,7 +130,7 @@ namespace Ayaya {
             uint32_t width = geoFBO->GetSpecification().Width;
             uint32_t height = geoFBO->GetSpecification().Height;
             cmd.BlitDepth(geoFBO->GetRendererID(), m_LightingFBO->GetRendererID(), width, height);
-            m_LightingFBO->Bind(); // Blit 后重新绑定
+            m_LightingFBO->Bind();
         }
 
         // ==========================================
@@ -166,13 +159,13 @@ namespace Ayaya {
                 }
                 m_SkyboxShader->SetMat4("u_Projection", skyProjection);
                 
+                // 【精准还原 4】：天空盒贴图绑在 0，变量名叫 u_Skybox
                 envMap->Bind(0); 
                 m_SkyboxShader->SetInt("u_Skybox", 0);
 
                 cmd.SetCullFace(false); 
-                if (context.RecordAndCheckDrawCall("Lighting Pass", "Skybox", "Skybox", 12)) {
-                    // 自行绑定 Transform 并绘制
-                    m_SkyboxShader->SetMat4("u_Transform", glm::mat4(1.0f));
+                if (context.RecordAndCheckDrawCall("Lighting Pass", "Skybox", "Skybox Shader", skyMesh->GetIndexCount() / 3)) {
+                    m_SkyboxShader->SetMat4("u_Transform", glm::mat4(1.0f)); // 接管 Renderer::Submit 逻辑
                     cmd.DrawIndexed(skyMesh->GetVertexArray(), skyMesh->GetIndexCount());
                 }
                 cmd.SetCullFace(true);
@@ -189,20 +182,25 @@ namespace Ayaya {
             cmd.SetCullFace(false);
             
             m_GridShader->Bind();
+            context.Stats.ShaderBinds++;
             m_GridShader->SetFloat("u_ExposureInverse", 1.0f / physicalExposure);
             
             glm::mat4 gridTransform = glm::scale(glm::mat4(1.0f), glm::vec3(1000.0f, 1.0f, 1000.0f));
             m_GridShader->SetMat4("u_Transform", gridTransform);
             
             auto gridMesh = context.Get<std::shared_ptr<Mesh>>("GridMesh", nullptr);
-            if (gridMesh) cmd.DrawIndexed(gridMesh->GetVertexArray(), gridMesh->GetIndexCount());
+            if (gridMesh) {
+                if (context.RecordAndCheckDrawCall("Lighting Pass", "Grid", "Grid Shader", gridMesh->GetIndexCount() / 3)) {
+                    cmd.DrawIndexed(gridMesh->GetVertexArray(), gridMesh->GetIndexCount());
+                }
+            }
             
             cmd.SetCullFace(true);
             cmd.SetDepthWrite(true); 
             cmd.SetBlend(false); 
         }
 
-        // 3.3 渲染 2D 纸片人 (Sprites) - 采用 Painter's Algorithm 透明度排序
+        // 3.3 渲染 2D 纸片人 (Sprites)
         {
             cmd.SetBlend(true);
             cmd.SetBlendFuncAlpha();
@@ -247,8 +245,7 @@ namespace Ayaya {
                 }
 
                 m_SpriteShader->SetFloat("u_ExposureInverse", 1.0f / physicalExposure);
-                std::string tag = drawCmd.SpriteComp.TextureHandle == 0 ? "White Sprite" : "Texture Sprite";
-                if (context.RecordAndCheckDrawCall("Lighting Pass", tag, "Sprite Shader", 2)) {
+                if (context.RecordAndCheckDrawCall("Lighting Pass", "Sprite", "Sprite Shader", 2)) {
                     cmd.DrawTriangleStrip(m_EmptyVAO, 4);
                 }
             }
@@ -264,17 +261,16 @@ namespace Ayaya {
         // 4. 选择轮廓描边 (Selection Pass)
         // ==========================================
         m_SelectionFBO->Bind();
-        cmd.SetClearColor({ 0.0f, 0.0f, 0.0f, 0.0f });
+        cmd.SetClearColor(glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
         cmd.Clear();
 
-        Entity hoveredEntity = context.Get<Entity>("HoveredEntity");
+        Entity hoveredEntity = context.Get<Entity>("HoveredEntity", Entity{});
         if (hoveredEntity && hoveredEntity.IsActiveInHierarchy()) {
             
             cmd.SetDepthTest(false); // X-Ray 穿透墙壁效果
-
             glm::mat4 transform = hoveredEntity.GetWorldTransform();
 
-            // 4.1: 3D 网格模型的纯白剪影
+            // 【精准还原 5】：直接绘制实心剪影，绝对不能开启 cmd.SetPolygonModeLine()，否则会毁掉后处理边缘检测！
             if (hoveredEntity.HasComponent<MeshRendererComponent>()) {
                 m_OutlineShader->Bind();
                 m_OutlineShader->SetFloat3("u_Color", glm::vec3(1.0f, 1.0f, 1.0f)); 
@@ -287,7 +283,6 @@ namespace Ayaya {
                     }
                 }
             }
-            // 4.2: 2D 精灵图的像素级剪影
             else if (hoveredEntity.HasComponent<SpriteRendererComponent>()) {
                 auto& spriteComp = hoveredEntity.GetComponent<SpriteRendererComponent>();
 
@@ -317,7 +312,6 @@ namespace Ayaya {
 
         // ==========================================
         // 5. 产出数据交接
-        // 把结果挂上黑板，通知下游 (Bloom / PostProcess) 来取货
         // ==========================================
         context.Set("Lighting_Output", m_LightingFBO->GetColorAttachmentRendererID(0));
         context.Set("Selection_Output", m_SelectionFBO->GetColorAttachmentRendererID(0));

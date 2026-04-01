@@ -6,6 +6,7 @@
 #include "Engine/Scene/Scene.hpp"
 
 #include <algorithm>
+#include <glm/glm.hpp>
 
 namespace Ayaya {
 
@@ -30,7 +31,7 @@ namespace Ayaya {
             FramebufferTextureFormat::RGBA32F, // Position
             FramebufferTextureFormat::RGBA16F, // Normal
             FramebufferTextureFormat::RGBA8,   // Albedo
-            FramebufferTextureFormat::RGBA8,   // PBR (R:AO, G:Rough, B:Metal)
+            FramebufferTextureFormat::RGBA8,   // PBR (Metal, Rough, AO)
             FramebufferTextureFormat::Depth    // Depth
         };
         m_GeometryFBO = Framebuffer::Create(geoSpec);
@@ -41,74 +42,77 @@ namespace Ayaya {
     }
 
     void GBufferPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
-        // 1. 视锥体剔除与数据收集
-        m_OpaqueDrawList.clear();
-        Frustum frustum(context.ProjectionMatrix * context.ViewMatrix);
-        
-        auto meshView = context.ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
-        for (auto entityID : meshView) {
-            Entity entity{ entityID, context.ActiveScene.get() };
-            if (!entity.IsActiveInHierarchy()) continue;
-            
-            auto& tc = entity.GetComponent<TransformComponent>();
-            auto& meshComp = entity.GetComponent<MeshRendererComponent>();
-
-            if (!meshComp.ModelAsset) continue;
-
-            glm::mat4 transform = tc.GetTransform();
-            
-            // 剔除判定
-            bool isInside = false;
-            if (meshComp.ModelAsset->GetMeshes().size() > 0) {
-                const auto& aabb = meshComp.ModelAsset->GetMeshes()[0]->GetAABB();
-                isInside = frustum.IsBoxVisible(aabb, transform);
-            }
-
-            if (isInside) {
-                RenderCommandData drawCmd;
-                drawCmd.Transform = transform;
-                drawCmd.TargetEntity = entity;
-                drawCmd.CastShadows = meshComp.CastShadows;
-                drawCmd.ReceiveShadows = meshComp.ReceiveShadows;
-
-                for (size_t i = 0; i < meshComp.ModelAsset->GetMeshes().size(); i++) {
-                    drawCmd.MeshAsset = meshComp.ModelAsset->GetMeshes()[i];
-                    drawCmd.MaterialAsset = m_FallbackMaterial;
-                    drawCmd.ShaderAsset = m_GBufferShader;
-                    m_OpaqueDrawList.push_back(drawCmd);
-                }
-            }
-        }
-
-        // 2. 状态准备
         m_GeometryFBO->Bind();
         cmd.SetViewport(0, 0, m_GeometryFBO->GetSpecification().Width, m_GeometryFBO->GetSpecification().Height);
-        cmd.SetClearColor({ 0.0f, 0.0f, 0.0f, 1.0f });
+        
+        // 【核心修复】：Alpha 清 0 代表天空！如果设为 1，天空盒会被错误遮挡！
+        cmd.SetClearColor(glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
         cmd.Clear();
         cmd.SetDepthTest(true);
 
+        m_OpaqueDrawList.clear();
+        glm::mat4 viewProj = context.ProjectionMatrix * context.ViewMatrix;
+        Frustum cameraFrustum(viewProj);
+
+        // 1. 收集与剔除
+        auto meshGroup = context.ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
+        for (auto entityID : meshGroup) {
+            Entity entity{ entityID, context.ActiveScene.get() };
+            if (!entity.IsActiveInHierarchy()) continue;
+
+            auto& meshComp = entity.GetComponent<MeshRendererComponent>();
+            if (!meshComp.ModelAsset) continue;
+
+            glm::mat4 transform = entity.GetWorldTransform();
+            bool isVisible = false;
+            for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
+                if (cameraFrustum.IsBoxVisible(mesh->GetAABB(), transform)) { isVisible = true; break; }
+            }
+            if (!isVisible) continue;
+
+            bool isFallback = (!meshComp.MaterialAsset || meshComp.MaterialAsset->Properties.empty());
+            auto targetShader = isFallback ? m_FallbackShader : m_GBufferShader;
+            auto targetMaterial = isFallback ? m_FallbackMaterial : meshComp.MaterialAsset;
+
+            for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
+                m_OpaqueDrawList.push_back({ transform, mesh, targetMaterial, targetShader, entity, meshComp.CastShadows, meshComp.ReceiveShadows });
+            }
+        }
+
+        // 2. 状态排序 (Shader -> Material -> Mesh)
+        std::sort(m_OpaqueDrawList.begin(), m_OpaqueDrawList.end(), [](const auto& a, const auto& b) {
+            if (a.ShaderAsset.get() != b.ShaderAsset.get()) return a.ShaderAsset.get() < b.ShaderAsset.get();
+            if (a.MaterialAsset.get() != b.MaterialAsset.get()) return a.MaterialAsset.get() < b.MaterialAsset.get();
+            return a.MeshAsset.get() < b.MeshAsset.get();
+        });
+
+        // 3. 批量执行
+        std::shared_ptr<Shader> currentShader = nullptr;
+        std::shared_ptr<Material> currentMaterial = nullptr;
         auto whiteTexture = context.GetTexture("WhiteTexture");
 
-        // 3. 几何渲染
+        // 【核心修复】：循环变量改名为 drawCmd，避免覆盖 RenderCommandBuffer& cmd
         for (const auto& drawCmd : m_OpaqueDrawList) {
-            auto currentShader = drawCmd.ShaderAsset ? drawCmd.ShaderAsset : m_GBufferShader;
-            currentShader->Bind();
-            context.Stats.ShaderBinds++;
-
-            if (drawCmd.MaterialAsset) {
-                uint32_t textureSlot = 0;
-                for (const auto& prop : drawCmd.MaterialAsset->Properties) {
+            if (currentShader != drawCmd.ShaderAsset) {
+                currentShader = drawCmd.ShaderAsset;
+                currentShader->Bind();
+                context.Stats.ShaderBinds++;
+            }
+            if (currentMaterial != drawCmd.MaterialAsset) {
+                currentMaterial = drawCmd.MaterialAsset;
+                if (currentMaterial) {
+                    int textureSlot = 0; 
+                    for (auto& prop : currentMaterial->Properties) {
                         switch (prop.Type) {
                             case MaterialPropertyType::Float: currentShader->SetFloat(prop.UniformName, prop.FloatValue); break;
-                            case MaterialPropertyType::Vec2: currentShader->SetFloat2(prop.UniformName, prop.Vec2Value); break;
-                            case MaterialPropertyType::Vec3: currentShader->SetFloat3(prop.UniformName, prop.Vec3Value); break;
-                            case MaterialPropertyType::Vec4: currentShader->SetFloat4(prop.UniformName, prop.Vec4Value); break;
-                            case MaterialPropertyType::Bool: currentShader->SetBool(prop.UniformName, prop.BoolValue); break;
+                            case MaterialPropertyType::Vec2:  currentShader->SetFloat2(prop.UniformName, prop.Vec2Value); break;
+                            case MaterialPropertyType::Vec3:  currentShader->SetFloat3(prop.UniformName, prop.Vec3Value); break;
+                            case MaterialPropertyType::Vec4:  currentShader->SetFloat4(prop.UniformName, prop.Vec4Value); break;
+                            case MaterialPropertyType::Bool:  currentShader->SetBool(prop.UniformName, prop.BoolValue); break;
                             case MaterialPropertyType::Texture2D:
                                 currentShader->SetInt(prop.UniformName, textureSlot);
                                 if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
                                     auto tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
-                                    // 引擎内部的 Texture 抽象依然可以直接 Bind，暂不破坏
                                     tex->Bind(textureSlot);
                                 } else {
                                     if (whiteTexture) whiteTexture->Bind(textureSlot); 
@@ -117,25 +121,28 @@ namespace Ayaya {
                                 break;
                             default: break;
                         }
+                    }
                 }
             }
-            currentShader->SetFloat("u_ReceiveShadows", drawCmd.ReceiveShadows ? 1.0f : 0.0f);
             
-            // 【核心替换】：告别 Renderer::Submit，直接下令绘制！
+            if (currentShader == m_GBufferShader) {
+                currentShader->SetFloat("u_ReceiveShadows", drawCmd.ReceiveShadows ? 1.0f : 0.0f);
+            }
+            
+            // 替代旧版的 Renderer::Submit
             currentShader->SetMat4("u_Transform", drawCmd.Transform);
-            
+
             std::string tag = drawCmd.TargetEntity.GetComponent<TagComponent>().Tag;
             uint32_t tris = drawCmd.MeshAsset->GetIndexCount() / 3;
 
             if (context.RecordAndCheckDrawCall("G-Buffer Pass", tag, "GBuffer Shader", tris)) {
-                // 指挥权完全移交给 CommandBuffer
                 cmd.DrawIndexed(drawCmd.MeshAsset->GetVertexArray(), drawCmd.MeshAsset->GetIndexCount());
             }
         }
 
         m_GeometryFBO->Unbind();
 
-        // 4. 将 G-Buffer 产物贴在黑板上，供下个 Pass 读取！
+        // 4. 将 G-Buffer 产物贴在黑板上，供下个 Pass 读取
         context.Set("GBuffer_Position", m_GeometryFBO->GetColorAttachmentRendererID(0));
         context.Set("GBuffer_Normal", m_GeometryFBO->GetColorAttachmentRendererID(1));
         context.Set("GBuffer_Albedo", m_GeometryFBO->GetColorAttachmentRendererID(2));

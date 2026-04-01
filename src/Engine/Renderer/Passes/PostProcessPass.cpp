@@ -1,5 +1,6 @@
 #include "ayapch.h"
 #include "PostProcessPass.hpp"
+#include <glm/glm.hpp>
 
 namespace Ayaya {
 
@@ -24,54 +25,65 @@ namespace Ayaya {
     }
 
     void PostProcessPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
+        // 提取黑板上的 3 张关键贴图
         uint32_t lightingTexID = context.Get<uint32_t>("Lighting_Output", 0);
+        uint32_t selectionTexID = context.Get<uint32_t>("Selection_Output", 0);
         uint32_t bloomTexID = context.Get<uint32_t>("Bloom_Output", 0);
-
+        
         if (lightingTexID == 0) return;
 
         m_PostProcessFBO->Bind();
-        
-        // 使用 cmd 控制管线状态
         cmd.SetViewport(0, 0, m_PostProcessFBO->GetSpecification().Width, m_PostProcessFBO->GetSpecification().Height);
-        cmd.SetClearColor({ 0.0f, 0.0f, 0.0f, 1.0f });
+        
+        // 使用圆括号初始化，避开 MSVC 的报错
+        cmd.SetClearColor(glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
         cmd.Clear();
-        cmd.SetDepthTest(false);
+        cmd.SetDepthTest(false); 
 
         m_PostProcessShader->Bind();
         context.Stats.ShaderBinds++;
 
+        // 1. 基础贴图 (Slot 0)
         m_PostProcessShader->SetInt("u_ScreenTexture", 0);
         cmd.BindTexture2D(0, lightingTexID);
 
-        float physicalExposure = context.Get<float>("PhysicalExposure", 1.0f);
-        float exposureComp = context.Get<float>("ExposureCompensation", 1.0f);
-        m_PostProcessShader->SetFloat("u_Exposure", physicalExposure * exposureComp);
-        
-        int toneMappingType = context.Get<int>("ToneMappingType", 1);
-        m_PostProcessShader->SetInt("u_ToneMappingType", toneMappingType);
+        // 2. 选择轮廓掩码 (Slot 1)
+        m_PostProcessShader->SetInt("u_SelectionTexture", 1);
+        cmd.BindTexture2D(1, selectionTexID);
 
-        glm::vec2 texelSize = {
+        // 参数注入
+        float physExposure = context.Get<float>("PhysicalExposure", 1.0f);
+        float expComp = context.Get<float>("ExposureCompensation", 1.0f);
+        m_PostProcessShader->SetFloat("u_Exposure", physExposure * expComp);
+        
+        int tmType = context.Get<int>("ToneMappingType", 1);
+        m_PostProcessShader->SetInt("u_ToneMappingType", tmType);
+
+        glm::vec2 texelSz = glm::vec2(
             1.0f / (float)m_PostProcessFBO->GetSpecification().Width,
             1.0f / (float)m_PostProcessFBO->GetSpecification().Height
-        };
-        m_PostProcessShader->SetFloat2("u_TexelSize", texelSize);
+        );
+        m_PostProcessShader->SetFloat2("u_TexelSize", texelSz);
 
-        bool enableBloom = bloomTexID != 0;
-        m_PostProcessShader->SetBool("u_EnableBloom", enableBloom);
-        if (enableBloom) {
-            float bloomIntensity = context.Get<float>("BloomIntensity", 1.0f);
-            m_PostProcessShader->SetFloat("u_BloomIntensity", bloomIntensity);
+        // 3. Bloom 合成 (Slot 2)
+        bool isBloomEnabled = (bloomTexID != 0);
+        m_PostProcessShader->SetBool("u_EnableBloom", isBloomEnabled);
+        if (isBloomEnabled) {
+            float bloomInt = context.Get<float>("BloomIntensity", 1.0f);
+            m_PostProcessShader->SetFloat("u_BloomIntensity", bloomInt);
             
             m_PostProcessShader->SetInt("u_BloomTexture", 2); 
             cmd.BindTexture2D(2, bloomTexID);
         }
 
         if (context.RecordAndCheckDrawCall("Post Process Pass", "Tone Mapping & Combine", "PostProcess Shader", 1)) {
-            // 通过 cmd 发送绘制指令
             cmd.DrawArrays(m_EmptyVAO, 3);
         }
         
         m_PostProcessFBO->Unbind();
+
+        // 最终结果写回黑板，供 FXAAPass 读取！
         context.Set("PostProcess_Output", m_PostProcessFBO->GetColorAttachmentRendererID(0));
+        context.Framebuffers["PostProcess"] = m_PostProcessFBO;
     }
 }
