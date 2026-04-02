@@ -7,7 +7,8 @@ namespace Ayaya {
     enum class AssetType : uint16_t {
         None = 0,
         Scene,
-        Texture2D
+        Texture2D,
+        TextureCube
     };
 
     class Asset {

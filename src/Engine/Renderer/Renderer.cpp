@@ -7,9 +7,12 @@ namespace Ayaya {
     void Renderer::Init() {
         RenderCommand::Init();
 
-        // 现代渲染必备的基础设施
-        // 消除高粗糙度 Cubemap Mipmap 采样时的可见缝隙
-        glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+        // OpenGL 专属的特性设置，未来我们需要把这行移到 OpenGLRendererAPI::Init 里
+        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+            // 消除高粗糙度 Cubemap Mipmap 采样时的可见缝隙
+            // 注意：Vulkan 默认就是无缝的，不需要这个
+            // glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS); 
+        }
     }
 
     void Renderer::Shutdown() {

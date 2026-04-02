@@ -290,13 +290,13 @@ namespace Ayaya {
         m_RenderContext.Set("BloomIntensity", bIntensity);
         m_RenderContext.Set("EnableFXAA", enableFXAA);
 
-        RenderCommandBuffer cmd;
-        cmd.Begin();
+        std::shared_ptr<RenderCommandBuffer> cmd = RenderCommandBuffer::Create();
+        cmd->Begin();
 
         // 将黑板和指令记录器一并传给管线
-        m_Pipeline.Execute(m_RenderContext, cmd);
+        m_Pipeline.Execute(m_RenderContext, *cmd);
 
-        cmd.End();
+        cmd->End();
 
         // 【新增】：将管线里各个 Pass 汇报的成绩，抄写到总管的统计表里供 UI 显示
         m_Data->Stats.DrawCalls = m_RenderContext.Stats.DrawCalls;
@@ -363,7 +363,7 @@ namespace Ayaya {
             if (!envComp.EquirectangularTexture) return;
             std::shared_ptr<Shader> convertShader = Shader::Create("assets/Editor/shaders/IBL/equirectangular_to_cubemap.vert", "assets/Editor/shaders/IBL/equirectangular_to_cubemap.frag");
             baseCubemapID = IBLBuilder::ConvertEquirectangularToCubemap(envComp.EquirectangularTexture, s_SkyboxMesh, convertShader);
-            m_Data->EnvironmentCubemap = std::make_shared<TextureCube>(baseCubemapID, 1024, 1024);
+            m_Data->EnvironmentCubemap = TextureCube::Create(baseCubemapID, 1024, 1024);
         }
         else if (envComp.Type == EnvironmentType::Classic_Cubemap) {
             if (!envComp.ClassicCubemapTexture) return;
@@ -378,11 +378,11 @@ namespace Ayaya {
         if (baseCubemapID != 0) {
             std::shared_ptr<Shader> irradianceShader = Shader::Create("assets/Editor/shaders/IBL/cubemap.vert", "assets/Editor/shaders/IBL/irradiance_convolution.frag");
             uint32_t irrID = IBLBuilder::CreateIrradianceMap(baseCubemapID, s_SkyboxMesh, irradianceShader);
-            m_Data->IrradianceMap = std::make_shared<TextureCube>(irrID, 32, 32);
+            m_Data->IrradianceMap = TextureCube::Create(irrID, 32, 32);
 
             std::shared_ptr<Shader> prefilterShader = Shader::Create("assets/Editor/shaders/IBL/cubemap.vert", "assets/Editor/shaders/IBL/prefilter.frag");
             uint32_t preID = IBLBuilder::CreatePrefilterMap(baseCubemapID, s_SkyboxMesh, prefilterShader);
-            m_Data->PrefilterMap = std::make_shared<TextureCube>(preID, 128, 128);
+            m_Data->PrefilterMap = TextureCube::Create(preID, 128, 128);
             
             envComp.IsDirty = false; 
         }

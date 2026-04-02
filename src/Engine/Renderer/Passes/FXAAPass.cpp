@@ -10,7 +10,7 @@ namespace Ayaya {
 
     void FXAAPass::OnAttach() {
         // 创建独立的全屏绘制 VAO
-        m_EmptyVAO.reset(VertexArray::Create());
+        m_EmptyVAO = VertexArray::Create();
 
         // 加载 Shader
         m_FXAAShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/fxaa.frag");

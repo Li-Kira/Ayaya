@@ -16,7 +16,7 @@ namespace Ayaya {
     }
 
     void LightingPass::OnAttach() {
-        m_EmptyVAO.reset(VertexArray::Create());
+        m_EmptyVAO = VertexArray::Create();
 
         m_DeferredLightingShader = Shader::Create("assets/Editor/shaders/Deferred/deferred_lighting.vert", "assets/Editor/shaders/Deferred/deferred_lighting.frag");
         m_SkyboxShader           = Shader::Create("assets/Editor/shaders/Skybox/skybox.vert", "assets/Editor/shaders/Skybox/skybox.frag");

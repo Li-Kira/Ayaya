@@ -19,6 +19,7 @@ namespace Ayaya {
         virtual uint32_t GetRendererID() const override { return m_RendererID; }
 
         virtual void Bind(uint32_t slot = 0) const override;
+        virtual void Unbind() const override; // 【新增】
 
         // 新增 SetData 声明
         virtual void SetData(void* data, uint32_t size) override;

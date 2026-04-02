@@ -6,7 +6,7 @@ namespace Ayaya {
     BloomPass::BloomPass() { m_PassName = "Bloom Pass"; }
 
     void BloomPass::OnAttach() {
-        m_EmptyVAO.reset(VertexArray::Create());
+        m_EmptyVAO = VertexArray::Create();
         m_DownsampleShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/bloom_downsample.frag");
         m_UpsampleShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/bloom_upsample.frag");
 

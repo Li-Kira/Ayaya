@@ -93,16 +93,16 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     EnvironmentComponent:
-      Type: 1
+      Type: 3
       EquirectangularPath: assets/textures/skybox/hdr/newport_loft.hdr
       Intensity: 30000
       AmbientColor: [0.1, 0.1, 0.1]
       CubemapFaces:
-        - ""
-        - assets/textures/skybox/left.jpg
-        - ""
-        - assets/textures/skybox/bottom.jpg
-        - ""
-        - ""
+        - assets\textures\skybox\right.jpg
+        - assets\textures\skybox\left.jpg
+        - assets\textures\skybox\top.jpg
+        - assets\textures\skybox\bottom.jpg
+        - assets\textures\skybox\front.jpg
+        - assets\textures\skybox\back.jpg
     RelationshipComponent:
       Parent: 0

@@ -9,7 +9,7 @@ namespace Ayaya {
     }
 
     void PostProcessPass::OnAttach() {
-        m_EmptyVAO.reset(VertexArray::Create());
+        m_EmptyVAO = VertexArray::Create();
 
         m_PostProcessShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/postprocess.frag");
 

@@ -1335,7 +1335,7 @@ namespace Ayaya {
                                 }
                                 
                                 if (allFacesPresent) {
-                                    comp.ClassicCubemapTexture = std::make_shared<TextureCube>(comp.CubemapFaces);
+                                    comp.ClassicCubemapTexture = TextureCube::Create(comp.CubemapFaces);
                                     comp.IsDirty = true; 
                                 } else {
                                     AYAYA_CORE_WARN("Please assign all 6 faces before baking!");

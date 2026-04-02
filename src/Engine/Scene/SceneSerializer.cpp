@@ -665,7 +665,7 @@ namespace Ayaya {
                 } 
                 else if (env.Type == EnvironmentType::Classic_Cubemap && !env.CubemapFaces[0].empty()) 
                 {
-                    env.ClassicCubemapTexture = std::make_shared<TextureCube>(env.CubemapFaces);
+                    env.ClassicCubemapTexture = TextureCube::Create(env.CubemapFaces);
                     env.IsDirty = true;
                 }
             }
