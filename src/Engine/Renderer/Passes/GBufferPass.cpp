@@ -102,54 +102,33 @@ namespace Ayaya {
 
         // 3. 批量执行绘制
         std::shared_ptr<Pipeline> currentPipeline = nullptr;
-        std::shared_ptr<Shader> currentShader = nullptr;
         std::shared_ptr<Material> currentMaterial = nullptr;
         auto whiteTexture = context.GetTexture("WhiteTexture");
 
         for (const auto& drawCmd : m_OpaqueDrawList) {
             
-            // 切换管线 (仅当变化时)
+            // 切换管线 (PSO)
             if (currentPipeline != drawCmd.PipelineAsset) {
                 currentPipeline = drawCmd.PipelineAsset;
-                cmd.BindPipeline(currentPipeline); // 一键切换 Shader 和所有状态
-                currentShader = currentPipeline->GetSpecification().Shader;
+                cmd.BindPipeline(currentPipeline);
                 context.Stats.ShaderBinds++;
             }
             
-            // 绑定材质 (仅当变化时)
+            // 【终极进化 1】：一键绑定材质包 (模拟 Descriptor Set)
             if (currentMaterial != drawCmd.MaterialAsset) {
                 currentMaterial = drawCmd.MaterialAsset;
                 if (currentMaterial) {
-                    int textureSlot = 0; 
-                    for (auto& prop : currentMaterial->Properties) {
-                        switch (prop.Type) {
-                            case MaterialPropertyType::Float: currentShader->SetFloat(prop.UniformName, prop.FloatValue); break;
-                            case MaterialPropertyType::Vec2:  currentShader->SetFloat2(prop.UniformName, prop.Vec2Value); break;
-                            case MaterialPropertyType::Vec3:  currentShader->SetFloat3(prop.UniformName, prop.Vec3Value); break;
-                            case MaterialPropertyType::Vec4:  currentShader->SetFloat4(prop.UniformName, prop.Vec4Value); break;
-                            case MaterialPropertyType::Bool:  currentShader->SetBool(prop.UniformName, prop.BoolValue); break;
-                            case MaterialPropertyType::Texture2D:
-                                currentShader->SetInt(prop.UniformName, textureSlot);
-                                if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
-                                    auto tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
-                                    tex->Bind(textureSlot);
-                                } else {
-                                    if (whiteTexture) whiteTexture->Bind(textureSlot); 
-                                }
-                                textureSlot++;
-                                break;
-                            default: break;
-                        }
-                    }
+                    currentMaterial->Bind(cmd, currentPipeline, whiteTexture ? whiteTexture->GetRendererID() : 0);
                 }
             }
             
-            // 设置实体级别的 Uniform 参数
+            // 【终极进化 2】：推送常量 (Push Constants)
             if (currentPipeline == m_GBufferPipeline) {
-                currentShader->SetFloat("u_ReceiveShadows", drawCmd.ReceiveShadows ? 1.0f : 0.0f);
+                cmd.PushConstant(currentPipeline, "u_ReceiveShadows", drawCmd.ReceiveShadows ? 1.0f : 0.0f);
             }
-            currentShader->SetMat4("u_Transform", drawCmd.Transform);
+            cmd.PushConstant(currentPipeline, "u_Transform", drawCmd.Transform);
 
+            // 绘制指令
             std::string tag = drawCmd.TargetEntity.GetComponent<TagComponent>().Tag;
             uint32_t tris = drawCmd.MeshAsset->GetIndexCount() / 3;
 

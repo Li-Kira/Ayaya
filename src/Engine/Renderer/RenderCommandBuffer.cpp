@@ -85,4 +85,40 @@ namespace Ayaya {
         // 在 OpenGL 中我们只需解绑即可；在 Vulkan 中对应 vkCmdEndRenderPass
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
+
+    // --- 运行时描述符模拟 ---
+    void RenderCommandBuffer::BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& uniformName, uint32_t slot, uint32_t rendererID) {
+        glActiveTexture(GL_TEXTURE0 + slot);
+        glBindTexture(GL_TEXTURE_2D, rendererID);
+        if (pipeline) pipeline->GetSpecification().Shader->SetInt(uniformName, slot);
+    }
+
+    void RenderCommandBuffer::BindTextureCube(const std::shared_ptr<Pipeline>& pipeline, const std::string& uniformName, uint32_t slot, uint32_t rendererID) {
+        glActiveTexture(GL_TEXTURE0 + slot);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, rendererID);
+        if (pipeline) pipeline->GetSpecification().Shader->SetInt(uniformName, slot);
+    }
+
+    // --- 推送常量模拟 ---
+    void RenderCommandBuffer::PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, float data) {
+        if (pipeline) pipeline->GetSpecification().Shader->SetFloat(name, data);
+    }
+    void RenderCommandBuffer::PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, int data) {
+        if (pipeline) pipeline->GetSpecification().Shader->SetInt(name, data);
+    }
+    void RenderCommandBuffer::PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, const glm::vec2& data) {
+        if (pipeline) pipeline->GetSpecification().Shader->SetFloat2(name, data);
+    }
+    void RenderCommandBuffer::PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, const glm::vec3& data) {
+        if (pipeline) pipeline->GetSpecification().Shader->SetFloat3(name, data);
+    }
+    void RenderCommandBuffer::PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, const glm::vec4& data) {
+        if (pipeline) pipeline->GetSpecification().Shader->SetFloat4(name, data);
+    }
+    void RenderCommandBuffer::PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, const glm::mat3& data) {
+        if (pipeline) pipeline->GetSpecification().Shader->SetMat3(name, data);
+    }
+    void RenderCommandBuffer::PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, const glm::mat4& data) {
+        if (pipeline) pipeline->GetSpecification().Shader->SetMat4(name, data);
+    }
 }

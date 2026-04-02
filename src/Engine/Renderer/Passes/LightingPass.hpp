@@ -28,6 +28,9 @@ namespace Ayaya {
         std::shared_ptr<Shader> m_SpriteShader;
         std::shared_ptr<Shader> m_OutlineShader;
 
+        // 在 private 区域最下方加入：
+        std::shared_ptr<Material> m_DeferredMaterial;
+
         // ==========================================
         // 各种渲染子通道专属的 PSO 管线
         // ==========================================

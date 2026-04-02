@@ -68,8 +68,9 @@ namespace Ayaya {
     void Shader::SetFloat2(const std::string& name, const glm::vec2& value) { glUniform2f(GetUniformLocation(name), value.x, value.y); }
     void Shader::SetFloat3(const std::string& name, const glm::vec3& value) { glUniform3f(GetUniformLocation(name), value.x, value.y, value.z); }
     void Shader::SetFloat4(const std::string& name, const glm::vec4& value) { glUniform4f(GetUniformLocation(name), value.x, value.y, value.z, value.w); }
+    void Shader::SetMat2(const std::string& name, const glm::mat2& matrix) { glUniformMatrix2fv(GetUniformLocation(name), 1, GL_FALSE, glm::value_ptr(matrix)); }
+    void Shader::SetMat3(const std::string& name, const glm::mat3& matrix) { glUniformMatrix3fv(GetUniformLocation(name), 1, GL_FALSE, glm::value_ptr(matrix)); }
     void Shader::SetMat4(const std::string& name, const glm::mat4& matrix) { glUniformMatrix4fv(GetUniformLocation(name), 1, GL_FALSE, glm::value_ptr(matrix)); }
-    // (其他 Mat2, Mat3 类似实现...)
 
     void Shader::BindUniformBlock(const std::string& name, uint32_t bindingPoint) {
         // 1. 查询这个 Uniform Block 在当前 Shader 中的索引 ID

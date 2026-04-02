@@ -51,36 +51,32 @@ namespace Ayaya {
 
 
         // 1. 基础贴图 (Slot 0)
-        m_PostProcessShader->SetInt("u_ScreenTexture", 0);
-        cmd.BindTexture2D(0, lightingTexID);
+        cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, lightingTexID);
 
         // 2. 选择轮廓掩码 (Slot 1)
-        m_PostProcessShader->SetInt("u_SelectionTexture", 1);
-        cmd.BindTexture2D(1, selectionTexID);
+        cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, selectionTexID);
 
         // 参数注入
         float physExposure = context.Get<float>("PhysicalExposure", 1.0f);
         float expComp = context.Get<float>("ExposureCompensation", 1.0f);
-        m_PostProcessShader->SetFloat("u_Exposure", physExposure * expComp);
+        cmd.PushConstant(m_Pipeline, "u_Exposure", physExposure * expComp);
         
         int tmType = context.Get<int>("ToneMappingType", 1);
-        m_PostProcessShader->SetInt("u_ToneMappingType", tmType);
+        cmd.PushConstant(m_Pipeline, "u_ToneMappingType", tmType);
 
         glm::vec2 texelSz = glm::vec2(
             1.0f / (float)m_PostProcessFBO->GetSpecification().Width,
             1.0f / (float)m_PostProcessFBO->GetSpecification().Height
         );
-        m_PostProcessShader->SetFloat2("u_TexelSize", texelSz);
+        cmd.PushConstant(m_Pipeline, "u_TexelSize", texelSz);
 
         // 3. Bloom 合成 (Slot 2)
         bool isBloomEnabled = (bloomTexID != 0);
-        m_PostProcessShader->SetBool("u_EnableBloom", isBloomEnabled);
+        cmd.PushConstant(m_Pipeline, "u_EnableBloom", isBloomEnabled ? 1 : 0);
         if (isBloomEnabled) {
             float bloomInt = context.Get<float>("BloomIntensity", 1.0f);
-            m_PostProcessShader->SetFloat("u_BloomIntensity", bloomInt);
-            
-            m_PostProcessShader->SetInt("u_BloomTexture", 2); 
-            cmd.BindTexture2D(2, bloomTexID);
+            cmd.PushConstant(m_Pipeline, "u_BloomIntensity", bloomInt);
+            cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, bloomTexID);
         }
 
         if (context.RecordAndCheckDrawCall("Post Process Pass", "Tone Mapping & Combine", "PostProcess Shader", 1)) {

@@ -68,34 +68,37 @@ namespace Ayaya {
         // ==========================================
         cmd.BindPipeline(m_DownsamplePipeline);
         context.Stats.ShaderBinds++;
-        m_DownsampleShader->SetInt("u_Image", 0);
+        
+        // 【消灭 Shader 调用】：删除了 m_DownsampleShader->SetInt("u_Image", 0);
 
         for (size_t i = 0; i < m_MipChain.size(); i++) {
             auto& mip = m_MipChain[i];
             
-            // 【完美规范】：每个 Mip 层级开启独立的 RenderPass (带清屏)
+            // 每个 Mip 层级开启独立的 RenderPass (带清屏)
             cmd.BeginRenderPass(mip.FBO, true, glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
 
-            m_DownsampleShader->SetInt("u_MipLevel", (int)i);
+            cmd.PushConstant(m_DownsamplePipeline, "u_MipLevel", (int)i);
 
             if (i == 0) {
-                m_DownsampleShader->SetFloat("u_Threshold", threshold);
-                m_DownsampleShader->SetFloat3("u_Curve", curve);
-                cmd.BindTexture2D(0, inputTextureID);
+                cmd.PushConstant(m_DownsamplePipeline, "u_Threshold", threshold);
+                cmd.PushConstant(m_DownsamplePipeline, "u_Curve", curve);
+                // 【自动化】：内部自带了 Shader 的 Uniform 更新
+                cmd.BindTexture2D(m_DownsamplePipeline, "u_Image", 0, inputTextureID);
             } else {
-                cmd.BindTexture2D(0, m_MipChain[i - 1].FBO->GetColorAttachmentRendererID(0));
+                // 【自动化】：内部自带了 Shader 的 Uniform 更新
+                cmd.BindTexture2D(m_DownsamplePipeline, "u_Image", 0, m_MipChain[i - 1].FBO->GetColorAttachmentRendererID(0));
             }
 
             glm::vec2 srcTexelSize = (i == 0) ? 
                 glm::vec2(1.0f / context.Get<uint32_t>("ViewportWidth", 1280), 1.0f / context.Get<uint32_t>("ViewportHeight", 720)) : 
                 glm::vec2(1.0f / m_MipChain[i - 1].Size.x, 1.0f / m_MipChain[i - 1].Size.y);
-            m_DownsampleShader->SetFloat2("u_TexelSize", srcTexelSize);
+            cmd.PushConstant(m_DownsamplePipeline, "u_TexelSize", srcTexelSize);
 
             if (context.RecordAndCheckDrawCall("Bloom Pass", "Downsample Mip " + std::to_string(i), "Downsample Shader", 1)) {
                 cmd.DrawArrays(m_EmptyVAO, 3);
             }
 
-            cmd.EndRenderPass(); // 【结束当前 Mip 的通道】
+            cmd.EndRenderPass(); // 结束当前 Mip 的通道
         }
 
         // ==========================================
@@ -103,24 +106,25 @@ namespace Ayaya {
         // ==========================================
         cmd.BindPipeline(m_UpsamplePipeline);
         context.Stats.ShaderBinds++;
-        m_UpsampleShader->SetInt("u_Image", 0);
-        m_UpsampleShader->SetFloat("u_FilterRadius", bloomRadius);
+        
+        // 【消灭 Shader 调用】：删除了 m_UpsampleShader->SetInt("u_Image", 0);
+        cmd.PushConstant(m_UpsamplePipeline, "u_FilterRadius", bloomRadius);
         
         for (int i = (int)m_MipChain.size() - 2; i >= 0; i--) {
             auto& currentMip = m_MipChain[i];
             auto& prevMip = m_MipChain[i + 1];
 
-            // 【完美规范】：开启 RenderPass！注意 clear = false
-            // 因为我们要利用 Additive 混合模式把光晕叠加在这一层原有的像素上！
+            // 开启 RenderPass！注意 clear = false
             cmd.BeginRenderPass(currentMip.FBO, false);
 
-            cmd.BindTexture2D(0, prevMip.FBO->GetColorAttachmentRendererID(0));
+            // 【终极替换】：使用完整签名的 BindTexture2D，替代原本旧版的裸写
+            cmd.BindTexture2D(m_UpsamplePipeline, "u_Image", 0, prevMip.FBO->GetColorAttachmentRendererID(0));
 
             if (context.RecordAndCheckDrawCall("Bloom Pass", "Upsample Mip " + std::to_string(i), "Upsample Shader", 1)) {
                 cmd.DrawArrays(m_EmptyVAO, 3);
             }
 
-            cmd.EndRenderPass(); // 【结束当前 Mip 的通道】
+            cmd.EndRenderPass(); // 结束当前 Mip 的通道
         }
 
         context.Set("Bloom_Output", m_MipChain[0].FBO->GetColorAttachmentRendererID(0));

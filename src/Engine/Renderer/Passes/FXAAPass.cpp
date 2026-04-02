@@ -59,16 +59,13 @@ namespace Ayaya {
         cmd.BindPipeline(m_Pipeline);
         context.Stats.ShaderBinds++;
         
-        m_FXAAShader->SetInt("u_ScreenTexture", 0);
+        cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, inputTextureID);
         
         glm::vec2 texelSz = glm::vec2(
             1.0f / (float)m_FXAAFBO->GetSpecification().Width,
             1.0f / (float)m_FXAAFBO->GetSpecification().Height
         );
-        m_FXAAShader->SetFloat2("u_TexelSize", texelSz); 
-
-        // 绑定输入图
-        cmd.BindTexture2D(0, inputTextureID);
+        cmd.PushConstant(m_Pipeline, "u_TexelSize", texelSz);
 
         // 执行绘制
         if (context.RecordAndCheckDrawCall("FXAA Pass", "Anti-Aliasing", "FXAA Shader", 1)) {

@@ -57,7 +57,7 @@ namespace Ayaya {
         cmd.BindPipeline(m_Pipeline); 
         context.Stats.ShaderBinds++;
 
-        m_ShadowShader->SetMat4("u_LightSpaceMatrix", lightSpaceMatrix);
+        cmd.PushConstant(m_Pipeline, "u_LightSpaceMatrix", lightSpaceMatrix);
 
         auto meshView = context.ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
         for (auto entityID : meshView) {
@@ -67,7 +67,7 @@ namespace Ayaya {
             auto& meshComp = entity.GetComponent<MeshRendererComponent>();
             if (!meshComp.ModelAsset || !meshComp.CastShadows) continue; 
 
-            m_ShadowShader->SetMat4("u_Transform", entity.GetWorldTransform());
+            cmd.PushConstant(m_Pipeline, "u_Transform", entity.GetWorldTransform());
             
             for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
                 std::string tag = entity.GetComponent<TagComponent>().Tag;
