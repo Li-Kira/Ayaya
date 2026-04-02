@@ -22,6 +22,18 @@ namespace Ayaya {
         spec.Height = 720;
         spec.Attachments = { FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::Depth };
         m_FXAAFBO = Framebuffer::Create(spec);
+
+        // ==========================================
+        // 【核心新增】：将渲染状态提前固化为管线图纸 (PSO)
+        // ==========================================
+        PipelineSpecification pipelineSpec;
+        pipelineSpec.Shader = m_FXAAShader;
+        pipelineSpec.TargetFramebuffer = m_FXAAFBO;
+        pipelineSpec.DepthTest = false;  // FXAA 是全屏覆盖，不需要深度测试
+        pipelineSpec.DepthWrite = false; // 不需要写入深度
+        pipelineSpec.Blend = false;      // 直接覆盖像素即可
+
+        m_Pipeline = Pipeline::Create(pipelineSpec);
     }
 
     void FXAAPass::OnResize(uint32_t width, uint32_t height) {
@@ -45,13 +57,13 @@ namespace Ayaya {
         m_FXAAFBO->Bind();
         cmd.SetViewport(0, 0, m_FXAAFBO->GetSpecification().Width, m_FXAAFBO->GetSpecification().Height);
         
-        // 使用圆括号初始化，避开 MSVC 常量报错
+        // 【规范顺序】：先绑管线，再清屏！
+        cmd.BindPipeline(m_Pipeline);
+        context.Stats.ShaderBinds++;
+
         cmd.SetClearColor(glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
         cmd.Clear();
-        cmd.SetDepthTest(false);
-
-        m_FXAAShader->Bind();
-        context.Stats.ShaderBinds++;
+        
         m_FXAAShader->SetInt("u_ScreenTexture", 0);
         
         glm::vec2 texelSz = glm::vec2(

@@ -24,6 +24,9 @@ namespace Ayaya {
         m_GBufferShader->BindUniformBlock("Camera", 0);
         m_FallbackShader->BindUniformBlock("Camera", 0);
 
+        // ==========================================
+        // 1. 创建包含 CustomData 的 G-Buffer (5个颜色附件)
+        // ==========================================
         FramebufferSpecification geoSpec;
         geoSpec.Samples = 1;
         geoSpec.Width = 1280; geoSpec.Height = 720;
@@ -32,10 +35,25 @@ namespace Ayaya {
             FramebufferTextureFormat::RGBA16F, // 1: Normal
             FramebufferTextureFormat::RGBA8,   // 2: Albedo
             FramebufferTextureFormat::RGBA8,   // 3: PBR (Metal, Rough, AO)
-            FramebufferTextureFormat::RGBA8,   // 4: 【新增】CustomData (R:接收阴影, G:预留ID)
+            FramebufferTextureFormat::RGBA8,   // 4: CustomData (R:接收阴影, 预留其他状态)
             FramebufferTextureFormat::Depth    // 5: Depth
         };
         m_GeometryFBO = Framebuffer::Create(geoSpec);
+
+        // ==========================================
+        // 2. 将渲染状态打包进 PSO 管线图纸
+        // ==========================================
+        PipelineSpecification gbufferPipeSpec;
+        gbufferPipeSpec.Shader = m_GBufferShader;
+        gbufferPipeSpec.TargetFramebuffer = m_GeometryFBO;
+        gbufferPipeSpec.DepthTest = true;
+        gbufferPipeSpec.DepthWrite = true; // 强制写入深度
+        gbufferPipeSpec.BackfaceCulling = CullMode::Back; // 开启背面剔除
+        m_GBufferPipeline = Pipeline::Create(gbufferPipeSpec);
+
+        PipelineSpecification fallbackPipeSpec = gbufferPipeSpec;
+        fallbackPipeSpec.Shader = m_FallbackShader;
+        m_FallbackPipeline = Pipeline::Create(fallbackPipeSpec);
     }
 
     void GBufferPass::OnResize(uint32_t width, uint32_t height) {
@@ -46,16 +64,22 @@ namespace Ayaya {
         m_GeometryFBO->Bind();
         cmd.SetViewport(0, 0, m_GeometryFBO->GetSpecification().Width, m_GeometryFBO->GetSpecification().Height);
         
-        // 【核心修复】：Alpha 清 0 代表天空！如果设为 1，天空盒会被错误遮挡！
+        // ==========================================
+        // 【核心进化】：在清空屏幕之前，提前绑定主几何管线！
+        // 这样底层的 OpenGL 就会自动执行图纸里的 glDepthMask(GL_TRUE)
+        // 完美保证 cmd.Clear() 能够干净地清理掉上一帧的深度残留！
+        // ==========================================
+        cmd.BindPipeline(m_GBufferPipeline); 
+        
+        // Alpha 清 0 代表天空，用于后续光照合成阶段的 discard
         cmd.SetClearColor(glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
         cmd.Clear();
-        cmd.SetDepthTest(true);
 
         m_OpaqueDrawList.clear();
         glm::mat4 viewProj = context.ProjectionMatrix * context.ViewMatrix;
         Frustum cameraFrustum(viewProj);
 
-        // 1. 收集与剔除
+        // 1. 收集与视锥体剔除
         auto meshGroup = context.ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
         for (auto entityID : meshGroup) {
             Entity entity{ entityID, context.ActiveScene.get() };
@@ -72,33 +96,38 @@ namespace Ayaya {
             if (!isVisible) continue;
 
             bool isFallback = (!meshComp.MaterialAsset || meshComp.MaterialAsset->Properties.empty());
-            auto targetShader = isFallback ? m_FallbackShader : m_GBufferShader;
+            auto targetPipeline = isFallback ? m_FallbackPipeline : m_GBufferPipeline;
             auto targetMaterial = isFallback ? m_FallbackMaterial : meshComp.MaterialAsset;
 
             for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
-                m_OpaqueDrawList.push_back({ transform, mesh, targetMaterial, targetShader, entity, meshComp.CastShadows, meshComp.ReceiveShadows });
+                m_OpaqueDrawList.push_back({ transform, mesh, targetMaterial, targetPipeline, entity, meshComp.CastShadows, meshComp.ReceiveShadows });
             }
         }
 
-        // 2. 状态排序 (Shader -> Material -> Mesh)
+        // 2. 状态排序 (Pipeline -> Material -> Mesh)
         std::sort(m_OpaqueDrawList.begin(), m_OpaqueDrawList.end(), [](const auto& a, const auto& b) {
-            if (a.ShaderAsset.get() != b.ShaderAsset.get()) return a.ShaderAsset.get() < b.ShaderAsset.get();
+            if (a.PipelineAsset.get() != b.PipelineAsset.get()) return a.PipelineAsset.get() < b.PipelineAsset.get();
             if (a.MaterialAsset.get() != b.MaterialAsset.get()) return a.MaterialAsset.get() < b.MaterialAsset.get();
             return a.MeshAsset.get() < b.MeshAsset.get();
         });
 
-        // 3. 批量执行
+        // 3. 批量执行绘制
+        std::shared_ptr<Pipeline> currentPipeline = nullptr;
         std::shared_ptr<Shader> currentShader = nullptr;
         std::shared_ptr<Material> currentMaterial = nullptr;
         auto whiteTexture = context.GetTexture("WhiteTexture");
 
-        // 【核心修复】：循环变量改名为 drawCmd，避免覆盖 RenderCommandBuffer& cmd
         for (const auto& drawCmd : m_OpaqueDrawList) {
-            if (currentShader != drawCmd.ShaderAsset) {
-                currentShader = drawCmd.ShaderAsset;
-                currentShader->Bind();
+            
+            // 切换管线 (仅当变化时)
+            if (currentPipeline != drawCmd.PipelineAsset) {
+                currentPipeline = drawCmd.PipelineAsset;
+                cmd.BindPipeline(currentPipeline); // 一键切换 Shader 和所有状态
+                currentShader = currentPipeline->GetSpecification().Shader;
                 context.Stats.ShaderBinds++;
             }
+            
+            // 绑定材质 (仅当变化时)
             if (currentMaterial != drawCmd.MaterialAsset) {
                 currentMaterial = drawCmd.MaterialAsset;
                 if (currentMaterial) {
@@ -126,11 +155,10 @@ namespace Ayaya {
                 }
             }
             
-            if (currentShader == m_GBufferShader) {
+            // 设置实体级别的 Uniform 参数
+            if (currentPipeline == m_GBufferPipeline) {
                 currentShader->SetFloat("u_ReceiveShadows", drawCmd.ReceiveShadows ? 1.0f : 0.0f);
             }
-            
-            // 替代旧版的 Renderer::Submit
             currentShader->SetMat4("u_Transform", drawCmd.Transform);
 
             std::string tag = drawCmd.TargetEntity.GetComponent<TagComponent>().Tag;
@@ -143,12 +171,14 @@ namespace Ayaya {
 
         m_GeometryFBO->Unbind();
 
-        // 4. 将 G-Buffer 产物贴在黑板上，供下个 Pass 读取
+        // ==========================================
+        // 4. 将 5 张 G-Buffer 产物贴在黑板上
+        // ==========================================
         context.Set("GBuffer_Position", m_GeometryFBO->GetColorAttachmentRendererID(0));
         context.Set("GBuffer_Normal", m_GeometryFBO->GetColorAttachmentRendererID(1));
         context.Set("GBuffer_Albedo", m_GeometryFBO->GetColorAttachmentRendererID(2));
         context.Set("GBuffer_PBR", m_GeometryFBO->GetColorAttachmentRendererID(3));
-        context.Set("GBuffer_CustomData", m_GeometryFBO->GetColorAttachmentRendererID(4)); // 【新增】
+        context.Set("GBuffer_CustomData", m_GeometryFBO->GetColorAttachmentRendererID(4)); 
         context.Framebuffers["Geometry"] = m_GeometryFBO;
     }
 }

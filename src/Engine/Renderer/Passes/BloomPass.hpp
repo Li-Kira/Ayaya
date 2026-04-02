@@ -4,9 +4,15 @@
 #include "Renderer/Framebuffer.hpp"
 #include "Renderer/VertexArray.hpp"
 #include "Renderer/RenderCommandBuffer.hpp"
-#include <vector>
+#include "Renderer/Pipeline.hpp"
 
 namespace Ayaya {
+
+    struct BloomMip {
+        glm::vec2 Size;
+        glm::vec2 IntSize;
+        std::shared_ptr<Framebuffer> FBO;
+    };
 
     class BloomPass : public RenderPass {
     public:
@@ -18,16 +24,13 @@ namespace Ayaya {
         virtual void Execute(RenderContext& context, RenderCommandBuffer& cmd) override;
 
     private:
-        struct BloomMip {
-            glm::vec2 Size;
-            glm::vec2 IntSize;
-            std::shared_ptr<Framebuffer> FBO;
-        };
-
-        std::vector<BloomMip> m_MipChain;
         std::shared_ptr<Shader> m_DownsampleShader;
-        std::shared_ptr<Shader> m_UpsampleShader; 
-        
+        std::shared_ptr<Shader> m_UpsampleShader;
+        std::vector<BloomMip> m_MipChain;
         std::shared_ptr<VertexArray> m_EmptyVAO;
+
+        // 【新增】：分离降采样和升采样管线
+        std::shared_ptr<Pipeline> m_DownsamplePipeline;
+        std::shared_ptr<Pipeline> m_UpsamplePipeline;
     };
 }

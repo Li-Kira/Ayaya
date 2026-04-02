@@ -18,6 +18,18 @@ namespace Ayaya {
         postSpec.Width = 1280; postSpec.Height = 720;
         postSpec.Attachments = { FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::Depth };
         m_PostProcessFBO = Framebuffer::Create(postSpec);
+
+        // ==========================================
+        // 【核心新增】：把渲染状态前置打包为管线图纸 (PSO)
+        // ==========================================
+        PipelineSpecification pipelineSpec;
+        pipelineSpec.Shader = m_PostProcessShader;
+        pipelineSpec.TargetFramebuffer = m_PostProcessFBO;
+        pipelineSpec.DepthTest = false;  // 后处理画全屏三角形，不需要深度测试
+        pipelineSpec.DepthWrite = false; // 不需要写深度
+        pipelineSpec.Blend = false;      // 直接覆盖像素，不需要开启混合
+
+        m_Pipeline = Pipeline::Create(pipelineSpec);
     }
 
     void PostProcessPass::OnResize(uint32_t width, uint32_t height) {
@@ -35,13 +47,12 @@ namespace Ayaya {
         m_PostProcessFBO->Bind();
         cmd.SetViewport(0, 0, m_PostProcessFBO->GetSpecification().Width, m_PostProcessFBO->GetSpecification().Height);
         
-        // 使用圆括号初始化，避开 MSVC 的报错
+        // 【规范顺序】：先绑管线，再清屏！
+        cmd.BindPipeline(m_Pipeline);
+        context.Stats.ShaderBinds++;
+
         cmd.SetClearColor(glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
         cmd.Clear();
-        cmd.SetDepthTest(false); 
-
-        m_PostProcessShader->Bind();
-        context.Stats.ShaderBinds++;
 
         // 1. 基础贴图 (Slot 0)
         m_PostProcessShader->SetInt("u_ScreenTexture", 0);

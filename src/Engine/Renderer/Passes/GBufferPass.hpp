@@ -3,7 +3,8 @@
 #include "Renderer/Shader.hpp"
 #include "Renderer/Material.hpp"
 #include "Renderer/Mesh.hpp"
-#include "Renderer/RenderCommandBuffer.hpp" // 【新增】
+#include "Renderer/RenderCommandBuffer.hpp"
+#include "Renderer/Pipeline.hpp"
 #include "Engine/Scene/Entity.hpp"
 
 namespace Ayaya {
@@ -12,7 +13,7 @@ namespace Ayaya {
         glm::mat4 Transform;
         std::shared_ptr<Mesh> MeshAsset;
         std::shared_ptr<Material> MaterialAsset;
-        std::shared_ptr<Shader> ShaderAsset;
+        std::shared_ptr<Pipeline> PipelineAsset; // 核心：使用管线对象驱动
         Entity TargetEntity;
         bool CastShadows;
         bool ReceiveShadows;
@@ -29,9 +30,14 @@ namespace Ayaya {
 
     private:
         std::shared_ptr<Framebuffer> m_GeometryFBO;
+        
         std::shared_ptr<Shader> m_GBufferShader;
         std::shared_ptr<Shader> m_FallbackShader;
         std::shared_ptr<Material> m_FallbackMaterial;
+
+        // 核心几何管线与错误材质回退管线
+        std::shared_ptr<Pipeline> m_GBufferPipeline;
+        std::shared_ptr<Pipeline> m_FallbackPipeline;
         
         std::vector<RenderCommandData> m_OpaqueDrawList;
     };

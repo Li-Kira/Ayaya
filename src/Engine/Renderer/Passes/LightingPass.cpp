@@ -40,6 +40,57 @@ namespace Ayaya {
         selSpec.Width = 1280; selSpec.Height = 720;
         selSpec.Attachments = { FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::Depth };
         m_SelectionFBO = Framebuffer::Create(selSpec);
+
+        // 配置各子通道的 PSO 管线
+        PipelineSpecification defSpec;
+        defSpec.Shader = m_DeferredLightingShader;
+        defSpec.TargetFramebuffer = m_LightingFBO;
+        defSpec.DepthTest = false; 
+        defSpec.Blend = false;
+        m_DeferredPipeline = Pipeline::Create(defSpec);
+
+        PipelineSpecification skySpec;
+        skySpec.Shader = m_SkyboxShader;
+        skySpec.TargetFramebuffer = m_LightingFBO;
+        skySpec.DepthTest = true;
+        skySpec.DepthWrite = false;
+        skySpec.DepthOperator = DepthCompareOperator::LEqual; 
+        skySpec.BackfaceCulling = CullMode::None;
+        m_SkyboxPipeline = Pipeline::Create(skySpec);
+
+        PipelineSpecification gridSpec;
+        gridSpec.Shader = m_GridShader;
+        gridSpec.TargetFramebuffer = m_LightingFBO;
+        gridSpec.DepthTest = true;
+        gridSpec.DepthWrite = false;
+        gridSpec.Blend = true;
+        gridSpec.BlendMode = BlendMode::Alpha;
+        gridSpec.BackfaceCulling = CullMode::None;
+        m_GridPipeline = Pipeline::Create(gridSpec);
+
+        PipelineSpecification spriteSpec;
+        spriteSpec.Shader = m_SpriteShader;
+        spriteSpec.TargetFramebuffer = m_LightingFBO;
+        spriteSpec.DepthTest = true;
+        spriteSpec.DepthWrite = false;
+        spriteSpec.Blend = true;
+        spriteSpec.BlendMode = BlendMode::Alpha;
+        spriteSpec.BackfaceCulling = CullMode::None;
+        m_SpritePipeline = Pipeline::Create(spriteSpec);
+
+        PipelineSpecification selMeshSpec;
+        selMeshSpec.Shader = m_OutlineShader;
+        selMeshSpec.TargetFramebuffer = m_SelectionFBO;
+        selMeshSpec.DepthTest = false;
+        selMeshSpec.Blend = false;
+        m_SelectionMeshPipeline = Pipeline::Create(selMeshSpec);
+
+        PipelineSpecification selSpriteSpec;
+        selSpriteSpec.Shader = m_SpriteShader;
+        selSpriteSpec.TargetFramebuffer = m_SelectionFBO;
+        selSpriteSpec.DepthTest = false;
+        selSpriteSpec.Blend = false;
+        m_SelectionSpritePipeline = Pipeline::Create(selSpriteSpec);
     }
 
     void LightingPass::OnResize(uint32_t width, uint32_t height) {
@@ -48,9 +99,6 @@ namespace Ayaya {
     }
 
     void LightingPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
-        // ==========================================
-        // 0. 从黑板提取前置依赖数据
-        // ==========================================
         uint32_t gPosition   = context.Get<uint32_t>("GBuffer_Position", 0);
         uint32_t gNormal     = context.Get<uint32_t>("GBuffer_Normal", 0);
         uint32_t gAlbedo     = context.Get<uint32_t>("GBuffer_Albedo", 0);
@@ -62,40 +110,33 @@ namespace Ayaya {
         float physicalExposure = context.Get<float>("PhysicalExposure", 1.0f);
         glm::vec4 clearColor   = context.Get<glm::vec4>("ClearColor", glm::vec4(0.06f, 0.06f, 0.065f, 1.0f));
 
-        // ==========================================
-        // 1. 延迟光照核爆合成 (Deferred Lighting)
-        // ==========================================
+        // 1. 延迟光照合成 (Deferred Lighting)
         m_LightingFBO->Bind();
+        cmd.SetViewport(0, 0, m_LightingFBO->GetSpecification().Width, m_LightingFBO->GetSpecification().Height);
         
+        // 【完美规范】：先绑管线，再清屏！
+        cmd.BindPipeline(m_DeferredPipeline);
+        context.Stats.ShaderBinds++;
+
         glm::vec4 hdrClearColor = clearColor;
         hdrClearColor.r /= physicalExposure;
         hdrClearColor.g /= physicalExposure;
         hdrClearColor.b /= physicalExposure;
-
-        cmd.SetViewport(0, 0, m_LightingFBO->GetSpecification().Width, m_LightingFBO->GetSpecification().Height);
         cmd.SetClearColor(hdrClearColor);
         cmd.Clear();
 
-        cmd.SetDepthTest(false);
-        m_DeferredLightingShader->Bind();
-        context.Stats.ShaderBinds++;
-
-        // --- 纹理槽位分配 (严格对齐!) ---
-        // 槽位 0~4: G-Buffer
         cmd.BindTexture2D(0, gPosition);   m_DeferredLightingShader->SetInt("g_Position", 0);
         cmd.BindTexture2D(1, gNormal);     m_DeferredLightingShader->SetInt("g_Normal", 1);
         cmd.BindTexture2D(2, gAlbedo);     m_DeferredLightingShader->SetInt("g_Albedo", 2);
         cmd.BindTexture2D(3, gPBR);        m_DeferredLightingShader->SetInt("g_PBR", 3);
         cmd.BindTexture2D(4, gCustomData); m_DeferredLightingShader->SetInt("g_CustomData", 4);
 
-        // 槽位 5: 阴影贴图
         if (context.Get<bool>("HasDirLight", false)) {
             cmd.BindTexture2D(5, context.Get<uint32_t>("ShadowMap_Output", 0));
             m_DeferredLightingShader->SetInt("u_ShadowMap", 5); 
             m_DeferredLightingShader->SetMat4("u_LightSpaceMatrix", context.Get<glm::mat4>("LightSpaceMatrix"));
         }
 
-        // 槽位 6, 7, 8: IBL 环境光
         auto irrMap = context.Get<std::shared_ptr<TextureCube>>("IrradianceMap", nullptr);
         auto preMap = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap", nullptr);
         if (irrMap && preMap) {
@@ -110,18 +151,14 @@ namespace Ayaya {
 
         auto brdfLUT = context.GetTexture("BRDFLUT");
         if (brdfLUT) {
-            brdfLUT->Bind(8); m_DeferredLightingShader->SetInt("u_BRDFLUT", 8); // 【核心修复】：绑在 8，别抢 6！
+            brdfLUT->Bind(8); m_DeferredLightingShader->SetInt("u_BRDFLUT", 8); 
         }
 
         if (context.RecordAndCheckDrawCall("Lighting Pass", "Deferred Combine", "DeferredLighting Shader", 2)) {
             cmd.DrawArrays(m_EmptyVAO, 3);
         }
-        
-        cmd.SetDepthTest(true); 
 
-        // ==========================================
         // 2. 深度拷贝 (Blit Depth)
-        // ==========================================
         auto geoFBO = context.Framebuffers["Geometry"];
         if (geoFBO) {
             uint32_t width = geoFBO->GetSpecification().Width;
@@ -130,57 +167,42 @@ namespace Ayaya {
             m_LightingFBO->Bind();
         }
 
-        // ==========================================
         // 3. 正向渲染 (Forward Pass)
-        // ==========================================
-        
         // 3.1 渲染天空盒
         if (context.Get<bool>("ShowSkybox", false)) {
             auto envMap = context.Get<std::shared_ptr<TextureCube>>("EnvironmentCubemap", nullptr);
             auto skyMesh = context.Get<std::shared_ptr<Mesh>>("SkyboxMesh", nullptr);
             if (envMap && skyMesh) {
-                cmd.SetDepthFuncLEqual();  
-                cmd.SetDepthWrite(false);
-
-                m_SkyboxShader->Bind();
+                cmd.BindPipeline(m_SkyboxPipeline);
                 context.Stats.ShaderBinds++;
-                m_SkyboxShader->SetFloat("u_Intensity", context.Get<float>("EnvironmentIntensity", 1.0f));
-                
+
                 glm::mat4 viewNoTranslation = glm::mat4(glm::mat3(context.ViewMatrix));
-                m_SkyboxShader->SetMat4("u_View", viewNoTranslation);
-                
                 glm::mat4 skyProjection = context.ProjectionMatrix;
                 if (skyProjection[3][3] == 1.0f) {
                     float aspect = (float)m_LightingFBO->GetSpecification().Width / (float)m_LightingFBO->GetSpecification().Height;
                     skyProjection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10.0f);
                 }
+                
+                m_SkyboxShader->SetMat4("u_View", viewNoTranslation);
                 m_SkyboxShader->SetMat4("u_Projection", skyProjection);
+                m_SkyboxShader->SetFloat("u_Intensity", context.Get<float>("EnvironmentIntensity", 1.0f));
                 
                 envMap->Bind(0); 
-                m_SkyboxShader->SetInt("u_Skybox", 0);
+                m_SkyboxShader->SetInt("u_Skybox", 0); 
 
-                cmd.SetCullFace(false); 
                 if (context.RecordAndCheckDrawCall("Lighting Pass", "Skybox", "Skybox Shader", skyMesh->GetIndexCount() / 3)) {
                     m_SkyboxShader->SetMat4("u_Transform", glm::mat4(1.0f));
                     cmd.DrawIndexed(skyMesh->GetVertexArray(), skyMesh->GetIndexCount());
                 }
-                cmd.SetCullFace(true);
-                cmd.SetDepthFuncLess();
-                cmd.SetDepthWrite(true);
             }
         }
 
         // 3.2 渲染网格地基
         if (context.Get<bool>("ShowGrid", false)) {
-            cmd.SetBlend(true);
-            cmd.SetBlendFuncAlpha();
-            cmd.SetDepthWrite(false); 
-            cmd.SetCullFace(false);
-            
-            m_GridShader->Bind();
+            cmd.BindPipeline(m_GridPipeline);
             context.Stats.ShaderBinds++;
+
             m_GridShader->SetFloat("u_ExposureInverse", 1.0f / physicalExposure);
-            
             glm::mat4 gridTransform = glm::scale(glm::mat4(1.0f), glm::vec3(1000.0f, 1.0f, 1000.0f));
             m_GridShader->SetMat4("u_Transform", gridTransform);
             
@@ -190,24 +212,14 @@ namespace Ayaya {
                     cmd.DrawIndexed(gridMesh->GetVertexArray(), gridMesh->GetIndexCount());
                 }
             }
-            
-            cmd.SetCullFace(true);
-            cmd.SetDepthWrite(true); 
-            cmd.SetBlend(false); 
         }
 
         // 3.3 渲染 2D 纸片人 (Sprites)
         {
-            cmd.SetBlend(true);
-            cmd.SetBlendFuncAlpha();
-            cmd.SetDepthWrite(false); 
-            cmd.SetCullFace(false); 
-
-            m_SpriteShader->Bind();
+            cmd.BindPipeline(m_SpritePipeline);
             context.Stats.ShaderBinds++;
 
             m_SpriteDrawList.clear();
-
             auto spriteGroup = context.ActiveScene->Reg().view<TransformComponent, SpriteRendererComponent>();
             for (auto entityID : spriteGroup) {
                 Entity entity{ entityID, context.ActiveScene.get() };
@@ -215,7 +227,6 @@ namespace Ayaya {
 
                 auto [transformComp, spriteComp] = spriteGroup.get<TransformComponent, SpriteRendererComponent>(entityID);
                 glm::mat4 transform = entity.GetWorldTransform();
-                
                 float distance = glm::length(context.CameraPosition - glm::vec3(transform[3]));
                 m_SpriteDrawList.push_back({ transform, spriteComp, distance });
             }
@@ -245,31 +256,29 @@ namespace Ayaya {
                     cmd.DrawTriangleStrip(m_EmptyVAO, 4);
                 }
             }
-
-            cmd.SetCullFace(true);
-            cmd.SetDepthWrite(true);
-            cmd.SetBlend(false);
         }
 
         m_LightingFBO->Unbind();
 
-        // ==========================================
         // 4. 选择轮廓描边 (Selection Pass)
-        // ==========================================
         m_SelectionFBO->Bind();
+        cmd.SetViewport(0, 0, m_SelectionFBO->GetSpecification().Width, m_SelectionFBO->GetSpecification().Height);
+        
+        // 【完美规范】：先绑管线，再清屏！
+        cmd.BindPipeline(m_SelectionMeshPipeline);
+        
         cmd.SetClearColor(glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
         cmd.Clear();
 
         Entity hoveredEntity = context.Get<Entity>("HoveredEntity", Entity{});
         if (hoveredEntity && hoveredEntity.IsActiveInHierarchy()) {
-            
-            cmd.SetDepthTest(false); 
             glm::mat4 transform = hoveredEntity.GetWorldTransform();
 
             if (hoveredEntity.HasComponent<MeshRendererComponent>()) {
-                m_OutlineShader->Bind();
-                m_OutlineShader->SetFloat3("u_Color", glm::vec3(1.0f, 1.0f, 1.0f)); 
+                // 已在上文 BindPipeline
+                context.Stats.ShaderBinds++;
 
+                m_OutlineShader->SetFloat3("u_Color", glm::vec3(1.0f, 1.0f, 1.0f)); 
                 auto& meshComp = hoveredEntity.GetComponent<MeshRendererComponent>();
                 if (meshComp.ModelAsset) {
                     m_OutlineShader->SetMat4("u_Transform", transform);
@@ -279,9 +288,10 @@ namespace Ayaya {
                 }
             }
             else if (hoveredEntity.HasComponent<SpriteRendererComponent>()) {
-                auto& spriteComp = hoveredEntity.GetComponent<SpriteRendererComponent>();
+                cmd.BindPipeline(m_SelectionSpritePipeline);
+                context.Stats.ShaderBinds++;
 
-                m_SpriteShader->Bind();
+                auto& spriteComp = hoveredEntity.GetComponent<SpriteRendererComponent>();
                 m_SpriteShader->SetMat4("u_Transform", transform);
                 m_SpriteShader->SetFloat4("u_Color", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
                 m_SpriteShader->SetFloat("u_ExposureInverse", 1.0f);
@@ -300,17 +310,13 @@ namespace Ayaya {
 
                 cmd.DrawTriangleStrip(m_EmptyVAO, 4);
             }
-            cmd.SetDepthTest(true);
         }
         
         m_SelectionFBO->Unbind();
 
-        // ==========================================
         // 5. 产出数据交接
-        // ==========================================
         context.Set("Lighting_Output", m_LightingFBO->GetColorAttachmentRendererID(0));
         context.Set("Selection_Output", m_SelectionFBO->GetColorAttachmentRendererID(0));
-
         context.Framebuffers["Lighting"] = m_LightingFBO;
         context.Framebuffers["Selection"] = m_SelectionFBO;
     }

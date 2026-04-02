@@ -3,7 +3,8 @@
 #include "Renderer/Shader.hpp"
 #include "Renderer/Framebuffer.hpp"
 #include "Renderer/VertexArray.hpp"
-#include "Renderer/RenderCommandBuffer.hpp" // 【新增】
+#include "Renderer/RenderCommandBuffer.hpp"
+#include "Renderer/Pipeline.hpp" // 【引入管线系统】
 #include "Engine/Scene/Components.hpp"
 
 namespace Ayaya {
@@ -11,11 +12,11 @@ namespace Ayaya {
     class LightingPass : public RenderPass {
     public:
         LightingPass();
-        virtual ~LightingPass() override = default; // 析构交给智能指针管理
+        virtual ~LightingPass() override = default;
 
         virtual void OnAttach() override;
         virtual void OnResize(uint32_t width, uint32_t height) override;
-        virtual void Execute(RenderContext& context, RenderCommandBuffer& cmd) override; // 【修改】
+        virtual void Execute(RenderContext& context, RenderCommandBuffer& cmd) override;
 
     private:
         std::shared_ptr<Framebuffer> m_LightingFBO;
@@ -27,7 +28,16 @@ namespace Ayaya {
         std::shared_ptr<Shader> m_SpriteShader;
         std::shared_ptr<Shader> m_OutlineShader;
 
-        // 【修改】：使用引擎的 VAO 抽象
+        // ==========================================
+        // 各种渲染子通道专属的 PSO 管线
+        // ==========================================
+        std::shared_ptr<Pipeline> m_DeferredPipeline;
+        std::shared_ptr<Pipeline> m_SkyboxPipeline;
+        std::shared_ptr<Pipeline> m_GridPipeline;
+        std::shared_ptr<Pipeline> m_SpritePipeline;
+        std::shared_ptr<Pipeline> m_SelectionMeshPipeline;
+        std::shared_ptr<Pipeline> m_SelectionSpritePipeline;
+
         std::shared_ptr<VertexArray> m_EmptyVAO;
 
         struct SpriteDrawCommand {

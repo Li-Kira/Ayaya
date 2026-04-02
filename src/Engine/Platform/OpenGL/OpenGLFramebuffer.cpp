@@ -124,8 +124,20 @@ namespace Ayaya {
                 glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, m_DepthAttachment, 0);
             } else {
                 glBindTexture(GL_TEXTURE_2D, m_DepthAttachment);
-                // 核心修复：降级使用 OpenGL 4.1 支持的 glTexImage2D
+                // 降级使用 OpenGL 4.1 支持的 glTexImage2D
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, m_Specification.Width, m_Specification.Height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
+                
+                // 【核心修复 1】：必须设置滤波参数！否则 OpenGL 会认为纹理 Incomplete，导致采样返回纯黑(0.0)！
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                
+                // 【核心修复 2】：为阴影贴图配置边缘纯白包裹模式 (Clamp to Border)，防止视野外出现黑色伪影
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+                float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+                glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+
                 glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, m_DepthAttachment, 0);
             }
         }
@@ -134,13 +146,16 @@ namespace Ayaya {
         // 3. 告诉 OpenGL 我们要同时绘制到哪些缓冲！
         // ==========================================
         if (m_ColorAttachments.size() > 0) {
+            // 【核心修复 3】：解除硬编码 4 张贴图的限制！动态生成 buffers 数组，适配 5 张 G-Buffer！
             std::vector<GLenum> buffers(m_ColorAttachments.size());
             for (size_t i = 0; i < m_ColorAttachments.size(); i++) {
                 buffers[i] = GL_COLOR_ATTACHMENT0 + i;
             }
             glDrawBuffers((GLsizei)m_ColorAttachments.size(), buffers.data());
         } else if (m_ColorAttachments.empty()) {
-            glDrawBuffer(GL_NONE); // 只有深度测试的 pass
+            // 只有深度测试的 pass (例如 Shadow Map Pass)
+            glDrawBuffer(GL_NONE); 
+            glReadBuffer(GL_NONE); // 确保读取也被禁用，保证 FBO 完整性
         }
 
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)

@@ -1,6 +1,5 @@
 #include "ayapch.h"
 #include "BloomPass.hpp"
-#include <glad/glad.h> // 暂时保留，仅用于 GL_ONE 混合模式枚举
 
 namespace Ayaya {
 
@@ -10,6 +9,23 @@ namespace Ayaya {
         m_EmptyVAO.reset(VertexArray::Create());
         m_DownsampleShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/bloom_downsample.frag");
         m_UpsampleShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/bloom_upsample.frag");
+
+        // 1. 降采样管线 (不混合，直接覆盖)
+        PipelineSpecification downSpec;
+        downSpec.Shader = m_DownsampleShader;
+        downSpec.DepthTest = false;
+        downSpec.DepthWrite = false;
+        downSpec.Blend = false;
+        m_DownsamplePipeline = Pipeline::Create(downSpec);
+
+        // 2. 升采样管线 (纯加法混合)
+        PipelineSpecification upSpec;
+        upSpec.Shader = m_UpsampleShader;
+        upSpec.DepthTest = false;
+        upSpec.DepthWrite = false;
+        upSpec.Blend = true;
+        upSpec.BlendMode = BlendMode::Additive; // GL_ONE, GL_ONE
+        m_UpsamplePipeline = Pipeline::Create(upSpec);
     }
 
     void BloomPass::OnResize(uint32_t width, uint32_t height) {
@@ -46,17 +62,13 @@ namespace Ayaya {
         float knee = context.Get<float>("BloomKnee", 0.1f);
         if (knee < 0.0001f) knee = 0.0001f;
         
-        glm::vec3 curve;
-        curve.x = threshold - knee;
-        curve.y = knee * 2.0f;
-        curve.z = 0.25f / knee;
-        
+        glm::vec3 curve(threshold - knee, knee * 2.0f, 0.25f / knee);
         float bloomRadius = context.Get<float>("BloomRadius", 0.005f);
-
-        cmd.SetDepthTest(false);
         
-        // 1. 降采样
-        m_DownsampleShader->Bind();
+        // ==========================================
+        // 1. 降采样 (Downsample)
+        // ==========================================
+        cmd.BindPipeline(m_DownsamplePipeline);
         context.Stats.ShaderBinds++;
         m_DownsampleShader->SetInt("u_Image", 0);
 
@@ -82,18 +94,15 @@ namespace Ayaya {
                 glm::vec2(1.0f / m_MipChain[i - 1].Size.x, 1.0f / m_MipChain[i - 1].Size.y);
             m_DownsampleShader->SetFloat2("u_TexelSize", srcTexelSize);
 
-            std::string stepName = "Downsample Mip " + std::to_string(i);
-            if (context.RecordAndCheckDrawCall("Bloom Pass", stepName, "Downsample Shader", 1)) {
+            if (context.RecordAndCheckDrawCall("Bloom Pass", "Downsample Mip " + std::to_string(i), "Downsample Shader", 1)) {
                 cmd.DrawArrays(m_EmptyVAO, 3);
             }
         }
 
-        // 2. 升采样与混合
-        cmd.SetBlend(true);
-        glBlendFunc(GL_ONE, GL_ONE); // 暂时保留
-        glBlendEquation(GL_FUNC_ADD); // 暂时保留
-
-        m_UpsampleShader->Bind();
+        // ==========================================
+        // 2. 升采样与混合 (Upsample)
+        // ==========================================
+        cmd.BindPipeline(m_UpsamplePipeline);
         context.Stats.ShaderBinds++;
         m_UpsampleShader->SetInt("u_Image", 0);
         m_UpsampleShader->SetFloat("u_FilterRadius", bloomRadius);
@@ -106,15 +115,12 @@ namespace Ayaya {
             cmd.SetViewport(0, 0, currentMip.IntSize.x, currentMip.IntSize.y);
             cmd.BindTexture2D(0, prevMip.FBO->GetColorAttachmentRendererID(0));
 
-            std::string stepName = "Upsample Mip " + std::to_string(i);
-            if (context.RecordAndCheckDrawCall("Bloom Pass", stepName, "Upsample Shader", 1)) {
+            if (context.RecordAndCheckDrawCall("Bloom Pass", "Upsample Mip " + std::to_string(i), "Upsample Shader", 1)) {
                 cmd.DrawArrays(m_EmptyVAO, 3);
             }
         }
 
-        cmd.SetBlend(false);
         m_MipChain[0].FBO->Unbind();
-
         cmd.SetViewport(0, 0, context.Get<uint32_t>("ViewportWidth", 1280), context.Get<uint32_t>("ViewportHeight", 720));
         context.Set("Bloom_Output", m_MipChain[0].FBO->GetColorAttachmentRendererID(0));
     }

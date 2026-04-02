@@ -57,4 +57,32 @@ namespace Ayaya {
         glDrawArrays(GL_TRIANGLE_STRIP, 0, vertexCount);
     }
 
+    void RenderCommandBuffer::BindPipeline(const std::shared_ptr<Pipeline>& pipeline) {
+        if (pipeline) {
+            pipeline->Bind();
+        }
+    }
+
+    void RenderCommandBuffer::BeginRenderPass(const std::shared_ptr<Framebuffer>& targetFBO, bool clear, const glm::vec4& clearColor) {
+        if (targetFBO) {
+            targetFBO->Bind();
+            SetViewport(0, 0, targetFBO->GetSpecification().Width, targetFBO->GetSpecification().Height);
+        } else {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+
+        if (clear) {
+            // 【神级封装】：模拟 Vulkan 的 LoadOp = CLEAR。
+            // 在这里强制开启深度写入，完美解决 OpenGL 清屏失败的死角！
+            // 这意味着我们在 Pass 业务层再也不需要操心清屏时的管线状态了。
+            glDepthMask(GL_TRUE); 
+            SetClearColor(clearColor);
+            Clear();
+        }
+    }
+
+    void RenderCommandBuffer::EndRenderPass() {
+        // 在 OpenGL 中我们只需解绑即可；在 Vulkan 中对应 vkCmdEndRenderPass
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
 }

@@ -4,6 +4,7 @@
 #include "Renderer/Framebuffer.hpp"
 #include "Renderer/VertexArray.hpp"
 #include "Renderer/RenderCommandBuffer.hpp"
+#include "Renderer/Pipeline.hpp" // 【新增】：引入管线系统
 
 namespace Ayaya {
 
@@ -20,6 +21,8 @@ namespace Ayaya {
         std::shared_ptr<Shader> m_FXAAShader;
         std::shared_ptr<Framebuffer> m_FXAAFBO;
         std::shared_ptr<VertexArray> m_EmptyVAO;
+
+        std::shared_ptr<Pipeline> m_Pipeline; // 【新增】：管线状态对象
     };
 
 }

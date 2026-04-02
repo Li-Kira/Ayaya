@@ -3,6 +3,7 @@
 #include <memory>
 #include <glm/glm.hpp>
 #include "Renderer/VertexArray.hpp" // 引入 VAO
+#include "Renderer/Pipeline.hpp"
 
 namespace Ayaya {
 
@@ -47,6 +48,14 @@ namespace Ayaya {
         void DrawIndexed(const std::shared_ptr<VertexArray>& vertexArray, uint32_t indexCount = 0);
         void DrawArrays(const std::shared_ptr<VertexArray>& vertexArray, uint32_t vertexCount);
         void DrawTriangleStrip(const std::shared_ptr<VertexArray>& vertexArray, uint32_t vertexCount);
+
+        void BindPipeline(const std::shared_ptr<Pipeline>& pipeline);
+
+        // ==========================================
+        // 【新增】：现代 API 渲染作用域语义
+        // ==========================================
+        void BeginRenderPass(const std::shared_ptr<Framebuffer>& targetFBO, bool clear = true, const glm::vec4& clearColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+        void EndRenderPass();
     };
 
 }

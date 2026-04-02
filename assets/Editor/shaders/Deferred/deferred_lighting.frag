@@ -86,28 +86,34 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
 }
 
 // 带PCF的阴影算法
+// 带PCF的阴影算法
 float ShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
     // 执行透视除法 (将坐标归一化到 -1 ~ 1)
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+    
     // 变换到 0 ~ 1 范围，方便去纹理里采样
     projCoords = projCoords * 0.5 + 0.5;
-
+    
     // 如果超出了阴影视锥体的范围，默认没有阴影
     if(projCoords.z > 1.0) return 0.0;
 
     // 当前像素在太阳眼里的深度
     float currentDepth = projCoords.z;
-
-    // 阴影偏移 (Bias) 魔法：防止表面出现极其丑陋的“阴影失真 (Shadow Acne)”条纹
-    float bias = max(0.0015 * (1.0 - dot(normal, lightDir)), 0.0002);
-
+    
+    // ==========================================
+    // 【核心修复】：稍微加大 Bias 的基础值！
+    // 因为我们关闭了正面剔除，需要稍强的偏移来抵抗斑马纹
+    // 原来是 0.0015 和 0.0002，现在提升到 0.005 和 0.0005
+    // ==========================================
+    float bias = max(0.005 * (1.0 - dot(normal, lightDir)), 0.0005);
+    
     // PCF (Percentage-Closer Filtering) 软阴影：对周围 9 个像素进行采样求平均值
     float shadow = 0.0;
     vec2 texelSize = 1.0 / textureSize(u_ShadowMap, 0);
     for(int x = -1; x <= 1; ++x) {
         for(int y = -1; y <= 1; ++y) {
-            float pcfDepth = texture(u_ShadowMap, projCoords.xy + vec2(x, y) * texelSize).r; 
-            shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;        
+            float pcfDepth = texture(u_ShadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
         }    
     }
     shadow /= 9.0;
