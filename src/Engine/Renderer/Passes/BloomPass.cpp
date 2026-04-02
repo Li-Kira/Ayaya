@@ -10,7 +10,6 @@ namespace Ayaya {
         m_DownsampleShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/bloom_downsample.frag");
         m_UpsampleShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/bloom_upsample.frag");
 
-        // 1. 降采样管线 (不混合，直接覆盖)
         PipelineSpecification downSpec;
         downSpec.Shader = m_DownsampleShader;
         downSpec.DepthTest = false;
@@ -18,13 +17,12 @@ namespace Ayaya {
         downSpec.Blend = false;
         m_DownsamplePipeline = Pipeline::Create(downSpec);
 
-        // 2. 升采样管线 (纯加法混合)
         PipelineSpecification upSpec;
         upSpec.Shader = m_UpsampleShader;
         upSpec.DepthTest = false;
         upSpec.DepthWrite = false;
         upSpec.Blend = true;
-        upSpec.BlendMode = BlendMode::Additive; // GL_ONE, GL_ONE
+        upSpec.BlendMode = BlendMode::Additive; 
         m_UpsamplePipeline = Pipeline::Create(upSpec);
     }
 
@@ -74,10 +72,9 @@ namespace Ayaya {
 
         for (size_t i = 0; i < m_MipChain.size(); i++) {
             auto& mip = m_MipChain[i];
-            mip.FBO->Bind();
-            cmd.SetViewport(0, 0, mip.IntSize.x, mip.IntSize.y);
-            cmd.SetClearColor({ 0.0f, 0.0f, 0.0f, 1.0f });
-            cmd.Clear();
+            
+            // 【完美规范】：每个 Mip 层级开启独立的 RenderPass (带清屏)
+            cmd.BeginRenderPass(mip.FBO, true, glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
 
             m_DownsampleShader->SetInt("u_MipLevel", (int)i);
 
@@ -97,6 +94,8 @@ namespace Ayaya {
             if (context.RecordAndCheckDrawCall("Bloom Pass", "Downsample Mip " + std::to_string(i), "Downsample Shader", 1)) {
                 cmd.DrawArrays(m_EmptyVAO, 3);
             }
+
+            cmd.EndRenderPass(); // 【结束当前 Mip 的通道】
         }
 
         // ==========================================
@@ -111,17 +110,19 @@ namespace Ayaya {
             auto& currentMip = m_MipChain[i];
             auto& prevMip = m_MipChain[i + 1];
 
-            currentMip.FBO->Bind(); 
-            cmd.SetViewport(0, 0, currentMip.IntSize.x, currentMip.IntSize.y);
+            // 【完美规范】：开启 RenderPass！注意 clear = false
+            // 因为我们要利用 Additive 混合模式把光晕叠加在这一层原有的像素上！
+            cmd.BeginRenderPass(currentMip.FBO, false);
+
             cmd.BindTexture2D(0, prevMip.FBO->GetColorAttachmentRendererID(0));
 
             if (context.RecordAndCheckDrawCall("Bloom Pass", "Upsample Mip " + std::to_string(i), "Upsample Shader", 1)) {
                 cmd.DrawArrays(m_EmptyVAO, 3);
             }
+
+            cmd.EndRenderPass(); // 【结束当前 Mip 的通道】
         }
 
-        m_MipChain[0].FBO->Unbind();
-        cmd.SetViewport(0, 0, context.Get<uint32_t>("ViewportWidth", 1280), context.Get<uint32_t>("ViewportHeight", 720));
         context.Set("Bloom_Output", m_MipChain[0].FBO->GetColorAttachmentRendererID(0));
     }
 }

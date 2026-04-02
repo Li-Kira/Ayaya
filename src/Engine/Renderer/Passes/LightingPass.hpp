@@ -4,7 +4,7 @@
 #include "Renderer/Framebuffer.hpp"
 #include "Renderer/VertexArray.hpp"
 #include "Renderer/RenderCommandBuffer.hpp"
-#include "Renderer/Pipeline.hpp" // 【引入管线系统】
+#include "Renderer/Pipeline.hpp" 
 #include "Engine/Scene/Components.hpp"
 
 namespace Ayaya {

@@ -61,19 +61,8 @@ namespace Ayaya {
     }
 
     void GBufferPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
-        m_GeometryFBO->Bind();
-        cmd.SetViewport(0, 0, m_GeometryFBO->GetSpecification().Width, m_GeometryFBO->GetSpecification().Height);
-        
-        // ==========================================
-        // 【核心进化】：在清空屏幕之前，提前绑定主几何管线！
-        // 这样底层的 OpenGL 就会自动执行图纸里的 glDepthMask(GL_TRUE)
-        // 完美保证 cmd.Clear() 能够干净地清理掉上一帧的深度残留！
-        // ==========================================
-        cmd.BindPipeline(m_GBufferPipeline); 
-        
-        // Alpha 清 0 代表天空，用于后续光照合成阶段的 discard
-        cmd.SetClearColor(glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
-        cmd.Clear();
+        // 【终极进化】：一句话开启渲染作用域，目标、视口、清空一次搞定！
+        cmd.BeginRenderPass(m_GeometryFBO, true, glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
 
         m_OpaqueDrawList.clear();
         glm::mat4 viewProj = context.ProjectionMatrix * context.ViewMatrix;
@@ -169,7 +158,7 @@ namespace Ayaya {
             }
         }
 
-        m_GeometryFBO->Unbind();
+        cmd.EndRenderPass();
 
         // ==========================================
         // 4. 将 5 张 G-Buffer 产物贴在黑板上

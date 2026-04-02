@@ -44,15 +44,11 @@ namespace Ayaya {
         
         if (lightingTexID == 0) return;
 
-        m_PostProcessFBO->Bind();
-        cmd.SetViewport(0, 0, m_PostProcessFBO->GetSpecification().Width, m_PostProcessFBO->GetSpecification().Height);
+        cmd.BeginRenderPass(m_PostProcessFBO, true, glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
         
-        // 【规范顺序】：先绑管线，再清屏！
         cmd.BindPipeline(m_Pipeline);
         context.Stats.ShaderBinds++;
 
-        cmd.SetClearColor(glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
-        cmd.Clear();
 
         // 1. 基础贴图 (Slot 0)
         m_PostProcessShader->SetInt("u_ScreenTexture", 0);
@@ -91,7 +87,7 @@ namespace Ayaya {
             cmd.DrawArrays(m_EmptyVAO, 3);
         }
         
-        m_PostProcessFBO->Unbind();
+        cmd.EndRenderPass();
 
         // 最终结果写回黑板，供 FXAAPass 读取！
         context.Set("PostProcess_Output", m_PostProcessFBO->GetColorAttachmentRendererID(0));

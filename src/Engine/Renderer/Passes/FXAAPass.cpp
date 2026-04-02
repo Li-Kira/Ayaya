@@ -54,15 +54,10 @@ namespace Ayaya {
         }
 
         // 3. 开始执行 FXAA 渲染
-        m_FXAAFBO->Bind();
-        cmd.SetViewport(0, 0, m_FXAAFBO->GetSpecification().Width, m_FXAAFBO->GetSpecification().Height);
+        cmd.BeginRenderPass(m_FXAAFBO, true, glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
         
-        // 【规范顺序】：先绑管线，再清屏！
         cmd.BindPipeline(m_Pipeline);
         context.Stats.ShaderBinds++;
-
-        cmd.SetClearColor(glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
-        cmd.Clear();
         
         m_FXAAShader->SetInt("u_ScreenTexture", 0);
         
@@ -80,7 +75,7 @@ namespace Ayaya {
             cmd.DrawArrays(m_EmptyVAO, 3);
         }
         
-        m_FXAAFBO->Unbind();
+        cmd.EndRenderPass();
 
         // 4. 将抗锯齿后的结果，写回黑板，供 EditorLayer 视口读取！
         context.Set("Final_Output", m_FXAAFBO->GetColorAttachmentRendererID(0));

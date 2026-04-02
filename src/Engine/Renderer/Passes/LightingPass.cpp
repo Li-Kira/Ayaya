@@ -7,6 +7,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
+// 【进化】：已经不需要包含 <glad/glad.h> 了！所有状态均由 CommandBuffer 和 PSO 代理！
 
 namespace Ayaya {
 
@@ -41,7 +42,9 @@ namespace Ayaya {
         selSpec.Attachments = { FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::Depth };
         m_SelectionFBO = Framebuffer::Create(selSpec);
 
+        // ==========================================
         // 配置各子通道的 PSO 管线
+        // ==========================================
         PipelineSpecification defSpec;
         defSpec.Shader = m_DeferredLightingShader;
         defSpec.TargetFramebuffer = m_LightingFBO;
@@ -110,20 +113,19 @@ namespace Ayaya {
         float physicalExposure = context.Get<float>("PhysicalExposure", 1.0f);
         glm::vec4 clearColor   = context.Get<glm::vec4>("ClearColor", glm::vec4(0.06f, 0.06f, 0.065f, 1.0f));
 
-        // 1. 延迟光照合成 (Deferred Lighting)
-        m_LightingFBO->Bind();
-        cmd.SetViewport(0, 0, m_LightingFBO->GetSpecification().Width, m_LightingFBO->GetSpecification().Height);
-        
-        // 【完美规范】：先绑管线，再清屏！
-        cmd.BindPipeline(m_DeferredPipeline);
-        context.Stats.ShaderBinds++;
-
         glm::vec4 hdrClearColor = clearColor;
         hdrClearColor.r /= physicalExposure;
         hdrClearColor.g /= physicalExposure;
         hdrClearColor.b /= physicalExposure;
-        cmd.SetClearColor(hdrClearColor);
-        cmd.Clear();
+
+        // ==========================================
+        // 1. 延迟光照合成 (Deferred Lighting)
+        // ==========================================
+        // 【显式 RenderPass 1】：清屏并绘制光照
+        cmd.BeginRenderPass(m_LightingFBO, true, hdrClearColor);
+        
+        cmd.BindPipeline(m_DeferredPipeline);
+        context.Stats.ShaderBinds++;
 
         cmd.BindTexture2D(0, gPosition);   m_DeferredLightingShader->SetInt("g_Position", 0);
         cmd.BindTexture2D(1, gNormal);     m_DeferredLightingShader->SetInt("g_Normal", 1);
@@ -158,16 +160,25 @@ namespace Ayaya {
             cmd.DrawArrays(m_EmptyVAO, 3);
         }
 
+        // 【显式结束 RenderPass 1】：为接下来的外部图像传输 (Blit) 腾出作用域
+        cmd.EndRenderPass();
+
+        // ==========================================
         // 2. 深度拷贝 (Blit Depth)
+        // ==========================================
         auto geoFBO = context.Framebuffers["Geometry"];
         if (geoFBO) {
             uint32_t width = geoFBO->GetSpecification().Width;
             uint32_t height = geoFBO->GetSpecification().Height;
             cmd.BlitDepth(geoFBO->GetRendererID(), m_LightingFBO->GetRendererID(), width, height);
-            m_LightingFBO->Bind();
         }
 
+        // ==========================================
         // 3. 正向渲染 (Forward Pass)
+        // ==========================================
+        // 【显式 RenderPass 2】：重新进入 FBO，且 LoadOp = LOAD (不清空原有像素)
+        cmd.BeginRenderPass(m_LightingFBO, false);
+
         // 3.1 渲染天空盒
         if (context.Get<bool>("ShowSkybox", false)) {
             auto envMap = context.Get<std::shared_ptr<TextureCube>>("EnvironmentCubemap", nullptr);
@@ -258,24 +269,21 @@ namespace Ayaya {
             }
         }
 
-        m_LightingFBO->Unbind();
+        // 【显式结束 RenderPass 2】
+        cmd.EndRenderPass();
 
+        // ==========================================
         // 4. 选择轮廓描边 (Selection Pass)
-        m_SelectionFBO->Bind();
-        cmd.SetViewport(0, 0, m_SelectionFBO->GetSpecification().Width, m_SelectionFBO->GetSpecification().Height);
-        
-        // 【完美规范】：先绑管线，再清屏！
-        cmd.BindPipeline(m_SelectionMeshPipeline);
-        
-        cmd.SetClearColor(glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
-        cmd.Clear();
+        // ==========================================
+        // 【显式 RenderPass 3】：独立的描边缓冲，清空为全透明
+        cmd.BeginRenderPass(m_SelectionFBO, true, glm::vec4(0.0f));
 
         Entity hoveredEntity = context.Get<Entity>("HoveredEntity", Entity{});
         if (hoveredEntity && hoveredEntity.IsActiveInHierarchy()) {
             glm::mat4 transform = hoveredEntity.GetWorldTransform();
 
             if (hoveredEntity.HasComponent<MeshRendererComponent>()) {
-                // 已在上文 BindPipeline
+                cmd.BindPipeline(m_SelectionMeshPipeline);
                 context.Stats.ShaderBinds++;
 
                 m_OutlineShader->SetFloat3("u_Color", glm::vec3(1.0f, 1.0f, 1.0f)); 
@@ -312,9 +320,12 @@ namespace Ayaya {
             }
         }
         
-        m_SelectionFBO->Unbind();
+        // 【显式结束 RenderPass 3】
+        cmd.EndRenderPass();
 
+        // ==========================================
         // 5. 产出数据交接
+        // ==========================================
         context.Set("Lighting_Output", m_LightingFBO->GetColorAttachmentRendererID(0));
         context.Set("Selection_Output", m_SelectionFBO->GetColorAttachmentRendererID(0));
         context.Framebuffers["Lighting"] = m_LightingFBO;

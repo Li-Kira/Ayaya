@@ -53,14 +53,10 @@ namespace Ayaya {
         glm::mat4 lightViewMatrix = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         glm::mat4 lightSpaceMatrix = lightProjection * lightViewMatrix;
 
-        m_ShadowMapFBO->Bind();
-        cmd.SetViewport(0, 0, 2048, 2048);
-        
-        // 【核心进化】：先绑定管线，再清空！管线会自动配置好深度写入状态！
+        cmd.BeginRenderPass(m_ShadowMapFBO, true, glm::vec4(1.0f));
         cmd.BindPipeline(m_Pipeline); 
-        cmd.Clear(); 
-        
         context.Stats.ShaderBinds++;
+
         m_ShadowShader->SetMat4("u_LightSpaceMatrix", lightSpaceMatrix);
 
         auto meshView = context.ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
@@ -83,11 +79,7 @@ namespace Ayaya {
             }
         }
         
-        m_ShadowMapFBO->Unbind();
-        
-        uint32_t vpWidth = context.Get<uint32_t>("ViewportWidth", 1280);
-        uint32_t vpHeight = context.Get<uint32_t>("ViewportHeight", 720);
-        cmd.SetViewport(0, 0, vpWidth, vpHeight);
+        cmd.EndRenderPass();
 
         context.Set("ShadowMap_Output", m_ShadowMapFBO->GetDepthAttachmentRendererID());
         context.Set("LightSpaceMatrix", lightSpaceMatrix);
