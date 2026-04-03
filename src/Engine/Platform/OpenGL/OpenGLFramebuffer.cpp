@@ -218,10 +218,4 @@ namespace Ayaya {
         m_Specification.Height = height;
         Invalidate();
     }
-
-    std::shared_ptr<Framebuffer> Framebuffer::Create(const FramebufferSpecification& spec) {
-        // 由于我们目前只有 OpenGL 后端，直接返回 OpenGLFramebuffer
-        return std::make_shared<OpenGLFramebuffer>(spec);
-    }
-    
 }
