@@ -1,15 +1,18 @@
 #pragma once
 
-#include <glad/glad.h>
+// 【移除 glad/glad.h，不再让 Window 层依赖具体的渲染 API】
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
 #include <string>
 #include <functional>
+#include <memory>
 
 #include "Events/Event.hpp"
 #include "Events/ApplicationEvent.hpp"
 #include "Events/KeyEvent.hpp"
 #include "Events/MouseEvent.hpp"
+#include "Renderer/GraphicsContext.hpp" // 【新增】：引入图形上下文接口
 
 namespace Ayaya {
 
@@ -41,6 +44,9 @@ namespace Ayaya {
 
     private:
         GLFWwindow* m_Window;
+        
+        // 【新增】：当前窗口绑定的图形上下文
+        std::shared_ptr<GraphicsContext> m_Context;
 
         // 内部结构体，用于在 GLFW 回调中通过 UserPointer 获取数据
         struct WindowData {

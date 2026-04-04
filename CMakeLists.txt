@@ -55,6 +55,15 @@ set(BOX2D_BUILD_UNIT_TESTS OFF CACHE BOOL "Disable Box2D Unit Tests" FORCE)
 set(BOX2D_BUILD_DOCS OFF CACHE BOOL "Disable Box2D Docs" FORCE)
 add_subdirectory(${BOX2D_DIR})
 
+# ==========================================
+# 【新增】：寻找本地安装的 Vulkan SDK
+# ==========================================
+find_package(Vulkan REQUIRED)
+if (Vulkan_FOUND)
+    message(STATUS "Vulkan SDK Found: ${Vulkan_LIBRARY}")
+else()
+    message(FATAL_ERROR "Vulkan SDK NOT FOUND! Please install LunarG Vulkan SDK.")
+endif()
 
 # 4. 收集底层引擎核心源文件 (Ayaya Library)
 # 注意：SCENE_SOURCES 现在只会收集 Engine/Scene 里的文件，
@@ -63,6 +72,7 @@ file(GLOB CORE_SOURCES "${ENGINE_DIR}/Core/*.cpp")
 file(GLOB RENDERER_SOURCES "${ENGINE_DIR}/Renderer/*.cpp")
 file(GLOB RENDERER_PASSES_SOURCES "${ENGINE_DIR}/Renderer/Passes/*.cpp")
 file(GLOB OPENGL_SOURCES "${ENGINE_DIR}/Platform/OpenGL/*.cpp")
+file(GLOB VULKAN_SOURCES "${ENGINE_DIR}/Platform/Vulkan/*.cpp")
 file(GLOB SCENE_SOURCES "${ENGINE_DIR}/Scene/*.cpp")
 file(GLOB SCRIPTING_SOURCES "${ENGINE_DIR}/Scripting/*.cpp")
 file(GLOB UTILS_SOURCES "${ENGINE_DIR}/Utils/*.cpp")
@@ -90,6 +100,7 @@ set(AYAYA_SOURCES
     ${RENDERER_SOURCES} 
     ${RENDERER_PASSES_SOURCES} 
     ${OPENGL_SOURCES}
+    ${VULKAN_SOURCES}
     ${SCENE_SOURCES}
     ${SCRIPTING_SOURCES}
     ${UTILS_SOURCES}
@@ -136,12 +147,13 @@ target_include_directories(Ayaya PUBLIC
     "${IMGUIZMO_DIR}"        # 允许直接 #include <ImGuizmo.h>
     "${YAML_CPP_DIR}/include" # 允许引擎能找到 <yaml-cpp/yaml.h>
     ${ASSIMP_INCLUDE_DIR}    # 允许引擎能找到 Assimp 的头文件
-
-    # 新增：允许引擎能找到 <box2d/box2d.h>
     "${BOX2D_DIR}/include"
     "${VENDOR_INCLUDE}/sol"
     "${VENDOR_DIR}/lua"
     "${VENDOR_DIR}/lua/src"
+
+    # 【新增】：Vulkan SDK 的头文件路径
+    ${Vulkan_INCLUDE_DIRS}
 )
 
 # 7. 链接第三方库
@@ -151,10 +163,10 @@ find_library(ASSIMP_LIB NAMES assimp assimp-vc143-mt assimp-vc142-mt PATHS "${VE
 
 if(APPLE)
     # Mac 平台链接
-    target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${APPLE_FRAMEWORKS} yaml-cpp ${ASSIMP_LIB} box2d Lua)
+    target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${APPLE_FRAMEWORKS} yaml-cpp ${ASSIMP_LIB} box2d Lua Vulkan::Vulkan)
 elseif(WIN32)
     # Windows 平台链接
-    target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${OPENGL_LIB} yaml-cpp ${ASSIMP_LIB} box2d Lua)
+    target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${OPENGL_LIB} yaml-cpp ${ASSIMP_LIB} box2d Lua Vulkan::Vulkan)
 endif()
 
 

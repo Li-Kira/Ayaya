@@ -1,5 +1,7 @@
+#include "ayapch.h"
 #include "Window.hpp"
 #include "Core/Log.hpp"
+#include "Renderer/RendererAPI.hpp" // 【新增】：获取当前激活的 API
 
 namespace Ayaya {
 
@@ -11,11 +13,20 @@ namespace Ayaya {
             return;
         }
 
-        // macOS OpenGL 4.1 Core Profile 配置
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+        // ==========================================
+        // 【核心修改】：根据 API 动态配置 GLFW 窗口属性
+        // ==========================================
+        if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+            // 如果是 Vulkan，必须告诉 GLFW 不要创建 OpenGL 上下文！
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); 
+        } 
+        else if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+            // 如果是 OpenGL，走 Mac 兼容的 4.1 Core Profile 配置
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+            glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+            glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+        }
 
         m_Window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
         
@@ -25,18 +36,19 @@ namespace Ayaya {
             return;
         }
 
-        glfwMakeContextCurrent(m_Window);
         glfwSetWindowUserPointer(m_Window, &m_Data);
+
+        // ==========================================
+        // 【核心修改】：把 glad 和 context 的事情全权委托给 Context 工厂！
+        // ==========================================
+        m_Context = GraphicsContext::Create(m_Window);
+        m_Context->Init();
 
         // --- 核心修复：获取初始物理像素大小以适配 Retina 屏幕 ---
         int fbWidth, fbHeight;
         glfwGetFramebufferSize(m_Window, &fbWidth, &fbHeight);
         m_Data.Width = fbWidth;
         m_Data.Height = fbHeight;
-
-        if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-            AYAYA_CORE_ERROR("Failed to initialize GLAD!");
-        }
 
         // --- 注册物理像素级的缩放回调 ---
         glfwSetFramebufferSizeCallback(m_Window, [](GLFWwindow* window, int width, int height) {
@@ -108,6 +120,9 @@ namespace Ayaya {
 
     void Window::OnUpdate() {
         glfwPollEvents();
-        glfwSwapBuffers(m_Window);
+        // ==========================================
+        // 【核心修改】：通过多态来 SwapBuffers
+        // ==========================================
+        m_Context->SwapBuffers();
     }
 }
