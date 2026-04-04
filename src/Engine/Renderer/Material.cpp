@@ -24,8 +24,6 @@ namespace Ayaya {
                 case MaterialPropertyType::Vec2:  shader->SetFloat2(prop.UniformName, prop.Vec2Value); break;
                 case MaterialPropertyType::Vec3:  shader->SetFloat3(prop.UniformName, prop.Vec3Value); break;
                 case MaterialPropertyType::Vec4:  shader->SetFloat4(prop.UniformName, prop.Vec4Value); break;
-                
-                // 【补全】：矩阵类型的绑定
                 case MaterialPropertyType::Mat3:  shader->SetMat3(prop.UniformName, prop.Mat3Value); break;
                 case MaterialPropertyType::Mat4:  shader->SetMat4(prop.UniformName, prop.Mat4Value); break;
                 

@@ -3,56 +3,41 @@
 #include <string>
 #include <unordered_map>
 #include <memory>
-#include <glad/glad.h>
 #include <glm/glm.hpp>
 
 namespace Ayaya {
 
+    // ==========================================
+    // 纯虚基类：抹除任何 glad/GL 痕迹
+    // ==========================================
     class Shader {
     public:
-        // 支持自动提取名称或手动指定名称
-        Shader(const std::string& vertexPath, const std::string& fragmentPath);
-        Shader(const std::string& name, const std::string& vertexPath, const std::string& fragmentPath);
-        ~Shader();
+        virtual ~Shader() = default;
 
-        void Bind() const;
-        void Unbind() const;
+        virtual void Bind() const = 0;
+        virtual void Unbind() const = 0;
 
-        const std::string& GetName() const { return m_Name; }
+        virtual const std::string& GetName() const = 0;
 
-        // --- Uniform 支持 ---
-        void SetBool(const std::string& name, bool value);
-        void SetInt(const std::string& name, int value);
-        void SetIntArray(const std::string& name, int* values, uint32_t count);
-        void SetFloat(const std::string& name, float value);
-        void SetFloat2(const std::string& name, const glm::vec2& value);
-        void SetFloat3(const std::string& name, const glm::vec3& value);
-        void SetFloat4(const std::string& name, const glm::vec4& value);
-        void SetMat2(const std::string& name, const glm::mat2& matrix);
-        void SetMat3(const std::string& name, const glm::mat3& matrix);
-        void SetMat4(const std::string& name, const glm::mat4& matrix);
+        virtual void SetBool(const std::string& name, bool value) = 0;
+        virtual void SetInt(const std::string& name, int value) = 0;
+        virtual void SetIntArray(const std::string& name, int* values, uint32_t count) = 0;
+        virtual void SetFloat(const std::string& name, float value) = 0;
+        virtual void SetFloat2(const std::string& name, const glm::vec2& value) = 0;
+        virtual void SetFloat3(const std::string& name, const glm::vec3& value) = 0;
+        virtual void SetFloat4(const std::string& name, const glm::vec4& value) = 0;
+        virtual void SetMat2(const std::string& name, const glm::mat2& matrix) = 0;
+        virtual void SetMat3(const std::string& name, const glm::mat3& matrix) = 0;
+        virtual void SetMat4(const std::string& name, const glm::mat4& matrix) = 0;
 
-        // 手动将 Shader 中的 Uniform Block 绑定到指定的槽位
-        void BindUniformBlock(const std::string& name, uint32_t bindingPoint);
+        virtual void BindUniformBlock(const std::string& name, uint32_t bindingPoint) = 0;
 
-        // 静态工厂方法
+        // 静态工厂
         static std::shared_ptr<Shader> Create(const std::string& vertexPath, const std::string& fragmentPath);
         static std::shared_ptr<Shader> Create(const std::string& name, const std::string& vertexPath, const std::string& fragmentPath);
-
-    private:
-        uint32_t m_RendererID;
-        std::string m_Name;
-        mutable std::unordered_map<std::string, int> m_UniformLocationCache;
-
-        // 核心初始化逻辑，解决赋值导致的资源销毁问题
-        void Init(const std::string& vertexSource, const std::string& fragmentSource);
-        
-        int GetUniformLocation(const std::string& name) const;
-        std::string ReadFile(const std::string& filepath);
-        uint32_t CompileShader(uint32_t type, const std::string& source);
     };
 
-    // --- ShaderLibrary ---
+    // --- ShaderLibrary 保持不变 (它只管理 shared_ptr) ---
     class ShaderLibrary {
     public:
         void Add(const std::shared_ptr<Shader>& shader);

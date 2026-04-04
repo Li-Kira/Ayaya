@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <memory>
 #include "Core/Log.hpp"
 
 namespace Ayaya {
@@ -11,7 +12,6 @@ namespace Ayaya {
         None = 0, Float, Float2, Float3, Float4, Mat3, Mat4, Int, Int2, Int3, Int4, Bool
     };
 
-    // 辅助函数：计算类型大小
     static uint32_t ShaderDataTypeSize(ShaderDataType type) {
         switch (type) {
             case ShaderDataType::Float:    return 4;
@@ -31,7 +31,6 @@ namespace Ayaya {
         return 0;
     }
 
-    // --- 布局元素 ---
     struct BufferElement {
         std::string Name;
         ShaderDataType Type;
@@ -40,7 +39,6 @@ namespace Ayaya {
         bool Normalized;
 
         BufferElement() = default;
-
         BufferElement(ShaderDataType type, const std::string& name, bool normalized = false)
             : Name(name), Type(type), Size(ShaderDataTypeSize(type)), Offset(0), Normalized(normalized) {}
 
@@ -59,23 +57,21 @@ namespace Ayaya {
                 case ShaderDataType::Bool:    return 1;
                 default: break;
             }
+            AYAYA_CORE_ERROR("Unknown ShaderDataType!");
             return 0;
         }
     };
 
-    // --- 布局类 ---
     class BufferLayout {
     public:
         BufferLayout() {}
-        BufferLayout(const std::initializer_list<BufferElement>& elements)
-            : m_Elements(elements) {
+        BufferLayout(std::initializer_list<BufferElement> elements) : m_Elements(elements) {
             CalculateOffsetsAndStride();
         }
 
-        inline uint32_t GetStride() const { return m_Stride; }
-        inline const std::vector<BufferElement>& GetElements() const { return m_Elements; }
+        uint32_t GetStride() const { return m_Stride; }
+        const std::vector<BufferElement>& GetElements() const { return m_Elements; }
 
-        // 支持迭代器，方便 range-based for 循环
         std::vector<BufferElement>::iterator begin() { return m_Elements.begin(); }
         std::vector<BufferElement>::iterator end() { return m_Elements.end(); }
         std::vector<BufferElement>::const_iterator begin() const { return m_Elements.begin(); }
@@ -100,7 +96,7 @@ namespace Ayaya {
     // --- Vertex Buffer 接口 ---
     class VertexBuffer {
     public:
-        virtual ~VertexBuffer() {}
+        virtual ~VertexBuffer() = default;
 
         virtual void Bind() const = 0;
         virtual void Unbind() const = 0;
@@ -108,20 +104,20 @@ namespace Ayaya {
         virtual const BufferLayout& GetLayout() const = 0;
         virtual void SetLayout(const BufferLayout& layout) = 0;
 
-        static VertexBuffer* Create(float* vertices, uint32_t size);
+        // 【修改】：返回智能指针
+        static std::shared_ptr<VertexBuffer> Create(float* vertices, uint32_t size);
     };
 
     // --- Index Buffer 接口 ---
     class IndexBuffer {
     public:
-        virtual ~IndexBuffer() {}
+        virtual ~IndexBuffer() = default;
 
         virtual void Bind() const = 0;
         virtual void Unbind() const = 0;
-
         virtual uint32_t GetCount() const = 0;
 
-        static IndexBuffer* Create(uint32_t* indices, uint32_t count);
+        // 【修改】：返回智能指针
+        static std::shared_ptr<IndexBuffer> Create(uint32_t* indices, uint32_t count);
     };
-
 }

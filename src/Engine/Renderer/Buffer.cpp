@@ -1,83 +1,45 @@
+#include "ayapch.h"
 #include "Buffer.hpp"
-#include <glad/glad.h>
+#include "Renderer/RendererAPI.hpp"
+#include "Platform/OpenGL/OpenGLBuffer.hpp"
+#include "Core/Log.hpp"
 
 namespace Ayaya {
 
-    // =========================================================================
-    // VertexBuffer Implementation (OpenGL)
-    // =========================================================================
-
-    class OpenGLVertexBuffer : public VertexBuffer {
-    public:
-        OpenGLVertexBuffer(float* vertices, uint32_t size) {
-            // 在 macOS (Apple Silicon) 上，建议先绑定 VAO 再操作 VBO
-            glGenBuffers(1, &m_RendererID);
-            glBindBuffer(GL_ARRAY_BUFFER, m_RendererID);
-            glBufferData(GL_ARRAY_BUFFER, size, vertices, GL_STATIC_DRAW);
+    std::shared_ptr<VertexBuffer> VertexBuffer::Create(float* vertices, uint32_t size) {
+        switch (RendererAPI::GetAPI()) {
+            case RendererAPI::API::None:    
+                AYAYA_CORE_ERROR("RendererAPI::None is currently not supported!"); 
+                return nullptr;
+            case RendererAPI::API::OpenGL:  
+                return std::make_shared<OpenGLVertexBuffer>(vertices, size);
+            case RendererAPI::API::Vulkan:  
+                AYAYA_CORE_ERROR("Vulkan VertexBuffer is under construction!"); 
+                return nullptr;
+            case RendererAPI::API::Metal:
+                AYAYA_CORE_ERROR("Metal VertexBuffer is under construction!"); 
+                return nullptr;
         }
-
-        virtual ~OpenGLVertexBuffer() {
-            glDeleteBuffers(1, &m_RendererID);
-        }
-
-        virtual void Bind() const override {
-            glBindBuffer(GL_ARRAY_BUFFER, m_RendererID);
-        }
-
-        virtual void Unbind() const override {
-            glBindBuffer(GL_ARRAY_BUFFER, 0);
-        }
-
-        virtual const BufferLayout& GetLayout() const override { return m_Layout; }
-        virtual void SetLayout(const BufferLayout& layout) override { m_Layout = layout; }
-
-    private:
-        uint32_t m_RendererID;
-        BufferLayout m_Layout;
-    };
-
-    VertexBuffer* VertexBuffer::Create(float* vertices, uint32_t size) {
-        return new OpenGLVertexBuffer(vertices, size);
+        AYAYA_CORE_ERROR("Unknown RendererAPI!");
+        return nullptr;
     }
 
-    // =========================================================================
-    // IndexBuffer Implementation (OpenGL)
-    // =========================================================================
-
-    class OpenGLIndexBuffer : public IndexBuffer {
-    public:
-        OpenGLIndexBuffer(uint32_t* indices, uint32_t count)
-            : m_Count(count) 
-        {
-            glGenBuffers(1, &m_RendererID);
-            
-            // 注意：GL_ELEMENT_ARRAY_BUFFER 必须在 VAO 绑定的情况下操作
-            // 否则在某些驱动下可能会产生状态冲突
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_RendererID);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, count * sizeof(uint32_t), indices, GL_STATIC_DRAW);
+    std::shared_ptr<IndexBuffer> IndexBuffer::Create(uint32_t* indices, uint32_t count) {
+        switch (RendererAPI::GetAPI()) {
+            case RendererAPI::API::None:    
+                AYAYA_CORE_ERROR("RendererAPI::None is currently not supported!"); 
+                return nullptr;
+            case RendererAPI::API::OpenGL:  
+                return std::make_shared<OpenGLIndexBuffer>(indices, count);
+            case RendererAPI::API::Vulkan:  
+                AYAYA_CORE_ERROR("Vulkan IndexBuffer is under construction!"); 
+                return nullptr;
+            case RendererAPI::API::Metal:
+                AYAYA_CORE_ERROR("Metal IndexBuffer is under construction!"); 
+                return nullptr;
         }
-
-        virtual ~OpenGLIndexBuffer() {
-            glDeleteBuffers(1, &m_RendererID);
-        }
-
-        virtual void Bind() const override {
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_RendererID);
-        }
-
-        virtual void Unbind() const override {
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-        }
-
-        virtual uint32_t GetCount() const override { return m_Count; }
-
-    private:
-        uint32_t m_RendererID;
-        uint32_t m_Count;
-    };
-
-    IndexBuffer* IndexBuffer::Create(uint32_t* indices, uint32_t count) {
-        return new OpenGLIndexBuffer(indices, count);
+        AYAYA_CORE_ERROR("Unknown RendererAPI!");
+        return nullptr;
     }
 
 }

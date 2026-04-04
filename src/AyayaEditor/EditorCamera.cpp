@@ -71,7 +71,7 @@ namespace Ayaya {
             
             // 限制一下最近和最远距离
             if (m_Distance < 0.1f) m_Distance = 0.1f;
-            if (m_Distance > 1000.0f) m_Distance = 1000.0f;
+            if (m_Distance > 10000.0f) m_Distance = 10000.0f;
             
             RecalculateView();
             return false;
