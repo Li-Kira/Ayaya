@@ -2,6 +2,11 @@
 
 // 【移除 glad/glad.h，不再让 Window 层依赖具体的渲染 API】
 #define GLFW_INCLUDE_NONE
+// ==========================================
+// 【核心修复】：强行要求 GLFW 暴露 Vulkan 的表面创建 API！
+// （放心，Vulkan 的头文件极其纯净，绝对不会污染你现有的 OpenGL 代码）
+// ==========================================
+#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #include <string>

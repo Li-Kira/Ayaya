@@ -64,6 +64,7 @@ if (Vulkan_FOUND)
 else()
     message(FATAL_ERROR "Vulkan SDK NOT FOUND! Please install LunarG Vulkan SDK.")
 endif()
+add_definitions(-DGLFW_INCLUDE_NONE -DGLFW_INCLUDE_VULKAN)
 
 # 4. 收集底层引擎核心源文件 (Ayaya Library)
 # 注意：SCENE_SOURCES 现在只会收集 Engine/Scene 里的文件，
