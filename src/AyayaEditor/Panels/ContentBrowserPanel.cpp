@@ -56,7 +56,15 @@ namespace Ayaya {
             ImGui::PushID(filenameString.c_str());
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); 
             
-            ImGui::ImageButton(filenameString.c_str(), (ImTextureID)(intptr_t)icon->GetRendererID(), { m_ThumbnailSize, m_ThumbnailSize }, { 0, 1 }, { 1, 0 });
+            // 检查 icon 指针是否有效且贴图已加载
+            if (icon) {
+                ImGui::ImageButton(filenameString.c_str(), (ImTextureID)(intptr_t)icon->GetRendererID(), 
+                                   { m_ThumbnailSize, m_ThumbnailSize }, { 0, 1 }, { 1, 0 });
+            } else {
+                // 如果是 Vulkan 模式且贴图还没做，画一个正方形按钮占位，防止崩溃！
+                ImGui::Button(directoryEntry.is_directory() ? "[DIR]" : "[FILE]", 
+                              { m_ThumbnailSize, m_ThumbnailSize });
+            }
             
             // ==========================================
             // 补上这段核心魔法：让按钮变成可以抓起的“拖拽源”！

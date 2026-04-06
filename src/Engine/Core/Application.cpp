@@ -95,8 +95,13 @@ Hi, welcome to Ayaya engine♪
         m_Window->SetEventCallback(std::bind(&Application::OnEvent, this, std::placeholders::_1));
         AYAYA_CORE_INFO("GLFW Window initialized successfully.");
 
-        Renderer::Init();
-        AYAYA_CORE_INFO("Renderer initialized successfully.");
+        // 【核心防御】：只有在 OpenGL 模式下才初始化旧的 3D 渲染器
+        if (Renderer::GetAPI() == RendererAPI::API::OpenGL) {
+            Renderer::Init();
+            AYAYA_CORE_INFO("Renderer initialized successfully.");
+        } else {
+            AYAYA_CORE_INFO("Vulkan 3D Renderer is under construction, bypassed OpenGL Renderer::Init().");
+        }
 
         // 创建并初始化 ImGuiLayer
         m_ImGuiLayer = new ImGuiLayer();
@@ -105,7 +110,10 @@ Hi, welcome to Ayaya engine♪
     }
 
     Application::~Application() {
-        Renderer::Shutdown(); // 建议加上清理逻辑
+        // 【核心修复】：安全清理
+        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+            Renderer::Shutdown();
+        }
     }
 
     void Application::PushLayer(Layer* layer) { 
@@ -171,7 +179,11 @@ Hi, welcome to Ayaya engine♪
         }
         
         AYAYA_CORE_INFO("Window Resize Logic: {0}, {1}", e.GetWidth(), e.GetHeight());
-        Renderer::OnWindowResize(e.GetWidth(), e.GetHeight());
+        
+        // 【核心修复】：只有在 OpenGL 模式下才去调整旧渲染器的视口！
+        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+            Renderer::OnWindowResize(e.GetWidth(), e.GetHeight());
+        }
         return false;
     }
 

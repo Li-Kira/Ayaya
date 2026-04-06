@@ -6,25 +6,31 @@ namespace Ayaya {
     Mesh::Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices) {
         m_VertexCount = (uint32_t)vertices.size();
         m_IndexCount = (uint32_t)indices.size();
+        
+        // ==========================================
+        // 1. 直接用智能指针接收返回值 (无需手动管理内存)
+        // ==========================================
+        std::shared_ptr<VertexBuffer> vbo = VertexBuffer::Create((float*)vertices.data(), vertices.size() * sizeof(Vertex));
+        std::shared_ptr<IndexBuffer> ibo = IndexBuffer::Create((uint32_t*)indices.data(), indices.size());
         m_VertexArray = VertexArray::Create();
 
-        // 将 Vertex 结构体数组转换为紧凑的 Buffer
-        auto vbo = std::shared_ptr<VertexBuffer>(VertexBuffer::Create((float*)vertices.data(), vertices.size() * sizeof(Vertex)));
-        
-        // 注意这里的 Layout：位置(Float3)、法线(Float3)、UV(Float2)
-        vbo->SetLayout({
-            { ShaderDataType::Float3, "a_Position" },
-            { ShaderDataType::Float3, "a_Normal"   },
-            { ShaderDataType::Float2, "a_TexCoord" },
-            { ShaderDataType::Float3, "a_Tangent"  } // <--- 新增
-        });
-        m_VertexArray->AddVertexBuffer(vbo);
-
-        auto ibo = std::shared_ptr<IndexBuffer>(IndexBuffer::Create((uint32_t*)indices.data(), indices.size()));
-        m_VertexArray->SetIndexBuffer(ibo);
+        // ==========================================
+        // 2. 【核心防御】：检查智能指针是否有效
+        // 如果处于 Vulkan 模式，底层会返回 nullptr，这里就不会执行，从而避免崩溃！
+        // ==========================================
+        if (vbo && ibo && m_VertexArray) {
+            vbo->SetLayout({
+                { ShaderDataType::Float3, "a_Position" },
+                { ShaderDataType::Float3, "a_Normal"   },
+                { ShaderDataType::Float2, "a_TexCoord" },
+                { ShaderDataType::Float3, "a_Tangent"  } 
+            });
+            m_VertexArray->AddVertexBuffer(vbo);
+            m_VertexArray->SetIndexBuffer(ibo);
+        }
 
         // ==========================================
-        // 核心：计算本地 AABB
+        // 3. 核心：计算本地 AABB
         // ==========================================
         for (const auto& vertex : vertices) {
             m_BoundingBox.Min.x = std::min(m_BoundingBox.Min.x, vertex.Position.x);

@@ -89,6 +89,7 @@ set(IMGUI_SOURCES
     "${IMGUI_DIR}/imgui_demo.cpp"
     "${IMGUI_DIR}/backends/imgui_impl_glfw.cpp"
     "${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp"
+    "${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp"
 )
 
 # 收集 ImGuizmo 源文件

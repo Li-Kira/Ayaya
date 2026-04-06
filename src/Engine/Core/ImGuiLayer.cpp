@@ -1,12 +1,16 @@
 #include "ayapch.h"
 #include "ImGuiLayer.hpp"
 #include "Engine/Core/Log.hpp" // 确保包含 Log
+#include "Engine/Core/ImGuiBackend.hpp"
 
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
+#include <backends/imgui_impl_vulkan.h> // 【新增】：引入 Vulkan 后端
 
 #include "Engine/Core/Application.hpp"
+#include "Engine/Renderer/RendererAPI.hpp" // 【新增】：获取当前 API
+#include "Engine/Platform/Vulkan/VulkanContext.hpp" // 【新增】：获取 Vulkan 句柄
 #include <backends/IconsFontAwesome5.h>
 
 namespace Ayaya {
@@ -99,7 +103,7 @@ namespace Ayaya {
         ImGuiIO& io = ImGui::GetIO(); (void)io;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // 允许键盘控制
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // 开启停靠功能
-        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // 开启多视口（可拖出主窗口）
+        // io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // 开启多视口（可拖出主窗口）
 
         float fontSize = 18.0f; // 基础字体大小
         // 建议加载你下载的高清 TTF 字体，不要用 AddFontDefault()
@@ -143,46 +147,62 @@ namespace Ayaya {
         ImGui::StyleColorsDark(); // 先以 ImGui 默认暗色垫底
         SetDarkThemeColors();     // 覆盖为我们的次世代引擎高级灰主题
 
-        // 全局缩放适配高分屏 (Retina)
-        // io.FontGlobalScale = 2.0f; 
-        // style.ScaleAllSizes(2.0f);
-
         Application& app = Application::Get();
         GLFWwindow* window = static_cast<GLFWwindow*>(app.GetWindow().GetNativeWindow());
         
-        ImGui_ImplGlfw_InitForOpenGL(window, true); 
-        ImGui_ImplOpenGL3_Init("#version 410");
+        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+            ImGui_ImplGlfw_InitForOpenGL(window, true); 
+            ImGui_ImplOpenGL3_Init("#version 410");
+        } 
+        else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+            ImGui_ImplGlfw_InitForVulkan(window, true);
+            
+            auto vulkanContext = std::dynamic_pointer_cast<VulkanContext>(app.GetWindow().GetContext());
+            
+            ImGui_ImplVulkan_InitInfo init_info = {};
+            init_info.Instance = vulkanContext->GetInstance();
+            init_info.PhysicalDevice = vulkanContext->GetPhysicalDevice();
+            init_info.Device = vulkanContext->GetDevice();
+            
+            // 【保留这个修复】：动态获取精准的 QueueFamily，不要写死 0
+            init_info.QueueFamily = vulkanContext->GetGraphicsQueueFamily(); 
+            init_info.Queue = vulkanContext->GetGraphicsQueue();
+            init_info.PipelineCache = VK_NULL_HANDLE;
+            init_info.DescriptorPool = vulkanContext->GetDescriptorPool();
+            init_info.MinImageCount = vulkanContext->GetMinImageCount();
+            init_info.ImageCount = vulkanContext->GetImageCount();
+            init_info.Allocator = nullptr;
+            init_info.CheckVkResultFn = nullptr;
+            
+            // 【恢复你的原始正确代码】：1.92 版本确实需要通过 PipelineInfoMain 传递！
+            init_info.PipelineInfoMain.RenderPass = vulkanContext->GetRenderPass();
+            init_info.PipelineInfoMain.Subpass = 0;
+            init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+            // 加上断言，确保初始化真正成功，没有被静默失败掩盖！
+            bool success = ImGui_ImplVulkan_Init(&init_info);
+            AYAYA_CORE_ASSERT(success, "Failed to initialize ImGui Vulkan Backend!");
+        }
     }
 
     void ImGuiLayer::OnDetach() {
-        // 为了安全起见，增加判空
         if (ImGui::GetCurrentContext() != nullptr) {
-            ImGui_ImplOpenGL3_Shutdown();
+            if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+                ImGui_ImplVulkan_Shutdown();
+            } else {
+                ImGui_ImplOpenGL3_Shutdown();
+            }
             ImGui_ImplGlfw_Shutdown();
             ImGui::DestroyContext();
         }
     }
 
     void ImGuiLayer::Begin() {
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
+        ImGuiBackend::BeginFrame();
     }
 
     void ImGuiLayer::End() {
-        ImGuiIO& io = ImGui::GetIO();
-        Application& app = Application::Get();
-        io.DisplaySize = ImVec2((float)app.GetWindow().GetWidth(), (float)app.GetWindow().GetHeight());
-
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-            GLFWwindow* backup_current_context = glfwGetCurrentContext();
-            ImGui::UpdatePlatformWindows();
-            ImGui::RenderPlatformWindowsDefault();
-            glfwMakeContextCurrent(backup_current_context);
-        }
+        ImGuiBackend::EndFrameAndSwapBuffers();
     }
 
     void ImGuiLayer::OnEvent(Event& e) {

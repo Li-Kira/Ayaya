@@ -39,14 +39,16 @@ namespace Ayaya {
         // ==========================================
         ScriptEngine::Init();
 
-        m_SceneRenderer = std::make_shared<SceneRenderer>();
-        m_SceneRenderer->Init();
-        
-        m_GameRenderer = std::make_shared<SceneRenderer>();
-        m_GameRenderer->Init();
+        // 【核心防御】：只在 OpenGL 模式下创建和初始化基于 GL 的 SceneRenderer
+        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+            m_SceneRenderer = std::make_shared<SceneRenderer>();
+            m_SceneRenderer->Init();
+            
+            m_GameRenderer = std::make_shared<SceneRenderer>();
+            m_GameRenderer->Init();
 
-        // 【新增】：将 GameRenderer 交给帧调试器
-        m_FrameDebuggerPanel.SetContext(m_GameRenderer);
+            m_FrameDebuggerPanel.SetContext(m_GameRenderer);
+        }
         
         SetupScene();
 
@@ -69,6 +71,8 @@ namespace Ayaya {
         // 1. 处理输入
         // ==========================================
         HandleShortcuts();
+
+        if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) return;
 
         // ==========================================
         // 2. 处理UI窗口 的 Resize
@@ -339,7 +343,12 @@ namespace Ayaya {
         auto& envComp = skyEntity.AddComponent<EnvironmentComponent>();
         envComp.Type = EnvironmentType::HDR_Equirectangular;
         envComp.EquirectangularPath = "assets/textures/skybox/hdr/newport_loft.hdr";
-        envComp.EquirectangularTexture = Texture2D::Create(envComp.EquirectangularPath);
+        // ==========================================
+        // 【核心防御 1】：只有 OpenGL 模式才去真正加载 HDR 贴图！
+        // ==========================================
+        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+            envComp.EquirectangularTexture = Texture2D::Create(envComp.EquirectangularPath);
+        }
         envComp.Intensity = 30000.0f; 
         envComp.AmbientColor = glm::vec3(0.0f, 0.0f, 0.0f);
         envComp.IsDirty = true;
@@ -350,16 +359,19 @@ namespace Ayaya {
         cubeEntity.GetComponent<TransformComponent>().Translation = { 0.0f, 0.0f, 0.0f };
         auto& mrc = cubeEntity.AddComponent<MeshRendererComponent>(); 
 
-        auto DefaultMat = std::make_shared<Material>();
-        bool success = MaterialSerializer::Deserialize(DefaultMat, "assets/Editor/materials/DefaultPBR.mat");
+        // ==========================================
+        // 【核心防御 2】：只有 OpenGL 模式才去反序列化材质和 Mesh！
+        // ==========================================
+        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+            auto DefaultMat = std::make_shared<Material>();
+            bool success = MaterialSerializer::Deserialize(DefaultMat, "assets/Editor/materials/DefaultPBR.mat");
 
-        if (success) {
-            // 给物体分配一个克隆体！
-            mrc.MaterialAsset = DefaultMat->Clone();
-        } else {
-            AYAYA_CORE_WARN("Failed to load DefaultPBR.mat!");
-            // 如果连母材质都没找到，只能给一个空材质，管线会自动走 Fallback(品红色)
-            mrc.MaterialAsset = std::make_shared<Material>(); 
+            if (success) {
+                mrc.MaterialAsset = DefaultMat->Clone();
+            } else {
+                AYAYA_CORE_WARN("Failed to load DefaultPBR.mat!");
+                mrc.MaterialAsset = std::make_shared<Material>(); 
+            }
         }
 
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
@@ -760,16 +772,22 @@ namespace Ayaya {
         m_ViewportSize = { viewportPanelSize.x, viewportPanelSize.y };
 
         // ==========================================
-        // 核心修改：向渲染管线索要处理完毕的后期画面
+        // 核心修改：向渲染管线索要处理完毕的后期画面 (增加安全检查)
         // ==========================================
-        uint32_t textureID = m_SceneRenderer->GetFinalColorAttachmentRendererID();
-        ImGui::Image(reinterpret_cast<void*>((intptr_t)textureID), 
-                     ImVec2{ m_ViewportSize.x, m_ViewportSize.y }, 
-                     ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL && m_SceneRenderer) {
+            uint32_t textureID = m_SceneRenderer->GetFinalColorAttachmentRendererID();
+            ImGui::Image(reinterpret_cast<void*>((intptr_t)textureID), 
+                         ImVec2{ m_ViewportSize.x, m_ViewportSize.y }, 
+                         ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
 
-        HandleMousePicking(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
-        HandleGizmo(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
-        UIRenderDebugGizmos(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
+            HandleMousePicking(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
+            HandleGizmo(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
+            UIRenderDebugGizmos(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
+        } else {
+            // Vulkan 模式下的占位符
+            ImGui::SetCursorPos(ImVec2(m_ViewportSize.x * 0.5f - 150.0f, m_ViewportSize.y * 0.5f));
+            ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.0f, 1.0f), "Vulkan 3D Viewport is under construction...");
+        }
 
         ImGui::End();
         ImGui::PopStyleVar();
@@ -786,10 +804,16 @@ namespace Ayaya {
         ImVec2 cursorStartPos = ImGui::GetCursorPos();
 
         // 渲染底层的游戏画面
-        uint32_t textureID = m_GameRenderer->GetFinalColorAttachmentRendererID();
-        ImGui::Image(reinterpret_cast<void*>((intptr_t)textureID), 
-                     ImVec2{ m_GameViewportSize.x, m_GameViewportSize.y }, 
-                     ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL && m_GameRenderer) {
+            uint32_t textureID = m_GameRenderer->GetFinalColorAttachmentRendererID();
+            ImGui::Image(reinterpret_cast<void*>((intptr_t)textureID), 
+                         ImVec2{ m_GameViewportSize.x, m_GameViewportSize.y }, 
+                         ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+        } else {
+            // Vulkan 模式下的占位符
+            ImGui::SetCursorPos(ImVec2(m_GameViewportSize.x * 0.5f - 150.0f, m_GameViewportSize.y * 0.5f));
+            ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.0f, 1.0f), "Vulkan Game Viewport is under construction...");
+        }
 
         // ==========================================
         // Game 窗口内置 Stats 悬浮层 (完美动态适配版)
