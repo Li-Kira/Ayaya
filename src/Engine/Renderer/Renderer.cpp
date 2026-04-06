@@ -2,7 +2,7 @@
 
 namespace Ayaya {
 
-    RendererAPI::API RendererAPI::s_API = RendererAPI::API::Vulkan;
+    RendererAPI::API RendererAPI::s_API = RendererAPI::API::OpenGL;
 
     void Renderer::Init() {
         RenderCommand::Init();
