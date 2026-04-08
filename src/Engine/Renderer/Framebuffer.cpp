@@ -2,6 +2,7 @@
 #include "Framebuffer.hpp"
 #include "Renderer/RendererAPI.hpp"
 #include "Platform/OpenGL/OpenGLFramebuffer.hpp"
+#include "Platform/Vulkan/VulkanFramebuffer.hpp" // 【新增】
 #include "Core/Log.hpp"
 
 namespace Ayaya {
@@ -16,8 +17,7 @@ namespace Ayaya {
                 return std::make_shared<OpenGLFramebuffer>(spec);
                 
             case RendererAPI::API::Vulkan:  
-                AYAYA_CORE_ERROR("Vulkan Framebuffer is under construction!"); 
-                return nullptr;
+                return std::make_shared<VulkanFramebuffer>(spec);
                 
             case RendererAPI::API::Metal:
                 AYAYA_CORE_ERROR("Metal Framebuffer is under construction!"); 

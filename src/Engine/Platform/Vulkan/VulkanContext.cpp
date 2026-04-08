@@ -12,41 +12,40 @@ namespace Ayaya {
     }
 
     VulkanContext::~VulkanContext() {
-        // 【新增】：等待 GPU 彻底空闲，防止在渲染途中强行销毁资源
+        // 等待 GPU 彻底空闲，防止在渲染途中强行销毁资源
         if (m_Device != VK_NULL_HANDLE) {
             vkDeviceWaitIdle(m_Device);
         }
-        // 【新增】：销毁描述符池
+        
+        // 销毁描述符池
         if (m_DescriptorPool != VK_NULL_HANDLE) {
             vkDestroyDescriptorPool(m_Device, m_DescriptorPool, nullptr);
             AYAYA_CORE_INFO("Vulkan Descriptor Pool destroyed.");
         }
-        // 【新增】：销毁同步对象和命令池
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        
+        // 销毁同步对象
+        for (size_t i = 0; i < m_RenderFinishedSemaphores.size(); i++) {
             vkDestroySemaphore(m_Device, m_RenderFinishedSemaphores[i], nullptr);
             vkDestroySemaphore(m_Device, m_ImageAvailableSemaphores[i], nullptr);
             vkDestroyFence(m_Device, m_InFlightFences[i], nullptr);
         }
         
+        // 销毁命令池
         if (m_CommandPool != VK_NULL_HANDLE) {
             vkDestroyCommandPool(m_Device, m_CommandPool, nullptr);
             AYAYA_CORE_INFO("Vulkan Command Pool and Sync Objects destroyed.");
         }
-        // 【新增】：销毁 Framebuffer 和 RenderPass
-        for (auto framebuffer : m_SwapChainFramebuffers) {
-            vkDestroyFramebuffer(m_Device, framebuffer, nullptr);
-        }
+
+        // ==========================================
+        // 【核心修改】：直接调用清理函数，销毁画布、视图和帧缓冲
+        // 这样可以避免代码重复，且保证重建和退出时的清理逻辑完全一致！
+        // ==========================================
+        CleanupSwapChain();
+
+        // 销毁 RenderPass (它独立于 Swapchain 存在，所以保留在这里销毁)
         if (m_RenderPass != VK_NULL_HANDLE) {
             vkDestroyRenderPass(m_Device, m_RenderPass, nullptr);
             AYAYA_CORE_INFO("Vulkan Render Pass destroyed.");
-        }
-        // 【新增】：销毁 ImageView 和 SwapChain (在销毁 Device 之前！)
-        for (auto imageView : m_SwapChainImageViews) {
-            vkDestroyImageView(m_Device, imageView, nullptr);
-        }
-        if (m_SwapChain != VK_NULL_HANDLE) {
-            vkDestroySwapchainKHR(m_Device, m_SwapChain, nullptr);
-            AYAYA_CORE_INFO("Vulkan SwapChain destroyed.");
         }
 
         if (m_Device != VK_NULL_HANDLE) {
@@ -292,9 +291,9 @@ namespace Ayaya {
     }
 
     VkSurfaceFormatKHR VulkanContext::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
-        // 首选：B8G8R8A8_SRGB 格式和 SRGB 颜色空间
+        // 【核心修复 1】：将 B8G8R8A8_SRGB 改为 B8G8R8A8_UNORM！
         for (const auto& availableFormat : availableFormats) {
-            if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            if (availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
                 return availableFormat;
             }
         }
@@ -314,20 +313,12 @@ namespace Ayaya {
     }
 
     VkExtent2D VulkanContext::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
-        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
-            return capabilities.currentExtent;
-        } else {
-            // 处理 Retina 屏幕这种高 DPI 情况
-            int width, height;
-            glfwGetFramebufferSize(m_WindowHandle, &width, &height);
+        int width, height;
+        glfwGetFramebufferSize(m_WindowHandle, &width, &height);
 
-            VkExtent2D actualExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
-
-            actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
-            actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
-
-            return actualExtent;
-        }
+        // 【核心修复】：彻底删掉 std::clamp！无视 Vulkan 提供的错误上限。
+        // 强制使用 GLFW 探测到的绝对物理像素，夺回屏幕的完整控制权！
+        return { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
     }
 
     void VulkanContext::CreateSwapChain() {
@@ -382,6 +373,9 @@ namespace Ayaya {
 
         m_SwapChainImageFormat = surfaceFormat.format;
         m_SwapChainExtent = extent;
+
+        // 【修改】：让飞行帧数量完全等于 Swapchain 画布的数量 (Mac 上通常是 3)
+        m_FramesInFlight = imageCount;
 
         AYAYA_CORE_INFO("Vulkan SwapChain created successfully! Images count: {0}", imageCount);
     }
@@ -515,9 +509,9 @@ namespace Ayaya {
     }
 
     void VulkanContext::CreateSyncObjects() {
-        m_ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        m_RenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        m_InFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+        m_ImageAvailableSemaphores.resize(m_FramesInFlight);
+        m_RenderFinishedSemaphores.resize(m_FramesInFlight);
+        m_InFlightFences.resize(m_FramesInFlight);
 
         VkSemaphoreCreateInfo semaphoreInfo{};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -528,7 +522,7 @@ namespace Ayaya {
         // 为什么？因为在渲染第一帧时，CPU 会一上来就等 Fence。如果默认为未放行，CPU 就会永远卡死在第一帧！
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; 
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        for (size_t i = 0; i < m_FramesInFlight; i++) {
             if (vkCreateSemaphore(m_Device, &semaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS ||
                 vkCreateSemaphore(m_Device, &semaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS ||
                 vkCreateFence(m_Device, &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS) {
@@ -545,7 +539,7 @@ namespace Ayaya {
     // =========================================================================
 
     void VulkanContext::AllocateCommandBuffers() {
-        m_CommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        m_CommandBuffers.resize(m_FramesInFlight);
 
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -660,7 +654,7 @@ namespace Ayaya {
         vkQueuePresentKHR(m_PresentQueue, &presentInfo);
 
         // 4. 推进到下一帧
-        m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+        m_CurrentFrame = (m_CurrentFrame + 1) % m_FramesInFlight;
     }
 
     VkCommandBuffer VulkanContext::BeginSingleTimeCommands() {
@@ -694,6 +688,65 @@ namespace Ayaya {
         vkQueueWaitIdle(m_GraphicsQueue);
 
         vkFreeCommandBuffers(m_Device, m_CommandPool, 1, &commandBuffer);
+    }
+
+    // 【新增】：清理旧的交换链及其关联资源
+    void VulkanContext::CleanupSwapChain() {
+        for (auto framebuffer : m_SwapChainFramebuffers) {
+            vkDestroyFramebuffer(m_Device, framebuffer, nullptr);
+        }
+        for (auto imageView : m_SwapChainImageViews) {
+            vkDestroyImageView(m_Device, imageView, nullptr);
+        }
+        if (m_SwapChain != VK_NULL_HANDLE) {
+            vkDestroySwapchainKHR(m_Device, m_SwapChain, nullptr);
+        }
+    }
+
+    // 【新增】：重新侦测屏幕尺寸并重建画布
+    void VulkanContext::RecreateSwapChain() {
+        int width = 0, height = 0;
+        glfwGetFramebufferSize(m_WindowHandle, &width, &height);
+        // 如果窗口被最小化了，就暂停程序等待恢复
+        while (width == 0 || height == 0) {
+            glfwGetFramebufferSize(m_WindowHandle, &width, &height);
+            glfwWaitEvents();
+        }
+
+        vkDeviceWaitIdle(m_Device); // 等待 GPU 停下手头工作
+
+        CleanupSwapChain(); // 砸碎旧的
+
+        // 创建匹配新分辨率的资源！
+        CreateSwapChain();
+        CreateImageViews();
+        CreateFramebuffers();
+    }
+
+    uint32_t VulkanContext::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+        VkPhysicalDeviceMemoryProperties memProperties;
+        vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProperties);
+
+        for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+            if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+                return i;
+            }
+        }
+        AYAYA_CORE_ASSERT(false, "Failed to find suitable memory type!");
+        return 0;
+    }
+
+    VkFormat VulkanContext::FindDepthFormat() {
+        std::vector<VkFormat> candidates = { VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT };
+        for (VkFormat format : candidates) {
+            VkFormatProperties props;
+            vkGetPhysicalDeviceFormatProperties(m_PhysicalDevice, format, &props);
+            if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+                return format;
+            }
+        }
+        AYAYA_CORE_ASSERT(false, "Failed to find supported depth format!");
+        return VK_FORMAT_UNDEFINED;
     }
 }
 

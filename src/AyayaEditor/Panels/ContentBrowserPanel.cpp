@@ -76,8 +76,10 @@ namespace Ayaya {
                 // 打包包裹：贴上 "CONTENT_BROWSER_ITEM" 的标签，并塞入路径字符串
                 ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", itemPathStr.c_str(), itemPathStr.size() + 1);
                 
-                // 拖拽时跟在鼠标旁边的小半透明提示：显示图标和文件名
-                ImGui::Image((ImTextureID)(intptr_t)icon->GetRendererID(), { 32.0f, 32.0f }, { 0, 1 }, { 1, 0 });
+                // 【核心补漏】：拖拽时的悬浮图标也必须加一层保护！
+                if (icon) {
+                    ImGui::Image((ImTextureID)(intptr_t)icon->GetRendererID(), { 32.0f, 32.0f }, { 0, 1 }, { 1, 0 });
+                }
                 ImGui::Text("%s", filenameString.c_str());
                 
                 ImGui::EndDragDropSource();

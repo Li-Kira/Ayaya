@@ -17,14 +17,22 @@ namespace Ayaya {
         virtual void Resize(uint32_t width, uint32_t height) override;
 
         // 获取指定索引的附件
-        virtual uint32_t GetColorAttachmentRendererID(uint32_t index = 0) const override { 
-            // 如果开启了 MSAA，返回降采样后的贴图；否则直接返回
-            return m_Specification.Samples > 1 ? m_ResolveColorAttachments[index] : m_ColorAttachments[index]; 
+        // ==========================================
+        // 修改：返回 void*，内部将 GLuint 强转为指针
+        // ==========================================
+        virtual void* GetColorAttachmentRendererID(uint32_t index = 0) const override { 
+            uint32_t id = m_Specification.Samples > 1 ? m_ResolveColorAttachments[index] : m_ColorAttachments[index]; 
+            return (void*)(intptr_t)id; 
         }
 
-        virtual uint32_t GetDepthAttachmentRendererID() const override { return m_DepthAttachment; }
+        virtual void* GetDepthAttachmentRendererID() const override { 
+            return (void*)(intptr_t)m_DepthAttachment; 
+        }
 
-        virtual uint32_t GetRendererID() const override { return m_RendererID; }
+        virtual void* GetRendererID() const override { 
+            return (void*)(intptr_t)m_RendererID; 
+        }
+        
         virtual const FramebufferSpecification& GetSpecification() const override { return m_Specification; }
 
     private:

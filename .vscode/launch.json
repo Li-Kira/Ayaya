@@ -2,15 +2,16 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug Ayaya Engine",
-            "type": "cppvsdbg",
+            "name": "Debug Ayaya Engine (macOS)",
+            "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/AyayaEditor.exe", 
+            "program": "${workspaceFolder}/build/AyayaEditor", 
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
-            "console": "integratedTerminal"
+            "externalConsole": false,
+            "MIMode": "lldb"
         }
     ]
 }

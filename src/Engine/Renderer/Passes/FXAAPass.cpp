@@ -42,14 +42,15 @@ namespace Ayaya {
 
     void FXAAPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
         // 1. 从黑板获取上一阶段 (PostProcess) 的输出纹理ID
-        uint32_t inputTextureID = context.Get<uint32_t>("PostProcess_Output", 0);
+        void* rawInputTex = context.Get<void*>("PostProcess_Output", nullptr);
+        uint32_t inputTextureID = (uint32_t)(intptr_t)rawInputTex;
         
         // 2. 检查 FXAA 是否在 UI 中被开启
         bool isFXAAActive = context.Get<bool>("EnableFXAA", true);
 
         // 如果没有输入图，或者 FXAA 被关闭，直接把输入图作为最终结果传出去！
         if (inputTextureID == 0 || !isFXAAActive) {
-            context.Set("Final_Output", inputTextureID);
+            context.Set("Final_Output", rawInputTex);
             return;
         }
 

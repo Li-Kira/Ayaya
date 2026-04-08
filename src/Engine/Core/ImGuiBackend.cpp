@@ -30,9 +30,6 @@ namespace Ayaya {
 
     void ImGuiBackend::EndFrameAndSwapBuffers() {
         ImGuiIO& io = ImGui::GetIO();
-        Application& app = Application::Get();
-        io.DisplaySize = ImVec2((float)app.GetWindow().GetWidth(), (float)app.GetWindow().GetHeight());
-
         ImGui::Render();
         
         if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {

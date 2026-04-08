@@ -105,11 +105,11 @@ namespace Ayaya {
     }
 
     void LightingPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
-        uint32_t gPosition   = context.Get<uint32_t>("GBuffer_Position", 0);
-        uint32_t gNormal     = context.Get<uint32_t>("GBuffer_Normal", 0);
-        uint32_t gAlbedo     = context.Get<uint32_t>("GBuffer_Albedo", 0);
-        uint32_t gPBR        = context.Get<uint32_t>("GBuffer_PBR", 0);
-        uint32_t gCustomData = context.Get<uint32_t>("GBuffer_CustomData", 0); 
+        uint32_t gPosition   = (uint32_t)(intptr_t)context.Get<void*>("GBuffer_Position", 0);
+        uint32_t gNormal     = (uint32_t)(intptr_t)context.Get<void*>("GBuffer_Normal", 0);
+        uint32_t gAlbedo     = (uint32_t)(intptr_t)context.Get<void*>("GBuffer_Albedo", 0);
+        uint32_t gPBR        = (uint32_t)(intptr_t)context.Get<void*>("GBuffer_PBR", 0);
+        uint32_t gCustomData = (uint32_t)(intptr_t)context.Get<void*>("GBuffer_CustomData", 0); 
         
         if (gPosition == 0) return;
 
@@ -136,7 +136,7 @@ namespace Ayaya {
         m_DeferredMaterial->SetRuntimeTexture("g_CustomData", gCustomData);
 
         if (context.Get<bool>("HasDirLight", false)) {
-            m_DeferredMaterial->SetRuntimeTexture("u_ShadowMap", context.Get<uint32_t>("ShadowMap_Output", 0));
+            m_DeferredMaterial->SetRuntimeTexture("u_ShadowMap", (uint32_t)(intptr_t)context.Get<void*>("ShadowMap_Output", 0));
             // 矩阵属于高频小数据，依旧使用推送常量
             cmd.PushConstant(m_DeferredPipeline, "u_LightSpaceMatrix", context.Get<glm::mat4>("LightSpaceMatrix"));
         }
@@ -176,7 +176,7 @@ namespace Ayaya {
         if (geoFBO) {
             uint32_t width = geoFBO->GetSpecification().Width;
             uint32_t height = geoFBO->GetSpecification().Height;
-            cmd.BlitDepth(geoFBO->GetRendererID(), m_LightingFBO->GetRendererID(), width, height);
+            cmd.BlitDepth((uint32_t)(intptr_t)geoFBO->GetRendererID(), (uint32_t)(intptr_t)m_LightingFBO->GetRendererID(), width, height);
         }
 
         // ==========================================

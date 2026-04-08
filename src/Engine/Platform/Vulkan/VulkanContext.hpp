@@ -57,6 +57,12 @@ namespace Ayaya {
         // 供外部（如 ImGui）向显卡一次性传输数据的通道
         VkCommandBuffer BeginSingleTimeCommands();
         void EndSingleTimeCommands(VkCommandBuffer commandBuffer);
+
+        void RecreateSwapChain(); // 【新增】：外部触发重建
+
+        // 供 VulkanFramebuffer 和 VulkanBuffer 等组件查询显存和格式
+        uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+        VkFormat FindDepthFormat();
         
     private:
         GLFWwindow* m_WindowHandle;
@@ -86,7 +92,7 @@ namespace Ayaya {
         // 【新增】：命令池与同步原语 (双重缓冲)
         // ==========================================
         // 允许 CPU 最多超前 GPU 准备几帧的数据 (通常是 2 帧，也就是常说的双重缓冲)
-        const int MAX_FRAMES_IN_FLIGHT = 2;
+        uint32_t m_FramesInFlight = 2;
 
         VkCommandPool m_CommandPool = VK_NULL_HANDLE;
 
@@ -131,6 +137,8 @@ namespace Ayaya {
         // 【新增】：分配函数声明
         void AllocateCommandBuffers();
         void CreateDescriptorPool();
+
+        void CleanupSwapChain();  // 【新增】：清理旧画布
     };
 
 }

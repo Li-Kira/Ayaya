@@ -188,6 +188,12 @@ namespace Ayaya {
     void ImGuiLayer::OnDetach() {
         if (ImGui::GetCurrentContext() != nullptr) {
             if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+                // ==========================================
+                // 【核心修复 1】：等待 GPU 彻底空闲，再销毁 ImGui 内部的缓冲与管线！
+                // ==========================================
+                auto vulkanContext = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+                vkDeviceWaitIdle(vulkanContext->GetDevice());
+                
                 ImGui_ImplVulkan_Shutdown();
             } else {
                 ImGui_ImplOpenGL3_Shutdown();

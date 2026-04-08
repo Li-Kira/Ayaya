@@ -181,8 +181,8 @@ namespace Ayaya {
                     std::string textureKey = targetKeys[s_SelectedTargetIndex];
 
                     // 从黑板提取 FBO 贴图
-                    uint32_t texID = m_Renderer->GetBlackboardTextureID(textureKey);
-                    if (texID != 0) {
+                    void* texID = m_Renderer->GetBlackboardTextureID(textureKey);
+                    if (texID) {
                         ImVec2 availSize = ImGui::GetContentRegionAvail();
                         float aspect = 16.0f / 9.0f;
                         ImVec2 imageSize;
@@ -193,7 +193,7 @@ namespace Ayaya {
                         }
                         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (availSize.x - imageSize.x) * 0.5f);
                         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (availSize.y - imageSize.y) * 0.5f);
-                        ImGui::Image((void*)(intptr_t)texID, imageSize, ImVec2(0, 1), ImVec2(1, 0));
+                        ImGui::Image(texID, imageSize, ImVec2(0, 1), ImVec2(1, 0));
                     } else {
                         ImGui::Spacing();
                         ImGui::TextDisabled("Render Target not available or cleared.");
@@ -269,8 +269,8 @@ namespace Ayaya {
                         ImGui::Text("Samples: %d", fbo->GetSpecification().Samples);
                         
                         ImGui::Spacing();
-                        uint32_t texID = fbo->GetColorAttachmentRendererID(0); 
-                        ImGui::Image((void*)(intptr_t)texID, ImVec2(320.0f, 180.0f), ImVec2(0, 1), ImVec2(1, 0));
+                        void* texID = fbo->GetColorAttachmentRendererID(0); 
+                        ImGui::Image(texID, ImVec2(320.0f, 180.0f), ImVec2(0, 1), ImVec2(1, 0));
                         ImGui::Unindent();
                         ImGui::Spacing();
                     }

@@ -20,8 +20,8 @@ namespace Ayaya {
         void Init();
         void OnWindowResize(uint32_t width, uint32_t height);
         void SetMSAASamples(uint32_t samples);
-        uint32_t GetFinalColorAttachmentRendererID();
-        uint32_t GetPostProcessFBORendererID();
+        void* GetFinalColorAttachmentRendererID();
+        void* GetPostProcessFBORendererID();
 
         void BeginScene(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, const glm::vec3& cameraPosition);
         void RenderScene(const std::shared_ptr<Scene>& scene, Entity hoveredEntity, bool showGrid, bool showSkybox, const glm::vec4& clearColor = glm::vec4(0.12f, 0.12f, 0.14f, 1.0f));
@@ -34,7 +34,7 @@ namespace Ayaya {
         void SetExposure(float exposure) { m_Exposure = exposure; }
 
         // 获取黑板上的中间阶段贴图 ID (用于帧调试器)
-        uint32_t GetBlackboardTextureID(std::string_view key);
+        void* GetBlackboardTextureID(std::string_view key);
 
         struct Statistics {
             uint32_t DrawCalls = 0;

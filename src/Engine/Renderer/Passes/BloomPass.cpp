@@ -49,11 +49,11 @@ namespace Ayaya {
     void BloomPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
         bool enableBloom = context.Get<bool>("EnableBloom", true);
         if (!enableBloom || m_MipChain.empty()) {
-            context.Set("Bloom_Output", (uint32_t)0); 
+            context.Set("Bloom_Output", (void*)nullptr);
             return;
         }
 
-        uint32_t inputTextureID = context.Get<uint32_t>("Lighting_Output", 0);
+        uint32_t inputTextureID = (uint32_t)(intptr_t)context.Get<uint32_t>("Lighting_Output", 0);
         if (inputTextureID == 0) return;
 
         float threshold = context.Get<float>("BloomThreshold", 1.0f);
@@ -86,7 +86,7 @@ namespace Ayaya {
                 cmd.BindTexture2D(m_DownsamplePipeline, "u_Image", 0, inputTextureID);
             } else {
                 // 【自动化】：内部自带了 Shader 的 Uniform 更新
-                cmd.BindTexture2D(m_DownsamplePipeline, "u_Image", 0, m_MipChain[i - 1].FBO->GetColorAttachmentRendererID(0));
+                cmd.BindTexture2D(m_DownsamplePipeline, "u_Image", 0, (uint32_t)(intptr_t)m_MipChain[i - 1].FBO->GetColorAttachmentRendererID(0));
             }
 
             glm::vec2 srcTexelSize = (i == 0) ? 
@@ -118,7 +118,7 @@ namespace Ayaya {
             cmd.BeginRenderPass(currentMip.FBO, false);
 
             // 【终极替换】：使用完整签名的 BindTexture2D，替代原本旧版的裸写
-            cmd.BindTexture2D(m_UpsamplePipeline, "u_Image", 0, prevMip.FBO->GetColorAttachmentRendererID(0));
+            cmd.BindTexture2D(m_UpsamplePipeline, "u_Image", 0, (uint32_t)(intptr_t)prevMip.FBO->GetColorAttachmentRendererID(0));
 
             if (context.RecordAndCheckDrawCall("Bloom Pass", "Upsample Mip " + std::to_string(i), "Upsample Shader", 1)) {
                 cmd.DrawArrays(m_EmptyVAO, 3);

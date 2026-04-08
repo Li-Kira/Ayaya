@@ -278,7 +278,7 @@ namespace Ayaya {
                     m_GameRenderer->EndScene();
 
                     // 5. 从显存偷出像素数据
-                    uint32_t fboID = m_GameRenderer->GetPostProcessFBORendererID();
+                    uint32_t fboID = (uint32_t)(intptr_t)m_GameRenderer->GetPostProcessFBORendererID();
                     glBindFramebuffer(GL_FRAMEBUFFER, fboID);
                     std::vector<unsigned char> pixels(shotWidth * shotHeight * 4);
                     glReadPixels(0, 0, shotWidth, shotHeight, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
@@ -775,10 +775,8 @@ namespace Ayaya {
         // 核心修改：向渲染管线索要处理完毕的后期画面 (增加安全检查)
         // ==========================================
         if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL && m_SceneRenderer) {
-            uint32_t textureID = m_SceneRenderer->GetFinalColorAttachmentRendererID();
-            ImGui::Image(reinterpret_cast<void*>((intptr_t)textureID), 
-                         ImVec2{ m_ViewportSize.x, m_ViewportSize.y }, 
-                         ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+            void* textureID = m_SceneRenderer->GetFinalColorAttachmentRendererID();
+            ImGui::Image(textureID, ImVec2{ m_ViewportSize.x, m_ViewportSize.y }, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
 
             HandleMousePicking(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
             HandleGizmo(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
@@ -805,10 +803,8 @@ namespace Ayaya {
 
         // 渲染底层的游戏画面
         if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL && m_GameRenderer) {
-            uint32_t textureID = m_GameRenderer->GetFinalColorAttachmentRendererID();
-            ImGui::Image(reinterpret_cast<void*>((intptr_t)textureID), 
-                         ImVec2{ m_GameViewportSize.x, m_GameViewportSize.y }, 
-                         ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+            void* textureID = m_GameRenderer->GetFinalColorAttachmentRendererID();
+            ImGui::Image(textureID, ImVec2{ m_GameViewportSize.x, m_GameViewportSize.y }, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
         } else {
             // Vulkan 模式下的占位符
             ImGui::SetCursorPos(ImVec2(m_GameViewportSize.x * 0.5f - 150.0f, m_GameViewportSize.y * 0.5f));

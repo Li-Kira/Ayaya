@@ -316,7 +316,7 @@ namespace Ayaya {
         m_Data->Stats.CPUTime = std::chrono::duration<float, std::milli>(cpuEndTime - cpuStartTime).count();
     }
 
-    uint32_t SceneRenderer::GetPostProcessFBORendererID() {
+    void* SceneRenderer::GetPostProcessFBORendererID() {
         bool enableFXAA = m_RenderContext.Get<bool>("EnableFXAA", false);
         
         if (enableFXAA && m_RenderContext.Framebuffers.count("FXAA")) {
@@ -325,15 +325,15 @@ namespace Ayaya {
         if (m_RenderContext.Framebuffers.count("PostProcess")) {
             return m_RenderContext.Framebuffers["PostProcess"]->GetRendererID();
         }
-        return 0; 
+        return nullptr; 
     }
 
-    uint32_t SceneRenderer::GetFinalColorAttachmentRendererID() {
-        return m_RenderContext.Get<uint32_t>("Final_Output", 0);
+    void* SceneRenderer::GetFinalColorAttachmentRendererID() {
+        return m_RenderContext.Get<void*>("Final_Output", nullptr);
     }
 
-    uint32_t SceneRenderer::GetBlackboardTextureID(std::string_view key) {
-        return m_RenderContext.Get<uint32_t>(key, 0);
+    void* SceneRenderer::GetBlackboardTextureID(std::string_view key) {
+        return m_RenderContext.Get<void*>(key, nullptr);
     }
 
     void SceneRenderer::ResetStats() {

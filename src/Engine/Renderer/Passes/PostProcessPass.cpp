@@ -38,9 +38,9 @@ namespace Ayaya {
 
     void PostProcessPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
         // 提取黑板上的 3 张关键贴图
-        uint32_t lightingTexID = context.Get<uint32_t>("Lighting_Output", 0);
-        uint32_t selectionTexID = context.Get<uint32_t>("Selection_Output", 0);
-        uint32_t bloomTexID = context.Get<uint32_t>("Bloom_Output", 0);
+        uint32_t lightingTexID = (uint32_t)(intptr_t)context.Get<void*>("Lighting_Output", 0);
+        uint32_t selectionTexID = (uint32_t)(intptr_t)context.Get<void*>("Selection_Output", 0);
+        uint32_t bloomTexID = (uint32_t)(intptr_t)context.Get<void*>("Bloom_Output", 0);
         
         if (lightingTexID == 0) return;
 

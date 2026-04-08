@@ -4,6 +4,7 @@
 #include "Log.hpp"
 #include "KeyCodes.hpp"
 #include "Renderer/Renderer.hpp" 
+#include "Platform/Vulkan/VulkanContext.hpp"
 #ifdef _WIN32
     #include <windows.h>
 #endif
@@ -180,9 +181,16 @@ Hi, welcome to Ayaya engine♪
         
         AYAYA_CORE_INFO("Window Resize Logic: {0}, {1}", e.GetWidth(), e.GetHeight());
         
-        // 【核心修复】：只有在 OpenGL 模式下才去调整旧渲染器的视口！
         if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
             Renderer::OnWindowResize(e.GetWidth(), e.GetHeight());
+        } 
+        else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+            // ==========================================
+            // 【核心修复】：如果是 Vulkan 模式，一旦触发 Resize 或 Retina 缩放，
+            // 立即命令底层重建所有画布！
+            // ==========================================
+            auto vulkanContext = std::dynamic_pointer_cast<VulkanContext>(m_Window->GetContext());
+            vulkanContext->RecreateSwapChain();
         }
         return false;
     }
