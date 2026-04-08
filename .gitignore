@@ -2,3 +2,4 @@
 build/
 documents/
 .vscode/launch.json
+/.vscode

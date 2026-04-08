@@ -1,8 +1,39 @@
 #include "ayapch.h"
 #include "OpenGLCommandBuffer.hpp"
+#include "Renderer/Mesh.hpp"
 #include <glad/glad.h>
 
 namespace Ayaya {
+    // 辅助工具：用于动态解析 BufferLayout
+    static GLenum ShaderDataTypeToOpenGLBaseType(ShaderDataType type) {
+        switch (type) {
+            case ShaderDataType::Float:    return GL_FLOAT;
+            case ShaderDataType::Float2:   return GL_FLOAT;
+            case ShaderDataType::Float3:   return GL_FLOAT;
+            case ShaderDataType::Float4:   return GL_FLOAT;
+            case ShaderDataType::Int:      return GL_INT;
+            case ShaderDataType::Int2:     return GL_INT;
+            case ShaderDataType::Int3:     return GL_INT;
+            case ShaderDataType::Int4:     return GL_INT;
+            case ShaderDataType::Bool:     return GL_BOOL;
+            default: return 0;
+        }
+    }
+
+    static uint32_t ShaderDataTypeComponentCount(ShaderDataType type) {
+        switch (type) {
+            case ShaderDataType::Float:    return 1;
+            case ShaderDataType::Float2:   return 2;
+            case ShaderDataType::Float3:   return 3;
+            case ShaderDataType::Float4:   return 4;
+            case ShaderDataType::Int:      return 1;
+            case ShaderDataType::Int2:     return 2;
+            case ShaderDataType::Int3:     return 3;
+            case ShaderDataType::Int4:     return 4;
+            case ShaderDataType::Bool:     return 1;
+            default: return 0;
+        }
+    }
 
     void OpenGLCommandBuffer::SetViewport(uint32_t x, uint32_t y, uint32_t width, uint32_t height) { glViewport(x, y, width, height); }
     void OpenGLCommandBuffer::SetDepthTest(bool enable) { if (enable) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST); }
@@ -81,4 +112,100 @@ namespace Ayaya {
         if (vertexArray) vertexArray->Bind();
         glDrawArrays(GL_TRIANGLE_STRIP, 0, vertexCount);
     }
+
+    // 【现代 RHI 架构】：直接画 Mesh，动态组装 VAO
+    void OpenGLCommandBuffer::DrawIndexed(const std::shared_ptr<Mesh>& mesh, uint32_t indexCount) {
+        if (!mesh || !mesh->GetVertexBuffer() || !mesh->GetIndexBuffer()) return;
+
+        // 1. OpenGL 核心模式要求必须有一个 VAO 绑定。我们用一个全局静态 VAO 作为载体。
+        static GLuint s_VAO = 0;
+        if (s_VAO == 0) glGenVertexArrays(1, &s_VAO);
+        glBindVertexArray(s_VAO);
+
+        // 2. 绑定底层数据
+        mesh->GetVertexBuffer()->Bind();
+        mesh->GetIndexBuffer()->Bind();
+
+        // 3. 动态配置顶点属性布局 (模拟 VAO 的工作)
+        const auto& layout = mesh->GetVertexBuffer()->GetLayout();
+        uint32_t index = 0;
+        for (const auto& element : layout) {
+            glEnableVertexAttribArray(index);
+            glVertexAttribPointer(
+                index,
+                ShaderDataTypeComponentCount(element.Type),
+                ShaderDataTypeToOpenGLBaseType(element.Type),
+                element.Normalized ? GL_TRUE : GL_FALSE,
+                layout.GetStride(),
+                (const void*)element.Offset
+            );
+            index++;
+        }
+
+        // 4. 发送绘制指令
+        uint32_t count = indexCount ? indexCount : mesh->GetIndexCount();
+        glDrawElements(GL_TRIANGLES, count, GL_UNSIGNED_INT, nullptr);
+
+        // 5. 还原状态，防止污染
+        glBindVertexArray(0);
+    }
+
+    void OpenGLCommandBuffer::DrawArrays(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount) {
+        if (!mesh || !mesh->GetVertexBuffer()) return;
+
+        static GLuint s_VAO = 0;
+        if (s_VAO == 0) glGenVertexArrays(1, &s_VAO);
+        glBindVertexArray(s_VAO);
+
+        mesh->GetVertexBuffer()->Bind();
+        const auto& layout = mesh->GetVertexBuffer()->GetLayout();
+        uint32_t index = 0;
+        for (const auto& element : layout) {
+            glEnableVertexAttribArray(index);
+            // 【核心修复 2】：规范排版，确保 6 个参数一个不少
+            glVertexAttribPointer(
+                index, 
+                ShaderDataTypeComponentCount(element.Type), 
+                ShaderDataTypeToOpenGLBaseType(element.Type), 
+                element.Normalized ? GL_TRUE : GL_FALSE, 
+                layout.GetStride(), 
+                (const void*)element.Offset
+            );
+            index++;
+        }
+
+        uint32_t count = vertexCount ? vertexCount : mesh->GetVertexCount();
+        glDrawArrays(GL_TRIANGLES, 0, count);
+        glBindVertexArray(0);
+    }
+
+    void OpenGLCommandBuffer::DrawTriangleStrip(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount) {
+        if (!mesh || !mesh->GetVertexBuffer()) return;
+
+        static GLuint s_VAO = 0;
+        if (s_VAO == 0) glGenVertexArrays(1, &s_VAO);
+        glBindVertexArray(s_VAO);
+
+        mesh->GetVertexBuffer()->Bind();
+        const auto& layout = mesh->GetVertexBuffer()->GetLayout();
+        uint32_t index = 0;
+        for (const auto& element : layout) {
+            glEnableVertexAttribArray(index);
+            // 【核心修复 2】：规范排版，确保 6 个参数一个不少
+            glVertexAttribPointer(
+                index, 
+                ShaderDataTypeComponentCount(element.Type), 
+                ShaderDataTypeToOpenGLBaseType(element.Type), 
+                element.Normalized ? GL_TRUE : GL_FALSE, 
+                layout.GetStride(), 
+                (const void*)element.Offset
+            );
+            index++;
+        }
+
+        uint32_t count = vertexCount ? vertexCount : mesh->GetVertexCount();
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, count);
+        glBindVertexArray(0);
+    }
+
 }

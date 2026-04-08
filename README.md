@@ -33,6 +33,8 @@ cmake .. -G "Visual Studio 17 2022" -A x64
 cmake --build . --config Release
 # Compile the editor separately
  cmake --build . --config Release --target AyayaEditor --parallel
+# Debug the editor separately
+ cmake --build . --config Debug --target AyayaEditor --parallel 
 # Compile the test project individually
 cmake --build . --config Release --target Sandbox --parallel
 ```

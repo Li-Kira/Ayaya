@@ -15,6 +15,8 @@ namespace Ayaya {
 
     void PreferencesPanel::Init() {
         LoadPreferences();
+        InitialGraphicsAPI = GraphicsAPI;
+
         Application::Get().GetWindow().SetSize(m_WindowWidth, m_WindowHeight);
         ImGui::GetIO().FontGlobalScale = m_UIScale;
         
@@ -196,16 +198,17 @@ namespace Ayaya {
             // ==========================================
             // 图形 API 切换预留位
             // ==========================================
-            const char* apis[] = { "OpenGL 4.1 (Current)", "Vulkan (Experimental)", "DirectX 12 (Planned)" };
-            if (ImGui::Combo("Hardware API", &GraphicsAPI, apis, 3)) {
-                // TODO: 未来如果要支持实时热切换，可能需要彻底重建 Renderer 上下文，通常建议提示用户重启引擎。
-            }
-
-            if (GraphicsAPI != 0) {
-                ImGui::Spacing();
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.6f, 0.2f, 1.0f));
-                ImGui::TextWrapped(ICON_FA_EXCLAMATION_TRIANGLE " Vulkan and DirectX 12 backends are currently under active development. Selecting them may cause engine instability. Changing the backend requires an engine restart to take effect.");
+            const char* apiItems[] = { "OpenGL", "Vulkan", "DirectX 12" };
+            ImGui::Combo("Graphics API", &GraphicsAPI, apiItems, IM_ARRAYSIZE(apiItems));
+                
+            // ==========================================
+            // 【修改】：只有当选择的 API 与当前正在运行的 API 不一致时，才弹出重启警告！
+            // ==========================================
+            if (GraphicsAPI != InitialGraphicsAPI) { 
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.36f, 0.36f, 1.0f)); // 醒目的珊瑚红
+                ImGui::TextWrapped(ICON_FA_EXCLAMATION_TRIANGLE " API changed. Requires restarting the engine to take effect.");
                 ImGui::PopStyleColor();
+                ImGui::Spacing();
             }
 
             ImGui::Spacing();

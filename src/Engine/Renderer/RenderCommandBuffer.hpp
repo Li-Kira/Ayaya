@@ -8,6 +8,7 @@
 #include "Renderer/Framebuffer.hpp"
 
 namespace Ayaya {
+    class Mesh;
 
     class RenderCommandBuffer {
     public:
@@ -64,6 +65,11 @@ namespace Ayaya {
 
         // 【工厂方法】：负责根据 API 派发具体的底层对象！
         static std::shared_ptr<RenderCommandBuffer> Create();
+
+        // 【新增】：现代 RHI 接口，直接接受纯数据资产 Mesh
+        virtual void DrawIndexed(const std::shared_ptr<Mesh>& mesh, uint32_t indexCount = 0) = 0;
+        virtual void DrawArrays(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount = 0) = 0;
+        virtual void DrawTriangleStrip(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount = 0) = 0;
     };
 
 }

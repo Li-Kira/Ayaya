@@ -36,6 +36,8 @@ namespace Ayaya {
         bool OnMouseMoved(MouseMovedEvent& e);
         bool OnMouseScrolled(MouseScrolledEvent& e);
 
+        // 【新增】：独立出来的早期配置加载函数
+        void LoadEarlyConfig();
     private:
         std::unique_ptr<Window> m_Window;
         ImGuiLayer* m_ImGuiLayer; // 特殊持有的 ImGui 指针

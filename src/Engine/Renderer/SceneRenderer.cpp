@@ -163,12 +163,9 @@ namespace Ayaya {
         m_Data->CameraData.ViewProjection = m_Data->ViewProjectionMatrix;
         m_Data->CameraData.CameraPosition = m_Data->CameraPosition;
         s_CameraUniformBuffer->SetData(&m_Data->CameraData, sizeof(struct_CameraData));
-
-        Renderer::BeginScene(m_Data->ViewProjectionMatrix);
     }
 
     void SceneRenderer::EndScene() {
-        Renderer::EndScene();
     }
 
     void SceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene, Entity hoveredEntity, bool showGrid, bool showSkybox, const glm::vec4& clearColor) {

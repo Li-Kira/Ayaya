@@ -5,6 +5,9 @@
 #include "KeyCodes.hpp"
 #include "Renderer/Renderer.hpp" 
 #include "Platform/Vulkan/VulkanContext.hpp"
+// 【新增】：引入 YAML 读取早期配置
+#include <yaml-cpp/yaml.h>
+#include <filesystem>
 #ifdef _WIN32
     #include <windows.h>
 #endif
@@ -92,17 +95,16 @@ Hi, welcome to Ayaya engine♪
         AYAYA_CORE_INFO("\x1b[38;2;255;150;200mAyaya Engine is starting up... ♪\n{0}\x1b[0m", ayayaAscii);
         AYAYA_CORE_INFO("Log System Initialized!");
 
+        // ==========================================
+        // 【核心架构】：调用封装好的早期配置加载
+        // ==========================================
+        LoadEarlyConfig();
+
         m_Window = std::make_unique<Window>(1920, 1080, "Ayaya Engine v0.1");
         m_Window->SetEventCallback(std::bind(&Application::OnEvent, this, std::placeholders::_1));
         AYAYA_CORE_INFO("GLFW Window initialized successfully.");
 
-        // 【核心防御】：只有在 OpenGL 模式下才初始化旧的 3D 渲染器
-        if (Renderer::GetAPI() == RendererAPI::API::OpenGL) {
-            Renderer::Init();
-            AYAYA_CORE_INFO("Renderer initialized successfully.");
-        } else {
-            AYAYA_CORE_INFO("Vulkan 3D Renderer is under construction, bypassed OpenGL Renderer::Init().");
-        }
+        Renderer::Init();
 
         // 创建并初始化 ImGuiLayer
         m_ImGuiLayer = new ImGuiLayer();
@@ -229,5 +231,34 @@ Hi, welcome to Ayaya engine♪
     bool Application::OnMouseScrolled(MouseScrolledEvent& e) {
         AYAYA_CORE_TRACE("Mouse Scrolled: {0}, {1}", e.GetXOffset(), e.GetYOffset());
         return false;
+    }
+
+    // ==========================================
+    // 提取出的早期配置加载实现
+    // ==========================================
+    void Application::LoadEarlyConfig() {
+        std::string prefsPath = "assets/Editor/settings/EditorPreferences.yaml";
+        if (std::filesystem::exists(prefsPath)) {
+            try {
+                YAML::Node data = YAML::LoadFile(prefsPath);
+                auto prefs = data["EditorPreferences"];
+                if (prefs && prefs["GraphicsAPI"]) {
+                    int apiConfig = prefs["GraphicsAPI"].as<int>();
+                    // 0 = OpenGL, 1 = Vulkan
+                    if (apiConfig == 1) {
+                        RendererAPI::SetAPI(RendererAPI::API::Vulkan);
+                        AYAYA_CORE_INFO("Early Config: Selected Vulkan API");
+                    } else {
+                        RendererAPI::SetAPI(RendererAPI::API::OpenGL);
+                        AYAYA_CORE_INFO("Early Config: Selected OpenGL API");
+                    }
+                }
+            } catch (const YAML::Exception& e) {
+                AYAYA_CORE_ERROR("Failed to load early config: {0}", e.what());
+                RendererAPI::SetAPI(RendererAPI::API::OpenGL); // 失败则回退默认
+            }
+        } else {
+            RendererAPI::SetAPI(RendererAPI::API::OpenGL); // 默认使用 OpenGL
+        }
     }
 }

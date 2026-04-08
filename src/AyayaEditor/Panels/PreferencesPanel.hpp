@@ -33,6 +33,7 @@ namespace Ayaya {
         int m_WindowWidth = 1280;
         int m_WindowHeight = 720;
         float m_UIScale = 1.0f;
+        int InitialGraphicsAPI = 0; // <--- 新增：用于记录刚加载配置时的初始 API
     };
 
 }

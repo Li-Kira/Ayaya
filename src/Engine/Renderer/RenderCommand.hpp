@@ -1,15 +1,14 @@
 #pragma once
 
 #include "RendererAPI.hpp"
+#include <memory>
 
 namespace Ayaya {
 
     class RenderCommand {
     public:
-        // 初始化渲染底层状态（如深度测试、混合等）
-        inline static void Init() {
-            s_RendererAPI->Init();
-        }
+        // 【核心修改】：把 Init() 的具体实现移到 cpp 文件中！
+        static void Init();
 
         // 设置视口区域
         inline static void SetViewport(uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
@@ -32,7 +31,8 @@ namespace Ayaya {
         }
 
     private:
-        static RendererAPI* s_RendererAPI;
+        // 【核心修改】：升级为智能指针，防止内存泄漏，且默认不要在头文件里 new！
+        static std::unique_ptr<RendererAPI> s_RendererAPI;
     };
 
 }

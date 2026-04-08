@@ -8,6 +8,7 @@
 
 namespace Ayaya {
 
+    // 管理每一级 Mipmap 的尺寸和 FBO
     struct BloomMip {
         glm::vec2 Size;
         glm::vec2 IntSize;
@@ -29,8 +30,9 @@ namespace Ayaya {
         std::vector<BloomMip> m_MipChain;
         std::shared_ptr<VertexArray> m_EmptyVAO;
 
-        // 【新增】：分离降采样和升采样管线
+        // 分离降采样和升采样管线 (PSO)
         std::shared_ptr<Pipeline> m_DownsamplePipeline;
         std::shared_ptr<Pipeline> m_UpsamplePipeline;
     };
+
 }

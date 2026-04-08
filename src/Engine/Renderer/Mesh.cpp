@@ -1,31 +1,56 @@
 #include "ayapch.h"
 #include "Mesh.hpp"
+#include "Renderer/Renderer.hpp" 
 
 namespace Ayaya {
+
+    // 防御性断言：确保结构体没有被编译器恶意填充
+    static_assert(sizeof(Vertex) == 44, "Vertex struct size mismatch! Expecting exactly 44 bytes.");
 
     Mesh::Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices) {
         m_VertexCount = (uint32_t)vertices.size();
         m_IndexCount = (uint32_t)indices.size();
-        m_VertexArray = VertexArray::Create();
 
-        // 将 Vertex 结构体数组转换为紧凑的 Buffer
-        auto vbo = std::shared_ptr<VertexBuffer>(VertexBuffer::Create((float*)vertices.data(), vertices.size() * sizeof(Vertex)));
+        // ==========================================
+        // 1. OpenGL 状态机陷阱：严格按照能够成功执行的老顺序！
+        // 先创建 VAO (开启录音机)
+        // ==========================================
+        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+            m_VertexArray = VertexArray::Create();
+        }
+
+        // ==========================================
+        // 2. 创建 VBO，设置 Layout，并录制到 VAO 中
+        // ==========================================
+        m_VertexBuffer = VertexBuffer::Create((float*)vertices.data(), vertices.size() * sizeof(Vertex));
+        if (m_VertexBuffer) {
+            m_VertexBuffer->SetLayout({
+                { ShaderDataType::Float3, "a_Position" },
+                { ShaderDataType::Float3, "a_Normal"   },
+                { ShaderDataType::Float2, "a_TexCoord" },
+                { ShaderDataType::Float3, "a_Tangent"  } 
+            });
+        }
         
-        // 注意这里的 Layout：位置(Float3)、法线(Float3)、UV(Float2)
-        vbo->SetLayout({
-            { ShaderDataType::Float3, "a_Position" },
-            { ShaderDataType::Float3, "a_Normal"   },
-            { ShaderDataType::Float2, "a_TexCoord" },
-            { ShaderDataType::Float3, "a_Tangent"  } // <--- 新增
-        });
-        m_VertexArray->AddVertexBuffer(vbo);
-
-        auto ibo = std::shared_ptr<IndexBuffer>(IndexBuffer::Create((uint32_t*)indices.data(), indices.size()));
-        m_VertexArray->SetIndexBuffer(ibo);
+        if (m_VertexArray && m_VertexBuffer) {
+            m_VertexArray->AddVertexBuffer(m_VertexBuffer);
+        }
 
         // ==========================================
-        // 核心：计算本地 AABB
+        // 3. 创建 IBO，并录制到 VAO 中
         // ==========================================
+        m_IndexBuffer = IndexBuffer::Create((uint32_t*)indices.data(), indices.size());
+        
+        if (m_VertexArray && m_IndexBuffer) {
+            m_VertexArray->SetIndexBuffer(m_IndexBuffer);
+        }
+
+        // ==========================================
+        // 4. AABB 计算 (保持不变)
+        // ==========================================
+        m_BoundingBox.Min = {  100000.0f,  100000.0f,  100000.0f };
+        m_BoundingBox.Max = { -100000.0f, -100000.0f, -100000.0f };
+
         for (const auto& vertex : vertices) {
             m_BoundingBox.Min.x = std::min(m_BoundingBox.Min.x, vertex.Position.x);
             m_BoundingBox.Min.y = std::min(m_BoundingBox.Min.y, vertex.Position.y);
@@ -166,12 +191,12 @@ namespace Ayaya {
                 // ==========================================
                 // 终极修复：逆时针 (CCW) 环绕顺序，确保法线与渲染面一致
                 // ==========================================
-                // 第一个三角形 (右上, 左上, 右下) -> 逆时针
+                // 第一个三角形 逆时针
                 indices.push_back(i0);
                 indices.push_back(i1);
                 indices.push_back(i2);
 
-                // 第二个三角形 (左上, 左下, 右下) -> 逆时针
+                // 第二个三角形 逆时针
                 indices.push_back(i1);
                 indices.push_back(i3);
                 indices.push_back(i2);
