@@ -40,15 +40,12 @@ namespace Ayaya {
         ScriptEngine::Init();
 
         // 【核心防御】：只在 OpenGL 模式下创建和初始化基于 GL 的 SceneRenderer
-        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
-            m_SceneRenderer = std::make_shared<SceneRenderer>();
-            m_SceneRenderer->Init();
-            
-            m_GameRenderer = std::make_shared<SceneRenderer>();
-            m_GameRenderer->Init();
+        m_SceneRenderer = std::make_shared<SceneRenderer>();
+        m_SceneRenderer->Init();
+        m_GameRenderer = std::make_shared<SceneRenderer>();
+        m_GameRenderer->Init();
 
-            m_FrameDebuggerPanel.SetContext(m_GameRenderer);
-        }
+        m_FrameDebuggerPanel.SetContext(m_GameRenderer);
         
         SetupScene();
 
@@ -71,8 +68,6 @@ namespace Ayaya {
         // 1. 处理输入
         // ==========================================
         HandleShortcuts();
-
-        if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) return;
 
         // ==========================================
         // 2. 处理UI窗口 的 Resize
@@ -774,17 +769,14 @@ namespace Ayaya {
         // ==========================================
         // 核心修改：向渲染管线索要处理完毕的后期画面 (增加安全检查)
         // ==========================================
-        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL && m_SceneRenderer) {
+
+        if (m_SceneRenderer) {
             void* textureID = m_SceneRenderer->GetFinalColorAttachmentRendererID();
             ImGui::Image(textureID, ImVec2{ m_ViewportSize.x, m_ViewportSize.y }, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
 
             HandleMousePicking(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
             HandleGizmo(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
             UIRenderDebugGizmos(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
-        } else {
-            // Vulkan 模式下的占位符
-            ImGui::SetCursorPos(ImVec2(m_ViewportSize.x * 0.5f - 150.0f, m_ViewportSize.y * 0.5f));
-            ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.0f, 1.0f), "Vulkan 3D Viewport is under construction...");
         }
 
         ImGui::End();
@@ -802,13 +794,9 @@ namespace Ayaya {
         ImVec2 cursorStartPos = ImGui::GetCursorPos();
 
         // 渲染底层的游戏画面
-        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL && m_GameRenderer) {
+        if (m_GameRenderer) {
             void* textureID = m_GameRenderer->GetFinalColorAttachmentRendererID();
             ImGui::Image(textureID, ImVec2{ m_GameViewportSize.x, m_GameViewportSize.y }, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
-        } else {
-            // Vulkan 模式下的占位符
-            ImGui::SetCursorPos(ImVec2(m_GameViewportSize.x * 0.5f - 150.0f, m_GameViewportSize.y * 0.5f));
-            ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.0f, 1.0f), "Vulkan Game Viewport is under construction...");
         }
 
         // ==========================================

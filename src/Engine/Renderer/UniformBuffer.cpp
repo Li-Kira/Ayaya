@@ -2,6 +2,7 @@
 #include "UniformBuffer.hpp"
 #include "Renderer/Renderer.hpp"
 #include "Platform/OpenGL/OpenGLUniformBuffer.hpp"
+#include "Platform/Vulkan/VulkanUniformBuffer.hpp" 
 #include "Core/Log.hpp"
 
 namespace Ayaya {
@@ -14,8 +15,8 @@ namespace Ayaya {
             case RendererAPI::API::OpenGL:  
                 return std::make_shared<OpenGLUniformBuffer>(size, binding);
             case RendererAPI::API::Vulkan:  
-                AYAYA_CORE_ERROR("Vulkan UniformBuffer is under construction!"); 
-                return nullptr;
+                // 返回 Vulkan 实例
+                return std::make_shared<VulkanUniformBuffer>(size, binding); 
             case RendererAPI::API::Metal:
                 AYAYA_CORE_ERROR("Metal UniformBuffer is under construction!"); 
                 return nullptr;
@@ -24,5 +25,4 @@ namespace Ayaya {
         AYAYA_CORE_ERROR("Unknown RendererAPI!");
         return nullptr;
     }
-
 }

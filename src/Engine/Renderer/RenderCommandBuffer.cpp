@@ -2,7 +2,9 @@
 #include "RenderCommandBuffer.hpp"
 #include "Renderer/Renderer.hpp"
 #include "Platform/OpenGL/OpenGLCommandBuffer.hpp"
-#include "Core/Log.hpp" // 【新增】：确保引入了 Log 系统
+// 【新增】：引入 Vulkan 实现
+#include "Platform/Vulkan/VulkanRenderCommandBuffer.hpp"
+#include "Core/Log.hpp" 
 
 namespace Ayaya {
 
@@ -16,8 +18,8 @@ namespace Ayaya {
                 return std::make_shared<OpenGLCommandBuffer>();
                 
             case RendererAPI::API::Vulkan:  
-                AYAYA_CORE_ERROR("Vulkan CommandBuffer is under construction!"); 
-                return nullptr;
+                // 【核心修复】：返回合法的 Vulkan 实例对象
+                return std::make_shared<VulkanRenderCommandBuffer>(); 
                 
             case RendererAPI::API::Metal:
                 AYAYA_CORE_ERROR("Metal CommandBuffer is under construction!"); 

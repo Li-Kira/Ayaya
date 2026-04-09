@@ -99,43 +99,62 @@ namespace Ayaya {
 
     void SceneRenderer::Init() {
         m_Data->WhiteTexture = Texture2D::Create(1, 1);
-        uint32_t whiteTextureData = 0xffffffff; 
-        m_Data->WhiteTexture->SetData(&whiteTextureData, sizeof(uint32_t));
+        if (m_Data->WhiteTexture) {
+            uint32_t whiteTextureData = 0xffffffff; 
+            m_Data->WhiteTexture->SetData(&whiteTextureData, sizeof(uint32_t));
+        }
 
         m_Data->GridMesh = Mesh::CreatePlane(1.0f, 1.0f);
 
-        // 初始化天空盒与 BRDF LUT
+        // ==========================================
+        // 【核心防御 1】：隔离 OpenGL 专属的天空盒与 IBL 逻辑
+        // ==========================================
         if (!s_SkyboxMesh) {
-            s_SkyboxShader = Shader::Create("assets/Editor/shaders/Skybox/skybox.vert", "assets/Editor/shaders/Skybox/skybox.frag");
+            // Mesh 是跨平台的，可以直接创建
             s_SkyboxMesh = Mesh::CreateCube(1.0f);
 
-            std::shared_ptr<Shader> brdfShader = Shader::Create("assets/Editor/shaders/IBL/brdf.vert", "assets/Editor/shaders/IBL/brdf.frag");
-            if(m_Data->EmptyVAO == 0) glGenVertexArrays(1, &m_Data->EmptyVAO);
-            uint32_t brdfID = IBLBuilder::CreateBRDFLUT(brdfShader, m_Data->EmptyVAO);
-            s_DefaultBRDFLUT = Texture2D::Create(brdfID, 512, 512);
+            if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+                // OpenGL 专属逻辑：编译 GLSL 着色器，生成 BRDF 贴图
+                s_SkyboxShader = Shader::Create("assets/Editor/shaders/Skybox/skybox.vert", "assets/Editor/shaders/Skybox/skybox.frag");
+                std::shared_ptr<Shader> brdfShader = Shader::Create("assets/Editor/shaders/IBL/brdf.vert", "assets/Editor/shaders/IBL/brdf.frag");
+                if(m_Data->EmptyVAO == 0) glGenVertexArrays(1, &m_Data->EmptyVAO);
+                uint32_t brdfID = IBLBuilder::CreateBRDFLUT(brdfShader, m_Data->EmptyVAO);
+                s_DefaultBRDFLUT = Texture2D::Create(brdfID, 512, 512);
+            } 
+            else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+                // Vulkan 占位逻辑：防止后续拿到空指针崩溃
+                s_DefaultBRDFLUT = Texture2D::Create(1, 1); 
+            }
         }
 
         m_Data->SkyboxMesh = s_SkyboxMesh;
         m_Data->SkyboxShader = s_SkyboxShader;
         m_Data->BRDFLUT = s_DefaultBRDFLUT;
         
-        // 全局 UBO 内存分配
+        // 全局 UBO 内存分配 (假设 UniformBuffer::Create 已经做了跨平台处理)
         if (!s_CameraUniformBuffer) s_CameraUniformBuffer = UniformBuffer::Create(sizeof(struct_CameraData), 0);
         if (!s_LightUniformBuffer) s_LightUniformBuffer = UniformBuffer::Create(sizeof(struct_LightData), 1);
 
         // ==========================================
-        // 核心：组装次世代渲染管线！
+        // 【核心防御 2】：隔离管线和裸露的 OpenGL 查询函数
         // ==========================================
-        m_Pipeline.AddPass(std::make_shared<ShadowPass>());
-        m_Pipeline.AddPass(std::make_shared<GBufferPass>());
-        m_Pipeline.AddPass(std::make_shared<LightingPass>());
-        m_Pipeline.AddPass(std::make_shared<BloomPass>());
-        m_Pipeline.AddPass(std::make_shared<PostProcessPass>());
-        m_Pipeline.AddPass(std::make_shared<FXAAPass>());
-        m_Pipeline.Init();
+        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+            m_Pipeline.AddPass(std::make_shared<ShadowPass>());
+            m_Pipeline.AddPass(std::make_shared<GBufferPass>());
+            m_Pipeline.AddPass(std::make_shared<LightingPass>());
+            m_Pipeline.AddPass(std::make_shared<BloomPass>());
+            m_Pipeline.AddPass(std::make_shared<PostProcessPass>());
+            m_Pipeline.AddPass(std::make_shared<FXAAPass>());
+            m_Pipeline.Init();
 
-        glGenVertexArrays(1, &m_Data->EmptyVAO);
-        glGenQueries(1, &m_Data->GPUTimeQuery);
+            // 拦截裸露的 OpenGL 调用！
+            if (m_Data->EmptyVAO == 0) glGenVertexArrays(1, &m_Data->EmptyVAO);
+            glGenQueries(1, &m_Data->GPUTimeQuery);
+        }
+        else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+            AYAYA_CORE_WARN("Vulkan Pipeline is running in minimal mode!");
+            // Vulkan 模式下暂不执行任何 OpenGL 的 VAO 或 Query 创建
+        }
     }
 
     void SceneRenderer::OnWindowResize(uint32_t width, uint32_t height) {
@@ -287,12 +306,15 @@ namespace Ayaya {
         m_RenderContext.Set("EnableFXAA", enableFXAA);
 
         std::shared_ptr<RenderCommandBuffer> cmd = RenderCommandBuffer::Create();
-        cmd->Begin();
-
-        // 将黑板和指令记录器一并传给管线
-        m_Pipeline.Execute(m_RenderContext, *cmd);
-
-        cmd->End();
+        
+        if (cmd) {
+            cmd->Begin();
+            // 将黑板和指令记录器一并传给管线
+            m_Pipeline.Execute(m_RenderContext, *cmd);
+            cmd->End();
+        } else {
+            AYAYA_CORE_ERROR("Failed to create RenderCommandBuffer in RenderScene!");
+        }
 
         // 【新增】：将管线里各个 Pass 汇报的成绩，抄写到总管的统计表里供 UI 显示
         m_Data->Stats.DrawCalls = m_RenderContext.Stats.DrawCalls;
