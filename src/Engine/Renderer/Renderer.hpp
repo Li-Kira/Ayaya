@@ -1,26 +1,22 @@
 #pragma once
 
-#include "RenderCommand.hpp"
 #include "RendererAPI.hpp"
+#include <memory>
 
 namespace Ayaya {
-
-    // ==========================================
-    // 现代架构下的 Renderer 类不再负责具体的 "Submit" 绘制。
-    // 它是一个静态 RHI 调度器，负责全局图形硬件的生命周期管理。
-    // 具体的绘制任务由 SceneRenderer 和 RenderCommandBuffer 接管！
-    // ==========================================
     class Renderer {
     public:
+        static void LoadConfig(); 
         static void Init();
         static void Shutdown(); 
         static void OnWindowResize(uint32_t width, uint32_t height);
 
-        // 预留给未来的全局帧生命周期调度
-        // static void BeginFrame();
-        // static void EndFrame();
+        inline static void SetClearColor(const glm::vec4& color) { s_RendererAPI->SetClearColor(color); }
+        inline static void Clear() { s_RendererAPI->Clear(); }
+        inline static void DrawIndexed(const std::shared_ptr<VertexArray>& va) { s_RendererAPI->DrawIndexed(va); }
 
-        inline static RendererAPI::API GetAPI() { return RendererAPI::GetAPI(); }
+    private:
+        // 注意这里：不再有 s_API，因为状态交还给 RendererAPI 管理了
+        static std::unique_ptr<RendererAPI> s_RendererAPI;
     };
-
 }

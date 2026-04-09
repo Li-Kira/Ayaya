@@ -9,7 +9,7 @@
 #include <backends/imgui_impl_vulkan.h> // 【新增】：引入 Vulkan 后端
 
 #include "Engine/Core/Application.hpp"
-#include "Engine/Renderer/RendererAPI.hpp" // 【新增】：获取当前 API
+#include "Renderer/Renderer.hpp" // 【新增】：获取当前 API
 #include "Engine/Platform/Vulkan/VulkanContext.hpp" // 【新增】：获取 Vulkan 句柄
 #include <backends/IconsFontAwesome5.h>
 

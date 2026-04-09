@@ -28,7 +28,7 @@ Properties:
   - UniformName: u_UseMetallicMap
     DisplayName: Enable Metallic Map
     Type: 2
-    BoolValue: false
+    BoolValue: true
   - UniformName: u_MetallicMap
     DisplayName: Metallic Texture
     Type: 8
@@ -40,7 +40,7 @@ Properties:
   - UniformName: u_UseRoughnessMap
     DisplayName: Enable Roughness Map
     Type: 2
-    BoolValue: false
+    BoolValue: true
   - UniformName: u_RoughnessMap
     DisplayName: Roughness Texture
     Type: 8
@@ -52,7 +52,7 @@ Properties:
   - UniformName: u_UseAOMap
     DisplayName: Enable AO Map
     Type: 2
-    BoolValue: false
+    BoolValue: true
   - UniformName: u_AOMap
     DisplayName: AO Texture
     Type: 8

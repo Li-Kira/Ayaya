@@ -1,7 +1,6 @@
 #include "ayapch.h"
 #include "Texture.hpp"
-
-#include "Renderer/RendererAPI.hpp" // 改为直接获取底层 API
+#include "Renderer/Renderer.hpp" // 改为直接获取底层 API
 #include "Platform/OpenGL/OpenGLTexture2D.hpp"
 #include "Core/Log.hpp"
 

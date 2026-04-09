@@ -1,6 +1,6 @@
 #include "ayapch.h"
 #include "IBLBuilder.hpp"
-#include "Renderer/RendererAPI.hpp"
+#include "Renderer/Renderer.hpp"
 #include "Platform/OpenGL/OpenGLIBLBuilder.hpp"
 #include "Core/Log.hpp"
 

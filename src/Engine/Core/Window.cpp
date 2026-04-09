@@ -1,7 +1,7 @@
 #include "ayapch.h"
 #include "Window.hpp"
 #include "Core/Log.hpp"
-#include "Renderer/RendererAPI.hpp" // 【新增】：获取当前激活的 API
+#include "Renderer/Renderer.hpp" // 【新增】：获取当前激活的 API
 
 namespace Ayaya {
 

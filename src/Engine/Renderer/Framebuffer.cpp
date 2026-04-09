@@ -1,6 +1,6 @@
 #include "ayapch.h"
 #include "Framebuffer.hpp"
-#include "Renderer/RendererAPI.hpp"
+#include "Renderer/Renderer.hpp"
 #include "Platform/OpenGL/OpenGLFramebuffer.hpp"
 #include "Platform/Vulkan/VulkanFramebuffer.hpp" // 【新增】
 #include "Core/Log.hpp"

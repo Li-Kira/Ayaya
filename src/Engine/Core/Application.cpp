@@ -1,13 +1,10 @@
+#include "ayapch.h"
 #include "Application.hpp"
 #include <GLFW/glfw3.h>
 #include "Input.hpp"
 #include "Log.hpp"
 #include "KeyCodes.hpp"
-#include "Renderer/Renderer.hpp" 
-#include "Platform/Vulkan/VulkanContext.hpp"
-// 【新增】：引入 YAML 读取早期配置
-#include <yaml-cpp/yaml.h>
-#include <filesystem>
+#include "Renderer/Renderer.hpp"
 #ifdef _WIN32
     #include <windows.h>
 #endif
@@ -95,10 +92,7 @@ Hi, welcome to Ayaya engine♪
         AYAYA_CORE_INFO("\x1b[38;2;255;150;200mAyaya Engine is starting up... ♪\n{0}\x1b[0m", ayayaAscii);
         AYAYA_CORE_INFO("Log System Initialized!");
 
-        // ==========================================
-        // 【核心架构】：调用封装好的早期配置加载
-        // ==========================================
-        LoadEarlyConfig();
+        Renderer::LoadConfig();
 
         m_Window = std::make_unique<Window>(1920, 1080, "Ayaya Engine v0.1");
         m_Window->SetEventCallback(std::bind(&Application::OnEvent, this, std::placeholders::_1));
@@ -113,10 +107,7 @@ Hi, welcome to Ayaya engine♪
     }
 
     Application::~Application() {
-        // 【核心修复】：安全清理
-        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
-            Renderer::Shutdown();
-        }
+        Renderer::Shutdown();
     }
 
     void Application::PushLayer(Layer* layer) { 
@@ -183,17 +174,8 @@ Hi, welcome to Ayaya engine♪
         
         AYAYA_CORE_INFO("Window Resize Logic: {0}, {1}", e.GetWidth(), e.GetHeight());
         
-        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
-            Renderer::OnWindowResize(e.GetWidth(), e.GetHeight());
-        } 
-        else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-            // ==========================================
-            // 【核心修复】：如果是 Vulkan 模式，一旦触发 Resize 或 Retina 缩放，
-            // 立即命令底层重建所有画布！
-            // ==========================================
-            auto vulkanContext = std::dynamic_pointer_cast<VulkanContext>(m_Window->GetContext());
-            vulkanContext->RecreateSwapChain();
-        }
+        Renderer::OnWindowResize(e.GetWidth(), e.GetHeight());
+
         return false;
     }
 
@@ -231,34 +213,5 @@ Hi, welcome to Ayaya engine♪
     bool Application::OnMouseScrolled(MouseScrolledEvent& e) {
         AYAYA_CORE_TRACE("Mouse Scrolled: {0}, {1}", e.GetXOffset(), e.GetYOffset());
         return false;
-    }
-
-    // ==========================================
-    // 提取出的早期配置加载实现
-    // ==========================================
-    void Application::LoadEarlyConfig() {
-        std::string prefsPath = "assets/Editor/settings/EditorPreferences.yaml";
-        if (std::filesystem::exists(prefsPath)) {
-            try {
-                YAML::Node data = YAML::LoadFile(prefsPath);
-                auto prefs = data["EditorPreferences"];
-                if (prefs && prefs["GraphicsAPI"]) {
-                    int apiConfig = prefs["GraphicsAPI"].as<int>();
-                    // 0 = OpenGL, 1 = Vulkan
-                    if (apiConfig == 1) {
-                        RendererAPI::SetAPI(RendererAPI::API::Vulkan);
-                        AYAYA_CORE_INFO("Early Config: Selected Vulkan API");
-                    } else {
-                        RendererAPI::SetAPI(RendererAPI::API::OpenGL);
-                        AYAYA_CORE_INFO("Early Config: Selected OpenGL API");
-                    }
-                }
-            } catch (const YAML::Exception& e) {
-                AYAYA_CORE_ERROR("Failed to load early config: {0}", e.what());
-                RendererAPI::SetAPI(RendererAPI::API::OpenGL); // 失败则回退默认
-            }
-        } else {
-            RendererAPI::SetAPI(RendererAPI::API::OpenGL); // 默认使用 OpenGL
-        }
     }
 }
