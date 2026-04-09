@@ -119,10 +119,20 @@ namespace Ayaya {
     }
 
     void Window::OnUpdate() {
+        // ==========================================
+        // 【终极修复】：调换顺序，拆除 Vulkan 的帧中炸弹！
+        // 1. 必须先安全地结束当前帧，并提交给显卡 (SwapBuffers)
+        // 2. 然后再去处理系统事件 (PollEvents)，防止中途触发画布重建
+        // ==========================================
+        
+        // 先提交画面！此时 vkCmdEndRenderPass 能够安全访问到有效的 RenderPass
+        if (m_Context) {
+            m_Context->SwapBuffers();
+        }
+        
+        // 再处理系统拖拽、缩放等事件。
+        // 如果触发了 RecreateSwapChain，底层的 vkDeviceWaitIdle 会确保
+        // 刚才提交的画面已经渲染完毕，然后再安全地销毁旧画布。
         glfwPollEvents();
-        // ==========================================
-        // 【核心修改】：通过多态来 SwapBuffers
-        // ==========================================
-        m_Context->SwapBuffers();
     }
 }

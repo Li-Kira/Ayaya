@@ -37,11 +37,27 @@ namespace Ayaya {
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         } 
         else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-            // ==========================================
-            // 将 ImGui 的绘制指令录入当前的 Command Buffer
-            // ==========================================
             auto vulkanContext = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-            ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), vulkanContext->GetCurrentCommandBuffer());
+            
+            ImDrawData* draw_data = ImGui::GetDrawData();
+            if (draw_data) {
+                // 计算 ImGui 当前想要绘制的物理像素尺寸
+                int fb_width = (int)(draw_data->DisplaySize.x * draw_data->FramebufferScale.x);
+                int fb_height = (int)(draw_data->DisplaySize.y * draw_data->FramebufferScale.y);
+
+                // 获取当前窗口真实的底层物理像素尺寸
+                int win_fb_width, win_fb_height;
+                GLFWwindow* window = static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow());
+                glfwGetFramebufferSize(window, &win_fb_width, &win_fb_height);
+
+                // 【核心防御】：只有两者完美匹配，且不为 0 时，才提交绘制！
+                // 如果不匹配，静默跳过这一帧，防止 Vulkan/Metal 裁剪越界崩溃。
+                if (fb_width == win_fb_width && fb_height == win_fb_height && fb_width > 0 && fb_height > 0) {
+                    ImGui_ImplVulkan_RenderDrawData(draw_data, vulkanContext->GetCurrentCommandBuffer());
+                } else {
+                    AYAYA_CORE_WARN("Vulkan SwapChain size mismatch! Skipping ImGui render for 1 frame.");
+                }
+            }
         }
         
         // 处理多视口 (Viewports)
