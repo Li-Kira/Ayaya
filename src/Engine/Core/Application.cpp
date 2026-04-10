@@ -5,6 +5,7 @@
 #include "Log.hpp"
 #include "KeyCodes.hpp"
 #include "Renderer/Renderer.hpp"
+#include "Renderer/SceneRenderer.hpp"
 #ifdef _WIN32
     #include <windows.h>
 #endif
@@ -144,6 +145,11 @@ Hi, welcome to Ayaya engine♪
             Timestep timestep = time - m_LastFrameTime;
             m_LastFrameTime = time;
 
+            // ==========================================
+            // 【核心架构升级】：在所有业务与渲染管线执行前，开启 Vulkan 帧录制！
+            // ==========================================
+            m_Window->GetContext()->BeginFrame();
+
             // 1. 逻辑更新（渲染场景）
             for (Layer* layer : m_LayerStack)
                 layer->OnUpdate(timestep);
@@ -156,6 +162,8 @@ Hi, welcome to Ayaya engine♪
 
             m_Window->OnUpdate();
         }
+
+        SceneRenderer::Shutdown();
     }
 
     // =========================================================================

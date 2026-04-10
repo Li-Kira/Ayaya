@@ -24,6 +24,7 @@
 #include "Renderer/Passes/PostProcessPass.hpp"
 #include "Renderer/Passes/BloomPass.hpp"
 #include "Renderer/Passes/FXAAPass.hpp"
+#include "Renderer/Passes/VulkanClearPass.hpp"
 
 // 3. 第三方库
 #include <glad/glad.h>
@@ -154,7 +155,20 @@ namespace Ayaya {
         else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
             AYAYA_CORE_WARN("Vulkan Pipeline is running in minimal mode!");
             // Vulkan 模式下暂不执行任何 OpenGL 的 VAO 或 Query 创建
+            m_Pipeline.AddPass(std::make_shared<VulkanClearPass>());
+            m_Pipeline.Init();
         }
+    }
+
+    void SceneRenderer::Shutdown() {
+        s_CameraUniformBuffer.reset();
+        s_LightUniformBuffer.reset();
+        s_SkyboxMesh.reset();
+        s_SkyboxShader.reset();
+        s_DefaultEnvironmentMap.reset();
+        s_DefaultIrradianceMap.reset();
+        s_DefaultPrefilterMap.reset();
+        s_DefaultBRDFLUT.reset();
     }
 
     void SceneRenderer::OnWindowResize(uint32_t width, uint32_t height) {

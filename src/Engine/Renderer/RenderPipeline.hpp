@@ -13,6 +13,7 @@
 #include "Renderer/Texture.hpp"
 #include "Renderer/Framebuffer.hpp"
 #include "Renderer/RenderCommandBuffer.hpp"
+#include "Renderer/Renderer.hpp"
 
 namespace Ayaya {
 
@@ -120,8 +121,11 @@ namespace Ayaya {
     public:
         ~RenderPipeline() {
             // 释放所有查询器
-            for (auto& kv : m_PassQueries) {
-                glDeleteQueries(1, &kv.second);
+            // 【防御】：只在 OpenGL 模式下清理 OpenGL 的查询器
+            if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+                for (auto& kv : m_PassQueries) {
+                    glDeleteQueries(1, &kv.second);
+                }
             }
         }
 
@@ -140,27 +144,33 @@ namespace Ayaya {
         }
 
         void Execute(RenderContext& context, RenderCommandBuffer& cmd) {
+            bool isOpenGL = RendererAPI::GetAPI() == RendererAPI::API::OpenGL;
+
             for (auto& pass : m_Passes) {
                 if (!pass->IsEnabled()) continue;
 
                 const std::string& passName = pass->GetName();
-                
-                // 1. 动态生成专属的 GPU 查询器
-                if (m_PassQueries.find(passName) == m_PassQueries.end()) {
-                    uint32_t query;
-                    glGenQueries(1, &query);
-                    m_PassQueries[passName] = query;
-                }
-                uint32_t queryID = m_PassQueries[passName];
+                uint32_t queryID = 0;
 
-                // 2. 读取上一帧的 GPU 耗时 (异步非阻塞)
-                if (m_QueryIssued[passName]) {
-                    uint32_t available = 0;
-                    glGetQueryObjectuiv(queryID, GL_QUERY_RESULT_AVAILABLE, &available);
-                    if (available) {
-                        uint64_t gpuTimeNs = 0;
-                        glGetQueryObjectui64v(queryID, GL_QUERY_RESULT, &gpuTimeNs);
-                        context.PassProfiles[passName].GPUTime = (float)gpuTimeNs / 1000000.0f;
+                // ==========================================
+                // 【防御】：OpenGL 专属的 GPU 耗时查询逻辑
+                // ==========================================
+                if (isOpenGL) {
+                    if (m_PassQueries.find(passName) == m_PassQueries.end()) {
+                        glGenQueries(1, &queryID);
+                        m_PassQueries[passName] = queryID;
+                    } else {
+                        queryID = m_PassQueries[passName];
+                    }
+
+                    if (m_QueryIssued[passName]) {
+                        uint32_t available = 0;
+                        glGetQueryObjectuiv(queryID, GL_QUERY_RESULT_AVAILABLE, &available);
+                        if (available) {
+                            uint64_t gpuTimeNs = 0;
+                            glGetQueryObjectui64v(queryID, GL_QUERY_RESULT, &gpuTimeNs);
+                            context.PassProfiles[passName].GPUTime = (float)gpuTimeNs / 1000000.0f;
+                        }
                     }
                 }
 
@@ -170,20 +180,26 @@ namespace Ayaya {
 
                 // 4. 开启前后夹击的性能拦截！
                 auto cpuStart = std::chrono::high_resolution_clock::now();
-                glBeginQuery(GL_TIME_ELAPSED, queryID);
+                if (isOpenGL) {
+                    glBeginQuery(GL_TIME_ELAPSED, queryID);
+                }
 
                 // ==========================================
                 pass->Execute(context, cmd);
                 // ==========================================
 
-                glEndQuery(GL_TIME_ELAPSED);
-                m_QueryIssued[passName] = true;
+                if (isOpenGL) {
+                    glEndQuery(GL_TIME_ELAPSED);
+                    m_QueryIssued[passName] = true;
+                }
                 auto cpuEnd = std::chrono::high_resolution_clock::now();
 
                 // 5. 结算数据并登记到黑板上
                 context.PassProfiles[passName].CPUTime = std::chrono::duration<float, std::milli>(cpuEnd - cpuStart).count();
                 context.PassProfiles[passName].DrawCalls = context.Stats.DrawCalls - startDC;
                 context.PassProfiles[passName].Triangles = context.Stats.TriangleCount - startTris;
+                
+                // 注意：Vulkan 的 GPU Time 暂时保留为初始的 0.0f，未来我们会通过 VkQueryPool 补齐
             }
         }
 

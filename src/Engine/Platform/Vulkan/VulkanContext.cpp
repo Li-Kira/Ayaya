@@ -12,6 +12,12 @@ namespace Ayaya {
     }
 
     VulkanContext::~VulkanContext() {
+        // 销毁 VMA (必须在 Device 销毁前)
+        if (m_Allocator != VK_NULL_HANDLE) {
+            vmaDestroyAllocator(m_Allocator);
+            AYAYA_CORE_INFO("VMA Allocator destroyed.");
+        }
+
         // 等待 GPU 彻底空闲，防止在渲染途中强行销毁资源
         if (m_Device != VK_NULL_HANDLE) {
             vkDeviceWaitIdle(m_Device);
@@ -112,6 +118,19 @@ namespace Ayaya {
 
         // 【新增】：4. 创建逻辑设备与队列
         CreateLogicalDevice();
+
+        // ==========================================
+        // 【新增】：初始化 VMA 分配器
+        // ==========================================
+        VmaAllocatorCreateInfo allocatorInfo = {};
+        allocatorInfo.physicalDevice = m_PhysicalDevice;
+        allocatorInfo.device = m_Device;
+        allocatorInfo.instance = m_Instance;
+        allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_2; // 确保与 Instance 版本一致
+        
+        VkResult vmaResult = vmaCreateAllocator(&allocatorInfo, &m_Allocator);
+        AYAYA_CORE_ASSERT(vmaResult == VK_SUCCESS, "Failed to create VMA Allocator!");
+        AYAYA_CORE_INFO("VMA Allocator created successfully!");
 
         // 【新增】：5. 创建交换链与图像视图
         CreateSwapChain();
@@ -602,25 +621,25 @@ namespace Ayaya {
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         vkBeginCommandBuffer(m_CommandBuffers[m_CurrentFrame], &beginInfo);
 
-        // 5. 开启 Render Pass (告诉显卡我们要往这张图上画了！)
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = m_RenderPass;
-        renderPassInfo.framebuffer = m_SwapChainFramebuffers[m_ImageIndex];
-        renderPassInfo.renderArea.offset = {0, 0};
-        renderPassInfo.renderArea.extent = m_SwapChainExtent;
+        // // 5. 开启 Render Pass (告诉显卡我们要往这张图上画了！)
+        // VkRenderPassBeginInfo renderPassInfo{};
+        // renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        // renderPassInfo.renderPass = m_RenderPass;
+        // renderPassInfo.framebuffer = m_SwapChainFramebuffers[m_ImageIndex];
+        // renderPassInfo.renderArea.offset = {0, 0};
+        // renderPassInfo.renderArea.extent = m_SwapChainExtent;
 
-        // 这里的清理颜色就是 ImGui UI 背后的纯色底板
-        VkClearValue clearColor = {{{0.08f, 0.085f, 0.09f, 1.0f}}};
-        renderPassInfo.clearValueCount = 1;
-        renderPassInfo.pClearValues = &clearColor;
+        // // 这里的清理颜色就是 ImGui UI 背后的纯色底板
+        // VkClearValue clearColor = {{{0.08f, 0.085f, 0.09f, 1.0f}}};
+        // renderPassInfo.clearValueCount = 1;
+        // renderPassInfo.pClearValues = &clearColor;
 
-        vkCmdBeginRenderPass(m_CommandBuffers[m_CurrentFrame], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        // vkCmdBeginRenderPass(m_CommandBuffers[m_CurrentFrame], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
     }
 
     void VulkanContext::SwapBuffers() {
         // 1. 结束 Render Pass 和命令录制
-        vkCmdEndRenderPass(m_CommandBuffers[m_CurrentFrame]);
+        // vkCmdEndRenderPass(m_CommandBuffers[m_CurrentFrame]);
         vkEndCommandBuffer(m_CommandBuffers[m_CurrentFrame]);
 
         // 2. 将写好的“待办清单”提交给图形队列

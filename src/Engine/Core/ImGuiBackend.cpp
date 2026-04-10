@@ -16,9 +16,6 @@ namespace Ayaya {
 
     void ImGuiBackend::BeginFrame() {
         if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-            auto vulkanContext = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-            // 获取下一张图像，并开启 Render Pass
-            vulkanContext->BeginFrame(); 
             ImGui_ImplVulkan_NewFrame();
         } else {
             ImGui_ImplOpenGL3_NewFrame();
@@ -38,6 +35,22 @@ namespace Ayaya {
         } 
         else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
             auto vulkanContext = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+            VkCommandBuffer cmdBuffer = vulkanContext->GetCurrentCommandBuffer();
+            // ==========================================
+            // 【终极交接】：在这里开启指向主屏幕的 RenderPass，并包裹 ImGui 的绘制！
+            // ==========================================
+            VkRenderPassBeginInfo renderPassInfo{};
+            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            renderPassInfo.renderPass = vulkanContext->GetRenderPass();
+            renderPassInfo.framebuffer = vulkanContext->GetCurrentFramebuffer();
+            renderPassInfo.renderArea.offset = {0, 0};
+            renderPassInfo.renderArea.extent = vulkanContext->GetSwapChainExtent();
+
+            VkClearValue clearColor = {{{0.08f, 0.085f, 0.09f, 1.0f}}}; // UI 背后的底色
+            renderPassInfo.clearValueCount = 1;
+            renderPassInfo.pClearValues = &clearColor;
+
+            vkCmdBeginRenderPass(cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
             
             ImDrawData* draw_data = ImGui::GetDrawData();
             if (draw_data) {
@@ -58,6 +71,8 @@ namespace Ayaya {
                     AYAYA_CORE_WARN("Vulkan SwapChain size mismatch! Skipping ImGui render for 1 frame.");
                 }
             }
+            
+            vkCmdEndRenderPass(cmdBuffer); // 结束屏幕的绘制
         }
         
         // 处理多视口 (Viewports)

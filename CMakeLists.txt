@@ -156,6 +156,7 @@ target_include_directories(Ayaya PUBLIC
 
     # 【新增】：Vulkan SDK 的头文件路径
     ${Vulkan_INCLUDE_DIRS}
+    "${VENDOR_INCLUDE}/vma"
 )
 
 # 7. 链接第三方库

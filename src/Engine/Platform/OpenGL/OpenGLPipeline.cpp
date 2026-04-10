@@ -72,10 +72,4 @@ namespace Ayaya {
             glDisable(GL_BLEND);
         }
     }
-
-    // 实现工厂方法
-    std::shared_ptr<Pipeline> Pipeline::Create(const PipelineSpecification& spec) {
-        // 因为我们目前只跑在 OpenGL 下，直接返回 OpenGL 版本
-        return std::make_shared<OpenGLPipeline>(spec);
-    }
 }

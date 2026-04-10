@@ -18,6 +18,7 @@ namespace Ayaya {
         ~SceneRenderer();
 
         void Init();
+        static void Shutdown(); // 【新增】：全局图形资源清理器
         void OnWindowResize(uint32_t width, uint32_t height);
         void SetMSAASamples(uint32_t samples);
         void* GetFinalColorAttachmentRendererID();

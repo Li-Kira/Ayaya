@@ -31,8 +31,8 @@ namespace Ayaya {
         virtual void BlitDepth(uint32_t readFBO, uint32_t drawFBO, uint32_t width, uint32_t height) override {}
 
         // --- 现代 API 核心语义 ---
-        virtual void BeginRenderPass(const std::shared_ptr<Framebuffer>& targetFBO, bool clear = true, const glm::vec4& clearColor = glm::vec4(0.0f)) override {}
-        virtual void EndRenderPass() override {}
+        virtual void BeginRenderPass(const std::shared_ptr<Framebuffer>& targetFBO, bool clear = true, const glm::vec4& clearColor = glm::vec4(0.0f)) override;
+        virtual void EndRenderPass() override;
         virtual void BindPipeline(const std::shared_ptr<Pipeline>& pipeline) override {}
 
         // --- 推送常量 ---

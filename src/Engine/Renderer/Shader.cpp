@@ -2,6 +2,7 @@
 #include "Shader.hpp"
 #include "Renderer/Renderer.hpp"
 #include "Platform/OpenGL/OpenGLShader.hpp"
+#include "Platform/Vulkan/VulkanShader.hpp"
 #include "Core/Log.hpp"
 
 namespace Ayaya {
@@ -10,7 +11,7 @@ namespace Ayaya {
         switch (RendererAPI::GetAPI()) {
             case RendererAPI::API::None:    AYAYA_CORE_ERROR("RendererAPI::None is currently not supported!"); return nullptr;
             case RendererAPI::API::OpenGL:  return std::make_shared<OpenGLShader>(vertexPath, fragmentPath);
-            case RendererAPI::API::Vulkan:  AYAYA_CORE_ERROR("Vulkan Shader is under construction!"); return nullptr;
+            case RendererAPI::API::Vulkan:  return std::make_shared<VulkanShader>(vertexPath, fragmentPath); 
             case RendererAPI::API::Metal:   AYAYA_CORE_ERROR("Metal Shader is under construction!"); return nullptr;
         }
         AYAYA_CORE_ERROR("Unknown RendererAPI!");
@@ -21,7 +22,7 @@ namespace Ayaya {
         switch (RendererAPI::GetAPI()) {
             case RendererAPI::API::None:    AYAYA_CORE_ERROR("RendererAPI::None is currently not supported!"); return nullptr;
             case RendererAPI::API::OpenGL:  return std::make_shared<OpenGLShader>(name, vertexPath, fragmentPath);
-            case RendererAPI::API::Vulkan:  AYAYA_CORE_ERROR("Vulkan Shader is under construction!"); return nullptr;
+            case RendererAPI::API::Vulkan:  return std::make_shared<VulkanShader>(name, vertexPath, fragmentPath);
             case RendererAPI::API::Metal:   AYAYA_CORE_ERROR("Metal Shader is under construction!"); return nullptr;
         }
         AYAYA_CORE_ERROR("Unknown RendererAPI!");

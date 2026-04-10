@@ -40,6 +40,7 @@ namespace Ayaya {
         static EditorLayer& Get();
 
         virtual void OnAttach() override;
+        virtual void OnDetach() override;
         virtual void OnUpdate(Timestep ts) override;
         virtual void OnImGuiRender() override;
         virtual void OnEvent(Event& event) override;

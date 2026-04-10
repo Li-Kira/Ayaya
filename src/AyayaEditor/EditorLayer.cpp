@@ -51,8 +51,15 @@ namespace Ayaya {
 
         // 清理临时文件
         if (std::filesystem::exists("assets/Editor/temp/temp_play_scene.ayaya")) {
-        std::filesystem::remove("assets/Editor/temp/temp_play_scene.ayaya");
+            std::filesystem::remove("assets/Editor/temp/temp_play_scene.ayaya");
+        }
     }
+
+    void EditorLayer::OnDetach() {
+        // 在 Layer 被剥离（程序退出）时，立刻释放渲染器实例，
+        // 确保 VMA 的离线画布 (Framebuffer) 赶在 Vulkan 销毁前被安全释放！
+        m_SceneRenderer.reset();
+        m_GameRenderer.reset();
     }
 
     void EditorLayer::OnUpdate(Timestep ts) {
@@ -300,11 +307,26 @@ namespace Ayaya {
         UIRenderToolbar();
 
         m_SceneHierarchyPanel.OnImGuiRender();
-        m_ContentBrowserPanel.OnImGuiRender();
+        // m_ContentBrowserPanel.OnImGuiRender();
         m_PreferencesPanel.OnImGuiRender();
         m_ScreenshotPanel.OnImGuiRender();
         m_HistoryPanel.OnImGuiRender();
-        m_FrameDebuggerPanel.OnImGuiRender();
+        // m_FrameDebuggerPanel.OnImGuiRender();
+
+        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+            // OpenGL 模式下，一切照常渲染
+            m_ContentBrowserPanel.OnImGuiRender();
+            m_FrameDebuggerPanel.OnImGuiRender();
+        } else {
+            // Vulkan 模式下，保留窗口外壳防止布局错乱，但内部用文字占位
+            ImGui::Begin("Content Browser");
+            ImGui::TextDisabled("Vulkan Mode: Content Browser is paused pending Descriptor Sets.");
+            ImGui::End();
+
+            ImGui::Begin("Frame Debugger");
+            ImGui::TextDisabled("Vulkan Mode: Frame Debugger is paused pending Descriptor Sets.");
+            ImGui::End();
+        }
         
         UIRenderViewport();
         UIRenderGameViewport();
@@ -772,11 +794,16 @@ namespace Ayaya {
 
         if (m_SceneRenderer) {
             void* textureID = m_SceneRenderer->GetFinalColorAttachmentRendererID();
-            ImGui::Image(textureID, ImVec2{ m_ViewportSize.x, m_ViewportSize.y }, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
-
-            HandleMousePicking(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
-            HandleGizmo(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
-            UIRenderDebugGizmos(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
+            if (textureID) {
+                ImGui::Image(textureID, ImVec2{ m_ViewportSize.x, m_ViewportSize.y }, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+                
+                HandleMousePicking(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
+                HandleGizmo(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
+                UIRenderDebugGizmos(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
+            } else {
+                // 占位提示，等待我们的 Vulkan 离线画布就绪
+                ImGui::Text("Viewport is initializing...");
+            }
         }
 
         ImGui::End();
@@ -796,7 +823,12 @@ namespace Ayaya {
         // 渲染底层的游戏画面
         if (m_GameRenderer) {
             void* textureID = m_GameRenderer->GetFinalColorAttachmentRendererID();
-            ImGui::Image(textureID, ImVec2{ m_GameViewportSize.x, m_GameViewportSize.y }, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+            if (textureID) {
+                ImGui::Image(textureID, ImVec2{ m_GameViewportSize.x, m_GameViewportSize.y }, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+            } else {
+                // 占位提示，等待我们的 Vulkan 离线画布就绪
+                ImGui::Text("Game is initializing...");
+            }
         }
 
         // ==========================================

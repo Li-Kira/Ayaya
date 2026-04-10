@@ -1,6 +1,7 @@
 #pragma once
 #include "Renderer/GraphicsContext.hpp"
 #include <vulkan/vulkan.h>
+#include <vk_mem_alloc.h>
 #include <optional>
 #include <set>
 #include <vector> // 确保引入 vector
@@ -47,11 +48,15 @@ namespace Ayaya {
         inline uint32_t GetImageCount() const { return static_cast<uint32_t>(m_SwapChainImages.size()); }
         inline uint32_t GetMinImageCount() const { return 2; } // 通常双重缓冲最少 2 张
         inline uint32_t GetGraphicsQueueFamily() const { return m_GraphicsQueueFamily; }
+        inline VmaAllocator GetAllocator() const { return m_Allocator; }
 
         // ==========================================
         // 【新增】：核心渲染大循环与单次命令接口
         // ==========================================
-        void BeginFrame(); 
+        virtual void BeginFrame() override;
+        // 【新增】：供 ImGui 后端查询当前帧缓冲
+        inline VkFramebuffer GetCurrentFramebuffer() const { return m_SwapChainFramebuffers[m_ImageIndex]; }
+        inline VkExtent2D GetSwapChainExtent() const { return m_SwapChainExtent; }
         inline VkCommandBuffer GetCurrentCommandBuffer() const { return m_CommandBuffers[m_CurrentFrame]; }
 
         // 供外部（如 ImGui）向显卡一次性传输数据的通道
@@ -106,6 +111,8 @@ namespace Ayaya {
         // ==========================================
         std::vector<VkCommandBuffer> m_CommandBuffers;
         VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
+
+        VmaAllocator m_Allocator = VK_NULL_HANDLE;
 
         // 【新增】：用于追踪当前绘制到了哪一帧，以及 Swapchain 给的是哪张图
         uint32_t m_CurrentFrame = 0;

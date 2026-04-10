@@ -14,6 +14,8 @@ namespace Ayaya {
         // 交换前后缓冲，将画面呈现 (Present) 到屏幕上
         virtual void SwapBuffers() = 0;
 
+        virtual void BeginFrame() {} // 【新增】
+
         // 静态工厂方法：接收 GLFW 窗口句柄
         static std::shared_ptr<GraphicsContext> Create(void* windowHandle);
     };
