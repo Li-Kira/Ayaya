@@ -27,7 +27,6 @@ namespace Ayaya {
         pipeSpec.DepthTest = true;
         pipeSpec.DepthWrite = true;
         
-        // 【核心修复】：千万不要用 Front！
         // 改为 CullMode::Back（常规模型）或者 CullMode::None（如果你的场景里有单面的纸片/树叶也要产生阴影）
         pipeSpec.BackfaceCulling = CullMode::Back; 
         
@@ -37,7 +36,8 @@ namespace Ayaya {
     void ShadowPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
         auto lightView = context.ActiveScene->Reg().view<TransformComponent, DirectionalLightComponent>();
         if (lightView.begin() == lightView.end()) {
-            context.Set("ShadowMap_Output", (uint32_t)0);
+            // 【修改】：安全地输出一个空指针，而不是 (uint32_t)0
+            context.Set("ShadowMap_Output", std::shared_ptr<Framebuffer>(nullptr));
             return;
         }
 
@@ -74,14 +74,20 @@ namespace Ayaya {
                 uint32_t tris = mesh->GetIndexCount() / 3;
 
                 if (context.RecordAndCheckDrawCall("Shadow Pass", tag, "Shadow Map", tris)) {
-                    cmd.DrawIndexed(mesh->GetVertexArray(), mesh->GetIndexCount());
+                    // 【现代绑定接口】：抛弃 GetVertexArray，直接传入 mesh 对象！
+                    cmd.DrawIndexed(mesh, mesh->GetIndexCount());
                 }
             }
         }
         
         cmd.EndRenderPass();
 
-        context.Set("ShadowMap_Output", m_ShadowMapFBO->GetDepthAttachmentRendererID());
+        // ==========================================
+        // 【核心交接】：将阴影 FBO 实体挂上全局黑板！
+        // 后续的 LightingPass 会读取这个对象进行深度图采样
+        // ==========================================
+        context.Set("ShadowMap_Output", m_ShadowMapFBO);
+        context.Framebuffers["ShadowMap"] = m_ShadowMapFBO;
         context.Set("LightSpaceMatrix", lightSpaceMatrix);
     }
 }

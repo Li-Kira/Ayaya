@@ -9,6 +9,7 @@ namespace Ayaya {
 
     class RenderCommandBuffer;
     class Pipeline;
+    class Texture2D; // 【新增】：前向声明贴图对象
 
     enum class MaterialPropertyType {
         Float     = 0, 
@@ -38,22 +39,22 @@ namespace Ayaya {
         
         UUID TextureHandle = 0;
         
-        // 【核心新增】：记录运行时生成的 FBO 贴图 ID (如 G-Buffer)
-        uint32_t RuntimeTextureID = 0; 
+        // 【核心修改】：将数字 ID 替换为纹理对象的智能指针
+        std::shared_ptr<Texture2D> RuntimeTexture = nullptr;
 
-        std::string TexturePath = ""; 
+        std::string TexturePath = ""; // 完美保留！
     };
 
     class Material {
     public:
-        std::string Name = "Empty Material";
-        std::string ShaderName = "Default"; 
-        std::string AssetPath = ""; 
-
-        std::vector<MaterialProperty> Properties;
-
         Material() = default;
         ~Material() = default;
+        
+        std::string Name = "Empty Material";
+        std::string ShaderName = "Default";   // 完美保留！
+        std::string AssetPath = "";           // 完美保留！
+
+        std::vector<MaterialProperty> Properties;
 
         std::shared_ptr<Material> Clone() const {
             auto clone = std::make_shared<Material>();
@@ -67,7 +68,8 @@ namespace Ayaya {
         // ==========================================
         // 核心执行：将所有属性打包提交给显卡
         // ==========================================
-        void Bind(RenderCommandBuffer& cmd, const std::shared_ptr<Pipeline>& pipeline, uint32_t fallbackWhiteTextureID = 0);
+        // 【核心修改】：回退白模纹理现在也接收对象指针
+        void Bind(RenderCommandBuffer& cmd, const std::shared_ptr<Pipeline>& pipeline, const std::shared_ptr<Texture2D>& fallbackWhiteTexture = nullptr);
 
         // ==========================================
         // 描述符更新接口 (代替 Shader->SetX)
@@ -83,13 +85,27 @@ namespace Ayaya {
         
         // 资产系统纹理绑定
         void SetTexture(const std::string& name, UUID textureHandle);
+
         // 动态 FBO 纹理绑定 (给 LightingPass / PostProcessPass 专用)
-        void SetRuntimeTexture(const std::string& name, uint32_t rendererID); 
+        // 【核心修改】：动态纹理绑定 (给特定运行时效果注入贴图)
+        void SetRuntimeTexture(const std::string& name, const std::shared_ptr<Texture2D>& texture);
 
     private:
-        // 内部泛型辅助函数
-        template<typename AssignFunc>
-        void SetPropertyInternal(const std::string& name, MaterialPropertyType type, AssignFunc assignFunc);
+        template<typename T>
+        void SetPropertyInternal(const std::string& name, MaterialPropertyType type, T setter) {
+            for (auto& prop : Properties) {
+                if (prop.UniformName == name) {
+                    setter(prop);
+                    return;
+                }
+            }
+            MaterialProperty newProp;
+            newProp.UniformName = name;
+            newProp.DisplayName = name;
+            newProp.Type = type;
+            setter(newProp);
+            Properties.push_back(newProp);
+        }
     };
 
 }

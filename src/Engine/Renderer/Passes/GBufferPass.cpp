@@ -118,7 +118,13 @@ namespace Ayaya {
             if (currentMaterial != drawCmd.MaterialAsset) {
                 currentMaterial = drawCmd.MaterialAsset;
                 if (currentMaterial) {
-                    currentMaterial->Bind(cmd, currentPipeline, whiteTexture ? whiteTexture->GetRendererID() : 0);
+                    // ==========================================
+                    // 【核心适配 1】：传入白模贴图对象而非 ID！
+                    // ⚠️ 注意：这要求你的 `Material::Bind` 函数签名也必须修改为接收 std::shared_ptr<Texture2D>
+                    // 并在其内部调用 `cmd.BindTexture2D(..., textureObject)`
+                    // 如果你的 Material 类还没改，这里请暂时恢复为 `whiteTexture ? whiteTexture->GetRendererID() : 0`
+                    // ==========================================
+                    currentMaterial->Bind(cmd, currentPipeline, whiteTexture);
                 }
             }
             
@@ -133,6 +139,7 @@ namespace Ayaya {
             uint32_t tris = drawCmd.MeshAsset->GetIndexCount() / 3;
 
             if (context.RecordAndCheckDrawCall("G-Buffer Pass", tag, "GBuffer Shader", tris)) {
+                // 完美保留你基于 VertexArray 的绘制调用
                 cmd.DrawIndexed(drawCmd.MeshAsset->GetVertexArray(), drawCmd.MeshAsset->GetIndexCount());
             }
         }
@@ -142,11 +149,18 @@ namespace Ayaya {
         // ==========================================
         // 4. 将 5 张 G-Buffer 产物贴在黑板上
         // ==========================================
+        // 保留你原本提取 ID 的代码，防止 EditorLayer 中的调试面板读取失败黑屏
         context.Set("GBuffer_Position", m_GeometryFBO->GetColorAttachmentRendererID(0));
         context.Set("GBuffer_Normal", m_GeometryFBO->GetColorAttachmentRendererID(1));
         context.Set("GBuffer_Albedo", m_GeometryFBO->GetColorAttachmentRendererID(2));
         context.Set("GBuffer_PBR", m_GeometryFBO->GetColorAttachmentRendererID(3));
         context.Set("GBuffer_CustomData", m_GeometryFBO->GetColorAttachmentRendererID(4)); 
+        
+        // ==========================================
+        // 【核心适配 2】：为 Vulkan 照明阶段补充完整的 FBO 实体对象！
+        // ==========================================
+        context.Set("GBuffer_FBO", m_GeometryFBO); 
+        context.Framebuffers["GBuffer"] = m_GeometryFBO;
         context.Framebuffers["Geometry"] = m_GeometryFBO;
     }
 }

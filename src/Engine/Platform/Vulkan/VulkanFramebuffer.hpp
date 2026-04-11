@@ -26,6 +26,15 @@ namespace Ayaya {
         inline VkRenderPass GetVulkanRenderPass() const { return m_RenderPass; }
         inline VkFramebuffer GetVulkanFramebuffer() const { return m_Framebuffer; }
 
+        // 【新增】：专供 Vulkan 描述符集装货使用的底层句柄
+        inline VkImageView GetColorImageView(uint32_t index) const {
+            AYAYA_CORE_ASSERT(index < m_ColorImageViews.size(), "Index out of bounds!");
+            return m_ColorImageViews[index];
+        }
+        inline VkImageView GetDepthImageView() const { return m_DepthImageView; }
+
+        inline VkSampler GetColorSampler() const { return m_ColorSampler; }
+
     private:
         FramebufferSpecification m_Specification;
         std::vector<FramebufferTextureSpecification> m_ColorAttachmentSpecs;

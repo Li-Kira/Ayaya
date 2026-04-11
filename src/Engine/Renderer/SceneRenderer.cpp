@@ -1,4 +1,5 @@
 #include "ayapch.h"
+#include <any>
 
 // 1. 核心系统
 #include "Engine/Scene/Scene.hpp"
@@ -25,6 +26,7 @@
 #include "Renderer/Passes/BloomPass.hpp"
 #include "Renderer/Passes/FXAAPass.hpp"
 #include "Renderer/Passes/VulkanClearPass.hpp"
+#include "Renderer/Passes/VulkanPostProcessPass.hpp"
 
 // 3. 第三方库
 #include <glad/glad.h>
@@ -156,6 +158,7 @@ namespace Ayaya {
             AYAYA_CORE_WARN("Vulkan Pipeline is running in minimal mode!");
             // Vulkan 模式下暂不执行任何 OpenGL 的 VAO 或 Query 创建
             m_Pipeline.AddPass(std::make_shared<VulkanClearPass>());
+            m_Pipeline.AddPass(std::make_shared<VulkanPostProcessPass>());
             m_Pipeline.Init();
         }
     }
@@ -348,24 +351,57 @@ namespace Ayaya {
         m_Data->Stats.CPUTime = std::chrono::duration<float, std::milli>(cpuEndTime - cpuStartTime).count();
     }
 
-    void* SceneRenderer::GetPostProcessFBORendererID() {
-        bool enableFXAA = m_RenderContext.Get<bool>("EnableFXAA", false);
-        
-        if (enableFXAA && m_RenderContext.Framebuffers.count("FXAA")) {
-            return m_RenderContext.Framebuffers["FXAA"]->GetRendererID();
+    void* SceneRenderer::GetFinalColorAttachmentRendererID() {
+        // 避开 std::any，直接从防弹字典里取最后画好的 FBO
+        if (m_RenderContext.Framebuffers.find("PostProcess") != m_RenderContext.Framebuffers.end()) {
+            auto fbo = m_RenderContext.Framebuffers["PostProcess"];
+            if (fbo) return fbo->GetColorAttachmentRendererID(0);
         }
-        if (m_RenderContext.Framebuffers.count("PostProcess")) {
-            return m_RenderContext.Framebuffers["PostProcess"]->GetRendererID();
-        }
-        return nullptr; 
+        return nullptr;
     }
 
-    void* SceneRenderer::GetFinalColorAttachmentRendererID() {
-        return m_RenderContext.Get<void*>("Final_Output", nullptr);
+    void* SceneRenderer::GetPostProcessFBORendererID() {
+        // 避开 std::any，直接从防弹字典里取
+        if (m_RenderContext.Framebuffers.find("PostProcess") != m_RenderContext.Framebuffers.end()) {
+            auto fbo = m_RenderContext.Framebuffers["PostProcess"];
+            if (fbo) return fbo->GetColorAttachmentRendererID(0);
+        }
+        return nullptr;
     }
 
     void* SceneRenderer::GetBlackboardTextureID(std::string_view key) {
-        return m_RenderContext.Get<void*>(key, nullptr);
+        std::string keyStr(key);
+        
+        // 1. 最安全路径：直接从强类型的 FBO 字典拿 (避开 std::any)
+        if (m_RenderContext.Framebuffers.find(keyStr) != m_RenderContext.Framebuffers.end()) {
+            auto fbo = m_RenderContext.Framebuffers[keyStr];
+            if (fbo) return fbo->GetColorAttachmentRendererID(0);
+        }
+
+        // 2. 兼容路径：既然 Data 是私有的，我们用 try-catch 安全探测类型！
+        // 只要类型不对，std::any 就会抛出异常，我们接住它然后试下一个，绝对不会闪退！
+        
+        try {
+            // 尝试 A: 存的是明确的 Framebuffer 智能指针
+            auto fbo = m_RenderContext.Get<std::shared_ptr<Framebuffer>>(keyStr, nullptr);
+            if (fbo) return fbo->GetColorAttachmentRendererID(0);
+        } catch (const std::bad_any_cast&) {} // 抓到异常就默默忽略，试下一个
+
+        try {
+            // 尝试 B: 存的就是原生指针 (如 GBuffer_Position)
+            return m_RenderContext.Get<void*>(keyStr, nullptr);
+        } catch (const std::bad_any_cast&) {}
+        
+        try {
+            // 尝试 C: 存的是被擦除类型的 void 智能指针 (历史遗留)
+            auto ptr = m_RenderContext.Get<std::shared_ptr<void>>(keyStr, nullptr);
+            if (ptr) {
+                auto fbo = std::static_pointer_cast<Framebuffer>(ptr);
+                if (fbo) return fbo->GetColorAttachmentRendererID(0);
+            }
+        } catch (const std::bad_any_cast&) {}
+
+        return nullptr; // 没找到或者类型全都不匹配，安全返回空
     }
 
     void SceneRenderer::ResetStats() {

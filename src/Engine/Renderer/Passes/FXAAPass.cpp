@@ -33,6 +33,9 @@ namespace Ayaya {
         pipelineSpec.DepthWrite = false; // 不需要写入深度
         pipelineSpec.Blend = false;      // 直接覆盖像素即可
 
+        // 【核心修复】：彻底关闭背面剔除，防止全屏三角形被吃掉！
+        // pipelineSpec.BackfaceCulling = CullMode::None;
+
         m_Pipeline = Pipeline::Create(pipelineSpec);
     }
 
@@ -41,16 +44,26 @@ namespace Ayaya {
     }
 
     void FXAAPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
-        // 1. 从黑板获取上一阶段 (PostProcess) 的输出纹理ID
-        void* rawInputTex = context.Get<void*>("PostProcess_Output", nullptr);
-        uint32_t inputTextureID = (uint32_t)(intptr_t)rawInputTex;
+        // ==========================================
+        // 1. 获取输入：直接获取 PostProcess 传过来的 Framebuffer 对象！
+        // ==========================================
+        std::shared_ptr<Framebuffer> inputFBO;
+        
+        // 尝试从字典里或者黑板上拿到上一阶段的 FBO
+        if (context.Framebuffers.find("PostProcess") != context.Framebuffers.end()) {
+            inputFBO = context.Framebuffers["PostProcess"];
+        } else {
+            inputFBO = context.Get<std::shared_ptr<Framebuffer>>("PostProcess_Output", nullptr);
+        }
         
         // 2. 检查 FXAA 是否在 UI 中被开启
         bool isFXAAActive = context.Get<bool>("EnableFXAA", true);
 
-        // 如果没有输入图，或者 FXAA 被关闭，直接把输入图作为最终结果传出去！
-        if (inputTextureID == 0 || !isFXAAActive) {
-            context.Set("Final_Output", rawInputTex);
+        // 如果没有输入图，或者 FXAA 被关闭，直接把输入的对象当作最终结果传出去！
+        if (!inputFBO || !isFXAAActive) {
+            if (inputFBO) {
+                context.Set("Final_Output", std::dynamic_pointer_cast<void>(inputFBO));
+            }
             return;
         }
 
@@ -60,7 +73,10 @@ namespace Ayaya {
         cmd.BindPipeline(m_Pipeline);
         context.Stats.ShaderBinds++;
         
-        cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, inputTextureID);
+        // ==========================================
+        // 【核心重构】：绑定贴图，直接传入 FBO 对象！
+        // ==========================================
+        cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, inputFBO, 0);
         
         glm::vec2 texelSz = glm::vec2(
             1.0f / (float)m_FXAAFBO->GetSpecification().Width,
@@ -70,13 +86,14 @@ namespace Ayaya {
 
         // 执行绘制
         if (context.RecordAndCheckDrawCall("FXAA Pass", "Anti-Aliasing", "FXAA Shader", 1)) {
-            cmd.DrawArrays(m_EmptyVAO, 3);
+            cmd.DrawArrays(3);
         }
         
         cmd.EndRenderPass();
 
-        // 4. 将抗锯齿后的结果，写回黑板，供 EditorLayer 视口读取！
-        context.Set("Final_Output", m_FXAAFBO->GetColorAttachmentRendererID(0));
+        // 4. 将抗锯齿后的 FBO 对象，写回黑板，供 EditorLayer 视口读取！
+        context.Set("Final_Output", std::dynamic_pointer_cast<void>(m_FXAAFBO));
+        context.Framebuffers["FXAA"] = m_FXAAFBO;
     }
 
 }

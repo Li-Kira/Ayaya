@@ -33,10 +33,10 @@ namespace Ayaya {
         // --- 现代 API 核心语义 ---
         virtual void BeginRenderPass(const std::shared_ptr<Framebuffer>& targetFBO, bool clear = true, const glm::vec4& clearColor = glm::vec4(0.0f)) override;
         virtual void EndRenderPass() override;
-        virtual void BindPipeline(const std::shared_ptr<Pipeline>& pipeline) override {}
+        virtual void BindPipeline(const std::shared_ptr<Pipeline>& pipeline) override;
 
         // --- 推送常量 ---
-        virtual void PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, float data) override {}
+        virtual void PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, float data) override;
         virtual void PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, int data) override {}
         virtual void PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, const glm::vec2& data) override {}
         virtual void PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, const glm::vec3& data) override {}
@@ -45,15 +45,17 @@ namespace Ayaya {
         virtual void PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, const glm::mat4& data) override {}
 
         // --- 运行时描述符绑定 ---
-        virtual void BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, uint32_t rendererID) override {}
-        virtual void BindTextureCube(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, uint32_t rendererID) override {}
+        virtual void BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<Texture2D>& texture) override;
+        virtual void BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<Framebuffer>& framebuffer, uint32_t attachmentIndex = 0, bool isDepth = false) override;
+        // 【核心修改】：同步签名，目前保持为空实现 {} 即可，等之后实现 Vulkan IBL 时再去 cpp 里写逻辑
+        virtual void BindTextureCube(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<TextureCube>& textureCube) override {}
 
         // --- 绘制指令 ---
-        virtual void DrawArrays(uint32_t vertexCount) override {}
+        virtual void DrawArrays(uint32_t vertexCount) override;
         virtual void DrawIndexed(uint32_t indexCount) override {}
         virtual void DrawIndexed(const std::shared_ptr<VertexArray>& vertexArray, uint32_t indexCount = 0) override {}
-        virtual void DrawArrays(const std::shared_ptr<VertexArray>& vertexArray, uint32_t vertexCount) override {}
-        virtual void DrawTriangleStrip(const std::shared_ptr<VertexArray>& vertexArray, uint32_t vertexCount) override {}
+        virtual void DrawArrays(const std::shared_ptr<VertexArray>& vertexArray, uint32_t vertexCount) override;
+        virtual void DrawTriangleStrip(const std::shared_ptr<VertexArray>& vertexArray, uint32_t vertexCount) override  {}
 
         virtual void DrawIndexed(const std::shared_ptr<Mesh>& mesh, uint32_t indexCount = 0) override {}
         virtual void DrawArrays(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount = 0) override {}

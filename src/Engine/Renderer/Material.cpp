@@ -8,7 +8,7 @@
 
 namespace Ayaya {
 
-    void Material::Bind(RenderCommandBuffer& cmd, const std::shared_ptr<Pipeline>& pipeline, uint32_t fallbackWhiteTextureID) {
+    void Material::Bind(RenderCommandBuffer& cmd, const std::shared_ptr<Pipeline>& pipeline, const std::shared_ptr<Texture2D>& fallbackWhiteTexture) {
         if (!pipeline) return;
         auto shader = pipeline->GetSpecification().Shader;
         if (!shader) return;
@@ -28,20 +28,20 @@ namespace Ayaya {
                 case MaterialPropertyType::Mat4:  shader->SetMat4(prop.UniformName, prop.Mat4Value); break;
                 
                 case MaterialPropertyType::Texture2D: {
-                    uint32_t finalTexID = fallbackWhiteTextureID;
+                    std::shared_ptr<Texture2D> finalTex = fallbackWhiteTexture;
                     
-                    // 1. 优先使用运行时临时分配的贴图 (例如 G-Buffer)
-                    if (prop.RuntimeTextureID != 0) {
-                        finalTexID = prop.RuntimeTextureID;
+                    // 1. 优先使用运行时临时分配的贴图 (例如 G-Buffer 注入)
+                    if (prop.RuntimeTexture) {
+                        finalTex = prop.RuntimeTexture;
                     } 
                     // 2. 否则通过资产系统读取硬盘里的贴图
                     else if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
                         auto tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
-                        if (tex) finalTexID = tex->GetRendererID();
+                        if (tex) finalTex = tex;
                     }
                     
-                    // 利用 CommandBuffer 的运行时描述符模拟接口绑定
-                    cmd.BindTexture2D(pipeline, prop.UniformName, textureSlot, finalTexID);
+                    // 利用 CommandBuffer 的运行时描述符接口绑定 (直接传递智能指针)
+                    cmd.BindTexture2D(pipeline, prop.UniformName, textureSlot, finalTex);
                     textureSlot++;
                     break;
                 }
@@ -53,25 +53,6 @@ namespace Ayaya {
     // 便捷的数据写入接口 (充当 Descriptor Set 的参数填充)
     // ==========================================
     
-    template<typename AssignFunc>
-    void Material::SetPropertyInternal(const std::string& name, MaterialPropertyType type, AssignFunc assignFunc) {
-        // 1. 如果属性已经存在，直接更新它的值
-        for (auto& prop : Properties) {
-            if (prop.UniformName == name) {
-                assignFunc(prop);
-                return;
-            }
-        }
-        
-        // 2. 如果不存在，自动创建并压入列表
-        MaterialProperty newProp;
-        newProp.UniformName = name;
-        newProp.DisplayName = name; 
-        newProp.Type = type;
-        assignFunc(newProp);
-        Properties.push_back(newProp);
-    }
-
     void Material::SetFloat(const std::string& name, float value) {
         SetPropertyInternal(name, MaterialPropertyType::Float, [&](MaterialProperty& p) { p.FloatValue = value; });
     }
@@ -107,13 +88,13 @@ namespace Ayaya {
     void Material::SetTexture(const std::string& name, UUID textureHandle) {
         SetPropertyInternal(name, MaterialPropertyType::Texture2D, [&](MaterialProperty& p) { 
             p.TextureHandle = textureHandle; 
-            p.RuntimeTextureID = 0; // 清除可能残留的运行时 ID
+            p.RuntimeTexture = nullptr; // 清除可能残留的运行时对象
         });
     }
 
-    void Material::SetRuntimeTexture(const std::string& name, uint32_t rendererID) {
+    void Material::SetRuntimeTexture(const std::string& name, const std::shared_ptr<Texture2D>& texture) {
         SetPropertyInternal(name, MaterialPropertyType::Texture2D, [&](MaterialProperty& p) { 
-            p.RuntimeTextureID = rendererID; 
+            p.RuntimeTexture = texture; 
             p.TextureHandle = 0; // 清除可能残留的资产 ID
         });
     }

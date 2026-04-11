@@ -1,6 +1,7 @@
 #include "ayapch.h"
 #include "OpenGLCommandBuffer.hpp"
 #include "Renderer/Mesh.hpp"
+#include "Renderer/TextureCube.hpp"
 #include <glad/glad.h>
 
 namespace Ayaya {
@@ -76,15 +77,51 @@ namespace Ayaya {
 
     void OpenGLCommandBuffer::BindPipeline(const std::shared_ptr<Pipeline>& pipeline) { if (pipeline) pipeline->Bind(); }
 
-    void OpenGLCommandBuffer::BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, uint32_t rendererID) {
+   // ==========================================
+    // 现代 API 适配：从 Texture2D 对象提取 ID 绑定
+    // ==========================================
+    void OpenGLCommandBuffer::BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<Texture2D>& texture) {
+        if (!texture) return;
+        
+        uint32_t rendererID = texture->GetRendererID();
         glActiveTexture(GL_TEXTURE0 + slot);
         glBindTexture(GL_TEXTURE_2D, rendererID);
-        if (pipeline) pipeline->GetSpecification().Shader->SetInt(name, slot);
+
+        // 【核心修复】：制导系统，确保贴图和 Shader 槽位精确对应！
+        if (pipeline && pipeline->GetSpecification().Shader) {
+            pipeline->GetSpecification().Shader->SetInt(name, slot);
+        }
     }
 
-    void OpenGLCommandBuffer::BindTextureCube(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, uint32_t rendererID) {
+    // ==========================================
+    // 现代 API 适配：从 Framebuffer 的指定附件提取 ID 绑定
+    // ==========================================
+    void OpenGLCommandBuffer::BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<Framebuffer>& framebuffer, uint32_t attachmentIndex, bool isDepth) {
+        if (!framebuffer) return;
+        
+        uint32_t rendererID = 0;
+        if (isDepth) {
+            rendererID = (uint32_t)(uintptr_t)framebuffer->GetDepthAttachmentRendererID();
+        } else {
+            rendererID = (uint32_t)(uintptr_t)framebuffer->GetColorAttachmentRendererID(attachmentIndex);
+        }
+        
         glActiveTexture(GL_TEXTURE0 + slot);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, rendererID);
+        glBindTexture(GL_TEXTURE_2D, rendererID);
+
+        // 【核心修复】：制导系统，确保贴图和 Shader 槽位精确对应！
+        if (pipeline && pipeline->GetSpecification().Shader) {
+            pipeline->GetSpecification().Shader->SetInt(name, slot);
+        }
+    }
+
+    void OpenGLCommandBuffer::BindTextureCube(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<TextureCube>& textureCube) {
+        if (!textureCube) return;
+
+        glActiveTexture(GL_TEXTURE0 + slot);
+        // 【核心提取】：从对象身上榨取数字 ID 喂给 OpenGL
+        glBindTexture(GL_TEXTURE_CUBE_MAP, textureCube->GetRendererID()); 
+        
         if (pipeline) pipeline->GetSpecification().Shader->SetInt(name, slot);
     }
 

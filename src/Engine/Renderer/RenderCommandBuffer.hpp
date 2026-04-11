@@ -6,9 +6,11 @@
 #include "Renderer/VertexArray.hpp"
 #include "Renderer/Pipeline.hpp"
 #include "Renderer/Framebuffer.hpp"
+#include "Renderer/Texture.hpp"
 
 namespace Ayaya {
     class Mesh;
+    class TextureCube; // 【新增】：前向声明 TextureCube
 
     class RenderCommandBuffer {
     public:
@@ -52,9 +54,16 @@ namespace Ayaya {
         virtual void PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, const glm::mat3& data) = 0;
         virtual void PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, const glm::mat4& data) = 0;
 
-        // --- 运行时描述符绑定 ---
-        virtual void BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, uint32_t rendererID) = 0;
-        virtual void BindTextureCube(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, uint32_t rendererID) = 0;
+        // ==========================================
+        // --- 运行时描述符绑定 (现代多态接口) ---
+        // ==========================================
+        // 1. 绑定独立的 2D 贴图对象
+        virtual void BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<Texture2D>& texture) = 0;
+        
+        // 2. 绑定离线画布 (Framebuffer) 上的某个附件作为贴图
+        virtual void BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<Framebuffer>& framebuffer, uint32_t attachmentIndex = 0, bool isDepth = false) = 0;
+        virtual void BindTextureCube(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<TextureCube>& textureCube) = 0;
+
 
         // --- 绘制指令 ---
         virtual void DrawArrays(uint32_t vertexCount) = 0;

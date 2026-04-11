@@ -105,13 +105,11 @@ namespace Ayaya {
     }
 
     void LightingPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
-        uint32_t gPosition   = (uint32_t)(intptr_t)context.Get<void*>("GBuffer_Position", 0);
-        uint32_t gNormal     = (uint32_t)(intptr_t)context.Get<void*>("GBuffer_Normal", 0);
-        uint32_t gAlbedo     = (uint32_t)(intptr_t)context.Get<void*>("GBuffer_Albedo", 0);
-        uint32_t gPBR        = (uint32_t)(intptr_t)context.Get<void*>("GBuffer_PBR", 0);
-        uint32_t gCustomData = (uint32_t)(intptr_t)context.Get<void*>("GBuffer_CustomData", 0); 
-        
-        if (gPosition == 0) return;
+        // ==========================================
+        // 【核心改造 1】：不再强制转换 ID，而是获取 G-Buffer 的完整对象
+        // ==========================================
+        auto gbufferFBO = context.Get<std::shared_ptr<Framebuffer>>("GBuffer_FBO", nullptr);
+        if (!gbufferFBO) return;
 
         float physicalExposure = context.Get<float>("PhysicalExposure", 1.0f);
         glm::vec4 clearColor   = context.Get<glm::vec4>("ClearColor", glm::vec4(0.06f, 0.06f, 0.065f, 1.0f));
@@ -128,24 +126,32 @@ namespace Ayaya {
         cmd.BindPipeline(m_DeferredPipeline);
         context.Stats.ShaderBinds++;
 
-        // 【终极优化】：像寄包裹一样把数据塞进材质，再一键提交！
-        m_DeferredMaterial->SetRuntimeTexture("g_Position", gPosition);
-        m_DeferredMaterial->SetRuntimeTexture("g_Normal",   gNormal);
-        m_DeferredMaterial->SetRuntimeTexture("g_Albedo",   gAlbedo);
-        m_DeferredMaterial->SetRuntimeTexture("g_PBR",      gPBR);
-        m_DeferredMaterial->SetRuntimeTexture("g_CustomData", gCustomData);
+        // ==========================================
+        // 【核心改造 2】：使用现代对象 API 批量绑定 G-Buffer 附件
+        // 取代旧的 m_DeferredMaterial->SetRuntimeTexture(ID)
+        // 0:Pos, 1:Norm, 2:Albedo, 3:PBR, 4:CustomData
+        // ==========================================
+        cmd.BindTexture2D(m_DeferredPipeline, "g_Position",   0, gbufferFBO, 0);
+        cmd.BindTexture2D(m_DeferredPipeline, "g_Normal",     1, gbufferFBO, 1);
+        cmd.BindTexture2D(m_DeferredPipeline, "g_Albedo",     2, gbufferFBO, 2);
+        cmd.BindTexture2D(m_DeferredPipeline, "g_PBR",        3, gbufferFBO, 3);
+        cmd.BindTexture2D(m_DeferredPipeline, "g_CustomData", 4, gbufferFBO, 4);
 
-        if (context.Get<bool>("HasDirLight", false)) {
-            m_DeferredMaterial->SetRuntimeTexture("u_ShadowMap", (uint32_t)(intptr_t)context.Get<void*>("ShadowMap_Output", 0));
-            // 矩阵属于高频小数据，依旧使用推送常量
+       if (context.Get<bool>("HasDirLight", false)) {
+            auto shadowFBO = context.Get<std::shared_ptr<Framebuffer>>("ShadowMap_Output", nullptr);
+            if (shadowFBO) {
+                // 【核心修复】：末尾加上 true，代表这是一个深度附件绑定！
+                cmd.BindTexture2D(m_DeferredPipeline, "u_ShadowMap", 5, shadowFBO, 0, true);
+            }
             cmd.PushConstant(m_DeferredPipeline, "u_LightSpaceMatrix", context.Get<glm::mat4>("LightSpaceMatrix"));
         }
 
         auto irrMap = context.Get<std::shared_ptr<TextureCube>>("IrradianceMap", nullptr);
         auto preMap = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap", nullptr);
         if (irrMap && preMap) {
-            cmd.BindTextureCube(m_DeferredPipeline, "u_IrradianceMap",  8, irrMap->GetRendererID());
-            cmd.BindTextureCube(m_DeferredPipeline, "u_PrefilteredMap", 9, preMap->GetRendererID());
+            // 【核心改造 3】：直接传入 TextureCube 对象
+            cmd.BindTextureCube(m_DeferredPipeline, "u_IrradianceMap",  8, irrMap);
+            cmd.BindTextureCube(m_DeferredPipeline, "u_PrefilteredMap", 9, preMap);
             
             cmd.PushConstant(m_DeferredPipeline, "u_EnvMapEnabled", 1); 
             cmd.PushConstant(m_DeferredPipeline, "u_Intensity", context.Get<float>("EnvironmentIntensity", 1.0f));
@@ -157,12 +163,8 @@ namespace Ayaya {
 
         auto brdfLUT = context.GetTexture("BRDFLUT");
         if (brdfLUT) {
-            m_DeferredMaterial->SetRuntimeTexture("u_BRDFLUT", brdfLUT->GetRendererID()); 
+            cmd.BindTexture2D(m_DeferredPipeline, "u_BRDFLUT", 10, brdfLUT); 
         }
-
-        // 一键绑定材质 (自动分配上面设置的 Texture 槽位并通知 Shader)
-        auto whiteTex = context.GetTexture("WhiteTexture");
-        m_DeferredMaterial->Bind(cmd, m_DeferredPipeline, whiteTex ? whiteTex->GetRendererID() : 0);
 
         if (context.RecordAndCheckDrawCall("Lighting Pass", "Deferred Combine", "DeferredLighting Shader", 2)) {
             cmd.DrawArrays(m_EmptyVAO, 3);
@@ -171,6 +173,7 @@ namespace Ayaya {
 
         // ==========================================
         // 2. 深度拷贝 (Blit Depth)
+        // 注意：BlitDepth 暂属 OpenGL 独占功能，故保留原 ID 提取方式
         // ==========================================
         auto geoFBO = context.Framebuffers["Geometry"];
         if (geoFBO) {
@@ -200,21 +203,15 @@ namespace Ayaya {
                     skyProjection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10.0f);
                 }
                 
-                // 天空盒
                 cmd.PushConstant(m_SkyboxPipeline, "u_View", viewNoTranslation);
                 cmd.PushConstant(m_SkyboxPipeline, "u_Projection", skyProjection);
                 cmd.PushConstant(m_SkyboxPipeline, "u_Intensity", context.Get<float>("EnvironmentIntensity", 1.0f));
                 
-                // 天空盒贴图绑定
-                cmd.BindTextureCube(m_SkyboxPipeline, "u_Skybox", 0, envMap->GetRendererID()); 
+                // 【核心改造 4】：天空盒贴图绑定直接传入对象
+                cmd.BindTextureCube(m_SkyboxPipeline, "u_Skybox", 0, envMap); 
                 
                 if (context.RecordAndCheckDrawCall("Lighting Pass", "Skybox", "Skybox Shader", skyMesh->GetIndexCount() / 3)) {
                     cmd.PushConstant(m_SkyboxPipeline, "u_Transform", glm::mat4(1.0f));
-                    cmd.DrawIndexed(skyMesh->GetVertexArray(), skyMesh->GetIndexCount());
-                }
-
-                if (context.RecordAndCheckDrawCall("Lighting Pass", "Skybox", "Skybox Shader", skyMesh->GetIndexCount() / 3)) {
-                    m_SkyboxShader->SetMat4("u_Transform", glm::mat4(1.0f));
                     cmd.DrawIndexed(skyMesh->GetVertexArray(), skyMesh->GetIndexCount());
                 }
             }
@@ -264,12 +261,12 @@ namespace Ayaya {
 
                 if (drawCmd.SpriteComp.TextureHandle != 0 && AssetManager::IsAssetHandleValid(drawCmd.SpriteComp.TextureHandle)) {
                     auto tex = AssetManager::GetAsset<Texture2D>(drawCmd.SpriteComp.TextureHandle);
-                    cmd.BindTexture2D(m_SpritePipeline, "u_Texture", 0, tex->GetRendererID());
+                    // 【核心改造 5】：Sprite 贴图传入对象而非 GetRendererID
+                    cmd.BindTexture2D(m_SpritePipeline, "u_Texture", 0, tex);
                     cmd.PushConstant(m_SpritePipeline, "u_UseTexture", 1);
                 } else {
                     auto whiteTex = context.GetTexture("WhiteTexture");
-                    uint32_t texID = whiteTex ? whiteTex->GetRendererID() : 0;
-                    cmd.BindTexture2D(m_SpritePipeline, "u_Texture", 0, texID);
+                    cmd.BindTexture2D(m_SpritePipeline, "u_Texture", 0, whiteTex);
                     cmd.PushConstant(m_SpritePipeline, "u_UseTexture", 0);
                 }
 
@@ -297,7 +294,6 @@ namespace Ayaya {
                 cmd.BindPipeline(m_SelectionMeshPipeline);
                 context.Stats.ShaderBinds++;
 
-                // 【终极替换】：全改为 PushConstant
                 cmd.PushConstant(m_SelectionMeshPipeline, "u_Color", glm::vec3(1.0f, 1.0f, 1.0f)); 
                 auto& meshComp = hoveredEntity.GetComponent<MeshRendererComponent>();
                 if (meshComp.ModelAsset) {
@@ -312,18 +308,18 @@ namespace Ayaya {
                 context.Stats.ShaderBinds++;
 
                 auto& spriteComp = hoveredEntity.GetComponent<SpriteRendererComponent>();
-                // 【终极替换】：全改为 PushConstant
                 cmd.PushConstant(m_SelectionSpritePipeline, "u_Transform", transform);
                 cmd.PushConstant(m_SelectionSpritePipeline, "u_Color", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
                 cmd.PushConstant(m_SelectionSpritePipeline, "u_ExposureInverse", 1.0f);
 
                 if (spriteComp.TextureHandle != 0 && AssetManager::IsAssetHandleValid(spriteComp.TextureHandle)) {
                     auto tex = AssetManager::GetAsset<Texture2D>(spriteComp.TextureHandle);
-                    cmd.BindTexture2D(m_SelectionSpritePipeline, "u_Texture", 0, tex->GetRendererID());
+                    // 【核心改造 6】：轮廓绘制时使用贴图对象
+                    cmd.BindTexture2D(m_SelectionSpritePipeline, "u_Texture", 0, tex);
                     cmd.PushConstant(m_SelectionSpritePipeline, "u_UseTexture", 1);
                 } else {
                     auto whiteTex = context.GetTexture("WhiteTexture");
-                    cmd.BindTexture2D(m_SelectionSpritePipeline, "u_Texture", 0, whiteTex ? whiteTex->GetRendererID() : 0);
+                    cmd.BindTexture2D(m_SelectionSpritePipeline, "u_Texture", 0, whiteTex);
                     cmd.PushConstant(m_SelectionSpritePipeline, "u_UseTexture", 0);
                 }
 
@@ -337,9 +333,11 @@ namespace Ayaya {
         // ==========================================
         // 5. 产出数据交接
         // ==========================================
-        context.Set("Lighting_Output", m_LightingFBO->GetColorAttachmentRendererID(0));
-        context.Set("Selection_Output", m_SelectionFBO->GetColorAttachmentRendererID(0));
+        // 【核心改造 7】：不再强转 ID 抛出，抛出 FBO 智能指针对象，供后处理拾取！
+        context.Set("Lighting_Output", m_LightingFBO);
         context.Framebuffers["Lighting"] = m_LightingFBO;
+
+        context.Set("Selection_Output", m_SelectionFBO);
         context.Framebuffers["Selection"] = m_SelectionFBO;
     }
 }

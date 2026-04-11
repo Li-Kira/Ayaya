@@ -28,6 +28,7 @@ namespace Ayaya {
         downSpec.DepthTest = false;
         downSpec.DepthWrite = false;
         downSpec.Blend = false; // 降采样直接覆盖
+        downSpec.BackfaceCulling = CullMode::None; // 【核心】：全屏三角形必须关闭剔除！
         m_DownsamplePipeline = Pipeline::Create(downSpec);
 
         // ==========================================
@@ -40,6 +41,7 @@ namespace Ayaya {
         upSpec.DepthWrite = false;
         upSpec.Blend = true;
         upSpec.BlendMode = BlendMode::Additive; // 升采样使用 Additive (叠加) 混合发光
+        upSpec.BackfaceCulling = CullMode::None; // 【核心】：全屏三角形必须关闭剔除！
         m_UpsamplePipeline = Pipeline::Create(upSpec);
     }
 
@@ -73,10 +75,14 @@ namespace Ayaya {
 
     void BloomPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
         // ==========================================
-        // 1. 获取输入：严格使用 void* 取出并强转，防止崩溃！
+        // 1. 获取输入：全面采用对象指针提取 Framebuffer
         // ==========================================
-        void* rawInputTex = context.Get<void*>("Lighting_Output", nullptr);
-        uint32_t inputTextureID = (uint32_t)(intptr_t)rawInputTex;
+        std::shared_ptr<Framebuffer> inputFBO;
+        if (context.Framebuffers.find("Lighting") != context.Framebuffers.end()) {
+            inputFBO = context.Framebuffers["Lighting"];
+        } else {
+            inputFBO = context.Get<std::shared_ptr<Framebuffer>>("Lighting_Output", nullptr);
+        }
 
         // 获取 Bloom 相关的参数，注意用正确的内置类型
         bool isBloomActive = context.Get<bool>("EnableBloom", true);
@@ -85,8 +91,12 @@ namespace Ayaya {
         float bloomKnee = context.Get<float>("BloomKnee", 0.1f);           // 软过渡范围
 
         // 如果没有输入，或者关掉了 Bloom，直接交接棒给下一关
-        if (inputTextureID == 0 || !isBloomActive) {
-            context.Set("Bloom_Output", rawInputTex);
+        if (!inputFBO || !isBloomActive) {
+            if (inputFBO) {
+                context.Set("Bloom_Output", std::dynamic_pointer_cast<void>(inputFBO));
+            } else {
+                context.Set("Bloom_Output", std::shared_ptr<void>(nullptr));
+            }
             return;
         }
 
@@ -100,7 +110,7 @@ namespace Ayaya {
         cmd.PushConstant(m_DownsamplePipeline, "u_Threshold", bloomThreshold);
         cmd.PushConstant(m_DownsamplePipeline, "u_Curve", curve);
 
-        uint32_t currentInputTexture = inputTextureID;
+        std::shared_ptr<Framebuffer> currentInputFBO = inputFBO;
 
         for (size_t i = 0; i < m_MipChain.size(); i++) {
             auto& mip = m_MipChain[i];
@@ -108,7 +118,8 @@ namespace Ayaya {
             // 开始 Pass (不清屏，直接全屏覆盖)
             cmd.BeginRenderPass(mip.FBO, false, glm::vec4(0.0f)); 
 
-            cmd.BindTexture2D(m_DownsamplePipeline, "u_Image", 0, currentInputTexture);
+            // 【现代绑定接口】：直接传 Framebuffer 对象！
+            cmd.BindTexture2D(m_DownsamplePipeline, "u_Image", 0, currentInputFBO, 0);
             
             // 【数学修正】：完美使用当前 Mip 级别的倒数作为 TexelSize
             glm::vec2 texelSize = 1.0f / mip.Size; 
@@ -117,14 +128,13 @@ namespace Ayaya {
             cmd.PushConstant(m_DownsamplePipeline, "u_MipLevel", (int)i);
 
             if (context.RecordAndCheckDrawCall("Bloom Pass", "Downsample Mip " + std::to_string(i), "Bloom Shader", 1)) {
-                cmd.DrawArrays(m_EmptyVAO, 3);
+                cmd.DrawArrays(3); // 【修改】：抛弃 m_EmptyVAO
             }
 
             cmd.EndRenderPass();
 
-            // 把这级画好的 FBO，作为下一级降采样的输入
-            // 加上强转：先把指针转为中立的 intptr_t，再转为 uint32_t 数字
-            currentInputTexture = (uint32_t)(intptr_t)mip.FBO->GetColorAttachmentRendererID(0);
+            // 把这级画好的 FBO 对象，作为下一级降采样的输入
+            currentInputFBO = mip.FBO;
         }
 
         // ==========================================
@@ -142,22 +152,21 @@ namespace Ayaya {
 
             cmd.BeginRenderPass(currentMip.FBO, false, glm::vec4(0.0f));
 
-            // 把上一级更模糊的 Mip 拿来放大
-            uint32_t prevTexture = (uint32_t)(intptr_t)prevMip.FBO->GetColorAttachmentRendererID(0);
-            cmd.BindTexture2D(m_UpsamplePipeline, "u_Image", 0, prevTexture);
+            // 【现代绑定接口】：把上一级更模糊的 Mip 对象拿来放大
+            cmd.BindTexture2D(m_UpsamplePipeline, "u_Image", 0, prevMip.FBO, 0);
 
             if (context.RecordAndCheckDrawCall("Bloom Pass", "Upsample Mip " + std::to_string(i), "Bloom Shader", 1)) {
-                cmd.DrawArrays(m_EmptyVAO, 3);
+                cmd.DrawArrays(3); // 【修改】：抛弃 m_EmptyVAO
             }
 
             cmd.EndRenderPass();
         }
 
         // ==========================================
-        // 3. 输出交接：将最高清的那张模糊图转为 void* 贴在黑板上
+        // 3. 输出交接：将最高清的那张模糊图 FBO 对象贴在黑板上
         // ==========================================
-        uint32_t finalBloomTexture = (uint32_t)(intptr_t)m_MipChain[0].FBO->GetColorAttachmentRendererID(0);
-        context.Set("Bloom_Output", (void*)(intptr_t)finalBloomTexture);
+        context.Set("Bloom_Output", std::dynamic_pointer_cast<void>(m_MipChain[0].FBO));
+        context.Framebuffers["Bloom"] = m_MipChain[0].FBO;
     }
 
 }
