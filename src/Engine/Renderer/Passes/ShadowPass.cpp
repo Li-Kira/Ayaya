@@ -10,7 +10,7 @@ namespace Ayaya {
     ShadowPass::ShadowPass() { m_PassName = "Shadow Map Pass"; }
 
     void ShadowPass::OnAttach() {
-        m_ShadowShader = Shader::Create("assets/Editor/shaders/Shadow/shadow_map.vert", "assets/Editor/shaders/Shadow/shadow_map.frag");
+        m_ShadowShader = Shader::Create("Shadow/shadow_map.vert", "Shadow/shadow_map.frag");
         
         // 1. 使用统一的 FBO 抽象
         FramebufferSpecification spec;

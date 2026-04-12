@@ -11,7 +11,7 @@ namespace Ayaya {
     void PostProcessPass::OnAttach() {
         m_EmptyVAO = VertexArray::Create();
 
-        m_PostProcessShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/postprocess.frag");
+        m_PostProcessShader = Shader::Create("PostProcess/postprocess.vert", "PostProcess/postprocess.frag");
 
         FramebufferSpecification postSpec;
         postSpec.Samples = 1; 

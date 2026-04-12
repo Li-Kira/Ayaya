@@ -73,86 +73,65 @@ namespace Ayaya {
         VkDevice device = context->GetDevice();
         VmaAllocator allocator = context->GetAllocator();
 
-        AYAYA_CORE_INFO("VulkanFramebuffer: Creating FBO {0}x{1}", m_Specification.Width, m_Specification.Height);
+        AYAYA_CORE_INFO("VulkanFramebuffer: Creating FBO {0}x{1} with {2} attachments", 
+                        m_Specification.Width, m_Specification.Height, m_ColorAttachmentSpecs.size());
 
         // ==========================================
-        // 1. 创建极其简化的 RenderPass (仅测试用)
+        // 1. 动态生成 RenderPass (支持任意数量的颜色附件)
         // ==========================================
-        VkAttachmentDescription colorAttachment{};
-        colorAttachment.format = VK_FORMAT_R8G8B8A8_UNORM; // 标准 RGBA
-        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        // 【关键】：画完之后，这张图必须变成 SHADER_READ_ONLY_OPTIMAL 布局，ImGui 才能读取它！
-        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; 
+        std::vector<VkAttachmentDescription> colorAttachments;
+        std::vector<VkAttachmentReference> colorAttachmentRefs;
 
-        VkAttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        for (size_t i = 0; i < m_ColorAttachmentSpecs.size(); i++) {
+            VkAttachmentDescription colorAttachment{};
+            colorAttachment.format = VK_FORMAT_R8G8B8A8_UNORM; // TODO: 未来可根据 Spec 真实格式转换
+            colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+            colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            // 画完之后统一转为 Shader 只读布局，供 ImGui 和后续 Pass 读取
+            colorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; 
+
+            VkAttachmentReference colorAttachmentRef{};
+            colorAttachmentRef.attachment = static_cast<uint32_t>(i);
+            colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+            colorAttachments.push_back(colorAttachment);
+            colorAttachmentRefs.push_back(colorAttachmentRef);
+        }
 
         VkSubpassDescription subpass{};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
+        subpass.colorAttachmentCount = static_cast<uint32_t>(colorAttachmentRefs.size());
+        subpass.pColorAttachments = colorAttachmentRefs.data();
 
+        // 只需要保留这一个标准的外部依赖，用于指导 Vulkan 进行 Layout Transition
+        VkSubpassDependency dependency{};
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass = 0;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dependency.srcAccessMask = 0;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        renderPassInfo.attachmentCount = 1;
-        renderPassInfo.pAttachments = &colorAttachment;
+        renderPassInfo.attachmentCount = static_cast<uint32_t>(colorAttachments.size());
+        renderPassInfo.pAttachments = colorAttachments.data();
         renderPassInfo.subpassCount = 1;
         renderPassInfo.pSubpasses = &subpass;
+
+        // 【应用依赖】
+        renderPassInfo.dependencyCount = 1;
+        renderPassInfo.pDependencies = &dependency;
 
         vkCreateRenderPass(device, &renderPassInfo, nullptr, &m_RenderPass);
 
         // ==========================================
-        // 2. 利用 VMA 申请离线画布 (VkImage)
+        // 2. 创建公用采样器
         // ==========================================
-        VkImageCreateInfo imageInfo{};
-        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.extent.width = m_Specification.Width;
-        imageInfo.extent.height = m_Specification.Height;
-        imageInfo.extent.depth = 1;
-        imageInfo.mipLevels = 1;
-        imageInfo.arrayLayers = 1;
-        imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        // 允许作为颜色附件被渲染，也允许被着色器采样 (交给 ImGui)
-        imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-
-        VmaAllocationCreateInfo allocInfo{};
-        allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE; // VMA 新特性：自动优选显存
-
-        VkImage colorImage;
-        VmaAllocation colorAllocation;
-        vmaCreateImage(allocator, &imageInfo, &allocInfo, &colorImage, &colorAllocation, nullptr);
-        
-        m_ColorImages.push_back(colorImage);
-        m_ColorMemories.push_back((VkDeviceMemory)colorAllocation);
-
-        // ==========================================
-        // 3. 创建 ImageView 和 Sampler
-        // ==========================================
-        VkImageViewCreateInfo viewInfo{};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = colorImage;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-
-        VkImageView colorImageView;
-        vkCreateImageView(device, &viewInfo, nullptr, &colorImageView);
-        m_ColorImageViews.push_back(colorImageView);
-
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -163,27 +142,68 @@ namespace Ayaya {
         vkCreateSampler(device, &samplerInfo, nullptr, &m_ColorSampler);
 
         // ==========================================
-        // 4. 创建 Framebuffer
+        // 3. 动态循环创建 显存图像、视图 和 ImGui 描述符
+        // ==========================================
+        m_ColorImages.resize(m_ColorAttachmentSpecs.size());
+        m_ColorMemories.resize(m_ColorAttachmentSpecs.size());
+        m_ColorImageViews.resize(m_ColorAttachmentSpecs.size());
+        m_ImGuiDescriptorSets.resize(m_ColorAttachmentSpecs.size());
+
+        for (size_t i = 0; i < m_ColorAttachmentSpecs.size(); i++) {
+            // A. 申请 VMA 显存
+            VkImageCreateInfo imageInfo{};
+            imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+            imageInfo.imageType = VK_IMAGE_TYPE_2D;
+            imageInfo.extent.width = m_Specification.Width;
+            imageInfo.extent.height = m_Specification.Height;
+            imageInfo.extent.depth = 1;
+            imageInfo.mipLevels = 1;
+            imageInfo.arrayLayers = 1;
+            imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+            imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+            imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+            imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+
+            VmaAllocationCreateInfo allocInfo{};
+            allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE; 
+
+            vmaCreateImage(allocator, &imageInfo, &allocInfo, &m_ColorImages[i], (VmaAllocation*)&m_ColorMemories[i], nullptr);
+
+            // B. 创建 ImageView
+            VkImageViewCreateInfo viewInfo{};
+            viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            viewInfo.image = m_ColorImages[i];
+            viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+            viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            viewInfo.subresourceRange.baseMipLevel = 0;
+            viewInfo.subresourceRange.levelCount = 1;
+            viewInfo.subresourceRange.baseArrayLayer = 0;
+            viewInfo.subresourceRange.layerCount = 1;
+
+            vkCreateImageView(device, &viewInfo, nullptr, &m_ColorImageViews[i]);
+
+            // C. 【核弹桥梁】：让每一个附件都拿到自己的 ImGui 凭证！
+            m_ImGuiDescriptorSets[i] = ImGui_ImplVulkan_AddTexture(
+                m_ColorSampler, 
+                m_ColorImageViews[i], 
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+            );
+        }
+
+        // ==========================================
+        // 4. 组装 Framebuffer
         // ==========================================
         VkFramebufferCreateInfo fboInfo{};
         fboInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         fboInfo.renderPass = m_RenderPass;
-        fboInfo.attachmentCount = 1;
-        fboInfo.pAttachments = &colorImageView;
+        fboInfo.attachmentCount = static_cast<uint32_t>(m_ColorImageViews.size());
+        fboInfo.pAttachments = m_ColorImageViews.data(); 
         fboInfo.width = m_Specification.Width;
         fboInfo.height = m_Specification.Height;
         fboInfo.layers = 1;
         vkCreateFramebuffer(device, &fboInfo, nullptr, &m_Framebuffer);
-
-        // ==========================================
-        // 5. 【核弹桥梁】：向 ImGui 注册并获取 DescriptorSet！
-        // ==========================================
-        VkDescriptorSet imguiSet = ImGui_ImplVulkan_AddTexture(
-            m_ColorSampler, 
-            colorImageView, 
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-        );
-        m_ImGuiDescriptorSets.push_back(imguiSet);
     }
 
     void VulkanFramebuffer::Bind() {

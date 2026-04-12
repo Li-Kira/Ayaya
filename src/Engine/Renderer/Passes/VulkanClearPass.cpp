@@ -26,13 +26,16 @@ namespace Ayaya {
         }
 
         // 2. 从黑板拿到 EditorLayer 传来的背景色
-        glm::vec4 clearColor = context.Get<glm::vec4>("ClearColor", glm::vec4(0.8f, 0.2f, 0.3f, 1.0f));
+       glm::vec4 clearColor = glm::vec4(0.8f, 0.0f, 0.2f, 1.0f);
 
-        // 3. 执行清屏指令！它会将画布刷成背景色，并自动转换 Layout 供 ImGui 读取
+        // 3. 执行清屏指令！
         cmd.BeginRenderPass(targetFBO, true, clearColor);
         cmd.EndRenderPass();
 
-        // 4. 将包含了 VMA 显存和 Sampler 的描述符集送上黑板，交给 ImGui！
-        context.Set("Final_Output", targetFBO->GetColorAttachmentRendererID(0));
+        // ==========================================
+        // 【核心修复】：直接交出 Framebuffer 对象！
+        // 绝不能调用 GetColorAttachmentRendererID，保持强类型安全！
+        // ==========================================
+        context.Set("Final_Output", targetFBO);
     }
 }

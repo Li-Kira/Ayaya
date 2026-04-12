@@ -13,7 +13,7 @@ namespace Ayaya {
         m_EmptyVAO = VertexArray::Create();
 
         // 加载 Shader
-        m_FXAAShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/fxaa.frag");
+        m_FXAAShader = Shader::Create("PostProcess/postprocess.vert", "PostProcess/fxaa.frag");
 
         // 创建专属的 FBO
         FramebufferSpecification spec;

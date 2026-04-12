@@ -42,14 +42,29 @@ namespace Ayaya {
         // ==========================================
         std::vector<VkClearValue> clearValues;
         if (clear) {
-            VkClearValue colorClear{};
-            colorClear.color = { {clearColor.r, clearColor.g, clearColor.b, clearColor.a} };
-            clearValues.push_back(colorClear);
+            // 1. 动态计算真实的 Color Attachment 数量
+            uint32_t colorCount = 0;
+            for (const auto& format : vulkanFBO->GetSpecification().Attachments.Attachments) {
+                if (format.TextureFormat != FramebufferTextureFormat::DEPTH24STENCIL8) {
+                    colorCount++;
+                }
+            }
 
-            // 无论有没有开启深度测试，只要 FBO 里有深度附件，就必须给它喂一个清屏值！
+            // 2. 只为真正注册到 RenderPass 的 Color 附件推入清屏色
+            for (uint32_t i = 0; i < colorCount; i++) {
+                VkClearValue colorClear{};
+                colorClear.color = { {clearColor.r, clearColor.g, clearColor.b, clearColor.a} };
+                clearValues.push_back(colorClear);
+            }
+
+            // 【彻底删掉或注释掉深度清屏】：
+            // 因为目前的 VulkanFramebuffer::Invalidate 并没有将深度附件加入 RenderPass
+            // 强行给 DepthClear 会导致 clearValueCount > attachmentCount，直接闪退！
+            /*
             VkClearValue depthClear{};
             depthClear.depthStencil = { 1.0f, 0 };
             clearValues.push_back(depthClear);
+            */
 
             renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
             renderPassInfo.pClearValues = clearValues.data();
@@ -150,12 +165,40 @@ namespace Ayaya {
         descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         descriptorWrite.descriptorCount = 1;
         descriptorWrite.pImageInfo = &imageInfo;
+        vkDeviceWaitIdle(context->GetDevice());
 
         vkUpdateDescriptorSets(context->GetDevice(), 1, &descriptorWrite, 0, nullptr);
     }
 
     // 绑定独立 Texture2D 的实现 (占位，因为 VulkanTexture2D 我们还没写完)
     void VulkanRenderCommandBuffer::BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<Texture2D>& texture) {
-        AYAYA_CORE_WARN("BindTexture2D for Texture2D is not fully implemented yet!");
+        // AYAYA_CORE_WARN("BindTexture2D for Texture2D is not fully implemented yet!");
+    }
+
+    void VulkanRenderCommandBuffer::InsertExecutionBarrier() {
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        VkCommandBuffer cmdBuffer = context->GetCurrentCommandBuffer();
+
+        // 创建一个全局内存屏障
+        VkMemoryBarrier memoryBarrier{};
+        memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        
+        // 生产者（上一个Pass）：我们必须等待颜色附件和深度附件的【写入操作】彻底完成
+        memoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        
+        // 消费者（下一个Pass）：我们允许片段着色器进行【读取操作】
+        memoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        // 向命令缓冲录制这条“交警指令”
+        // 注意：它必须在 BeginRenderPass 之前，或者 EndRenderPass 之后调用！
+        vkCmdPipelineBarrier(
+            cmdBuffer,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, // 等待阶段
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, // 阻塞阶段
+            0,
+            1, &memoryBarrier,
+            0, nullptr,
+            0, nullptr
+        );
     }
 }

@@ -118,8 +118,8 @@ namespace Ayaya {
 
             if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
                 // OpenGL 专属逻辑：编译 GLSL 着色器，生成 BRDF 贴图
-                s_SkyboxShader = Shader::Create("assets/Editor/shaders/Skybox/skybox.vert", "assets/Editor/shaders/Skybox/skybox.frag");
-                std::shared_ptr<Shader> brdfShader = Shader::Create("assets/Editor/shaders/IBL/brdf.vert", "assets/Editor/shaders/IBL/brdf.frag");
+                s_SkyboxShader = Shader::Create("Skybox/skybox.vert", "Skybox/skybox.frag");
+                std::shared_ptr<Shader> brdfShader = Shader::Create("IBL/brdf.vert", "IBL/brdf.frag");
                 if(m_Data->EmptyVAO == 0) glGenVertexArrays(1, &m_Data->EmptyVAO);
                 uint32_t brdfID = IBLBuilder::CreateBRDFLUT(brdfShader, m_Data->EmptyVAO);
                 s_DefaultBRDFLUT = Texture2D::Create(brdfID, 512, 512);
@@ -429,7 +429,7 @@ namespace Ayaya {
 
         if (envComp.Type == EnvironmentType::HDR_Equirectangular || envComp.Type == EnvironmentType::LDR_Equirectangular) {
             if (!envComp.EquirectangularTexture) return;
-            std::shared_ptr<Shader> convertShader = Shader::Create("assets/Editor/shaders/IBL/equirectangular_to_cubemap.vert", "assets/Editor/shaders/IBL/equirectangular_to_cubemap.frag");
+            std::shared_ptr<Shader> convertShader = Shader::Create("IBL/equirectangular_to_cubemap.vert", "IBL/equirectangular_to_cubemap.frag");
             baseCubemapID = IBLBuilder::ConvertEquirectangularToCubemap(envComp.EquirectangularTexture, s_SkyboxMesh, convertShader);
             m_Data->EnvironmentCubemap = TextureCube::Create(baseCubemapID, 1024, 1024);
         }
@@ -444,11 +444,11 @@ namespace Ayaya {
         }
 
         if (baseCubemapID != 0) {
-            std::shared_ptr<Shader> irradianceShader = Shader::Create("assets/Editor/shaders/IBL/cubemap.vert", "assets/Editor/shaders/IBL/irradiance_convolution.frag");
+            std::shared_ptr<Shader> irradianceShader = Shader::Create("IBL/cubemap.vert", "IBL/irradiance_convolution.frag");
             uint32_t irrID = IBLBuilder::CreateIrradianceMap(baseCubemapID, s_SkyboxMesh, irradianceShader);
             m_Data->IrradianceMap = TextureCube::Create(irrID, 32, 32);
 
-            std::shared_ptr<Shader> prefilterShader = Shader::Create("assets/Editor/shaders/IBL/cubemap.vert", "assets/Editor/shaders/IBL/prefilter.frag");
+            std::shared_ptr<Shader> prefilterShader = Shader::Create("IBL/cubemap.vert", "IBL/prefilter.frag");
             uint32_t preID = IBLBuilder::CreatePrefilterMap(baseCubemapID, s_SkyboxMesh, prefilterShader);
             m_Data->PrefilterMap = TextureCube::Create(preID, 128, 128);
             

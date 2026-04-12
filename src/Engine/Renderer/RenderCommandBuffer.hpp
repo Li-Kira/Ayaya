@@ -79,6 +79,9 @@ namespace Ayaya {
         virtual void DrawIndexed(const std::shared_ptr<Mesh>& mesh, uint32_t indexCount = 0) = 0;
         virtual void DrawArrays(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount = 0) = 0;
         virtual void DrawTriangleStrip(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount = 0) = 0;
+
+        // 插入全局执行屏障，用于隔离前后两个具有依赖关系的 Pass
+        virtual void InsertExecutionBarrier() = 0;
     };
 
 }

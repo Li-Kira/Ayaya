@@ -18,11 +18,11 @@ namespace Ayaya {
     void LightingPass::OnAttach() {
         m_EmptyVAO = VertexArray::Create();
 
-        m_DeferredLightingShader = Shader::Create("assets/Editor/shaders/Deferred/deferred_lighting.vert", "assets/Editor/shaders/Deferred/deferred_lighting.frag");
-        m_SkyboxShader           = Shader::Create("assets/Editor/shaders/Skybox/skybox.vert", "assets/Editor/shaders/Skybox/skybox.frag");
-        m_GridShader             = Shader::Create("assets/Editor/shaders/UI/grid.vert", "assets/Editor/shaders/UI/grid.frag");
-        m_SpriteShader           = Shader::Create("assets/Editor/shaders/2D/sprite.vert", "assets/Editor/shaders/2D/sprite.frag");
-        m_OutlineShader          = Shader::Create("assets/Editor/shaders/UI/outline.vert", "assets/Editor/shaders/UI/outline.frag");
+        m_DeferredLightingShader = Shader::Create("Deferred/deferred_lighting.vert", "Deferred/deferred_lighting.frag");
+        m_SkyboxShader           = Shader::Create("Skybox/skybox.vert",              "Skybox/skybox.frag");
+        m_GridShader             = Shader::Create("UI/grid.vert",                    "UI/grid.frag");
+        m_SpriteShader           = Shader::Create("2D/sprite.vert",                  "2D/sprite.frag");
+        m_OutlineShader          = Shader::Create("UI/outline.vert",                 "UI/outline.frag");
 
         m_DeferredLightingShader->BindUniformBlock("Camera", 0);
         m_DeferredLightingShader->BindUniformBlock("LightData", 1);

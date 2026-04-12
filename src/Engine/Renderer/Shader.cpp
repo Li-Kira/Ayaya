@@ -7,11 +7,25 @@
 
 namespace Ayaya {
 
+    // 【新增】：内部辅助函数，负责将逻辑路径翻译为物理真实路径
+    static std::string ResolveShaderPath(const std::string& logicalPath) {
+        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+            return "assets/Editor/shaders/src/opengl/" + logicalPath;
+        } 
+        else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+            return "assets/Editor/shaders/cache/vulkan/" + logicalPath + ".spv";
+        }
+        return logicalPath;
+    }
+
     std::shared_ptr<Shader> Shader::Create(const std::string& vertexPath, const std::string& fragmentPath) {
+        std::string realVPath = ResolveShaderPath(vertexPath);
+        std::string realFPath = ResolveShaderPath(fragmentPath);
+
         switch (RendererAPI::GetAPI()) {
             case RendererAPI::API::None:    AYAYA_CORE_ERROR("RendererAPI::None is currently not supported!"); return nullptr;
-            case RendererAPI::API::OpenGL:  return std::make_shared<OpenGLShader>(vertexPath, fragmentPath);
-            case RendererAPI::API::Vulkan:  return std::make_shared<VulkanShader>(vertexPath, fragmentPath); 
+            case RendererAPI::API::OpenGL:  return std::make_shared<OpenGLShader>(realVPath, realFPath);
+            case RendererAPI::API::Vulkan:  return std::make_shared<VulkanShader>(realVPath, realFPath); 
             case RendererAPI::API::Metal:   AYAYA_CORE_ERROR("Metal Shader is under construction!"); return nullptr;
         }
         AYAYA_CORE_ERROR("Unknown RendererAPI!");
@@ -19,10 +33,13 @@ namespace Ayaya {
     }
 
     std::shared_ptr<Shader> Shader::Create(const std::string& name, const std::string& vertexPath, const std::string& fragmentPath) {
+        std::string realVPath = ResolveShaderPath(vertexPath);
+        std::string realFPath = ResolveShaderPath(fragmentPath);
+
         switch (RendererAPI::GetAPI()) {
             case RendererAPI::API::None:    AYAYA_CORE_ERROR("RendererAPI::None is currently not supported!"); return nullptr;
-            case RendererAPI::API::OpenGL:  return std::make_shared<OpenGLShader>(name, vertexPath, fragmentPath);
-            case RendererAPI::API::Vulkan:  return std::make_shared<VulkanShader>(name, vertexPath, fragmentPath);
+            case RendererAPI::API::OpenGL:  return std::make_shared<OpenGLShader>(name, realVPath, realFPath);
+            case RendererAPI::API::Vulkan:  return std::make_shared<VulkanShader>(name, realVPath, realFPath);
             case RendererAPI::API::Metal:   AYAYA_CORE_ERROR("Metal Shader is under construction!"); return nullptr;
         }
         AYAYA_CORE_ERROR("Unknown RendererAPI!");

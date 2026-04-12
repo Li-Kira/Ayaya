@@ -56,10 +56,8 @@ namespace Ayaya {
         auto count = lastDot == std::string::npos ? vertexPath.size() - lastSlash : lastDot - lastSlash;
         m_Name = vertexPath.substr(lastSlash, count);
 
-        // 【巧妙设计】：外层代码传进来的依然是 .vert，我们在这里偷偷加上 .spv 后缀！
-        // 这样你的高层逻辑 (SceneRenderer) 就不用改任何一行代码了！
-        std::vector<char> vertCode = ReadFile(vertexPath + ".spv");
-        std::vector<char> fragCode = ReadFile(fragmentPath + ".spv");
+        std::vector<char> vertCode = ReadFile(vertexPath);
+        std::vector<char> fragCode = ReadFile(fragmentPath);
 
         m_VertexShaderModule = CreateShaderModule(vertCode);
         m_FragmentShaderModule = CreateShaderModule(fragCode);
@@ -71,8 +69,8 @@ namespace Ayaya {
 
     VulkanShader::VulkanShader(const std::string& name, const std::string& vertexPath, const std::string& fragmentPath)
         : m_Name(name) {
-        std::vector<char> vertCode = ReadFile(vertexPath + ".spv");
-        std::vector<char> fragCode = ReadFile(fragmentPath + ".spv");
+        std::vector<char> vertCode = ReadFile(vertexPath);
+        std::vector<char> fragCode = ReadFile(fragmentPath);
 
         m_VertexShaderModule = CreateShaderModule(vertCode);
         m_FragmentShaderModule = CreateShaderModule(fragCode);

@@ -15,8 +15,8 @@ namespace Ayaya {
     }
 
     void GBufferPass::OnAttach() {
-        m_GBufferShader = Shader::Create("assets/Editor/shaders/Deferred/gbuffer.vert", "assets/Editor/shaders/Deferred/gbuffer.frag");
-        m_FallbackShader = Shader::Create("assets/Editor/shaders/Fallback/fallback.vert", "assets/Editor/shaders/Fallback/fallback.frag");
+        m_GBufferShader = Shader::Create("Deferred/gbuffer.vert", "Deferred/gbuffer.frag");
+        m_FallbackShader = Shader::Create("Fallback/fallback.vert", "Fallback/fallback.frag");
 
         m_FallbackMaterial = std::make_shared<Material>();
         m_FallbackMaterial->Name = "Error Fallback";

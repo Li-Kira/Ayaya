@@ -11,8 +11,8 @@ namespace Ayaya {
         // 创建用于全屏绘制的空 VAO
         m_EmptyVAO = VertexArray::Create();
         
-        m_DownsampleShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/bloom_downsample.frag");
-        m_UpsampleShader = Shader::Create("assets/Editor/shaders/PostProcess/postprocess.vert", "assets/Editor/shaders/PostProcess/bloom_upsample.frag");
+        m_DownsampleShader = Shader::Create("PostProcess/postprocess.vert", "PostProcess/bloom_downsample.frag");
+        m_UpsampleShader = Shader::Create("PostProcess/postprocess.vert", "PostProcess/bloom_upsample.frag");
 
         // ==========================================
         // 初始化尺寸：为了让下面的 Pipeline 能拿到格式，必须先生成一次 MipChain

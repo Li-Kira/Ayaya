@@ -8,9 +8,9 @@ namespace Ayaya {
     ContentBrowserPanel::ContentBrowserPanel()
         : m_BaseDirectory(g_AssetPath), m_CurrentDirectory(g_AssetPath) {
         // 在构造函数中加载两张图标贴图
-        m_DirectoryIcon = Texture2D::Create("assets/icons/folder_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png");
-        m_FileIcon      = Texture2D::Create("assets/icons/docs_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png");
-        m_PngIcon       = Texture2D::Create("assets/icons/image_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png");
+        m_DirectoryIcon = Texture2D::Create("assets/Editor/icons/folder_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png");
+        m_FileIcon      = Texture2D::Create("assets/Editor/icons/docs_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png");
+        m_PngIcon       = Texture2D::Create("assets/Editor/icons/image_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png");
     }
 
     void ContentBrowserPanel::OnImGuiRender() {

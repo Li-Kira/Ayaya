@@ -55,5 +55,7 @@ namespace Ayaya {
         virtual void DrawIndexed(const std::shared_ptr<Mesh>& mesh, uint32_t indexCount = 0) override;
         virtual void DrawArrays(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount = 0) override;
         virtual void DrawTriangleStrip(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount = 0) override;
+
+        virtual void InsertExecutionBarrier() override {}
     };
 }
