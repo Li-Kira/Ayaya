@@ -37,6 +37,7 @@ namespace Ayaya {
         virtual void SetClearColor(const glm::vec4& color) = 0;
         virtual void Clear() = 0;
         virtual void BlitDepth(uint32_t readFBO, uint32_t drawFBO, uint32_t width, uint32_t height) = 0;
+        virtual void BlitDepth(const std::shared_ptr<Framebuffer>& readFBO, const std::shared_ptr<Framebuffer>& drawFBO, uint32_t width, uint32_t height) = 0;
 
         // ==========================================
         // 现代 API 核心语义
@@ -53,6 +54,8 @@ namespace Ayaya {
         virtual void PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, const glm::vec4& data) = 0;
         virtual void PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, const glm::mat3& data) = 0;
         virtual void PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, const glm::mat4& data) = 0;
+        // 【核心新增】：现代 Vulkan 架构的泛型 PushConstant 接口，直接推送一整块内存结构体
+        virtual void PushConstantData(const std::shared_ptr<Pipeline>& pipeline, const void* data, uint32_t size) = 0;
 
         // ==========================================
         // --- 运行时描述符绑定 (现代多态接口) ---
@@ -79,6 +82,7 @@ namespace Ayaya {
         virtual void DrawIndexed(const std::shared_ptr<Mesh>& mesh, uint32_t indexCount = 0) = 0;
         virtual void DrawArrays(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount = 0) = 0;
         virtual void DrawTriangleStrip(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount = 0) = 0;
+        virtual void DrawTriangleStrip(uint32_t vertexCount) = 0;
 
         // 插入全局执行屏障，用于隔离前后两个具有依赖关系的 Pass
         virtual void InsertExecutionBarrier() = 0;

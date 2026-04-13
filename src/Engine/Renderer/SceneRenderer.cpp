@@ -26,6 +26,8 @@
 #include "Renderer/Passes/BloomPass.hpp"
 #include "Renderer/Passes/FXAAPass.hpp"
 #include "Renderer/Passes/VulkanClearPass.hpp"
+#include "Renderer/Passes/VulkanGbufferPass.hpp"
+#include "Renderer/Passes/VulkanLightingPass.hpp"
 #include "Renderer/Passes/VulkanPostProcessPass.hpp"
 
 // 3. 第三方库
@@ -157,7 +159,10 @@ namespace Ayaya {
         else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
             AYAYA_CORE_WARN("Vulkan Pipeline is running in minimal mode!");
             // Vulkan 模式下暂不执行任何 OpenGL 的 VAO 或 Query 创建
-            m_Pipeline.AddPass(std::make_shared<VulkanClearPass>());
+
+            // m_Pipeline.AddPass(std::make_shared<VulkanClearPass>());
+            m_Pipeline.AddPass(std::make_shared<VulkanGBufferPass>());
+            m_Pipeline.AddPass(std::make_shared<VulkanLightingPass>());
             m_Pipeline.AddPass(std::make_shared<VulkanPostProcessPass>());
             m_Pipeline.Init();
         }

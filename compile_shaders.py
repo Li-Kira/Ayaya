@@ -1,11 +1,19 @@
 import os
 import subprocess
 import time
+import platform
 from pathlib import Path
 
 # ================= 配置区 =================
-# 确保 glslc.exe 在你的环境变量中，或者在这里写绝对路径
-GLSLC = "glslc.exe" 
+# 根据当前操作系统自动选择 glslc 可执行文件名
+if platform.system() == "Windows":
+    GLSLC = "glslc.exe"
+else:
+    GLSLC = "glslc" # Mac 和 Linux 使用这个
+
+# 💡 提示：如果你的 Mac 终端里直接敲 glslc 找不到命令（说明没配环境变量），
+# 可以把上面那行换成你的 Vulkan SDK 绝对路径，例如：
+# GLSLC = "/Users/likirac/VulkanSDK/1.3.268.0/macOS/bin/glslc"
 
 # 匹配我们在 C++ 中定义的路径结构
 BASE_DIR = Path("assets/Editor/shaders")
@@ -40,7 +48,7 @@ def compile_shader(src_path: Path):
             print(f"Error compiling {src_path}:\n{result.stderr}")
             return False
     except Exception as e:
-        print(f"Failed to run glslc: {e}")
+        print(f"Failed to run glslc: {e}\n(请确保 '{GLSLC}' 已加入系统环境变量，或在脚本中配置绝对路径)")
         return False
     
     return True

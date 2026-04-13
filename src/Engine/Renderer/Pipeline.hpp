@@ -2,6 +2,7 @@
 #include <memory>
 #include "Renderer/Shader.hpp"
 #include "Renderer/Framebuffer.hpp"
+#include "Renderer/Buffer.hpp"
 
 namespace Ayaya {
 
@@ -14,21 +15,28 @@ namespace Ayaya {
 
     // --- 管线图纸 (Blueprint) ---
     struct PipelineSpecification {
-        std::shared_ptr<Shader> Shader;
-        std::shared_ptr<Framebuffer> TargetFramebuffer; // 决定了输出的格式和渲染通道兼容性
+    std::shared_ptr<Shader> Shader;
+    std::shared_ptr<Framebuffer> TargetFramebuffer;
 
-        PrimitiveTopology Topology = PrimitiveTopology::Triangles;
-        PolygonMode PolygonMode = PolygonMode::Fill;
-        CullMode BackfaceCulling = CullMode::Back;
-        float LineWidth = 1.0f;
+    BufferLayout Layout;
+    
+    PrimitiveTopology Topology = PrimitiveTopology::Triangles;
+    PolygonMode PolygonMode = PolygonMode::Fill;
+    DepthCompareOperator DepthOperator = DepthCompareOperator::Less;
+    
+    bool DepthTest = true;
+    bool DepthWrite = true;
+    bool Blend = false;
+    CullMode BackfaceCulling = CullMode::Back;
+    BlendMode BlendMode = BlendMode::Alpha;
 
-        bool DepthTest = true;
-        bool DepthWrite = true;
-        DepthCompareOperator DepthOperator = DepthCompareOperator::Less;
-
-        bool Blend = false;
-        BlendMode BlendMode = BlendMode::Alpha;
-    };
+    // ==========================================
+    // 【核心新增】：补充缺失的现代渲染状态
+    // ==========================================
+    bool DepthFuncLEqual = false;  // 用于天空盒等深度必须为 1.0 的渲染
+    bool PolygonModeLine = false;  // 用于绘制线框（描边）
+    float LineWidth = 1.0f;        // 线宽
+};
 
     // --- 管线基类 ---
     class Pipeline {

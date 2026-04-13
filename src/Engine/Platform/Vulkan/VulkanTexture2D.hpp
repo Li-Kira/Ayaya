@@ -1,5 +1,7 @@
 #pragma once
 #include "Renderer/Texture.hpp"
+#include <vulkan/vulkan.h>
+#include <vk_mem_alloc.h>
 
 namespace Ayaya {
 
@@ -11,23 +13,32 @@ namespace Ayaya {
 
         virtual uint32_t GetWidth() const override { return m_Width; }
         virtual uint32_t GetHeight() const override { return m_Height; }
-        virtual uint32_t GetRendererID() const override { return 0; } // 暂时返回 0
+        // 【关键】：在 Vulkan 下，RendererID 返回的是 VkImageView 的句柄，供 ImGui 使用
+        virtual uint32_t GetRendererID() const override { return (uint32_t)(uintptr_t)m_ImageView; }
 
         virtual void SetData(void* data, uint32_t size) override;
 
         virtual void Bind(uint32_t slot = 0) const override;
-        virtual void Unbind() const override;
+        virtual void Unbind() const override {}
+
+        // 供渲染器内部获取真实句柄
+        VkImageView GetImageView() const { return m_ImageView; }
+        VkSampler GetSampler() const { return m_Sampler; }
+
+    private:
+        void Invalidate();
+        void CreateSampler();
 
     private:
         uint32_t m_Width = 0;
         uint32_t m_Height = 0;
         std::string m_Path;
         
-        // 未来我们会在这里加入：
-        // VkImage m_Image;
-        // VkDeviceMemory m_Memory;
-        // VkImageView m_ImageView;
-        // VkSampler m_Sampler;
+        VkImage m_Image = VK_NULL_HANDLE;
+        VmaAllocation m_Allocation = VK_NULL_HANDLE;
+        VkImageView m_ImageView = VK_NULL_HANDLE;
+        VkSampler m_Sampler = VK_NULL_HANDLE;
+        VkFormat m_Format = VK_FORMAT_R8G8B8A8_UNORM;
     };
 
 }

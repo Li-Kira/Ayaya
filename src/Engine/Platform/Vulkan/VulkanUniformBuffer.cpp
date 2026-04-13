@@ -2,6 +2,7 @@
 #include "VulkanUniformBuffer.hpp"
 #include "Core/Log.hpp"
 #include "Platform/Vulkan/VulkanContext.hpp"
+#include "Platform/Vulkan/VulkanPipeline.hpp"
 #include "Core/Application.hpp"
 #include <cstring> // for memcpy
 
@@ -28,6 +29,7 @@ namespace Ayaya {
         allocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
         VkResult result = vmaCreateBuffer(allocator, &bufferInfo, &allocInfo, &m_Buffer, &m_Allocation, &m_AllocInfo);
+        Ayaya::VulkanPipeline::SetGlobalUniformBuffer(binding, m_Buffer, size);
         AYAYA_CORE_ASSERT(result == VK_SUCCESS, "Failed to allocate Vulkan Uniform Buffer!");
     }
 

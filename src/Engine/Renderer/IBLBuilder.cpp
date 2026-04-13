@@ -2,6 +2,7 @@
 #include "IBLBuilder.hpp"
 #include "Renderer/Renderer.hpp"
 #include "Platform/OpenGL/OpenGLIBLBuilder.hpp"
+#include "Platform/Vulkan/VulkanIBLBuilder.hpp"
 #include "Core/Log.hpp"
 
 namespace Ayaya {
@@ -12,7 +13,7 @@ namespace Ayaya {
         switch (RendererAPI::GetAPI()) {
             case RendererAPI::API::None:    AYAYA_CORE_ERROR("RendererAPI::None is currently not supported!"); return 0;
             case RendererAPI::API::OpenGL:  return OpenGLIBLBuilder::ConvertEquirectangularToCubemap(hdrTexture, cubeMesh, convertShader);
-            case RendererAPI::API::Vulkan:  AYAYA_CORE_ERROR("Vulkan IBLBuilder is under construction!"); return 0;
+            case RendererAPI::API::Vulkan:  return VulkanIBLBuilder::ConvertEquirectangularToCubemap(hdrTexture, cubeMesh, convertShader);
             case RendererAPI::API::Metal:   AYAYA_CORE_ERROR("Metal IBLBuilder is under construction!"); return 0;
         }
         AYAYA_CORE_ERROR("Unknown RendererAPI!");
@@ -25,7 +26,7 @@ namespace Ayaya {
         switch (RendererAPI::GetAPI()) {
             case RendererAPI::API::None:    AYAYA_CORE_ERROR("RendererAPI::None is currently not supported!"); return 0;
             case RendererAPI::API::OpenGL:  return OpenGLIBLBuilder::CreateIrradianceMap(envCubemap, cubeMesh, irradianceShader);
-            case RendererAPI::API::Vulkan:  AYAYA_CORE_ERROR("Vulkan IBLBuilder is under construction!"); return 0;
+            case RendererAPI::API::Vulkan:  return VulkanIBLBuilder::CreateIrradianceMap(envCubemap, cubeMesh, irradianceShader);
             case RendererAPI::API::Metal:   AYAYA_CORE_ERROR("Metal IBLBuilder is under construction!"); return 0;
         }
         AYAYA_CORE_ERROR("Unknown RendererAPI!");
@@ -38,7 +39,7 @@ namespace Ayaya {
         switch (RendererAPI::GetAPI()) {
             case RendererAPI::API::None:    AYAYA_CORE_ERROR("RendererAPI::None is currently not supported!"); return 0;
             case RendererAPI::API::OpenGL:  return OpenGLIBLBuilder::CreatePrefilterMap(envCubemap, cubeMesh, prefilterShader);
-            case RendererAPI::API::Vulkan:  AYAYA_CORE_ERROR("Vulkan IBLBuilder is under construction!"); return 0;
+            case RendererAPI::API::Vulkan:  return VulkanIBLBuilder::CreatePrefilterMap(envCubemap, cubeMesh, prefilterShader);
             case RendererAPI::API::Metal:   AYAYA_CORE_ERROR("Metal IBLBuilder is under construction!"); return 0;
         }
         AYAYA_CORE_ERROR("Unknown RendererAPI!");
@@ -49,7 +50,7 @@ namespace Ayaya {
         switch (RendererAPI::GetAPI()) {
             case RendererAPI::API::None:    AYAYA_CORE_ERROR("RendererAPI::None is currently not supported!"); return 0;
             case RendererAPI::API::OpenGL:  return OpenGLIBLBuilder::CreateBRDFLUT(brdfShader, emptyVAO);
-            case RendererAPI::API::Vulkan:  AYAYA_CORE_ERROR("Vulkan IBLBuilder is under construction!"); return 0;
+            case RendererAPI::API::Vulkan:  return VulkanIBLBuilder::CreateBRDFLUT(brdfShader, emptyVAO);
             case RendererAPI::API::Metal:   AYAYA_CORE_ERROR("Metal IBLBuilder is under construction!"); return 0;
         }
         AYAYA_CORE_ERROR("Unknown RendererAPI!");

@@ -1,37 +1,70 @@
 #include "ayapch.h"
 #include "VulkanBuffer.hpp"
+#include "Platform/Vulkan/VulkanContext.hpp"
+#include "Core/Application.hpp"
 #include "Core/Log.hpp"
 
 namespace Ayaya {
 
     // ==========================================
-    // Vulkan 顶点缓冲区实现 (Stub)
+    // 顶点缓冲区 (VBO)
     // ==========================================
     VulkanVertexBuffer::VulkanVertexBuffer(float* vertices, uint32_t size) {
-        AYAYA_CORE_WARN("VulkanVertexBuffer created (Stub): Static size {0} bytes", size);
-        // 未来逻辑：
-        // 1. 创建 CPU 可见的 Staging Buffer
-        // 2. 将 vertices 数据 memcpy 进去
-        // 3. 创建 GPU 本地的 Device Local Buffer
-        // 4. 通过单次 Command Buffer 执行 vkCmdCopyBuffer
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        VmaAllocator allocator = context->GetAllocator();
+
+        VkBufferCreateInfo bufferInfo{};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.size = size;
+        bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; 
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        // 自动映射显存到 CPU (为简单起见，暂不使用 Staging Buffer)
+        VmaAllocationCreateInfo allocInfo{};
+        allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+        vmaCreateBuffer(allocator, &bufferInfo, &allocInfo, &m_Buffer, &m_Allocation, &m_AllocInfo);
+
+        // 直接拷贝数据进显存！
+        memcpy(m_AllocInfo.pMappedData, vertices, size);
     }
 
     VulkanVertexBuffer::~VulkanVertexBuffer() {
-        // 未来逻辑：销毁 VkBuffer 并释放 VkDeviceMemory
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        if (m_Buffer != VK_NULL_HANDLE) {
+            vmaDestroyBuffer(context->GetAllocator(), m_Buffer, m_Allocation);
+        }
     }
 
     // ==========================================
-    // Vulkan 索引缓冲区实现 (Stub)
+    // 索引缓冲区 (IBO)
     // ==========================================
     VulkanIndexBuffer::VulkanIndexBuffer(uint32_t* indices, uint32_t count) 
-        : m_Count(count) 
-    {
-        AYAYA_CORE_WARN("VulkanIndexBuffer created (Stub): count {0}", count);
-        // 未来逻辑同上，通过 Staging Buffer 拷贝数据到 GPU
+        : m_Count(count) {
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        VmaAllocator allocator = context->GetAllocator();
+
+        VkBufferCreateInfo bufferInfo{};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.size = count * sizeof(uint32_t); // uint32_t 索引！
+        bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        VmaAllocationCreateInfo allocInfo{};
+        allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+        vmaCreateBuffer(allocator, &bufferInfo, &allocInfo, &m_Buffer, &m_Allocation, &m_AllocInfo);
+
+        memcpy(m_AllocInfo.pMappedData, indices, count * sizeof(uint32_t));
     }
 
     VulkanIndexBuffer::~VulkanIndexBuffer() {
-        // 未来逻辑：销毁 VkBuffer 并释放 VkDeviceMemory
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        if (m_Buffer != VK_NULL_HANDLE) {
+            vmaDestroyBuffer(context->GetAllocator(), m_Buffer, m_Allocation);
+        }
     }
 
 }

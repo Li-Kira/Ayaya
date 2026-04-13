@@ -2,6 +2,7 @@
 #include "TextureCube.hpp"
 #include "Renderer/Renderer.hpp"
 #include "Platform/OpenGL/OpenGLTextureCube.hpp"
+#include "Platform/Vulkan/VulkanTextureCube.hpp"
 #include "Core/Log.hpp"
 
 #include <algorithm> // 【新增】：用于 std::replace
@@ -27,7 +28,7 @@ namespace Ayaya {
                 // 【修改】：传入清洗后的 sanitizedFaces，而不是原始的 faces
                 return std::make_shared<OpenGLTextureCube>(sanitizedFaces);
             case RendererAPI::API::Vulkan:  
-                AYAYA_CORE_ERROR("Vulkan TextureCube is under construction!"); 
+                return std::make_shared<VulkanTextureCube>(sanitizedFaces);
                 return nullptr;
             case RendererAPI::API::Metal:   
                 AYAYA_CORE_ERROR("Metal TextureCube is under construction!"); 
@@ -45,8 +46,7 @@ namespace Ayaya {
             case RendererAPI::API::OpenGL:  
                 return std::make_shared<OpenGLTextureCube>(rendererID, width, height);
             case RendererAPI::API::Vulkan:  
-                AYAYA_CORE_ERROR("Vulkan TextureCube is under construction!"); 
-                return nullptr;
+                return std::make_shared<VulkanTextureCube>(rendererID, width, height);
             case RendererAPI::API::Metal:   
                 AYAYA_CORE_ERROR("Metal TextureCube is under construction!"); 
                 return nullptr;

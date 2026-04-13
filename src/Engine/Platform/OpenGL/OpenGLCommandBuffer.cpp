@@ -132,7 +132,14 @@ namespace Ayaya {
     void OpenGLCommandBuffer::PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, const glm::vec4& data) { if (pipeline) pipeline->GetSpecification().Shader->SetFloat4(name, data); }
     void OpenGLCommandBuffer::PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, const glm::mat3& data) { if (pipeline) pipeline->GetSpecification().Shader->SetMat3(name, data); }
     void OpenGLCommandBuffer::PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, const glm::mat4& data) { if (pipeline) pipeline->GetSpecification().Shader->SetMat4(name, data); }
-
+    void OpenGLCommandBuffer::PushConstantData(const std::shared_ptr<Pipeline>& pipeline, const void* data, uint32_t size) {
+        // OpenGL 并没有 Vulkan 这样直接把任意内存块推给 Shader 的原生机制。
+        // 当后续我们用 SPIRV-Cross 将 Vulkan Shader 反编译给 OpenGL 使用时，
+        // 我们会通过 Shader 反射，在这里将其包装为一个底层的 Uniform Buffer (UBO) 来同步。
+        // 目前为了让 Vulkan 端能顺利跑通，这里仅做拦截警告。
+        AYAYA_CORE_WARN("Generic PushConstant (void*, size) called in OpenGL! This requires SPIRV-Cross reflection or UBO backing.");
+    }
+    
     void OpenGLCommandBuffer::DrawArrays(uint32_t vertexCount) { glDrawArrays(GL_TRIANGLES, 0, vertexCount); }
     void OpenGLCommandBuffer::DrawIndexed(uint32_t indexCount) { glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, nullptr); }
     
@@ -245,4 +252,15 @@ namespace Ayaya {
         glBindVertexArray(0);
     }
 
+    void OpenGLCommandBuffer::BlitDepth(const std::shared_ptr<Framebuffer>& readFBO, const std::shared_ptr<Framebuffer>& drawFBO, uint32_t width, uint32_t height) {
+        // 安全地将智能指针提取为 OpenGL ID
+        uint32_t readID = readFBO ? (uint32_t)(uintptr_t)readFBO->GetRendererID() : 0;
+        uint32_t drawID = drawFBO ? (uint32_t)(uintptr_t)drawFBO->GetRendererID() : 0;
+        BlitDepth(readID, drawID, width, height); // 调用旧接口
+    }
+
+    void OpenGLCommandBuffer::DrawTriangleStrip(uint32_t vertexCount) {
+        // 无需 VAO 绑定，直接使用 VertexID 生成图形
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, vertexCount);
+    }
 }
