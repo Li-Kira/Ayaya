@@ -6,9 +6,9 @@ layout(location = 0) in vec2 v_TexCoord;
 // ==========================================
 // 1. 贴图采样器：显式分配 Binding 槽位
 // ==========================================
-layout(binding = 0) uniform sampler2D u_ScreenTexture; 
-layout(binding = 1) uniform sampler2D u_SelectionTexture;
-layout(binding = 2) uniform sampler2D u_BloomTexture;
+layout(set = 1, binding = 0) uniform sampler2D u_ScreenTexture; 
+layout(set = 1, binding = 1) uniform sampler2D u_SelectionTexture;
+layout(set = 1, binding = 2) uniform sampler2D u_BloomTexture;
 
 // ==========================================
 // 2. 散装 Uniform 统合：Push Constant

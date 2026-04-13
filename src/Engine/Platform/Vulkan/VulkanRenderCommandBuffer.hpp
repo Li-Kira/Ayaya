@@ -1,8 +1,10 @@
 #pragma once
 #include "Renderer/RenderCommandBuffer.hpp"
 #include <vulkan/vulkan.h>
+#include <unordered_map>
 
 namespace Ayaya {
+    class VulkanPipeline;
 
     class VulkanRenderCommandBuffer : public RenderCommandBuffer {
     public:
@@ -69,6 +71,12 @@ namespace Ayaya {
 
         // 管线屏障
         virtual void InsertExecutionBarrier() override;
+
+    private:
+        std::shared_ptr<VulkanPipeline> m_BoundPipeline; // 记住当前管线
+        std::unordered_map<uint32_t, VkDescriptorImageInfo> m_PendingImageInfos; // 记住即将绑定的贴图
+
+        void FlushDescriptorSets(); // 核心发车函数
     };
 
 }

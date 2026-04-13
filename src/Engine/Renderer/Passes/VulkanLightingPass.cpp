@@ -53,6 +53,7 @@ namespace Ayaya {
         // ==========================================
         // 1. 延迟光照全屏管线
         PipelineSpecification defSpec;
+        defSpec.Layout = {};
         defSpec.Shader = m_DeferredLightingShader;
         defSpec.TargetFramebuffer = m_LightingFBO;
         defSpec.DepthTest = false;  
@@ -63,6 +64,12 @@ namespace Ayaya {
 
         // 2. 天空盒管线
         PipelineSpecification skySpec;
+        skySpec.Layout = {
+            { ShaderDataType::Float3, "a_Position" },
+            { ShaderDataType::Float3, "a_Normal" },
+            { ShaderDataType::Float2, "a_TexCoord" },
+            { ShaderDataType::Float3, "a_Tangent" }
+        };
         skySpec.Shader = m_SkyboxShader;
         skySpec.TargetFramebuffer = m_LightingFBO;
         skySpec.DepthTest = true;
@@ -74,6 +81,12 @@ namespace Ayaya {
 
         // 3. 无穷网格管线
         PipelineSpecification gridSpec;
+        gridSpec.Layout = {
+            { ShaderDataType::Float3, "a_Position" },
+            { ShaderDataType::Float3, "a_Normal" },
+            { ShaderDataType::Float2, "a_TexCoord" },
+            { ShaderDataType::Float3, "a_Tangent" }
+        };
         gridSpec.Shader = m_GridShader;
         gridSpec.TargetFramebuffer = m_LightingFBO;
         gridSpec.DepthTest = true;
@@ -84,6 +97,7 @@ namespace Ayaya {
 
         // 4. 2D精灵图管线
         PipelineSpecification spriteSpec;
+        spriteSpec.Layout = {};
         spriteSpec.Shader = m_SpriteShader;
         spriteSpec.TargetFramebuffer = m_LightingFBO;
         spriteSpec.DepthTest = true;
@@ -94,6 +108,12 @@ namespace Ayaya {
 
         // 5. 选中描边管线 (网格)
         PipelineSpecification selMeshSpec;
+        selMeshSpec.Layout = {
+            { ShaderDataType::Float3, "a_Position" },
+            { ShaderDataType::Float3, "a_Normal" },
+            { ShaderDataType::Float2, "a_TexCoord" },
+            { ShaderDataType::Float3, "a_Tangent" }
+        };
         selMeshSpec.Shader = m_OutlineShader;
         selMeshSpec.TargetFramebuffer = m_SelectionFBO;
         selMeshSpec.DepthTest = true;
@@ -106,6 +126,7 @@ namespace Ayaya {
 
         // 6. 选中描边管线 (2D Sprite)
         PipelineSpecification selSpriteSpec;
+        selSpriteSpec.Layout = {};
         selSpriteSpec.Shader = m_SpriteShader;
         selSpriteSpec.TargetFramebuffer = m_SelectionFBO;
         selSpriteSpec.DepthTest = true;
@@ -158,27 +179,41 @@ namespace Ayaya {
         cmd.BindPipeline(m_DeferredPipeline);
         context.Stats.ShaderBinds++;
 
+        // 绑定 G-Buffer
         cmd.BindTexture2D(m_DeferredPipeline, "g_Position", 0, gbufferFBO, 0);
         cmd.BindTexture2D(m_DeferredPipeline, "g_Normal", 1, gbufferFBO, 1);
         cmd.BindTexture2D(m_DeferredPipeline, "g_Albedo", 2, gbufferFBO, 2);
         cmd.BindTexture2D(m_DeferredPipeline, "g_PBR", 3, gbufferFBO, 3);
         cmd.BindTexture2D(m_DeferredPipeline, "g_CustomData", 4, gbufferFBO, 4);
 
-        if (shadowFBO) {
-            cmd.BindTexture2D(m_DeferredPipeline, "u_ShadowMap", 5, shadowFBO, 0, true);
+        // ==========================================
+        // 【核心修复 2】：疯狂填坑！不允许任何槽位为空！
+        // ==========================================
+        auto whiteTex = context.GetTexture("WhiteTexture");
+        if (whiteTex) {
+            cmd.BindTexture2D(m_DeferredPipeline, "u_ShadowMap", 5, whiteTex);
+            cmd.BindTexture2D(m_DeferredPipeline, "u_BRDFLUT", 10, whiteTex);
         }
 
-        // IBL 贴图
         auto irrMap = context.Get<std::shared_ptr<TextureCube>>("IrradianceMap", nullptr);
         auto preMap = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap", nullptr);
-        auto brdfMap = context.Get<std::shared_ptr<Texture2D>>("BRDFLUTMap", nullptr);
-        bool hasEnvMap = (irrMap && preMap && brdfMap);
-
-        if (hasEnvMap) {
+        
+        // ==========================================
+        // 【核心修复 2】：严格控制发车！
+        // ==========================================
+        if (irrMap && preMap) {
             cmd.BindTextureCube(m_DeferredPipeline, "u_IrradianceMap", 8, irrMap);
             cmd.BindTextureCube(m_DeferredPipeline, "u_PrefilteredMap", 9, preMap);
-            cmd.BindTexture2D(m_DeferredPipeline, "u_BRDFLUT", 10, brdfMap);
+            
+            // 只有绑好了贴图，才允许发车！
+            cmd.DrawTriangleStrip(4); 
+        } 
+        else {
+            AYAYA_CORE_WARN("No Skybox found! Skipping Lighting Pass to prevent Vulkan Crash.");
+            // ⚠️ 绝对不能在这里或者在这段 if 之后执行 cmd.DrawTriangleStrip(4); ！！！
         }
+
+        bool hasEnvMap = (irrMap && preMap);
 
         // 【重构】：组装并推送常量
         DeferredLightingPushConstants defConstants{};

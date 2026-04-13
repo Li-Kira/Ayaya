@@ -40,15 +40,21 @@ namespace Ayaya {
         // ==========================================
         // 2. 烘焙几何管线图纸 (PSO)
         // ==========================================
-        PipelineSpecification gbufferPipeSpec;
+       PipelineSpecification gbufferPipeSpec;
         gbufferPipeSpec.Shader = m_GBufferShader;
         gbufferPipeSpec.TargetFramebuffer = m_GeometryFBO;
-        // 【核心新增】：告诉 Vulkan 我们的模型长什么样！
+        
+        // ==========================================
+        // 【核心修复 1】：告诉 Vulkan 顶点数据的排列格式！
+        // 加上这段代码，扭曲的三角形立马变成完美的模型！
+        // ==========================================
         gbufferPipeSpec.Layout = {
             { ShaderDataType::Float3, "a_Position" },
             { ShaderDataType::Float3, "a_Normal" },
-            { ShaderDataType::Float2, "a_TexCoord" }
+            { ShaderDataType::Float2, "a_TexCoord" },
+            { ShaderDataType::Float3, "a_Tangent" } // 加上这行，怪物瞬间变回模型！
         };
+
         gbufferPipeSpec.DepthTest = true;
         gbufferPipeSpec.DepthWrite = true;
         gbufferPipeSpec.Blend = false; 
@@ -158,6 +164,19 @@ namespace Ayaya {
                 constants.UseRoughnessMap = 0;
                 constants.UseAOMap = 0;
                 constants.UseNormalMap = 0;
+
+                // ==========================================
+                // 【核心修复】：为所有的贴图槽位提供“垫背”贴图！
+                // 防止 Vulkan 报 08114 槽位未更新的错误
+                // ==========================================
+                auto whiteTex = context.GetTexture("WhiteTexture");
+                if (whiteTex) {
+                    cmd.BindTexture2D(currentPipeline, "u_AlbedoMap", 1, whiteTex);
+                    cmd.BindTexture2D(currentPipeline, "u_MetallicMap", 2, whiteTex);
+                    cmd.BindTexture2D(currentPipeline, "u_RoughnessMap", 3, whiteTex);
+                    cmd.BindTexture2D(currentPipeline, "u_AOMap", 4, whiteTex);
+                    cmd.BindTexture2D(currentPipeline, "u_NormalMap", 5, whiteTex);
+                }
 
                 // 【修复2】：通过遍历 Properties 数组获取材质数据！
                 if (currentMaterial) {

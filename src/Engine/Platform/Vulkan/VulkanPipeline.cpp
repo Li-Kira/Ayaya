@@ -126,7 +126,7 @@ namespace Ayaya {
         if (spec.BackfaceCulling == CullMode::Back) rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
         else if (spec.BackfaceCulling == CullMode::Front) rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
         
-        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
 
         // ==========================================
         // 5. 深度与模板测试 (Depth & Stencil)
@@ -249,46 +249,60 @@ namespace Ayaya {
         pipelineInfo.renderPass = vulkanFBO ? vulkanFBO->GetVulkanRenderPass() : VK_NULL_HANDLE;
         pipelineInfo.subpass = 0;
 
-        
-
         if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_Pipeline) != VK_SUCCESS) {
             AYAYA_CORE_ERROR("Failed to create Vulkan Graphics Pipeline!");
         }
 
-        
-
         // ==========================================
-        // 10. 分配 Descriptor Sets
+        // 10. 创建管线专属 Descriptor Pool 并分配环形缓冲
         // ==========================================
-        VkDescriptorSetAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = context->GetDescriptorPool();
-        allocInfo.descriptorSetCount = 2;
-        allocInfo.pSetLayouts = m_DescriptorSetLayouts.data();
+        // 分配 10 个 UBO 坑位和 1500 个图片采样器坑位
+        VkDescriptorPoolSize poolSizes[] = {
+            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10 },
+            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1500 }
+        };
 
-        if (vkAllocateDescriptorSets(device, &allocInfo, m_DescriptorSets.data()) != VK_SUCCESS) {
-            AYAYA_CORE_ERROR("Failed to allocate Descriptor Sets! Check your Descriptor Pool size.");
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.poolSizeCount = 2;
+        poolInfo.pPoolSizes = poolSizes;
+        poolInfo.maxSets = 150; // 最大支持分配 150 个 Set
+
+        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_PipelineDescriptorPool) != VK_SUCCESS) {
+            AYAYA_CORE_ERROR("Failed to create custom Descriptor Pool for Pipeline!");
         }
 
-        // ==========================================
-        // 【核心修复 4】：将全局注册的 UBO 写入到 Descriptor Set 0！
-        // 这样着色器才能读到 Camera 的 ViewProjection 矩阵！
-        // ==========================================
+        // 分配 Set 0 (UBO)
+        VkDescriptorSetAllocateInfo allocInfo0{};
+        allocInfo0.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo0.descriptorPool = m_PipelineDescriptorPool;
+        allocInfo0.descriptorSetCount = 1;
+        allocInfo0.pSetLayouts = &m_DescriptorSetLayouts[0];
+        vkAllocateDescriptorSets(device, &allocInfo0, &m_DescriptorSets[0]);
+
+        // 分配 100 个 Set 1 (纹理) 作为环形缓冲！
+        std::vector<VkDescriptorSetLayout> layouts100(100, m_DescriptorSetLayouts[1]);
+        m_TextureDescriptorSets.resize(100);
+        
+        VkDescriptorSetAllocateInfo allocInfo1{};
+        allocInfo1.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo1.descriptorPool = m_PipelineDescriptorPool;
+        allocInfo1.descriptorSetCount = 100;
+        allocInfo1.pSetLayouts = layouts100.data();
+        vkAllocateDescriptorSets(device, &allocInfo1, m_TextureDescriptorSets.data());
+
+        // 写入全局 UBO (保留你上一轮已经修复的代码)
         if (m_DescriptorSets[0] != VK_NULL_HANDLE) {
             std::vector<VkWriteDescriptorSet> descriptorWrites;
-            for (const auto& [binding, info] : s_GlobalUBOs) {
+            for (const auto& pair : s_GlobalUBOs) {
                 VkWriteDescriptorSet write{};
                 write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
                 write.dstSet = m_DescriptorSets[0];
-                write.dstBinding = binding;
+                write.dstBinding = pair.first;
                 write.dstArrayElement = 0;
                 write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
                 write.descriptorCount = 1;
-                // 解决 const 限制，复制一份 info
-                static std::vector<VkDescriptorBufferInfo> bufferInfos;
-                bufferInfos.push_back(info);
-                write.pBufferInfo = &bufferInfos.back();
-                
+                write.pBufferInfo = &pair.second;
                 descriptorWrites.push_back(write);
             }
             if (!descriptorWrites.empty()) {
@@ -305,6 +319,8 @@ namespace Ayaya {
             if (m_PipelineLayout) vkDestroyPipelineLayout(device, m_PipelineLayout, nullptr);
             if (m_DescriptorSetLayouts[0]) vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayouts[0], nullptr);
             if (m_DescriptorSetLayouts[1]) vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayouts[1], nullptr);
+            // 销毁专属池
+            if (m_PipelineDescriptorPool) vkDestroyDescriptorPool(device, m_PipelineDescriptorPool, nullptr);
         }
     }
 

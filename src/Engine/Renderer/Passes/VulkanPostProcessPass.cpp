@@ -80,17 +80,24 @@ namespace Ayaya {
             cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, screenFBO, screenAttachmentIndex);
         }
         
-        if (selectionFBO) {
-            cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, selectionFBO, 0);
-        } else if (screenFBO) {
-            cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, screenFBO, screenAttachmentIndex);
+        auto whiteTex = context.GetTexture("WhiteTexture");
+        if (whiteTex) {
+            // 保证 Binding 1 和 2 绝对不为空
+            cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, whiteTex);
+            cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, whiteTex);
         }
 
-        if (isBloomEnabled) {
-            cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, bloomFBO, 0);
-        } else if (screenFBO) {
-            cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, screenFBO, screenAttachmentIndex);
-        }
+        // if (selectionFBO) {
+        //     cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, selectionFBO, 0);
+        // } else if (screenFBO) {
+        //     cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, screenFBO, screenAttachmentIndex);
+        // }
+
+        // if (isBloomEnabled) {
+        //     cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, bloomFBO, 0);
+        // } else if (screenFBO) {
+        //     cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, screenFBO, screenAttachmentIndex);
+        // }
 
         // ==========================================
         // 3. 执行内存屏障！等待前置 Pass (Lighting/Bloom/Selection) 全部写入完成

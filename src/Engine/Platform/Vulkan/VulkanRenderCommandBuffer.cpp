@@ -73,7 +73,7 @@ namespace Ayaya {
         vkCmdEndRenderPass(context->GetCurrentCommandBuffer());
     }
 
-    void VulkanRenderCommandBuffer::BindPipeline(const std::shared_ptr<Pipeline>& pipeline) {
+   void VulkanRenderCommandBuffer::BindPipeline(const std::shared_ptr<Pipeline>& pipeline) {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         auto vulkanPipeline = std::dynamic_pointer_cast<VulkanPipeline>(pipeline);
         
@@ -81,20 +81,15 @@ namespace Ayaya {
             VkCommandBuffer cmdBuffer = context->GetCurrentCommandBuffer();
             vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanPipeline->GetVulkanPipeline());
 
-            // ==========================================
-            // 【核心修缮】：同时将 UBO(0) 和 Texture(1) 的集装箱绑定到管线上！
-            // 不绑定的话，着色器将无法读取任何数据。
-            // ==========================================
-            VkDescriptorSet sets[] = {
-                vulkanPipeline->GetVulkanDescriptorSet(0),
-                vulkanPipeline->GetVulkanDescriptorSet(1)
-            };
-
-            if (sets[0] != VK_NULL_HANDLE && sets[1] != VK_NULL_HANDLE) {
-                vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanPipeline->GetVulkanPipelineLayout(), 0, 2, sets, 0, nullptr);
+            // 绑定 UBO (Set 0)
+            VkDescriptorSet set0 = vulkanPipeline->GetVulkanDescriptorSet(0);
+            if (set0 != VK_NULL_HANDLE) {
+                vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanPipeline->GetVulkanPipelineLayout(), 0, 1, &set0, 0, nullptr);
             }
-        } else {
-            AYAYA_CORE_ERROR("Vulkan Error: Attempted to bind a NULL Pipeline!");
+
+            // 【核心】：切换管线时，清空之前记的小本本，并记住新管线
+            m_BoundPipeline = vulkanPipeline;
+            m_PendingImageInfos.clear();
         }
     }
 
@@ -109,98 +104,62 @@ namespace Ayaya {
                            0, size, data);
     }
 
+    // ==========================================
+    // 绑定贴图：只记小本本，不跟 Vulkan 通信！
+    // ==========================================
     void VulkanRenderCommandBuffer::BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<Texture2D>& texture) {
-        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-        auto vulkanPipeline = std::dynamic_pointer_cast<VulkanPipeline>(pipeline);
         auto vulkanTex = std::dynamic_pointer_cast<VulkanTexture2D>(texture);
-
-        if (!vulkanPipeline || !vulkanTex) return;
-
-        VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageView = vulkanTex->GetImageView();
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.sampler = vulkanTex->GetSampler();
-
-        VkWriteDescriptorSet descriptorWrite{};
-        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        
-        // 【核心修改】：贴图都在 Set 1 中，必须传入 1 ！！！
-        descriptorWrite.dstSet = vulkanPipeline->GetVulkanDescriptorSet(1); 
-        descriptorWrite.dstBinding = slot;
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pImageInfo = &imageInfo;
-
-        vkDeviceWaitIdle(context->GetDevice()); // TODO: 临时暴力锁，后期需改为动态 DescriptorPool
-        vkUpdateDescriptorSets(context->GetDevice(), 1, &descriptorWrite, 0, nullptr);
+        if (!vulkanTex || vulkanTex->GetImageView() == VK_NULL_HANDLE) return;
+        m_PendingImageInfos[slot] = { vulkanTex->GetSampler(), vulkanTex->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
     }
 
     void VulkanRenderCommandBuffer::BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<Framebuffer>& framebuffer, uint32_t attachmentIndex, bool isDepth) {
-        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-        auto vulkanPipeline = std::dynamic_pointer_cast<VulkanPipeline>(pipeline);
         auto vulkanFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(framebuffer);
-
-        if (!vulkanPipeline || !vulkanFBO) return;
-
-        VkDescriptorImageInfo imageInfo{};
-        
-        // ==========================================
-        // 【核心修复 2】：解除注释，真正绑定 FBO 贴图！
-        // ==========================================
-        if (isDepth) {
-            imageInfo.imageView = vulkanFBO->GetDepthAttachmentImageView(); // 修改这里
-        } else {
-            imageInfo.imageView = vulkanFBO->GetColorAttachmentImageView(attachmentIndex); // 修改这里
-        }
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.sampler = vulkanFBO->GetSampler(); // 修改这里
-
-        if (imageInfo.imageView == VK_NULL_HANDLE) {
-            AYAYA_CORE_WARN("Failed to bind Framebuffer Texture: ImageView is NULL!");
-            return;
-        }
-
-        VkWriteDescriptorSet descriptorWrite{};
-        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet = vulkanPipeline->GetVulkanDescriptorSet(1); // Set 1
-        descriptorWrite.dstBinding = slot;
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pImageInfo = &imageInfo;
-
-        vkDeviceWaitIdle(context->GetDevice());
-        vkUpdateDescriptorSets(context->GetDevice(), 1, &descriptorWrite, 0, nullptr);
+        if (!vulkanFBO) return;
+        VkImageView view = isDepth ? vulkanFBO->GetDepthAttachmentImageView() : vulkanFBO->GetColorAttachmentImageView(attachmentIndex);
+        if (view == VK_NULL_HANDLE) return;
+        m_PendingImageInfos[slot] = { vulkanFBO->GetSampler(), view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
     }
 
     void VulkanRenderCommandBuffer::BindTextureCube(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<TextureCube>& textureCube) {
-        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-        auto vulkanPipeline = std::dynamic_pointer_cast<VulkanPipeline>(pipeline);
         auto vulkanTex = std::dynamic_pointer_cast<VulkanTextureCube>(textureCube);
+        if (!vulkanTex || vulkanTex->GetImageView() == VK_NULL_HANDLE) return;
+        m_PendingImageInfos[slot] = { vulkanTex->GetSampler(), vulkanTex->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+    }
 
-        if (!vulkanPipeline || !vulkanTex) return;
+    // ==========================================
+    // 核心冲刷器：Draw 之前的终极发车！
+    // ==========================================
+    void VulkanRenderCommandBuffer::FlushDescriptorSets() {
+        if (!m_BoundPipeline || m_PendingImageInfos.empty()) return;
 
-        VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageView = vulkanTex->GetImageView();
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.sampler = vulkanTex->GetSampler(); 
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        VkDevice device = context->GetDevice();
 
-        VkWriteDescriptorSet descriptorWrite{};
-        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet = vulkanPipeline->GetVulkanDescriptorSet(1); // 【核心修改】：写入 Set 1
-        descriptorWrite.dstBinding = slot;
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pImageInfo = &imageInfo;
+        // 从环形缓冲里拿出一个全新的干净集装箱
+        VkDescriptorSet newSet = m_BoundPipeline->GetNextTextureDescriptorSet();
 
-        vkDeviceWaitIdle(context->GetDevice());
-        vkUpdateDescriptorSets(context->GetDevice(), 1, &descriptorWrite, 0, nullptr);
+        std::vector<VkWriteDescriptorSet> writes;
+        // 把小本本里的记录全部写进新集装箱
+        for (auto& pair : m_PendingImageInfos) {
+            VkWriteDescriptorSet write{};
+            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.dstSet = newSet;
+            write.dstBinding = pair.first;
+            write.dstArrayElement = 0;
+            write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            write.descriptorCount = 1;
+            write.pImageInfo = &pair.second; // 值存在 map 里，地址稳定
+            writes.push_back(write);
+        }
+
+        vkUpdateDescriptorSets(device, writes.size(), writes.data(), 0, nullptr);
+        vkCmdBindDescriptorSets(context->GetCurrentCommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_BoundPipeline->GetVulkanPipelineLayout(), 1, 1, &newSet, 0, nullptr);
     }
 
     // --- 绘制指令 ---
     void VulkanRenderCommandBuffer::DrawIndexed(const std::shared_ptr<Mesh>& mesh, uint32_t indexCount) {
+        FlushDescriptorSets(); // 发车！
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         if (!mesh) return;
 
@@ -234,23 +193,27 @@ namespace Ayaya {
     }
 
     void VulkanRenderCommandBuffer::DrawArrays(uint32_t vertexCount) {
+        FlushDescriptorSets(); // 发车！
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         vkCmdDraw(context->GetCurrentCommandBuffer(), vertexCount, 1, 0, 0);
     }
 
     void VulkanRenderCommandBuffer::DrawArrays(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount) {
+        FlushDescriptorSets(); // 发车！
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         uint32_t count = vertexCount ? vertexCount : mesh->GetVertexCount();
         vkCmdDraw(context->GetCurrentCommandBuffer(), count, 1, 0, 0);
     }
 
     void VulkanRenderCommandBuffer::DrawTriangleStrip(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount) {
+        FlushDescriptorSets(); // 发车！
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         uint32_t count = vertexCount ? vertexCount : mesh->GetVertexCount();
         vkCmdDraw(context->GetCurrentCommandBuffer(), count, 1, 0, 0);
     }
 
     void VulkanRenderCommandBuffer::DrawTriangleStrip(uint32_t vertexCount) {
+        FlushDescriptorSets(); // 发车！
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         vkCmdDraw(context->GetCurrentCommandBuffer(), vertexCount, 1, 0, 0);
     }
