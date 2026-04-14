@@ -29,6 +29,8 @@
 #include "Renderer/Passes/VulkanGbufferPass.hpp"
 #include "Renderer/Passes/VulkanLightingPass.hpp"
 #include "Renderer/Passes/VulkanPostProcessPass.hpp"
+#include "Renderer/Passes/VulkanForwardTestPass.hpp"
+
 
 // 3. 第三方库
 #include <glad/glad.h>
@@ -161,9 +163,11 @@ namespace Ayaya {
             // Vulkan 模式下暂不执行任何 OpenGL 的 VAO 或 Query 创建
 
             // m_Pipeline.AddPass(std::make_shared<VulkanClearPass>());
-            m_Pipeline.AddPass(std::make_shared<VulkanGBufferPass>());
-            m_Pipeline.AddPass(std::make_shared<VulkanLightingPass>());
-            m_Pipeline.AddPass(std::make_shared<VulkanPostProcessPass>());
+            // m_Pipeline.AddPass(std::make_shared<VulkanGBufferPass>());
+            // m_Pipeline.AddPass(std::make_shared<VulkanLightingPass>());
+            // m_Pipeline.AddPass(std::make_shared<VulkanPostProcessPass>());
+            m_Pipeline.AddPass(std::make_shared<VulkanForwardTestPass>());
+            
             m_Pipeline.Init();
         }
     }
@@ -357,20 +361,35 @@ namespace Ayaya {
     }
 
     void* SceneRenderer::GetFinalColorAttachmentRendererID() {
-        // 避开 std::any，直接从防弹字典里取最后画好的 FBO
+        // 1. 优先寻找完整管线的最后输出 (正式模式)
         if (m_RenderContext.Framebuffers.find("PostProcess") != m_RenderContext.Framebuffers.end()) {
             auto fbo = m_RenderContext.Framebuffers["PostProcess"];
             if (fbo) return fbo->GetColorAttachmentRendererID(0);
         }
+
+        // ==========================================
+        // 2. 【核心修复】：向下兼容！如果没开后处理，尝试寻找向前渲染测试的产物
+        // ==========================================
+        if (m_RenderContext.Framebuffers.find("ForwardTest") != m_RenderContext.Framebuffers.end()) {
+            auto fbo = m_RenderContext.Framebuffers["ForwardTest"];
+            if (fbo) return fbo->GetColorAttachmentRendererID(0);
+        }
+
         return nullptr;
     }
 
     void* SceneRenderer::GetPostProcessFBORendererID() {
-        // 避开 std::any，直接从防弹字典里取
+        // 同理，高清截图器等功能也需要向下兼容
         if (m_RenderContext.Framebuffers.find("PostProcess") != m_RenderContext.Framebuffers.end()) {
             auto fbo = m_RenderContext.Framebuffers["PostProcess"];
             if (fbo) return fbo->GetColorAttachmentRendererID(0);
         }
+
+        if (m_RenderContext.Framebuffers.find("ForwardTest") != m_RenderContext.Framebuffers.end()) {
+            auto fbo = m_RenderContext.Framebuffers["ForwardTest"];
+            if (fbo) return fbo->GetColorAttachmentRendererID(0);
+        }
+
         return nullptr;
     }
 
