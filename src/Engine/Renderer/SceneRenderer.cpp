@@ -201,8 +201,25 @@ namespace Ayaya {
         // 【核心修复】：将物理矩阵与位置同步给数据黑板，救活整个场景！
         // ==========================================
         m_RenderContext.ViewMatrix = viewMatrix;
-        m_RenderContext.ProjectionMatrix = projectionMatrix;
         m_RenderContext.CameraPosition = cameraPosition;
+
+        // ==========================================
+        // 【方案 A】：应用 Vulkan 深度校正矩阵
+        // ==========================================
+        if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+            // 这个矩阵的作用是将 OpenGL 的 Z [-1, 1] 映射到 Vulkan 的 [0, 1]
+            // 由于你在 CommandBuffer 里用了负视口处理了 Y 轴，这里只需要改 Z。
+            // GLM 是列主序 (Column Major)
+            static const glm::mat4 vulkanCorrection(
+                1.0f,  0.0f,  0.0f,  0.0f,
+                0.0f,  1.0f,  0.0f,  0.0f,
+                0.0f,  0.0f,  0.5f,  0.0f, // 缩放 Z: 0.5
+                0.0f,  0.0f,  0.5f,  1.0f  // 偏移 Z: 0.5
+            );
+            m_RenderContext.ProjectionMatrix = vulkanCorrection * projectionMatrix;
+        } else {
+            m_RenderContext.ProjectionMatrix = projectionMatrix;
+        }
 
         m_Data->CameraData.ViewProjection = m_Data->ViewProjectionMatrix;
         m_Data->CameraData.CameraPosition = m_Data->CameraPosition;

@@ -108,10 +108,88 @@ namespace Ayaya {
 
     void VulkanTexture2D::SetData(void* data, uint32_t size) {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-        
-        // 此处应调用你定义的 Staging Buffer 拷贝逻辑
-        // 简写：创建暂存缓冲 -> Map内存 -> Unmap -> 录制拷贝命令 -> 转换布局到 SHADER_READ_ONLY
-        AYAYA_CORE_INFO("VulkanTexture2D: Pixel data uploaded for {0}", m_Path);
+        VmaAllocator allocator = context->GetAllocator();
+
+        // ==========================================
+        // 1. 创建暂存缓冲区 (Staging Buffer)
+        // 用于在 CPU 和 GPU 之间中转像素数据
+        // ==========================================
+        VkBufferCreateInfo bufferInfo{};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.size = size;
+        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT; // 声明它是一个数据源
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        VmaAllocationCreateInfo allocInfo{};
+        allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+        VkBuffer stagingBuffer;
+        VmaAllocation stagingAllocation;
+        VmaAllocationInfo stagingAllocInfo;
+        vmaCreateBuffer(allocator, &bufferInfo, &allocInfo, &stagingBuffer, &stagingAllocation, &stagingAllocInfo);
+
+        // ==========================================
+        // 2. 将 CPU 图片数据拷贝到暂存缓冲区
+        // ==========================================
+        memcpy(stagingAllocInfo.pMappedData, data, size);
+
+        // ==========================================
+        // 3. 录制单次指令将数据推送给真正的 Image
+        // ==========================================
+        VkCommandBuffer cmdBuffer = context->BeginSingleTimeCommands();
+
+        // 【步骤 A】：将图片布局从 UNDEFINED 转换为 传输目标 (TRANSFER_DST)
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = m_Image;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        vkCmdPipelineBarrier(cmdBuffer,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        // 【步骤 B】：将暂存缓冲区里的像素拷贝到图片中
+        VkBufferImageCopy region{};
+        region.bufferOffset = 0;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageOffset = {0, 0, 0};
+        region.imageExtent = {m_Width, m_Height, 1};
+
+        vkCmdCopyBufferToImage(cmdBuffer, stagingBuffer, m_Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        // 【步骤 C】：将图片布局从 传输目标 转换为 着色器只读 (SHADER_READ_ONLY) —— 解决验证层报错的核心！
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(cmdBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        // 4. 提交命令并阻塞等待 GPU 执行完毕
+        context->EndSingleTimeCommands(cmdBuffer);
+
+        // 5. 过河拆桥：数据已经到了显卡里的 Image 中，干掉暂存缓冲区
+        vmaDestroyBuffer(allocator, stagingBuffer, stagingAllocation);
+
+        AYAYA_CORE_INFO("VulkanTexture2D: Pixel data securely uploaded & Layout transitioned for {0}", m_Path.empty() ? "Generated Texture" : m_Path);
     }
 
     void VulkanTexture2D::Bind(uint32_t slot) const {

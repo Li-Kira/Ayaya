@@ -1,4 +1,5 @@
 #pragma once
+#include "ayapch.h"
 #include "Camera.hpp"
 
 namespace Ayaya {

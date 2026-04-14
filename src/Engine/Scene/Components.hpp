@@ -73,7 +73,6 @@ namespace Ayaya {
     };
 
     // 相机组件 (纯数据，没有任何控制逻辑)
-    // 相机组件 (纯数据，没有任何控制逻辑)
     struct CameraComponent {
         Ayaya::SceneCamera Camera;
         bool Primary = true;           // 标志这是否是当前负责渲染画面的主相机
