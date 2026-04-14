@@ -18,14 +18,23 @@ namespace Ayaya {
         VkPipeline GetVulkanPipeline() const { return m_Pipeline; }
         VkPipelineLayout GetVulkanPipelineLayout() const { return m_PipelineLayout; }
         
-        VkDescriptorSet GetVulkanDescriptorSet(uint32_t setIndex = 0) const { 
-            return m_DescriptorSets[setIndex]; 
+        // ==========================================
+        // 【核心修改】：现在需要传入 frameIndex 来获取对应帧的相机描述符集 (Set 0)
+        // ==========================================
+        VkDescriptorSet GetVulkanDescriptorSet(uint32_t setIndex, uint32_t frameIndex = 0) const { 
+            if (setIndex == 0) {
+                // 增加安全取模，防止 frameIndex 超过 m_GlobalDescriptorSets 的大小
+                size_t size = m_GlobalDescriptorSets.size();
+                return size > 0 ? m_GlobalDescriptorSets[frameIndex % size] : VK_NULL_HANDLE;
+            }
+            return VK_NULL_HANDLE; 
         }
 
-        static void SetGlobalUniformBuffer(uint32_t binding, VkBuffer buffer, uint32_t size);
+        // 注册 UBO，需指定是哪一帧的 Buffer
+        static void SetGlobalUniformBuffer(uint32_t binding, uint32_t frameIndex, VkBuffer buffer, uint32_t size);
 
         // ==========================================
-        // 【核心架构】：环形缓冲，每次索要都给一个全新的描述符集！
+        // 环形缓冲，每次索要都给一个全新的描述符集！(Set 1)
         // ==========================================
         VkDescriptorSet GetNextTextureDescriptorSet() {
             uint32_t index = m_CurrentTextureSetIndex;
@@ -34,16 +43,20 @@ namespace Ayaya {
         }
 
     private:
-        static std::unordered_map<uint32_t, VkDescriptorBufferInfo> s_GlobalUBOs;
+        // 记录每一帧对应的 UBO 缓冲区信息 [Binding] -> [Frame0_Info, Frame1_Info]
+        static std::unordered_map<uint32_t, std::array<VkDescriptorBufferInfo, 3>> s_GlobalUBOs;
+        
         PipelineSpecification m_Specification;
 
         VkPipeline m_Pipeline = VK_NULL_HANDLE;
         VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
         
         std::array<VkDescriptorSetLayout, 2> m_DescriptorSetLayouts = { VK_NULL_HANDLE, VK_NULL_HANDLE };
-        std::array<VkDescriptorSet, 2> m_DescriptorSets = { VK_NULL_HANDLE, VK_NULL_HANDLE };
 
-        // 专属池与环形缓冲
+        // 【核心修改】：Set 0 变为数组，为每一帧保存一份专属的描述符
+        std::vector<VkDescriptorSet> m_GlobalDescriptorSets; 
+
+        // 专属池与环形缓冲 (Set 1)
         VkDescriptorPool m_PipelineDescriptorPool = VK_NULL_HANDLE;
         std::vector<VkDescriptorSet> m_TextureDescriptorSets;
         uint32_t m_CurrentTextureSetIndex = 0;

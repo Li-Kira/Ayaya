@@ -31,6 +31,8 @@
 #include "Renderer/Passes/VulkanPostProcessPass.hpp"
 #include "Renderer/Passes/VulkanForwardTestPass.hpp"
 
+#include "Core/Application.hpp"
+#include "Platform/Vulkan/VulkanContext.hpp"
 
 // 3. 第三方库
 #include <glad/glad.h>
@@ -190,41 +192,51 @@ namespace Ayaya {
     }
     
     void SceneRenderer::BeginScene(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, const glm::vec3& cameraPosition) {
-        ResetStats();
+    ResetStats();
 
-        m_Data->ViewMatrix = viewMatrix;
-        m_Data->ProjectionMatrix = projectionMatrix;
-        m_Data->ViewProjectionMatrix = projectionMatrix * viewMatrix; 
-        m_Data->CameraPosition = cameraPosition;
-        
-        // ==========================================
-        // 【核心修复】：将物理矩阵与位置同步给数据黑板，救活整个场景！
-        // ==========================================
-        m_RenderContext.ViewMatrix = viewMatrix;
-        m_RenderContext.CameraPosition = cameraPosition;
+    m_Data->ViewMatrix = viewMatrix;
+    m_Data->ProjectionMatrix = projectionMatrix;
+    m_Data->CameraPosition = cameraPosition;
+    
+    m_RenderContext.ViewMatrix = viewMatrix;
+    m_RenderContext.CameraPosition = cameraPosition;
 
-        // ==========================================
-        // 【方案 A】：应用 Vulkan 深度校正矩阵
-        // ==========================================
-        if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-            // 这个矩阵的作用是将 OpenGL 的 Z [-1, 1] 映射到 Vulkan 的 [0, 1]
-            // 由于你在 CommandBuffer 里用了负视口处理了 Y 轴，这里只需要改 Z。
-            // GLM 是列主序 (Column Major)
-            static const glm::mat4 vulkanCorrection(
-                1.0f,  0.0f,  0.0f,  0.0f,
-                0.0f,  1.0f,  0.0f,  0.0f,
-                0.0f,  0.0f,  0.5f,  0.0f, // 缩放 Z: 0.5
-                0.0f,  0.0f,  0.5f,  1.0f  // 偏移 Z: 0.5
-            );
-            m_RenderContext.ProjectionMatrix = vulkanCorrection * projectionMatrix;
-        } else {
-            m_RenderContext.ProjectionMatrix = projectionMatrix;
-        }
-
-        m_Data->CameraData.ViewProjection = m_Data->ViewProjectionMatrix;
-        m_Data->CameraData.CameraPosition = m_Data->CameraPosition;
-        s_CameraUniformBuffer->SetData(&m_Data->CameraData, sizeof(struct_CameraData));
+    // ==========================================
+    // 1. 先应用 Vulkan 深度校正矩阵！
+    // ==========================================
+    if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+        static const glm::mat4 vulkanCorrection(
+            1.0f,  0.0f,  0.0f,  0.0f,
+            0.0f, -1.0f,  0.0f,  0.0f, // <--- 【核心修复】：将这里的 1.0f 改为 -1.0f ！！！
+            0.0f,  0.0f,  0.5f,  0.0f, 
+            0.0f,  0.0f,  0.5f,  1.0f  
+        );
+        m_RenderContext.ProjectionMatrix = vulkanCorrection * projectionMatrix;
+    } else {
+        m_RenderContext.ProjectionMatrix = projectionMatrix;
     }
+
+    // ==========================================
+    // 2. 【核心修复】：使用校正后的 Projection 乘以 View！
+    // ==========================================
+    m_Data->ViewProjectionMatrix = m_RenderContext.ProjectionMatrix * viewMatrix; 
+
+    // 3. 上传到 GPU
+    m_Data->CameraData.ViewProjection = m_Data->ViewProjectionMatrix;
+    m_Data->CameraData.CameraPosition = m_Data->CameraPosition;
+    
+   // ==========================================
+    // 【抓鬼测试】：强行同步 CPU 与 GPU
+    // ==========================================
+    if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        // 强迫 CPU 停下来，等显卡彻底把上一帧画完再继续！
+        vkDeviceWaitIdle(context->GetDevice()); 
+    }
+    
+    // 现在写入就绝对安全了！
+    s_CameraUniformBuffer->SetData(&m_Data->CameraData, sizeof(struct_CameraData));
+}
 
     void SceneRenderer::EndScene() {
     }

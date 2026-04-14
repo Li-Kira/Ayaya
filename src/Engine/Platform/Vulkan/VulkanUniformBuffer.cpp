@@ -1,10 +1,8 @@
 #include "ayapch.h"
 #include "VulkanUniformBuffer.hpp"
-#include "Core/Log.hpp"
 #include "Platform/Vulkan/VulkanContext.hpp"
 #include "Platform/Vulkan/VulkanPipeline.hpp"
 #include "Core/Application.hpp"
-#include <cstring> // for memcpy
 
 namespace Ayaya {
 
@@ -14,38 +12,53 @@ namespace Ayaya {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         VmaAllocator allocator = context->GetAllocator();
 
-        // 1. 声明这是一个 Uniform Buffer
-        VkBufferCreateInfo bufferInfo{};
-        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bufferInfo.size = size;
-        bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        // 【修改 1】：扩大为 3，覆盖三重缓冲！
+        m_FramesInFlight = 3;
+        
+        m_Buffers.resize(m_FramesInFlight);
+        m_Allocations.resize(m_FramesInFlight);
+        m_AllocInfos.resize(m_FramesInFlight);
 
-        // 2. VMA 高级配置：自动选择内存位置，并声明我们需要从 CPU 频繁写入
-        VmaAllocationCreateInfo allocInfo{};
-        allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
-        // 【魔法参数】：CREATE_MAPPED_BIT 让 VMA 直接帮我们把显存映射到 CPU 内存空间！
-        // HOST_ACCESS_SEQUENTIAL_WRITE_BIT 告诉底层驱动我们会经常覆盖写入，驱动会为其优化带宽。
-        allocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+        for (uint32_t i = 0; i < m_FramesInFlight; i++) {
+            VkBufferCreateInfo bufferInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+            bufferInfo.size = size;
+            bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+            bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        VkResult result = vmaCreateBuffer(allocator, &bufferInfo, &allocInfo, &m_Buffer, &m_Allocation, &m_AllocInfo);
-        Ayaya::VulkanPipeline::SetGlobalUniformBuffer(binding, m_Buffer, size);
-        AYAYA_CORE_ASSERT(result == VK_SUCCESS, "Failed to allocate Vulkan Uniform Buffer!");
+            VmaAllocationCreateInfo allocInfo{};
+            allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+            allocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+            
+            // ==========================================
+            // 【核心修复】：强制要求内存具备“缓存一致性”！
+            // 解决偶尔闪烁、数据未及时同步到显存的终极杀手锏。
+            // ==========================================
+            allocInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT; 
+
+            vmaCreateBuffer(allocator, &bufferInfo, &allocInfo, &m_Buffers[i], &m_Allocations[i], &m_AllocInfos[i]);
+            
+            // 注册到管线...
+            Ayaya::VulkanPipeline::SetGlobalUniformBuffer(binding, i, m_Buffers[i], size);
+        }
     }
 
     VulkanUniformBuffer::~VulkanUniformBuffer() {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-        if (context && m_Buffer != VK_NULL_HANDLE) {
-            // VMA 的销毁非常省心，一行代码带走 Buffer 和 显存块
-            vmaDestroyBuffer(context->GetAllocator(), m_Buffer, m_Allocation);
+        if (!context) return;
+
+        for (uint32_t i = 0; i < m_FramesInFlight; i++) {
+            if (m_Buffers[i]) {
+                vmaDestroyBuffer(context->GetAllocator(), m_Buffers[i], m_Allocations[i]);
+            }
         }
     }
 
     void VulkanUniformBuffer::SetData(const void* data, uint32_t size, uint32_t offset) {
-        // 由于我们使用了 MAPPED_BIT，m_AllocInfo.pMappedData 就是直通显存的 CPU 指针！
-        // 直接使用 memcpy 暴力写入，没有任何额外 API 开销，极致性能！
-        if (m_AllocInfo.pMappedData) {
-            memcpy((uint8_t*)m_AllocInfo.pMappedData + offset, data, size);
-        }
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        
+        // 核心逻辑：获取当前正在录制的帧索引 (0 或 1)
+        uint32_t frameIndex = context->GetCurrentFrameIndex() % m_FramesInFlight;
+        // 只写到当前帧对应的内存地址，绝不干扰 GPU 正在读的另一帧！
+        memcpy((uint8_t*)m_AllocInfos[frameIndex].pMappedData + offset, data, size);
     }
 }

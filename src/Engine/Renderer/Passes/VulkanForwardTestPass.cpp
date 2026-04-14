@@ -48,13 +48,13 @@ namespace Ayaya {
             { ShaderDataType::Float3, "a_Position" },
             { ShaderDataType::Float3, "a_Normal" },
             { ShaderDataType::Float2, "a_TexCoord" },
-            { ShaderDataType::Float3, "a_Tangent" } 
+            { ShaderDataType::Float3, "a_Tangent" }
         };
-
+        
         pipeSpec.DepthTest = true;
         pipeSpec.DepthWrite = true;
         pipeSpec.Blend = false;
-        pipeSpec.BackfaceCulling = CullMode::Back; 
+        pipeSpec.BackfaceCulling = CullMode::None;
 
         m_ForwardPipeline = Pipeline::Create(pipeSpec);
     }
@@ -122,7 +122,7 @@ namespace Ayaya {
         // ==========================================
         // 3. 执行绘制
         // ==========================================
-        cmd.BeginRenderPass(m_ForwardFBO, true, glm::vec4(0.15f, 0.15f, 0.15f, 1.0f));
+        cmd.BeginRenderPass(m_ForwardFBO, true, glm::vec4(1.0f, 0.0f, 1.0f, 1.0f));
 
         std::shared_ptr<Pipeline> currentPipeline = nullptr;
         auto whiteTex = context.GetTexture("WhiteTexture");

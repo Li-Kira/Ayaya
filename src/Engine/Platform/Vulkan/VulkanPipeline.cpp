@@ -7,10 +7,11 @@
 #include "Core/Log.hpp"
 
 namespace Ayaya {
-    // 初始化静态 UBO 注册表
-    std::unordered_map<uint32_t, VkDescriptorBufferInfo> VulkanPipeline::s_GlobalUBOs;
-    void VulkanPipeline::SetGlobalUniformBuffer(uint32_t binding, VkBuffer buffer, uint32_t size) {
-        s_GlobalUBOs[binding] = { buffer, 0, size };
+    std::unordered_map<uint32_t, std::array<VkDescriptorBufferInfo, 3>> VulkanPipeline::s_GlobalUBOs;
+
+    // 记录 UBO 缓冲区信息 (增加 frameIndex 参数)
+    void VulkanPipeline::SetGlobalUniformBuffer(uint32_t binding, uint32_t frameIndex, VkBuffer buffer, uint32_t size) {
+        s_GlobalUBOs[binding][frameIndex] = { buffer, 0, size };
     }
 
     VulkanPipeline::VulkanPipeline(const PipelineSpecification& spec)
@@ -18,6 +19,7 @@ namespace Ayaya {
         
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         VkDevice device = context->GetDevice();
+        uint32_t framesInFlight = 3; // 与引擎 Double Buffering 保持一致
     
         auto vulkanShader = std::dynamic_pointer_cast<VulkanShader>(spec.Shader);
         AYAYA_CORE_ASSERT(vulkanShader, "Pipeline requires a valid VulkanShader!");
@@ -90,7 +92,6 @@ namespace Ayaya {
         // ==========================================
         VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        // 如果是后处理/精灵绘制等使用 glDrawArrays(4)，我们假定使用的是 TriangleStrip
         inputAssembly.topology = attributeDescriptions.empty() ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         inputAssembly.primitiveRestartEnable = VK_FALSE;
 
@@ -110,17 +111,14 @@ namespace Ayaya {
         viewportState.scissorCount = 1;
 
         // ==========================================
-        // 4. 光栅化 (Rasterizer) 描边线框与背面剔除支持
+        // 4. 光栅化 (Rasterizer) 
         // ==========================================
         VkPipelineRasterizationStateCreateInfo rasterizer{};
         rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         rasterizer.depthClampEnable = VK_FALSE;
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
-        
-        // rasterizer.polygonMode = spec.PolygonModeLine ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
-        // 【修改】：暂时强制为 FILL，等后续在 VulkanContext 开启了 fillModeNonSolid 特性后再放开
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterizer.lineWidth = spec.LineWidth; // 注意：大于 1.0f 需开启 GPU 特性宽线支持
+        rasterizer.lineWidth = spec.LineWidth; 
         
         rasterizer.cullMode = VK_CULL_MODE_NONE;
         if (spec.BackfaceCulling == CullMode::Back) rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
@@ -173,8 +171,6 @@ namespace Ayaya {
 
         // ==========================================
         // 7. Descriptor Set Layouts (描述符集图纸)
-        // Set 0: 统一留给 UBO (2 个槽位够用了)
-        // Set 1: 统一留给 Textures (留 12 个槽位)
         // ==========================================
         std::vector<VkDescriptorSetLayoutBinding> set0Bindings;
         for (uint32_t i = 0; i < 2; i++) {
@@ -212,11 +208,11 @@ namespace Ayaya {
         VkPushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
         pushConstantRange.offset = 0;
-        pushConstantRange.size = 256; // 最大支持 128 Bytes 的常数块
+        pushConstantRange.size = 256; 
 
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 2; // 启用 Set0 和 Set1
+        pipelineLayoutInfo.setLayoutCount = 2; 
         pipelineLayoutInfo.pSetLayouts = m_DescriptorSetLayouts.data();
         pipelineLayoutInfo.pushConstantRangeCount = 1;
         pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
@@ -236,12 +232,11 @@ namespace Ayaya {
         pipelineInfo.pInputAssemblyState = &inputAssembly;
         pipelineInfo.pViewportState = &viewportState;
         pipelineInfo.pRasterizationState = &rasterizer;
-        // 补充默认的多重采样状态（1次采样，即不开启 MSAA）
         VkPipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisampling.sampleShadingEnable = VK_FALSE;
         multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-        pipelineInfo.pMultisampleState = &multisampling; // 替换原来的 nullptr
+        pipelineInfo.pMultisampleState = &multisampling; 
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;
@@ -254,9 +249,8 @@ namespace Ayaya {
         }
 
         // ==========================================
-        // 10. 创建管线专属 Descriptor Pool 并分配环形缓冲
+        // 10. 创建管线专属 Descriptor Pool
         // ==========================================
-        // 分配 10 个 UBO 坑位和 1500 个图片采样器坑位
         VkDescriptorPoolSize poolSizes[] = {
             { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10 },
             { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1500 }
@@ -266,21 +260,50 @@ namespace Ayaya {
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.poolSizeCount = 2;
         poolInfo.pPoolSizes = poolSizes;
-        poolInfo.maxSets = 150; // 最大支持分配 150 个 Set
+        poolInfo.maxSets = 150; 
 
         if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_PipelineDescriptorPool) != VK_SUCCESS) {
             AYAYA_CORE_ERROR("Failed to create custom Descriptor Pool for Pipeline!");
         }
 
-        // 分配 Set 0 (UBO)
+        // ==========================================
+        // 11. 【核心升级】：为每一帧独立分配与写入 Set 0
+        // ==========================================
+        m_GlobalDescriptorSets.resize(framesInFlight);
+        std::vector<VkDescriptorSetLayout> layouts0(framesInFlight, m_DescriptorSetLayouts[0]);
+        
         VkDescriptorSetAllocateInfo allocInfo0{};
         allocInfo0.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         allocInfo0.descriptorPool = m_PipelineDescriptorPool;
-        allocInfo0.descriptorSetCount = 1;
-        allocInfo0.pSetLayouts = &m_DescriptorSetLayouts[0];
-        vkAllocateDescriptorSets(device, &allocInfo0, &m_DescriptorSets[0]);
+        allocInfo0.descriptorSetCount = framesInFlight;
+        allocInfo0.pSetLayouts = layouts0.data();
+        vkAllocateDescriptorSets(device, &allocInfo0, m_GlobalDescriptorSets.data());
 
-        // 分配 100 个 Set 1 (纹理) 作为环形缓冲！
+        // 将每一帧对应的 UBO 缓冲区写入各自的描述符集中
+        for (uint32_t i = 0; i < framesInFlight; i++) {
+            std::vector<VkWriteDescriptorSet> descriptorWrites;
+            for (auto& pair : s_GlobalUBOs) {
+                uint32_t binding = pair.first;
+                VkDescriptorBufferInfo& bufferInfo = pair.second[i]; // 取第 i 帧的显存信息
+
+                VkWriteDescriptorSet write{};
+                write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                write.dstSet = m_GlobalDescriptorSets[i];
+                write.dstBinding = binding;
+                write.dstArrayElement = 0;
+                write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                write.descriptorCount = 1;
+                write.pBufferInfo = &bufferInfo;
+                descriptorWrites.push_back(write);
+            }
+            if (!descriptorWrites.empty()) {
+                vkUpdateDescriptorSets(device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
+            }
+        }
+
+        // ==========================================
+        // 12. 分配 100 个 Set 1 (纹理) 作为环形缓冲
+        // ==========================================
         std::vector<VkDescriptorSetLayout> layouts100(100, m_DescriptorSetLayouts[1]);
         m_TextureDescriptorSets.resize(100);
         
@@ -290,25 +313,6 @@ namespace Ayaya {
         allocInfo1.descriptorSetCount = 100;
         allocInfo1.pSetLayouts = layouts100.data();
         vkAllocateDescriptorSets(device, &allocInfo1, m_TextureDescriptorSets.data());
-
-        // 写入全局 UBO (保留你上一轮已经修复的代码)
-        if (m_DescriptorSets[0] != VK_NULL_HANDLE) {
-            std::vector<VkWriteDescriptorSet> descriptorWrites;
-            for (const auto& pair : s_GlobalUBOs) {
-                VkWriteDescriptorSet write{};
-                write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                write.dstSet = m_DescriptorSets[0];
-                write.dstBinding = pair.first;
-                write.dstArrayElement = 0;
-                write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                write.descriptorCount = 1;
-                write.pBufferInfo = &pair.second;
-                descriptorWrites.push_back(write);
-            }
-            if (!descriptorWrites.empty()) {
-                vkUpdateDescriptorSets(device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
-            }
-        }
     }
 
     VulkanPipeline::~VulkanPipeline() {
@@ -319,7 +323,6 @@ namespace Ayaya {
             if (m_PipelineLayout) vkDestroyPipelineLayout(device, m_PipelineLayout, nullptr);
             if (m_DescriptorSetLayouts[0]) vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayouts[0], nullptr);
             if (m_DescriptorSetLayouts[1]) vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayouts[1], nullptr);
-            // 销毁专属池
             if (m_PipelineDescriptorPool) vkDestroyDescriptorPool(device, m_PipelineDescriptorPool, nullptr);
         }
     }

@@ -159,37 +159,33 @@ namespace Ayaya {
 
     // --- 绘制指令 ---
     void VulkanRenderCommandBuffer::DrawIndexed(const std::shared_ptr<Mesh>& mesh, uint32_t indexCount) {
-        FlushDescriptorSets(); // 发车！
+        if (!m_BoundPipeline) return;
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-        if (!mesh) return;
+        VkCommandBuffer cmd = context->GetCurrentCommandBuffer();
 
-        VkCommandBuffer cmdBuffer = context->GetCurrentCommandBuffer();
+        // 1. 【核心修复】：绑定相机数据 (Set 0)
+        VkDescriptorSet cameraSet = m_BoundPipeline->GetVulkanDescriptorSet(0);
+        if (cameraSet != VK_NULL_HANDLE) {
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+                                    m_BoundPipeline->GetVulkanPipelineLayout(), 0, 1, &cameraSet, 0, nullptr);
+        }
 
-        // ==========================================
-        // 1. 绑定 VBO
-        // ==========================================
-        auto vbo = std::dynamic_pointer_cast<VulkanVertexBuffer>(mesh->GetVertexBuffer());
-        if (vbo && vbo->GetVulkanBuffer() != VK_NULL_HANDLE) {
-            VkBuffer vertexBuffers[] = { vbo->GetVulkanBuffer() };
+        // 2. 绑定材质贴图 (Set 1)
+        FlushDescriptorSets(); 
+
+        // 3. 【核心修复】：绑定 VBO 和 IBO
+        auto vulkanVB = std::dynamic_pointer_cast<VulkanVertexBuffer>(mesh->GetVertexBuffer());
+        auto vulkanIB = std::dynamic_pointer_cast<VulkanIndexBuffer>(mesh->GetIndexBuffer());
+        if (vulkanVB && vulkanIB) {
+            VkBuffer vbs[] = { vulkanVB->GetVulkanBuffer() };
             VkDeviceSize offsets[] = { 0 };
-            vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
+            vkCmdBindVertexBuffers(cmd, 0, 1, vbs, offsets);
+            vkCmdBindIndexBuffer(cmd, vulkanIB->GetVulkanBuffer(), 0, VK_INDEX_TYPE_UINT32);
         }
 
-        // ==========================================
-        // 2. 绑定 IBO 并拦截致命错误
-        // ==========================================
-        auto ibo = std::dynamic_pointer_cast<VulkanIndexBuffer>(mesh->GetIndexBuffer());
-        if (ibo && ibo->GetVulkanBuffer() != VK_NULL_HANDLE) {
-            // 你的引擎通常使用 uint32_t 的索引
-            vkCmdBindIndexBuffer(cmdBuffer, ibo->GetVulkanBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        } else {
-            // 【防崩魔法】：如果没有索引缓冲区，强行 Draw 会让驱动爆炸，我们直接跳过绘制！
-            AYAYA_CORE_ERROR("Vulkan Error: Trying to DrawIndexed but no valid Index Buffer found!");
-            return; 
-        }
-
+        // 4. 执行绘制
         uint32_t count = indexCount ? indexCount : mesh->GetIndexCount();
-        vkCmdDrawIndexed(cmdBuffer, count, 1, 0, 0, 0);
+        vkCmdDrawIndexed(cmd, count, 1, 0, 0, 0);
     }
 
     void VulkanRenderCommandBuffer::DrawArrays(uint32_t vertexCount) {
