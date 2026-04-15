@@ -40,7 +40,8 @@ namespace Ayaya {
         virtual void Execute(RenderContext& context, RenderCommandBuffer& cmd) override;
 
     private:
-        std::shared_ptr<Framebuffer> m_ForwardFBO;
+        // 【核心修改】：将单一 FBO 升级为多帧隔离的 FBO 数组
+        std::vector<std::shared_ptr<Framebuffer>> m_ForwardFBOs;
         
         std::shared_ptr<Shader> m_ForwardShader;
         std::shared_ptr<Material> m_DefaultMaterial; 

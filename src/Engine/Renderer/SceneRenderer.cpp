@@ -225,14 +225,14 @@ namespace Ayaya {
     m_Data->CameraData.ViewProjection = m_Data->ViewProjectionMatrix;
     m_Data->CameraData.CameraPosition = m_Data->CameraPosition;
     
-   // ==========================================
+    // ==========================================
     // 【抓鬼测试】：强行同步 CPU 与 GPU
     // ==========================================
-    if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-        // 强迫 CPU 停下来，等显卡彻底把上一帧画完再继续！
-        vkDeviceWaitIdle(context->GetDevice()); 
-    }
+    // if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+    //     auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+    //     // 强迫 CPU 停下来，等显卡彻底把上一帧画完再继续！
+    //     vkDeviceWaitIdle(context->GetDevice());
+    // }
     
     // 现在写入就绝对安全了！
     s_CameraUniformBuffer->SetData(&m_Data->CameraData, sizeof(struct_CameraData));

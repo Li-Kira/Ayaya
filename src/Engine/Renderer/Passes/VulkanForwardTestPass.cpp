@@ -4,6 +4,8 @@
 #include "Renderer/Frustum.hpp"
 #include "Engine/Scene/Components.hpp"
 #include "Engine/Scene/Scene.hpp"
+#include "Core/Application.hpp"
+#include "Platform/Vulkan/VulkanContext.hpp"
 
 #include <algorithm>
 #include <glm/glm.hpp>
@@ -31,14 +33,19 @@ namespace Ayaya {
             FramebufferTextureFormat::RGBA8, 
             FramebufferTextureFormat::Depth  
         };
-        m_ForwardFBO = Framebuffer::Create(fboSpec);
+
+
+        m_ForwardFBOs.resize(3);
+        for (int i = 0; i < 3; i++) {
+            m_ForwardFBOs[i] = Framebuffer::Create(fboSpec);
+        }
 
         // ==========================================
         // 2. 打包 PSO (Pipeline State Object)
         // ==========================================
         PipelineSpecification pipeSpec;
         pipeSpec.Shader = m_ForwardShader;
-        pipeSpec.TargetFramebuffer = m_ForwardFBO;
+        pipeSpec.TargetFramebuffer = m_ForwardFBOs[0];
         
         // ==========================================
         // 【核心修复 1】：必须声明顶点布局！
@@ -60,7 +67,9 @@ namespace Ayaya {
     }
 
     void VulkanForwardTestPass::OnResize(uint32_t width, uint32_t height) {
-        m_ForwardFBO->Resize(width, height);
+        for (auto& fbo : m_ForwardFBOs) {
+            fbo->Resize(width, height);
+        }
     }
 
     void VulkanForwardTestPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
@@ -68,7 +77,11 @@ namespace Ayaya {
         uint32_t height = context.Get<uint32_t>("ViewportHeight");
         if (width == 0 || height == 0) return;
 
-        if (m_ForwardFBO->GetSpecification().Width != width || m_ForwardFBO->GetSpecification().Height != height) {
+        auto vulkanContext = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        // 确保这里的 3 与 m_ForwardFBOs 的大小一致
+        uint32_t frameIndex = vulkanContext->GetCurrentFrameIndex() % m_ForwardFBOs.size();
+        auto currentFBO = m_ForwardFBOs[frameIndex];
+        if (currentFBO->GetSpecification().Width != width || currentFBO->GetSpecification().Height != height) {
             OnResize(width, height);
         }
 
@@ -122,7 +135,7 @@ namespace Ayaya {
         // ==========================================
         // 3. 执行绘制
         // ==========================================
-        cmd.BeginRenderPass(m_ForwardFBO, true, glm::vec4(1.0f, 0.0f, 1.0f, 1.0f));
+        cmd.BeginRenderPass(currentFBO, true, glm::vec4(0.12f, 0.12f, 0.14f, 1.0f));
 
         std::shared_ptr<Pipeline> currentPipeline = nullptr;
         auto whiteTex = context.GetTexture("WhiteTexture");
@@ -183,9 +196,9 @@ namespace Ayaya {
         // ==========================================
         // 4. 将结果推到黑板，方便编辑器显示
         // ==========================================
-        context.Set("Forward_Output", m_ForwardFBO); 
+        context.Set("Forward_Output", currentFBO); 
         // 将这个 Pass 的产物挂载为最终输出，这样 Editor 就会自动把这幅画贴到屏幕上
-        context.Set("Final_Output", m_ForwardFBO);   
-        context.Framebuffers["ForwardTest"] = m_ForwardFBO;
+        context.Set("Final_Output", currentFBO);   
+        context.Framebuffers["ForwardTest"] = currentFBO;
     }
 }
