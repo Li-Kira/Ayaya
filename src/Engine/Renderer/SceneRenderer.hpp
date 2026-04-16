@@ -3,6 +3,7 @@
 #include "Engine/Scene/Scene.hpp"
 #include "Engine/Scene/Entity.hpp"
 #include "Renderer/Framebuffer.hpp"
+#include "Renderer/UniformBuffer.hpp"
 #include "Renderer/RenderPipeline.hpp"
 #include <glm/glm.hpp>
 #include <memory>
@@ -53,6 +54,9 @@ namespace Ayaya {
     private:
         // 每个 Renderer 实例独有的数据指针！
         std::unique_ptr<SceneRendererData> m_Data;
+
+        // 【核心修复】：去掉 static！让每个实例拥有独立的 UBO，互不干扰
+        std::shared_ptr<UniformBuffer> m_CameraUniformBuffer;
 
         RenderPipeline m_Pipeline; 
         RenderContext  m_RenderContext; // 持有一份上下文

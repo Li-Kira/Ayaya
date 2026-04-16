@@ -13,7 +13,6 @@
 #include "Renderer/Mesh.hpp"
 #include "Renderer/Texture.hpp"
 #include "Renderer/TextureCube.hpp"
-#include "Renderer/UniformBuffer.hpp"
 #include "Renderer/Frustum.hpp"
 #include "Renderer/IBLBuilder.hpp"
 #include "Asset/AssetManager.hpp"
@@ -61,7 +60,7 @@ namespace Ayaya {
         int _padding[3];                  
     };
 
-    static std::shared_ptr<UniformBuffer> s_CameraUniformBuffer;
+    // static std::shared_ptr<UniformBuffer> s_CameraUniformBuffer;
     static std::shared_ptr<UniformBuffer> s_LightUniformBuffer;
 
     static std::shared_ptr<Mesh> s_SkyboxMesh;
@@ -103,7 +102,9 @@ namespace Ayaya {
 
     SceneRenderer::SceneRenderer() {
         m_Data = std::make_unique<SceneRendererData>();
+        m_CameraUniformBuffer = UniformBuffer::Create(sizeof(struct_CameraData), 0);
     }
+
     SceneRenderer::~SceneRenderer() = default;
 
     void SceneRenderer::Init() {
@@ -141,7 +142,7 @@ namespace Ayaya {
         m_Data->BRDFLUT = s_DefaultBRDFLUT;
         
         // 全局 UBO 内存分配 (假设 UniformBuffer::Create 已经做了跨平台处理)
-        if (!s_CameraUniformBuffer) s_CameraUniformBuffer = UniformBuffer::Create(sizeof(struct_CameraData), 0);
+        // if (!s_CameraUniformBuffer) s_CameraUniformBuffer = UniformBuffer::Create(sizeof(struct_CameraData), 0);
         if (!s_LightUniformBuffer) s_LightUniformBuffer = UniformBuffer::Create(sizeof(struct_LightData), 1);
 
         // ==========================================
@@ -175,7 +176,7 @@ namespace Ayaya {
     }
 
     void SceneRenderer::Shutdown() {
-        s_CameraUniformBuffer.reset();
+        // s_CameraUniformBuffer.reset();
         s_LightUniformBuffer.reset();
         s_SkyboxMesh.reset();
         s_SkyboxShader.reset();
@@ -194,49 +195,41 @@ namespace Ayaya {
     void SceneRenderer::BeginScene(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, const glm::vec3& cameraPosition) {
     ResetStats();
 
-    m_Data->ViewMatrix = viewMatrix;
-    m_Data->ProjectionMatrix = projectionMatrix;
-    m_Data->CameraPosition = cameraPosition;
-    
-    m_RenderContext.ViewMatrix = viewMatrix;
-    m_RenderContext.CameraPosition = cameraPosition;
+    // 记录原始数据
+        m_Data->ViewMatrix = viewMatrix;
+        m_Data->ProjectionMatrix = projectionMatrix;
+        m_Data->CameraPosition = cameraPosition;
 
-    // ==========================================
-    // 1. 先应用 Vulkan 深度校正矩阵！
-    // ==========================================
-    if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-        static const glm::mat4 vulkanCorrection(
-            1.0f,  0.0f,  0.0f,  0.0f,
-            0.0f, -1.0f,  0.0f,  0.0f, // <--- 【核心修复】：将这里的 1.0f 改为 -1.0f ！！！
-            0.0f,  0.0f,  0.5f,  0.0f, 
-            0.0f,  0.0f,  0.5f,  1.0f  
-        );
-        m_RenderContext.ProjectionMatrix = vulkanCorrection * projectionMatrix;
-    } else {
-        m_RenderContext.ProjectionMatrix = projectionMatrix;
+        // 1. 应用 Vulkan 深度校正 (保持 Y 轴缩放为 1.0f，配合之前的 Negative Viewport 方案)
+        if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+            static const glm::mat4 vulkanCorrection(
+                1.0f,  0.0f,  0.0f,  0.0f,
+                0.0f, -1.0f,  0.0f,  0.0f,
+                0.0f,  0.0f,  0.5f,  0.0f, 
+                0.0f,  0.0f,  0.5f,  1.0f  
+            );
+            m_RenderContext.ProjectionMatrix = vulkanCorrection * projectionMatrix;
+        } else {
+            m_RenderContext.ProjectionMatrix = projectionMatrix;
+        }
+
+        m_RenderContext.ViewMatrix = viewMatrix;
+        m_RenderContext.CameraPosition = cameraPosition;
+
+        // ==========================================
+        // 2. 【核心修复】：计算 ViewProjection 必须用校正后的 Projection！
+        // ==========================================
+        m_Data->ViewProjectionMatrix = m_RenderContext.ProjectionMatrix * viewMatrix; 
+
+        // 3. 填充数据结构
+        m_Data->CameraData.ViewProjection = m_Data->ViewProjectionMatrix;
+        m_Data->CameraData.CameraPosition = m_Data->CameraPosition;
+        
+        // ==========================================
+        // 4. 【核心修复】：上传数据到当前实例私有的 UBO
+        // ==========================================
+        m_CameraUniformBuffer->SetData(&m_Data->CameraData, sizeof(struct_CameraData));
     }
-
-    // ==========================================
-    // 2. 【核心修复】：使用校正后的 Projection 乘以 View！
-    // ==========================================
-    m_Data->ViewProjectionMatrix = m_RenderContext.ProjectionMatrix * viewMatrix; 
-
-    // 3. 上传到 GPU
-    m_Data->CameraData.ViewProjection = m_Data->ViewProjectionMatrix;
-    m_Data->CameraData.CameraPosition = m_Data->CameraPosition;
-    
-    // ==========================================
-    // 【抓鬼测试】：强行同步 CPU 与 GPU
-    // ==========================================
-    // if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-    //     auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-    //     // 强迫 CPU 停下来，等显卡彻底把上一帧画完再继续！
-    //     vkDeviceWaitIdle(context->GetDevice());
-    // }
-    
-    // 现在写入就绝对安全了！
-    s_CameraUniformBuffer->SetData(&m_Data->CameraData, sizeof(struct_CameraData));
-}
 
     void SceneRenderer::EndScene() {
     }

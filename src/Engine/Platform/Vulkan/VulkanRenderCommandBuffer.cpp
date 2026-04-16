@@ -107,10 +107,43 @@ namespace Ayaya {
     // ==========================================
     // 绑定贴图：只记小本本，不跟 Vulkan 通信！
     // ==========================================
+    // 在 VulkanRenderCommandBuffer.cpp 中
     void VulkanRenderCommandBuffer::BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<Texture2D>& texture) {
-        auto vulkanTex = std::dynamic_pointer_cast<VulkanTexture2D>(texture);
-        if (!vulkanTex || vulkanTex->GetImageView() == VK_NULL_HANDLE) return;
-        m_PendingImageInfos[slot] = { vulkanTex->GetSampler(), vulkanTex->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        auto vulkanPipeline = std::dynamic_pointer_cast<VulkanPipeline>(pipeline);
+        auto vulkanTexture = std::dynamic_pointer_cast<VulkanTexture2D>(texture);
+        
+        if (!vulkanPipeline || !vulkanTexture) return;
+
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        VkDevice device = context->GetDevice();
+
+        // ==========================================
+        // 【核心修复】：从管线的环形池中获取一个可用的 Set 1
+        // ==========================================
+        VkDescriptorSet textureSet = vulkanPipeline->GetNextTextureDescriptorSet();
+
+        // 更新该描述符集，将其指向当前贴图的 View 和 Sampler
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imageInfo.imageView = vulkanTexture->GetImageView();
+        imageInfo.sampler = vulkanTexture->GetSampler();
+
+        VkWriteDescriptorSet descriptorWrite{};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = textureSet;
+        descriptorWrite.dstBinding = slot; // 对应 Shader 里的 binding = slot
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pImageInfo = &imageInfo;
+
+        vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+
+        // 立即绑定该 Set 到管线的 Set 1 槽位
+        VkCommandBuffer cmd = context->GetCurrentCommandBuffer();
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+                                vulkanPipeline->GetVulkanPipelineLayout(), 
+                                1, 1, &textureSet, 0, nullptr);
     }
 
     void VulkanRenderCommandBuffer::BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<Framebuffer>& framebuffer, uint32_t attachmentIndex, bool isDepth) {
@@ -161,6 +194,7 @@ namespace Ayaya {
     void VulkanRenderCommandBuffer::DrawIndexed(const std::shared_ptr<Mesh>& mesh, uint32_t indexCount) {
         if (!m_BoundPipeline) return;
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        uint32_t currentFrame = context->GetCurrentFrameIndex() % 3;
         VkCommandBuffer cmd = context->GetCurrentCommandBuffer();
 
         // 1. 【核心修复】：绑定相机数据 (Set 0)
@@ -233,4 +267,5 @@ namespace Ayaya {
             0, nullptr
         );
     }
+
 }

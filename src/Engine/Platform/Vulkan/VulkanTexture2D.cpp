@@ -85,19 +85,19 @@ namespace Ayaya {
         CreateSampler();
     }
 
+    // 在 VulkanTexture2D.cpp 中补充采样器配置
     void VulkanTexture2D::CreateSampler() {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.magFilter = VK_FILTER_LINEAR; // 线性过滤
         samplerInfo.minFilter = VK_FILTER_LINEAR;
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT; // 重复平铺
         samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.anisotropyEnable = VK_FALSE; // 【修改】：暂时关闭各向异性，防止特性校验报错
-        // samplerInfo.maxAnisotropy = 16.0f;
-        samplerInfo.maxAnisotropy = 1.0f;
+        samplerInfo.anisotropyEnable = VK_TRUE;   // 开启各项异性过滤
+        samplerInfo.maxAnisotropy = 16.0f;
         samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
         samplerInfo.compareEnable = VK_FALSE;
