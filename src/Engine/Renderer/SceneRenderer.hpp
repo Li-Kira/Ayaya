@@ -57,6 +57,7 @@ namespace Ayaya {
 
         // 【核心修复】：去掉 static！让每个实例拥有独立的 UBO，互不干扰
         std::shared_ptr<UniformBuffer> m_CameraUniformBuffer;
+        std::shared_ptr<UniformBuffer> m_LightUniformBuffer;
 
         RenderPipeline m_Pipeline; 
         RenderContext  m_RenderContext; // 持有一份上下文

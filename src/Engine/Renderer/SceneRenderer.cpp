@@ -61,7 +61,7 @@ namespace Ayaya {
     };
 
     // static std::shared_ptr<UniformBuffer> s_CameraUniformBuffer;
-    static std::shared_ptr<UniformBuffer> s_LightUniformBuffer;
+    // static std::shared_ptr<UniformBuffer> s_LightUniformBuffer;
 
     static std::shared_ptr<Mesh> s_SkyboxMesh;
     static std::shared_ptr<Shader> s_SkyboxShader;
@@ -103,6 +103,7 @@ namespace Ayaya {
     SceneRenderer::SceneRenderer() {
         m_Data = std::make_unique<SceneRendererData>();
         m_CameraUniformBuffer = UniformBuffer::Create(sizeof(struct_CameraData), 0);
+        m_LightUniformBuffer = UniformBuffer::Create(sizeof(struct_LightData), 1);
     }
 
     SceneRenderer::~SceneRenderer() = default;
@@ -143,7 +144,7 @@ namespace Ayaya {
         
         // 全局 UBO 内存分配 (假设 UniformBuffer::Create 已经做了跨平台处理)
         // if (!s_CameraUniformBuffer) s_CameraUniformBuffer = UniformBuffer::Create(sizeof(struct_CameraData), 0);
-        if (!s_LightUniformBuffer) s_LightUniformBuffer = UniformBuffer::Create(sizeof(struct_LightData), 1);
+        // if (!s_LightUniformBuffer) s_LightUniformBuffer = UniformBuffer::Create(sizeof(struct_LightData), 1);
 
         // ==========================================
         // 【核心防御 2】：隔离管线和裸露的 OpenGL 查询函数
@@ -177,7 +178,7 @@ namespace Ayaya {
 
     void SceneRenderer::Shutdown() {
         // s_CameraUniformBuffer.reset();
-        s_LightUniformBuffer.reset();
+        // s_LightUniformBuffer.reset();
         s_SkyboxMesh.reset();
         s_SkyboxShader.reset();
         s_DefaultEnvironmentMap.reset();
@@ -289,7 +290,7 @@ namespace Ayaya {
             pointLightIndex++;
         }
         m_Data->LightData.PointLightCount = pointLightIndex;
-        s_LightUniformBuffer->SetData(&m_Data->LightData, sizeof(struct_LightData));
+        m_LightUniformBuffer->SetData(&m_Data->LightData, sizeof(struct_LightData));
 
 
         // ==========================================
