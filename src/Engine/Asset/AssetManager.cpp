@@ -23,6 +23,12 @@ namespace Ayaya {
         // 注意：Clear 只清空内存池，绝不能清空硬盘账本！
     }
 
+    void AssetManager::Shutdown() {
+        // 清空所有缓存的资产，强制触发它们的析构函数
+        s_Assets.clear(); // 假设你的静态缓存叫 s_Assets
+        AYAYA_CORE_INFO("AssetManager shutdown successfully.");
+    }
+
     // ==========================================
     // 实现注册表相关方法
     // ==========================================

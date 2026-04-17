@@ -13,8 +13,15 @@ namespace Ayaya {
 
         virtual uint32_t GetWidth() const override { return m_Width; }
         virtual uint32_t GetHeight() const override { return m_Height; }
-        // 【关键】：在 Vulkan 下，RendererID 返回的是 VkImageView 的句柄，供 ImGui 使用
-        virtual uint32_t GetRendererID() const override { return (uint32_t)(uintptr_t)m_ImageView; }
+        
+        // Vulkan 实际上不需要传统的 RendererID
+        virtual uint32_t GetRendererID() const override { return 0; }
+
+        // ==========================================
+        // 【核心修改 2】：覆盖实现，由 Vulkan 层去处理底层翻译
+        // ==========================================
+        virtual void* GetImGuiTextureID() const override;
+
 
         virtual void SetData(void* data, uint32_t size) override;
 
@@ -39,6 +46,9 @@ namespace Ayaya {
         VkImageView m_ImageView = VK_NULL_HANDLE;
         VkSampler m_Sampler = VK_NULL_HANDLE;
         VkFormat m_Format = VK_FORMAT_R8G8B8A8_UNORM;
+
+        // 【新增】：缓存 ImGui 专用的描述符集 (使用 void* 避免污染头文件)
+        mutable void* m_ImGuiDescriptorSet = nullptr;
     };
 
 }

@@ -18,11 +18,16 @@ namespace Ayaya {
         virtual uint32_t GetHeight() const = 0;
         virtual uint32_t GetRendererID() const = 0;
 
+        virtual void* GetImGuiTextureID() const { 
+            return (void*)(intptr_t)GetRendererID(); 
+        }
+
         // --- 新增：允许通过代码直接向显存写入像素数据 ---
         virtual void SetData(void* data, uint32_t size) = 0;
 
         virtual void Bind(uint32_t slot = 0) const = 0;
         virtual void Unbind() const = 0;
+        virtual bool IsDataFlipped() const { return false; }
     };
 
     class Texture2D : public Texture {

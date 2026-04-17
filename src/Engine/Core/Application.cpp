@@ -6,6 +6,8 @@
 #include "KeyCodes.hpp"
 #include "Renderer/Renderer.hpp"
 #include "Renderer/SceneRenderer.hpp"
+#include "Asset/AssetManager.hpp"
+
 #ifdef _WIN32
     #include <windows.h>
 #endif
@@ -108,7 +110,10 @@ Hi, welcome to Ayaya engine♪
     }
 
     Application::~Application() {
+        // SceneRenderer 先销毁然后才是 Renderer 否则会抛出异常
+        SceneRenderer::Shutdown();
         Renderer::Shutdown();
+        AssetManager::Shutdown();
     }
 
     void Application::PushLayer(Layer* layer) { 
@@ -163,7 +168,7 @@ Hi, welcome to Ayaya engine♪
             m_Window->OnUpdate();
         }
 
-        SceneRenderer::Shutdown();
+        
     }
 
     // =========================================================================

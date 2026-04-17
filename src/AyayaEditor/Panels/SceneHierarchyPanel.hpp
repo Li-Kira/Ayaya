@@ -70,6 +70,11 @@ namespace Ayaya {
         std::vector<Entity> m_EntitiesToDestroy;  
         std::vector<Entity> m_EntitiesToUnparent; 
         std::vector<Entity> m_EntitiesToDuplicate;
+
+        // ==========================================
+        // 【核心防御】：纹理垃圾桶，用于延迟析构被替换的贴图，防止 Vulkan 崩溃
+        // ==========================================
+        std::vector<std::shared_ptr<Texture2D>> m_TextureGarbageBin;
     };
 
 }

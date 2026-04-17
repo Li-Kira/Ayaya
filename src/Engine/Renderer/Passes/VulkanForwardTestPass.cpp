@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 namespace Ayaya {
 
@@ -64,6 +65,28 @@ namespace Ayaya {
         pipeSpec.BackfaceCulling = CullMode::None;
 
         m_ForwardPipeline = Pipeline::Create(pipeSpec);
+
+        // ==========================================
+        // 【新增】：创建天空盒管线
+        // ==========================================
+        m_SkyboxShader = Shader::Create("Skybox/skybox.vert", "Skybox/skybox.frag");
+
+        PipelineSpecification skyboxPipeSpec;
+        skyboxPipeSpec.Shader = m_SkyboxShader;
+        skyboxPipeSpec.TargetFramebuffer = m_ForwardFBOs[0]; 
+        skyboxPipeSpec.Layout = {
+            { ShaderDataType::Float3, "a_Position" },
+            { ShaderDataType::Float3, "a_Normal" },
+            { ShaderDataType::Float2, "a_TexCoord" }
+        };
+        // 关键点 1：剔除正面，因为相机在天空盒内部
+        skyboxPipeSpec.BackfaceCulling = CullMode::Front; 
+        // 关键点 2：开启深度测试，但关闭深度写入，保证天空盒永远在最底层
+        skyboxPipeSpec.DepthTest = true;
+        skyboxPipeSpec.DepthWrite = false; 
+        // （如果你的引擎支持，最好将 DepthCompareOp 设为 LessOrEqual）
+
+        m_SkyboxPipeline = Pipeline::Create(skyboxPipeSpec);
     }
 
     void VulkanForwardTestPass::OnResize(uint32_t width, uint32_t height) {
@@ -188,6 +211,47 @@ namespace Ayaya {
 
             if (context.RecordAndCheckDrawCall("Forward Test Pass", tag, "Forward Shader", tris)) {
                 cmd.DrawIndexed(drawCmd.MeshAsset, drawCmd.MeshAsset->GetIndexCount());
+            }
+        }
+
+
+        // ==========================================
+        // 【新增】：在所有不透明物体画完后，绘制天空盒
+        // ==========================================
+        bool showSkybox = context.Get<bool>("ShowSkybox");
+        auto skyboxMesh = context.Get<std::shared_ptr<Mesh>>("SkyboxMesh");
+        auto envCubemap = context.Get<std::shared_ptr<TextureCube>>("EnvironmentCubemap");
+        if (!envCubemap) {
+            AYAYA_CORE_ERROR("Skybox Debug: EnvironmentCubemap is NULL! Check SceneRenderer::SetEnvironment.");
+        }
+
+        if (showSkybox && skyboxMesh && envCubemap) {
+            cmd.BindPipeline(m_SkyboxPipeline);
+
+            // 1. 定义与 Shader 严丝合缝的 C++ 结构体
+            struct SkyboxPushConstants {
+                glm::mat4 ViewProjection;
+                float Intensity;
+            };
+
+            // 2. 准备数据
+            SkyboxPushConstants skyboxConstants;
+            // 去除位移的 View 矩阵
+            glm::mat4 viewNoTranslation = glm::mat4(glm::mat3(context.ViewMatrix));
+            skyboxConstants.ViewProjection = context.ProjectionMatrix * viewNoTranslation;
+            
+            // 从黑板获取场景的光照强度 (如果你的黑板里存了的话，否则可以给个默认值 1.0f)
+            skyboxConstants.Intensity = context.Get<float>("EnvironmentIntensity", 1.0f);
+
+            // 3. 将 68 字节的数据安全推送到 GPU
+            cmd.PushConstantData(m_SkyboxPipeline, &skyboxConstants, sizeof(SkyboxPushConstants));
+
+            // 2. 绑定 Cubemap 贴图（注意这里需要你在 CommandBuffer 里实现 BindTextureCube）
+            cmd.BindTextureCube(m_SkyboxPipeline, "u_Skybox", 0, envCubemap);
+
+            // 3. 绘制
+            if (context.RecordAndCheckDrawCall("Forward Pass", "Skybox", "Skybox Shader", skyboxMesh->GetIndexCount() / 3)) {
+                cmd.DrawIndexed(skyboxMesh, skyboxMesh->GetIndexCount());
             }
         }
 

@@ -47,6 +47,8 @@ namespace Ayaya {
     }
 
     void SceneHierarchyPanel::OnImGuiRender() {
+        m_TextureGarbageBin.clear();
+        
         ImGui::Begin("Properties");
         if (!m_SelectedEntities.empty()) {
             DrawComponents(); 
@@ -1605,7 +1607,13 @@ namespace Ayaya {
                                         ImVec2 textureSlotSize = { 64.0f * uiScale, 64.0f * uiScale };
                                         if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
                                             auto tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
-                                            ImGui::Image((ImTextureID)(intptr_t)tex->GetRendererID(), textureSlotSize, {0, 1}, {1, 0});
+                                            
+                                            // ==========================================
+                                            // 【修复 1 & 2】：跨平台 ID 与动态 UV 翻转
+                                            // ==========================================
+                                            ImVec2 uv0 = tex->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
+                                            ImVec2 uv1 = tex->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
+                                            ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), textureSlotSize, uv0, uv1);
                                         } else {
                                             ImGui::Button("Null", textureSlotSize);
                                         }
@@ -1617,6 +1625,14 @@ namespace Ayaya {
                                                 if (texturePath.extension() == ".png" || texturePath.extension() == ".jpg") {
                                                     UUID importedHandle = AssetManager::ImportAsset(texturePath);
                                                     if (importedHandle != 0) {
+                                                        
+                                                        // ==========================================
+                                                        // 【修复 3-A】：覆盖前，把旧贴图扔进垃圾桶续命！
+                                                        // ==========================================
+                                                        if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
+                                                            m_TextureGarbageBin.push_back(AssetManager::GetAsset<Texture2D>(prop.TextureHandle));
+                                                        }
+
                                                         prop.TextureHandle = importedHandle;
                                                         prop.TexturePath = texturePath.string(); 
                                                         propChanged = true;
@@ -1630,6 +1646,14 @@ namespace Ayaya {
                                             ImGui::SameLine();
                                             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textureSlotSize.y * 0.5f - 12.0f);
                                             if (ImGui::Button("X##Remove")) {
+                                                
+                                                // ==========================================
+                                                // 【修复 3-B】：移除前，把旧贴图扔进垃圾桶续命！
+                                                // ==========================================
+                                                if (AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
+                                                    m_TextureGarbageBin.push_back(AssetManager::GetAsset<Texture2D>(prop.TextureHandle));
+                                                }
+
                                                 prop.TextureHandle = 0;
                                                 prop.TexturePath = "";
                                                 propChanged = true;

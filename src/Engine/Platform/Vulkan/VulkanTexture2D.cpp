@@ -5,6 +5,10 @@
 #include "Core/Application.hpp"
 
 #include <stb_image.h>
+// ==========================================
+// 【核心修改 3】：把底层 API 脏活累活藏在具体的实现文件里
+// ==========================================
+#include <backends/imgui_impl_vulkan.h>
 
 namespace Ayaya {
 
@@ -36,6 +40,17 @@ namespace Ayaya {
     VulkanTexture2D::~VulkanTexture2D() {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         VkDevice device = context->GetDevice();
+        vkDeviceWaitIdle(device);
+
+        // ==========================================
+        // 【核心修复】：探活保护！
+        // ==========================================
+        if (m_ImGuiDescriptorSet) {
+            if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().BackendRendererUserData != nullptr) {
+                ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)m_ImGuiDescriptorSet);
+            }
+            m_ImGuiDescriptorSet = nullptr;
+        }
 
         vkDeviceWaitIdle(device); // 销毁前确保 GPU 没在用它
         if (m_Sampler) vkDestroySampler(device, m_Sampler, nullptr);
@@ -104,6 +119,21 @@ namespace Ayaya {
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
         vkCreateSampler(context->GetDevice(), &samplerInfo, nullptr, &m_Sampler);
+    }
+
+    // ==========================================
+    // 实现懒加载包装：只有当 UI 真正需要画这张图时，才向 Vulkan 申请描述符集
+    // ==========================================
+    void* VulkanTexture2D::GetImGuiTextureID() const {
+        if (m_ImGuiDescriptorSet == nullptr && m_Sampler != VK_NULL_HANDLE && m_ImageView != VK_NULL_HANDLE) {
+            // 将 Vulkan 视口和采样器打包，注册给 ImGui 后端
+            m_ImGuiDescriptorSet = (void*)ImGui_ImplVulkan_AddTexture(
+                m_Sampler, 
+                m_ImageView, 
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+            );
+        }
+        return m_ImGuiDescriptorSet;
     }
 
     void VulkanTexture2D::SetData(void* data, uint32_t size) {

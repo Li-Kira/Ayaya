@@ -49,6 +49,8 @@ namespace Ayaya {
         // 清空仓库缓存
         static void Clear();
 
+        static void Shutdown();
+
     private:
         // 内部专用：真正执行硬盘读取的函数
         static std::shared_ptr<Asset> LoadAssetFromFile(UUID handle);

@@ -136,6 +136,11 @@ namespace Ayaya {
         // 同样什么都不用做，只接管 ID 并在析构时释放
     }
 
+    void* OpenGLTexture2D::GetImGuiTextureID() const {
+        // 使用 intptr_t 进行安全中转，防止 64 位编译器产生长度截断警告
+        return (void*)(intptr_t)m_RendererID;
+    }
+
     // --- 向显存填充像素数据 ---
     void OpenGLTexture2D::SetData(void* data, uint32_t size) {
         // 【新增防御】：如果是接管的外部 ID（格式未知），严禁 CPU 直接修改！

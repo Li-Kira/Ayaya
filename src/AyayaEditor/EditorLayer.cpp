@@ -307,7 +307,7 @@ namespace Ayaya {
         UIRenderToolbar();
 
         m_SceneHierarchyPanel.OnImGuiRender();
-        // m_ContentBrowserPanel.OnImGuiRender();
+        m_ContentBrowserPanel.OnImGuiRender();
         m_PreferencesPanel.OnImGuiRender();
         m_ScreenshotPanel.OnImGuiRender();
         m_HistoryPanel.OnImGuiRender();
@@ -315,13 +315,13 @@ namespace Ayaya {
 
         if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
             // OpenGL 模式下，一切照常渲染
-            m_ContentBrowserPanel.OnImGuiRender();
+            // m_ContentBrowserPanel.OnImGuiRender();
             m_FrameDebuggerPanel.OnImGuiRender();
         } else {
             // Vulkan 模式下，保留窗口外壳防止布局错乱，但内部用文字占位
-            ImGui::Begin("Content Browser");
-            ImGui::TextDisabled("Vulkan Mode: Content Browser is paused pending Descriptor Sets.");
-            ImGui::End();
+            // ImGui::Begin("Content Browser");
+            // ImGui::TextDisabled("Vulkan Mode: Content Browser is paused pending Descriptor Sets.");
+            // ImGui::End();
 
             ImGui::Begin("Frame Debugger");
             ImGui::TextDisabled("Vulkan Mode: Frame Debugger is paused pending Descriptor Sets.");

@@ -58,10 +58,16 @@ namespace Ayaya {
             
             // 检查 icon 指针是否有效且贴图已加载
             if (icon) {
-                ImGui::ImageButton(filenameString.c_str(), (ImTextureID)(intptr_t)icon->GetRendererID(), 
-                                   { m_ThumbnailSize, m_ThumbnailSize }, { 0, 1 }, { 1, 0 });
+                // ==========================================
+                // 【核心修改 4】：直接调用干净的 GetImGuiTextureID()
+                // 不管底下是 OpenGL 还是 Vulkan，统统不用管！
+                // ==========================================
+                ImVec2 uv0 = icon->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
+                ImVec2 uv1 = icon->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
+
+                ImGui::ImageButton(filenameString.c_str(), (ImTextureID)icon->GetImGuiTextureID(), 
+                                   { m_ThumbnailSize, m_ThumbnailSize }, uv0, uv1);
             } else {
-                // 如果是 Vulkan 模式且贴图还没做，画一个正方形按钮占位，防止崩溃！
                 ImGui::Button(directoryEntry.is_directory() ? "[DIR]" : "[FILE]", 
                               { m_ThumbnailSize, m_ThumbnailSize });
             }
@@ -78,7 +84,10 @@ namespace Ayaya {
                 
                 // 【核心补漏】：拖拽时的悬浮图标也必须加一层保护！
                 if (icon) {
-                    ImGui::Image((ImTextureID)(intptr_t)icon->GetRendererID(), { 32.0f, 32.0f }, { 0, 1 }, { 1, 0 });
+                    // 【记得把悬浮拖拽时的图标也改了！】
+                    ImVec2 uv0 = icon->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
+                    ImVec2 uv1 = icon->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
+                    ImGui::Image((ImTextureID)icon->GetImGuiTextureID(), { 32.0f, 32.0f }, uv0, uv1);
                 }
                 ImGui::Text("%s", filenameString.c_str());
                 

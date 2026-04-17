@@ -154,10 +154,37 @@ namespace Ayaya {
         m_PendingImageInfos[slot] = { vulkanFBO->GetSampler(), view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
     }
 
-    void VulkanRenderCommandBuffer::BindTextureCube(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<TextureCube>& textureCube) {
-        auto vulkanTex = std::dynamic_pointer_cast<VulkanTextureCube>(textureCube);
-        if (!vulkanTex || vulkanTex->GetImageView() == VK_NULL_HANDLE) return;
-        m_PendingImageInfos[slot] = { vulkanTex->GetSampler(), vulkanTex->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+    void VulkanRenderCommandBuffer::BindTextureCube(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<TextureCube>& texture) {
+        auto vulkanPipeline = std::dynamic_pointer_cast<VulkanPipeline>(pipeline);
+        auto vulkanTexture = std::dynamic_pointer_cast<VulkanTextureCube>(texture);
+        
+        if (!vulkanPipeline || !vulkanTexture) return;
+
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        VkDevice device = context->GetDevice();
+
+        VkDescriptorSet textureSet = vulkanPipeline->GetNextTextureDescriptorSet();
+
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imageInfo.imageView = vulkanTexture->GetImageView(); // 这里拿到的是 CUBE 类型的 View
+        imageInfo.sampler = vulkanTexture->GetSampler();     // 必须提供 Sampler
+
+        VkWriteDescriptorSet descriptorWrite{};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = textureSet;
+        descriptorWrite.dstBinding = slot; 
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pImageInfo = &imageInfo;
+
+        vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+
+        VkCommandBuffer cmd = context->GetCurrentCommandBuffer();
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+                                vulkanPipeline->GetVulkanPipelineLayout(), 
+                                1, 1, &textureSet, 0, nullptr);
     }
 
     // ==========================================

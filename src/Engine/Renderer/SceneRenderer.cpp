@@ -185,6 +185,7 @@ namespace Ayaya {
         s_DefaultIrradianceMap.reset();
         s_DefaultPrefilterMap.reset();
         s_DefaultBRDFLUT.reset();
+        AYAYA_CORE_INFO("SceneRenderer static resources cleared.");
     }
 
     void SceneRenderer::OnWindowResize(uint32_t width, uint32_t height) {

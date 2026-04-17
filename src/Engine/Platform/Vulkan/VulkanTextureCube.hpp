@@ -29,8 +29,9 @@ namespace Ayaya {
         VkSampler GetSampler() const { return m_Sampler; }
 
     private:
-        void Invalidate(); // 内部创建函数
+        void Invalidate(); 
         void CreateFromFiles(const std::vector<std::string>& faces);
+        void CreateSampler();
 
     private:
         uint32_t m_Width = 0, m_Height = 0;
@@ -40,6 +41,7 @@ namespace Ayaya {
         VkImageView m_ImageView = VK_NULL_HANDLE;
         VkSampler m_Sampler = VK_NULL_HANDLE;
         
-        bool m_IsWrapped = false; // 是否是从外部 ID 包装的（如 IBL 产物）
+        bool m_IsWrapped = false;
     };
+
 }

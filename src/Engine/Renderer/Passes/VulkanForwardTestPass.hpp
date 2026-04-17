@@ -45,9 +45,10 @@ namespace Ayaya {
         
         std::shared_ptr<Shader> m_ForwardShader;
         std::shared_ptr<Material> m_DefaultMaterial; 
-
         std::shared_ptr<Pipeline> m_ForwardPipeline;
-        
+
+        std::shared_ptr<Shader> m_SkyboxShader;
+        std::shared_ptr<Pipeline> m_SkyboxPipeline;
         std::vector<VulkanForwardCommandData> m_OpaqueDrawList;
     };
 
