@@ -781,7 +781,7 @@ namespace Ayaya {
         m_ViewportBounds[1] = { viewportMaxRegion.x + viewportOffset.x, viewportMaxRegion.y + viewportOffset.y };
 
         ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
-        m_ViewportSize = { viewportPanelSize.x, viewportPanelSize.y };
+        m_ViewportSize = { std::floor(viewportPanelSize.x), std::floor(viewportPanelSize.y) };
 
         // ==========================================
         // 核心修改：向渲染管线索要处理完毕的后期画面 (增加安全检查)
@@ -810,8 +810,7 @@ namespace Ayaya {
         ImGui::Begin("Game");
 
         ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
-        m_GameViewportSize = { viewportPanelSize.x, viewportPanelSize.y };
-
+        m_GameViewportSize = { std::floor(viewportPanelSize.x), std::floor(viewportPanelSize.y) };
         // 记录画图前的光标起始位置，这是悬浮层定位的锚点！
         ImVec2 cursorStartPos = ImGui::GetCursorPos();
 
