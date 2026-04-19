@@ -77,14 +77,20 @@ namespace Ayaya {
         skyboxPipeSpec.Layout = {
             { ShaderDataType::Float3, "a_Position" },
             { ShaderDataType::Float3, "a_Normal" },
-            { ShaderDataType::Float2, "a_TexCoord" }
+            { ShaderDataType::Float2, "a_TexCoord" },
+            { ShaderDataType::Float3, "a_Tangent" } // <--- 把它补上！
         };
-        // 关键点 1：剔除正面，因为相机在天空盒内部
-        skyboxPipeSpec.BackfaceCulling = CullMode::Front; 
-        // 关键点 2：开启深度测试，但关闭深度写入，保证天空盒永远在最底层
+        
         skyboxPipeSpec.DepthTest = true;
         skyboxPipeSpec.DepthWrite = false; 
-        // （如果你的引擎支持，最好将 DepthCompareOp 设为 LessOrEqual）
+
+        // ==========================================
+        // 【终极必杀】：允许 z=1.0 的天空盒像素通过深度测试！
+        // ==========================================
+        skyboxPipeSpec.DepthOperator = DepthCompareOperator::LEqual;
+        
+        // 为了防止网格顶点绕序 (Winding Order) 导致的误杀，暂时把剔除关掉，确保一定能看到
+        skyboxPipeSpec.BackfaceCulling = CullMode::None; 
 
         m_SkyboxPipeline = Pipeline::Create(skyboxPipeSpec);
     }

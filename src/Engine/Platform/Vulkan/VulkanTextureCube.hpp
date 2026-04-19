@@ -9,7 +9,7 @@ namespace Ayaya {
     public:
         // 核心：支持从 6 张图创建或从现有句柄包装
         VulkanTextureCube(const std::vector<std::string>& faces);
-        VulkanTextureCube(uint32_t rendererID, uint32_t width, uint32_t height);
+        VulkanTextureCube(void* rendererID, uint32_t width, uint32_t height);
         virtual ~VulkanTextureCube() override;
 
         virtual uint32_t GetWidth() const override { return m_Width; }

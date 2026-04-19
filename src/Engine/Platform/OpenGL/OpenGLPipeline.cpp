@@ -61,10 +61,10 @@ namespace Ayaya {
         // 5. 混合模式
         if (m_Specification.Blend) {
             glEnable(GL_BLEND);
-            if (m_Specification.BlendMode == BlendMode::Alpha) {
+            if (m_Specification.BlendMode == BlendModeType::Alpha) {
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
                 glBlendEquation(GL_FUNC_ADD);
-            } else if (m_Specification.BlendMode == BlendMode::Additive) {
+            } else if (m_Specification.BlendMode == BlendModeType::Additive) {
                 glBlendFunc(GL_ONE, GL_ONE); 
                 glBlendEquation(GL_FUNC_ADD);
             }

@@ -33,6 +33,14 @@ namespace Ayaya {
             AYAYA_CORE_ASSERT(index < m_ColorImageViews.size(), "Color Attachment Index out of bounds!");
             return m_ColorImageViews[index];
         }
+
+        // ==========================================
+        // 【新增】：暴漏原生 VkImage 供 IBLBuilder 物理拷贝使用
+        // ==========================================
+        inline VkImage GetColorAttachmentImage(uint32_t index) const {
+            return m_ColorImages[index];
+        }
+        
         inline VkImageView GetDepthAttachmentImageView() const { return m_DepthImageView; }
         inline VkSampler GetSampler() const { return m_Sampler; }
 

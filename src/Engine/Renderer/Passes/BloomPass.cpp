@@ -40,7 +40,7 @@ namespace Ayaya {
         upSpec.DepthTest = false;
         upSpec.DepthWrite = false;
         upSpec.Blend = true;
-        upSpec.BlendMode = BlendMode::Additive; // 升采样使用 Additive (叠加) 混合发光
+        upSpec.BlendMode = BlendModeType::Additive; // 升采样使用 Additive (叠加) 混合发光
         upSpec.BackfaceCulling = CullMode::None; // 【核心】：全屏三角形必须关闭剔除！
         m_UpsamplePipeline = Pipeline::Create(upSpec);
     }

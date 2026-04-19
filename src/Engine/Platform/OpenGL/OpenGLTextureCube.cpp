@@ -49,8 +49,8 @@ namespace Ayaya {
         stbi_set_flip_vertically_on_load(true); 
     }
 
-    OpenGLTextureCube::OpenGLTextureCube(uint32_t rendererID, int width, int height)
-        : m_RendererID(rendererID), m_Width(width), m_Height(height) 
+    OpenGLTextureCube::OpenGLTextureCube(void* rendererID, int width, int height)
+        : m_RendererID((uint32_t)(uintptr_t)rendererID), m_Width(width), m_Height(height) 
     {
     }
 

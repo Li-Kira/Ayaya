@@ -6,7 +6,7 @@ namespace Ayaya {
     class OpenGLTextureCube : public TextureCube {
     public:
         OpenGLTextureCube(const std::vector<std::string>& faces);
-        OpenGLTextureCube(uint32_t rendererID, int width, int height);
+        OpenGLTextureCube(void* rendererID, int width, int height);
         virtual ~OpenGLTextureCube() override;
 
         virtual uint32_t GetWidth() const override { return m_Width; }

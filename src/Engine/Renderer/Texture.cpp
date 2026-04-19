@@ -38,7 +38,7 @@ namespace Ayaya {
     // ==========================================
     // 3. 从已有的底层 ID 包装贴图 (用于 IBL 和 FBO)
     // ==========================================
-    std::shared_ptr<Texture2D> Texture2D::Create(uint32_t rendererID, uint32_t width, uint32_t height) {
+    std::shared_ptr<Texture2D> Texture2D::Create(void* rendererID, uint32_t width, uint32_t height) {
         switch (RendererAPI::GetAPI()) {
             case RendererAPI::API::None:    AYAYA_CORE_ERROR("RendererAPI::None is currently not supported!"); return nullptr;
             case RendererAPI::API::OpenGL:  return std::make_shared<OpenGLTexture2D>(rendererID, width, height);

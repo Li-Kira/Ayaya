@@ -37,7 +37,7 @@ namespace Ayaya {
 
         static std::shared_ptr<Texture2D> Create(const std::string& path);
 
-        static std::shared_ptr<Texture2D> Create(uint32_t rendererID, uint32_t width, uint32_t height);
+        static std::shared_ptr<Texture2D> Create(void* rendererID, uint32_t width, uint32_t height);
 
         // --- 修改 2：实现基类的类型识别 ---
         virtual AssetType GetType() const override { return AssetType::Texture2D; }

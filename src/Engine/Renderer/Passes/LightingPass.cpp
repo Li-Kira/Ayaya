@@ -67,7 +67,7 @@ namespace Ayaya {
         gridSpec.DepthTest = true;
         gridSpec.DepthWrite = false;
         gridSpec.Blend = true;
-        gridSpec.BlendMode = BlendMode::Alpha;
+        gridSpec.BlendMode = BlendModeType::Alpha;
         gridSpec.BackfaceCulling = CullMode::None;
         m_GridPipeline = Pipeline::Create(gridSpec);
 
@@ -77,7 +77,7 @@ namespace Ayaya {
         spriteSpec.DepthTest = true;
         spriteSpec.DepthWrite = false;
         spriteSpec.Blend = true;
-        spriteSpec.BlendMode = BlendMode::Alpha;
+        spriteSpec.BlendMode = BlendModeType::Alpha;
         spriteSpec.BackfaceCulling = CullMode::None;
         m_SpritePipeline = Pipeline::Create(spriteSpec);
 

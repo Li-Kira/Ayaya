@@ -13,6 +13,7 @@ namespace Ayaya {
         virtual ~VulkanPipeline() override;
 
         virtual const PipelineSpecification& GetSpecification() const override { return m_Specification; }
+        virtual PipelineSpecification& GetSpecification() override { return m_Specification; }
         virtual void Bind() override {} 
 
         VkPipeline GetVulkanPipeline() const { return m_Pipeline; }

@@ -360,12 +360,7 @@ namespace Ayaya {
         auto& envComp = skyEntity.AddComponent<EnvironmentComponent>();
         envComp.Type = EnvironmentType::HDR_Equirectangular;
         envComp.EquirectangularPath = "assets/textures/skybox/hdr/newport_loft.hdr";
-        // ==========================================
-        // 【核心防御 1】：只有 OpenGL 模式才去真正加载 HDR 贴图！
-        // ==========================================
-        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
-            envComp.EquirectangularTexture = Texture2D::Create(envComp.EquirectangularPath);
-        }
+        envComp.EquirectangularTexture = Texture2D::Create(envComp.EquirectangularPath);
         envComp.Intensity = 30000.0f; 
         envComp.AmbientColor = glm::vec3(0.0f, 0.0f, 0.0f);
         envComp.IsDirty = true;

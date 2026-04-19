@@ -165,6 +165,13 @@ namespace Ayaya {
 
         VkDescriptorSet textureSet = vulkanPipeline->GetNextTextureDescriptorSet();
 
+        // AYAYA_CORE_WARN("Debug TextureCube -> View: {0}, Sampler: {1}", 
+        //        (void*)vulkanTexture->GetImageView(), 
+        //        (void*)vulkanTexture->GetSampler());
+        if (vulkanTexture->GetImageView() == VK_NULL_HANDLE || vulkanTexture->GetSampler() == VK_NULL_HANDLE) {
+            AYAYA_CORE_ERROR("Vulkan: Attempted to bind an incomplete TextureCube! (View or Sampler is NULL)");
+            return;
+        }
         VkDescriptorImageInfo imageInfo{};
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         imageInfo.imageView = vulkanTexture->GetImageView(); // 这里拿到的是 CUBE 类型的 View
@@ -273,6 +280,44 @@ namespace Ayaya {
         FlushDescriptorSets(); // 发车！
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         vkCmdDraw(context->GetCurrentCommandBuffer(), vertexCount, 1, 0, 0);
+    }
+
+    void VulkanRenderCommandBuffer::DrawArrays(const std::shared_ptr<VertexArray>& vertexArray, uint32_t vertexCount) {
+        if (!m_BoundPipeline) return;
+
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        VkCommandBuffer cmd = context->GetCurrentCommandBuffer();
+
+        // ==========================================
+        // 1. 【核心修复】：必须绑定 Set 0！
+        // 哪怕后处理 Shader 里没用到，Vulkan 也要求布局槽位必须对齐填满！
+        // ==========================================
+        VkDescriptorSet cameraSet = m_BoundPipeline->GetVulkanDescriptorSet(0);
+        if (cameraSet != VK_NULL_HANDLE) {
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+                                    m_BoundPipeline->GetVulkanPipelineLayout(), 0, 1, &cameraSet, 0, nullptr);
+        }
+
+        // 2. 绑定贴图 (Set 1)
+        FlushDescriptorSets(); 
+
+        // ==========================================
+        // 3. 【核心逻辑】：智能空判断
+        // 如果 VAO 里真的有 VBO，就绑定它；
+        // 如果是 m_EmptyVAO（空的），直接跳过绑定，进入无图元绘制模式！
+        // ==========================================
+        if (vertexArray && !vertexArray->GetVertexBuffers().empty()) {
+            auto vulkanVB = std::dynamic_pointer_cast<VulkanVertexBuffer>(vertexArray->GetVertexBuffers()[0]);
+            if (vulkanVB) {
+                VkBuffer vbs[] = { vulkanVB->GetVulkanBuffer() };
+                VkDeviceSize offsets[] = { 0 };
+                vkCmdBindVertexBuffers(cmd, 0, 1, vbs, offsets);
+            }
+        }
+
+        // 4. 发起绘制！
+        uint32_t count = vertexCount ? vertexCount : 3;
+        vkCmdDraw(cmd, count, 1, 0, 0);
     }
 
     void VulkanRenderCommandBuffer::InsertExecutionBarrier() {

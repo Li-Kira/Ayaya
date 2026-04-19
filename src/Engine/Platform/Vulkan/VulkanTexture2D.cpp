@@ -17,22 +17,32 @@ namespace Ayaya {
         Invalidate();
     }
 
-    VulkanTexture2D::VulkanTexture2D(const std::string& path)
-        : m_Path(path) {
+    VulkanTexture2D::VulkanTexture2D(const std::string& path) : m_Path(path) {
         int w, h, channels;
-        // 强制转换为 4 通道 RGBA
-        stbi_uc* pixels = stbi_load(path.c_str(), &w, &h, &channels, STBI_rgb_alpha);
         
+        // 1. 探测是否为 HDR
+        bool isHDR = stbi_is_hdr(path.c_str());
+        void* pixels = nullptr;
+        
+        if (isHDR) {
+            // 使用浮点加载，强制 4 通道保证对齐
+            pixels = stbi_loadf(path.c_str(), &w, &h, &channels, STBI_rgb_alpha);
+            m_Format = VK_FORMAT_R32G32B32A32_SFLOAT; // 或者 R16G16B16A16_SFLOAT
+        } else {
+            pixels = stbi_load(path.c_str(), &w, &h, &channels, STBI_rgb_alpha);
+            m_Format = VK_FORMAT_R8G8B8A8_UNORM;
+        }
+
         if (!pixels) {
             AYAYA_CORE_ERROR("Failed to load texture: {0}", path);
             return;
         }
 
-        m_Width = (uint32_t)w;
-        m_Height = (uint32_t)h;
+        m_Width = w; m_Height = h;
+        Invalidate(); // 内部使用更新后的 m_Format 创建 VkImage
         
-        Invalidate();
-        SetData(pixels, m_Width * m_Height * 4);
+        uint32_t bpp = isHDR ? 16 : 4; // HDR 是 4个float=16字节，LDR 是 4字节
+        SetData(pixels, m_Width * m_Height * bpp);
         
         stbi_image_free(pixels);
     }
@@ -111,8 +121,8 @@ namespace Ayaya {
         samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT; // 重复平铺
         samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.anisotropyEnable = VK_TRUE;   // 开启各项异性过滤
-        samplerInfo.maxAnisotropy = 16.0f;
+        samplerInfo.anisotropyEnable = false;   // 开启各项异性过滤
+        samplerInfo.maxAnisotropy = 1.0f;
         samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
         samplerInfo.compareEnable = VK_FALSE;

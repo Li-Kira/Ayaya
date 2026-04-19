@@ -32,6 +32,7 @@
 
 #include "Core/Application.hpp"
 #include "Platform/Vulkan/VulkanContext.hpp"
+#include "Platform/Vulkan/VulkanIBLBuilder.hpp"
 
 // 3. 第三方库
 #include <glad/glad.h>
@@ -129,7 +130,7 @@ namespace Ayaya {
                 s_SkyboxShader = Shader::Create("Skybox/skybox.vert", "Skybox/skybox.frag");
                 std::shared_ptr<Shader> brdfShader = Shader::Create("IBL/brdf.vert", "IBL/brdf.frag");
                 if(m_Data->EmptyVAO == 0) glGenVertexArrays(1, &m_Data->EmptyVAO);
-                uint32_t brdfID = IBLBuilder::CreateBRDFLUT(brdfShader, m_Data->EmptyVAO);
+                void* brdfID = IBLBuilder::CreateBRDFLUT(brdfShader, (void*)(uintptr_t)m_Data->EmptyVAO);
                 s_DefaultBRDFLUT = Texture2D::Create(brdfID, 512, 512);
             } 
             else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
@@ -169,8 +170,8 @@ namespace Ayaya {
             // m_Pipeline.AddPass(std::make_shared<VulkanClearPass>());
             // m_Pipeline.AddPass(std::make_shared<VulkanGBufferPass>());
             // m_Pipeline.AddPass(std::make_shared<VulkanLightingPass>());
-            // m_Pipeline.AddPass(std::make_shared<VulkanPostProcessPass>());
             m_Pipeline.AddPass(std::make_shared<VulkanForwardTestPass>());
+            m_Pipeline.AddPass(std::make_shared<VulkanPostProcessPass>());
             
             m_Pipeline.Init();
         }
@@ -185,6 +186,10 @@ namespace Ayaya {
         s_DefaultIrradianceMap.reset();
         s_DefaultPrefilterMap.reset();
         s_DefaultBRDFLUT.reset();
+        if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+            // 销毁所有烘焙出来的 IBL 环境贴图显存
+            VulkanIBLBuilder::ClearResources();
+        }
         AYAYA_CORE_INFO("SceneRenderer static resources cleared.");
     }
 
@@ -473,7 +478,7 @@ namespace Ayaya {
             return;
         }
 
-        uint32_t baseCubemapID = 0;
+        void* baseCubemapID = nullptr;
 
         if (envComp.Type == EnvironmentType::HDR_Equirectangular || envComp.Type == EnvironmentType::LDR_Equirectangular) {
             if (!envComp.EquirectangularTexture) return;
@@ -483,21 +488,29 @@ namespace Ayaya {
         }
         else if (envComp.Type == EnvironmentType::Classic_Cubemap) {
             if (!envComp.ClassicCubemapTexture) return;
-            baseCubemapID = envComp.ClassicCubemapTexture->GetRendererID();
+            baseCubemapID = (void*)(uintptr_t)envComp.ClassicCubemapTexture->GetRendererID();
             m_Data->EnvironmentCubemap = envComp.ClassicCubemapTexture;
-            glBindTexture(GL_TEXTURE_CUBE_MAP, baseCubemapID);
-            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); 
-            glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
-            glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+
+            // ==========================================
+            // 【核心修复】：隔离 OpenGL 原生调用
+            // 仅在 OpenGL 模式下执行传统的管线绑定和 Mipmap 生成
+            // ==========================================
+            if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+                uint32_t glTextureID = (uint32_t)(uintptr_t)baseCubemapID; 
+                glBindTexture(GL_TEXTURE_CUBE_MAP, glTextureID);
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); 
+                glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+                glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+            }
         }
 
-        if (baseCubemapID != 0) {
+        if (baseCubemapID != nullptr) { // <--- 判断非空
             std::shared_ptr<Shader> irradianceShader = Shader::Create("IBL/cubemap.vert", "IBL/irradiance_convolution.frag");
-            uint32_t irrID = IBLBuilder::CreateIrradianceMap(baseCubemapID, s_SkyboxMesh, irradianceShader);
+            void* irrID = IBLBuilder::CreateIrradianceMap(baseCubemapID, s_SkyboxMesh, irradianceShader);
             m_Data->IrradianceMap = TextureCube::Create(irrID, 32, 32);
 
             std::shared_ptr<Shader> prefilterShader = Shader::Create("IBL/cubemap.vert", "IBL/prefilter.frag");
-            uint32_t preID = IBLBuilder::CreatePrefilterMap(baseCubemapID, s_SkyboxMesh, prefilterShader);
+            void* preID = IBLBuilder::CreatePrefilterMap(baseCubemapID, s_SkyboxMesh, prefilterShader);
             m_Data->PrefilterMap = TextureCube::Create(preID, 128, 128);
             
             envComp.IsDirty = false; 

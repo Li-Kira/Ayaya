@@ -38,7 +38,7 @@ namespace Ayaya {
         return nullptr;
     }
 
-    std::shared_ptr<TextureCube> TextureCube::Create(uint32_t rendererID, int width, int height) {
+    std::shared_ptr<TextureCube> TextureCube::Create(void* rendererID, int width, int height) {
         switch (RendererAPI::GetAPI()) {
             case RendererAPI::API::None:    
                 AYAYA_CORE_ERROR("RendererAPI::None is currently not supported!"); 

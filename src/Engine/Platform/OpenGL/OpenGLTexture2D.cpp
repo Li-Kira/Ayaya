@@ -130,8 +130,8 @@ namespace Ayaya {
         glTexImage2D(GL_TEXTURE_2D, 0, m_InternalFormat, m_Width, m_Height, 0, m_DataFormat, GL_UNSIGNED_BYTE, nullptr);
     }
 
-    OpenGLTexture2D::OpenGLTexture2D(uint32_t rendererID, uint32_t width, uint32_t height)
-        : m_RendererID(rendererID), m_Width(width), m_Height(height) 
+    OpenGLTexture2D::OpenGLTexture2D(void* rendererID, uint32_t width, uint32_t height)
+        : m_RendererID((uint32_t)(uintptr_t)rendererID), m_Width(width), m_Height(height) 
     {
         // 同样什么都不用做，只接管 ID 并在析构时释放
     }

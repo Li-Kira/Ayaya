@@ -6,7 +6,7 @@
 
 namespace Ayaya {
 
-    uint32_t OpenGLIBLBuilder::ConvertEquirectangularToCubemap(const std::shared_ptr<Texture2D>& hdrTexture, 
+    void* OpenGLIBLBuilder::ConvertEquirectangularToCubemap(const std::shared_ptr<Texture2D>& hdrTexture, 
                                                                const std::shared_ptr<Mesh>& cubeMesh, 
                                                                const std::shared_ptr<Shader>& convertShader) {
         uint32_t envCubemap;
@@ -93,10 +93,10 @@ namespace Ayaya {
         glDeleteRenderbuffers(1, &captureRBO);
 
         AYAYA_CORE_INFO("HDR Equirectangular mapped to Cubemap successfully! ID: {0}", envCubemap);
-        return envCubemap;
+        return (void*)(uintptr_t)envCubemap;
     }
 
-    uint32_t OpenGLIBLBuilder::CreateIrradianceMap(uint32_t envCubemap, 
+    void* OpenGLIBLBuilder::CreateIrradianceMap(void* envCubemap, 
                                                    const std::shared_ptr<Mesh>& cubeMesh, 
                                                    const std::shared_ptr<Shader>& irradianceShader) {
         uint32_t irradianceMap;
@@ -137,7 +137,7 @@ namespace Ayaya {
         irradianceShader->SetMat4("u_Projection", captureProjection);
         
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, (uint32_t)(uintptr_t)envCubemap);
 
         glViewport(0, 0, 32, 32); 
         glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
@@ -165,10 +165,10 @@ namespace Ayaya {
         glDeleteRenderbuffers(1, &captureRBO);
 
         AYAYA_CORE_INFO("IBL: Irradiance Map convoluted successfully! ID: {0}", irradianceMap);
-        return irradianceMap;
+        return (void*)(uintptr_t)irradianceMap;
     }
 
-    uint32_t OpenGLIBLBuilder::CreatePrefilterMap(uint32_t envCubemap, 
+    void* OpenGLIBLBuilder::CreatePrefilterMap(void* envCubemap, 
                                                   const std::shared_ptr<Mesh>& cubeMesh, 
                                                   const std::shared_ptr<Shader>& prefilterShader) {
         uint32_t prefilterMap;
@@ -209,7 +209,7 @@ namespace Ayaya {
         prefilterShader->SetInt("u_EnvironmentMap", 0);
         prefilterShader->SetMat4("u_Projection", captureProjection);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, (uint32_t)(uintptr_t)envCubemap);
 
         glDisable(GL_CULL_FACE);
         glDepthFunc(GL_LEQUAL);
@@ -242,10 +242,10 @@ namespace Ayaya {
         glDeleteFramebuffers(1, &captureFBO); glDeleteRenderbuffers(1, &captureRBO);
 
         AYAYA_CORE_INFO("IBL: Prefilter Map generated successfully! ID: {0}", prefilterMap);
-        return prefilterMap;
+        return (void*)(uintptr_t)prefilterMap;
     }
 
-    uint32_t OpenGLIBLBuilder::CreateBRDFLUT(const std::shared_ptr<Shader>& brdfShader, uint32_t emptyVAO) {
+    void* OpenGLIBLBuilder::CreateBRDFLUT(const std::shared_ptr<Shader>& brdfShader, void* emptyVAO) {
         uint32_t brdfLUTTexture;
         glGenTextures(1, &brdfLUTTexture);
         glBindTexture(GL_TEXTURE_2D, brdfLUTTexture);
@@ -299,7 +299,7 @@ namespace Ayaya {
         glDeleteBuffers(1, &quadVBO);
 
         AYAYA_CORE_INFO("IBL: BRDF LUT generated successfully! ID: {0}", brdfLUTTexture);
-        return brdfLUTTexture;
+       return (void*)(uintptr_t)brdfLUTTexture;
     }
 
 }

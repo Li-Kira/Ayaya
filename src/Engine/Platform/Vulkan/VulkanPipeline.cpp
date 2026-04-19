@@ -129,11 +129,31 @@ namespace Ayaya {
         // ==========================================
         // 5. 深度与模板测试 (Depth & Stencil)
         // ==========================================
+        auto AyayaToVulkanDepthCompare = [](DepthCompareOperator op) -> VkCompareOp {
+            switch(op) {
+               case DepthCompareOperator::Less: return VK_COMPARE_OP_LESS;
+                case DepthCompareOperator::LEqual: return VK_COMPARE_OP_LESS_OR_EQUAL;
+                case DepthCompareOperator::Equal: return VK_COMPARE_OP_EQUAL;
+                case DepthCompareOperator::GEqual: return VK_COMPARE_OP_GREATER_OR_EQUAL;
+                case DepthCompareOperator::Greater: return VK_COMPARE_OP_GREATER;
+                case DepthCompareOperator::NotEqual: return VK_COMPARE_OP_NOT_EQUAL;
+                case DepthCompareOperator::Always: return VK_COMPARE_OP_ALWAYS;
+            }
+            return VK_COMPARE_OP_LESS;
+        };
+
         VkPipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         depthStencil.depthTestEnable = spec.DepthTest ? VK_TRUE : VK_FALSE;
         depthStencil.depthWriteEnable = spec.DepthWrite ? VK_TRUE : VK_FALSE;
-        depthStencil.depthCompareOp = spec.DepthFuncLEqual ? VK_COMPARE_OP_LESS_OR_EQUAL : VK_COMPARE_OP_LESS;
+        
+        // ==========================================
+        // 【核心修复】：不要再写死 VK_COMPARE_OP_LESS，使用传入的规范！
+        // ==========================================
+        depthStencil.depthCompareOp = AyayaToVulkanDepthCompare(spec.DepthOperator);
+        
+        depthStencil.depthBoundsTestEnable = VK_FALSE;
+        depthStencil.stencilTestEnable = VK_FALSE;
 
         // ==========================================
         // 6. 颜色混合 (Color Blend) 动态匹配 FBO 附件

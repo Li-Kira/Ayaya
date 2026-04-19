@@ -8,19 +8,22 @@ namespace Ayaya {
 
     class VulkanIBLBuilder {
     public:
-        static uint32_t ConvertEquirectangularToCubemap(const std::shared_ptr<Texture2D>& hdrTexture, 
+        static void* ConvertEquirectangularToCubemap(const std::shared_ptr<Texture2D>& hdrTexture, 
                                                         const std::shared_ptr<Mesh>& cubeMesh, 
                                                         const std::shared_ptr<Shader>& convertShader);
 
-        static uint32_t CreateIrradianceMap(uint32_t envCubemap, 
+        static void* CreateIrradianceMap(void* envCubemap, 
                                             const std::shared_ptr<Mesh>& cubeMesh, 
                                             const std::shared_ptr<Shader>& irradianceShader);
         
-        static uint32_t CreatePrefilterMap(uint32_t envCubemap, 
+        static void* CreatePrefilterMap(void* envCubemap, 
                                            const std::shared_ptr<Mesh>& cubeMesh, 
                                            const std::shared_ptr<Shader>& prefilterShader);
         
-        static uint32_t CreateBRDFLUT(const std::shared_ptr<Shader>& brdfShader, uint32_t emptyVAO);
+        static void* CreateBRDFLUT(const std::shared_ptr<Shader>& brdfShader, void* emptyVAO);
+
+        // 在 VulkanIBLBuilder 类中新增：
+        static void ClearResources();
     };
 
 }

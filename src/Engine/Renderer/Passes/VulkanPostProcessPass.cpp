@@ -1,6 +1,7 @@
 #include "ayapch.h"
 #include "VulkanPostProcessPass.hpp"
-#include <glm/glm.hpp>
+#include "Core/Application.hpp"
+#include "Platform/Vulkan/VulkanContext.hpp"
 
 namespace Ayaya {
 
@@ -9,136 +10,117 @@ namespace Ayaya {
     }
 
     void VulkanPostProcessPass::OnAttach() {
-        // 1. 加载基于逻辑路径的新架构 Shader
-        m_PostProcessShader = Shader::Create("postprocess/postprocess.vert", "postprocess/postprocess.frag");
+        m_EmptyVAO = VertexArray::Create();
 
-        // 2. 创建专属 FBO
+        m_PostProcessShader = Shader::Create("PostProcess/postprocess.vert", "PostProcess/postprocess.frag");
+
         FramebufferSpecification postSpec;
         postSpec.Samples = 1; 
         postSpec.Width = 1280; 
         postSpec.Height = 720;
-        postSpec.Attachments = { FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::Depth };
-        m_PostProcessFBO = Framebuffer::Create(postSpec);
+        postSpec.Attachments = { FramebufferTextureFormat::RGBA8 }; // 后处理不需要深度缓冲
 
-        // 3. 固化管线 (PSO)
+        m_PostProcessFBOs.resize(3);
+        for (int i = 0; i < 3; i++) {
+            m_PostProcessFBOs[i] = Framebuffer::Create(postSpec);
+        }
+
         PipelineSpecification pipelineSpec;
         pipelineSpec.Shader = m_PostProcessShader;
-        pipelineSpec.TargetFramebuffer = m_PostProcessFBO;
+        pipelineSpec.TargetFramebuffer = m_PostProcessFBOs[0];
+        pipelineSpec.Layout = {}; // 魔法大三角形，不需要顶点输入
         pipelineSpec.DepthTest = false;  
         pipelineSpec.DepthWrite = false; 
         pipelineSpec.Blend = false;      
-        // 【核心】：全屏三角形必须关闭背面剔除
         pipelineSpec.BackfaceCulling = CullMode::None; 
 
         m_Pipeline = Pipeline::Create(pipelineSpec);
     }
 
     void VulkanPostProcessPass::OnResize(uint32_t width, uint32_t height) {
-        m_PostProcessFBO->Resize(width, height);
+        for (auto& fbo : m_PostProcessFBOs) {
+            fbo->Resize(width, height);
+        }
     }
 
     void VulkanPostProcessPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
         uint32_t width = context.Get<uint32_t>("ViewportWidth");
         uint32_t height = context.Get<uint32_t>("ViewportHeight");
-
         if (width == 0 || height == 0) return;
 
-        if (m_PostProcessFBO->GetSpecification().Width != width || m_PostProcessFBO->GetSpecification().Height != height) {
+        auto vulkanContext = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        uint32_t frameIndex = vulkanContext->GetCurrentFrameIndex() % m_PostProcessFBOs.size();
+        auto currentFBO = m_PostProcessFBOs[frameIndex];
+
+        if (currentFBO->GetSpecification().Width != width || currentFBO->GetSpecification().Height != height) {
             OnResize(width, height);
         }
 
-        // ==========================================
-        // 1. 还原并保留所有 OpenGL 版本的输入源获取逻辑
-        // ==========================================
-        std::shared_ptr<Framebuffer> screenFBO;
-        uint32_t screenAttachmentIndex = 0;
-
-        // 优先拾取 Lighting 阶段的高清光照图，如果没有则退化使用 VulkanTarget 纯色底图
-        if (context.Framebuffers.find("Lighting") != context.Framebuffers.end()) {
-            screenFBO = context.Framebuffers["Lighting"];
-            screenAttachmentIndex = 0; 
-        } else if (context.Framebuffers.find("VulkanTarget") != context.Framebuffers.end()) {
-            screenFBO = context.Framebuffers["VulkanTarget"];
-        }
-
-        std::shared_ptr<Framebuffer> selectionFBO;
-        if (context.Framebuffers.find("Selection") != context.Framebuffers.end()) {
-            selectionFBO = context.Framebuffers["Selection"];
-        }
-
-        std::shared_ptr<Framebuffer> bloomFBO;
-        if (context.Framebuffers.find("Bloom") != context.Framebuffers.end()) {
-            bloomFBO = context.Framebuffers["Bloom"];
-        }
-
-        bool isBloomEnabled = (bloomFBO != nullptr) && context.Get<bool>("EnableBloom", true);
-
-        // ==========================================
-        // 2. 绑定贴图并处理降级防崩 (Vulkan 必须填满所有的 Descriptor 坑位)
-        // ==========================================
-        if (screenFBO) {
-            cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, screenFBO, screenAttachmentIndex);
-        }
-        
-        auto whiteTex = context.GetTexture("WhiteTexture");
-        if (whiteTex) {
-            // 保证 Binding 1 和 2 绝对不为空
-            cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, whiteTex);
-            cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, whiteTex);
-        }
-
-        // if (selectionFBO) {
-        //     cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, selectionFBO, 0);
-        // } else if (screenFBO) {
-        //     cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, screenFBO, screenAttachmentIndex);
-        // }
-
-        // if (isBloomEnabled) {
-        //     cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, bloomFBO, 0);
-        // } else if (screenFBO) {
-        //     cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, screenFBO, screenAttachmentIndex);
-        // }
-
-        // ==========================================
-        // 3. 执行内存屏障！等待前置 Pass (Lighting/Bloom/Selection) 全部写入完成
-        // ==========================================
-        cmd.InsertExecutionBarrier();
-
-        // ==========================================
-        // 4. 开启后处理渲染通道
-        // ==========================================
-        cmd.BeginRenderPass(m_PostProcessFBO, true, glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
-        
+        cmd.BeginRenderPass(currentFBO, true, glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
         cmd.BindPipeline(m_Pipeline);
         context.Stats.ShaderBinds++;
 
         // ==========================================
-        // 5. 组装并推送常量块 (彻底抛弃 m_EmptyVAO)
+        // 1. 获取主画面 (抓取之前 VulkanForwardTestPass 的产物)
         // ==========================================
-        PostProcessPushConstants constants{};
+        std::shared_ptr<Framebuffer> screenFBO;
+        if (context.Framebuffers.find("ForwardTest") != context.Framebuffers.end()) {
+            screenFBO = context.Framebuffers["ForwardTest"];
+        }
+
+        auto whiteTex = context.GetTexture("WhiteTexture");
+
+        // Vulkan 规定所有描述符槽位都必须绑定有效数据，否则会报错
+        if (screenFBO) {
+            cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, screenFBO, 0);
+        } else {
+            cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, whiteTex);
+        }
+
+        // ==========================================
+        // 2. 绑定杂项 (描边、泛光)
+        // ==========================================
+        std::shared_ptr<Framebuffer> selectionFBO;
+        if (context.Framebuffers.find("Selection") != context.Framebuffers.end()) selectionFBO = context.Framebuffers["Selection"];
+        if (selectionFBO) cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, selectionFBO, 0);
+        else cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, whiteTex);
+
+        std::shared_ptr<Framebuffer> bloomFBO;
+        if (context.Framebuffers.find("Bloom") != context.Framebuffers.end()) bloomFBO = context.Framebuffers["Bloom"];
+        bool isBloomEnabled = (bloomFBO != nullptr) && context.Get<bool>("EnableBloom", true);
         
+        if (isBloomEnabled) cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, bloomFBO, 0);
+        else cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, whiteTex);
+
+        // ==========================================
+        // 3. 推送参数
+        // ==========================================
+        PostProcessPushConstants pc{};
         float physExposure = context.Get<float>("PhysicalExposure", 1.0f);
         float expComp = context.Get<float>("ExposureCompensation", 1.0f);
         
-        constants.Exposure = physExposure * expComp;
-        constants.TexelSize = glm::vec2(1.0f / (float)width, 1.0f / (float)height);
-        constants.ToneMappingType = context.Get<int>("ToneMappingType", 1);
-        constants.EnableBloom = isBloomEnabled ? 1 : 0;
-        constants.BloomIntensity = context.Get<float>("BloomIntensity", 1.0f);
+        pc.Exposure = physExposure * expComp;
+        pc.ToneMappingType = context.Get<int>("ToneMappingType", 1);
+        pc.TexelSize = glm::vec2(1.0f / (float)width, 1.0f / (float)height);
+        pc.EnableBloom = isBloomEnabled ? 1 : 0;
+        pc.BloomIntensity = context.Get<float>("BloomIntensity", 1.0f);
 
-        cmd.PushConstantData(m_Pipeline, &constants, sizeof(PostProcessPushConstants));
+        cmd.PushConstantData(m_Pipeline, &pc, sizeof(PostProcessPushConstants));
 
+        // ==========================================
+        // 4. 绘制大三角形
+        // ==========================================
         if (context.RecordAndCheckDrawCall("Post Process Pass", "Tone Mapping & Combine", "PostProcess Shader", 1)) {
-            cmd.DrawArrays(3); // 原生触发全屏绘制
+            // 没有顶点缓冲，直接调用 3 个顶点即可
+            cmd.DrawArrays(m_EmptyVAO, 3);
         }
         
         cmd.EndRenderPass();
 
-        // ==========================================
-        // 6. 产出交还黑板
-        // ==========================================
-        context.Set("PostProcess_Output", m_PostProcessFBO);
-        context.Set("Final_Output", m_PostProcessFBO); // 如果后面没有 FXAA，这就是最终输出
-        context.Framebuffers["PostProcess"] = m_PostProcessFBO;
+        // 最终输出挂载到黑板上
+        context.Set("Final_Output", currentFBO);
+        context.Set("PostProcess_Output", currentFBO);
+        context.Framebuffers["PostProcess"] = currentFBO;
     }
+
 }

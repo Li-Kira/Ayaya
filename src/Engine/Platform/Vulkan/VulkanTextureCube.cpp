@@ -11,10 +11,10 @@ namespace Ayaya {
     // ==========================================
     // 构造函数 1：从现有句柄包装 (如 IBL 计算产物)
     // ==========================================
-    VulkanTextureCube::VulkanTextureCube(uint32_t rendererID, uint32_t width, uint32_t height)
+    VulkanTextureCube::VulkanTextureCube(void* rendererID, uint32_t width, uint32_t height)
         : m_Width(width), m_Height(height), m_IsWrapped(true) {
-        m_ImageView = (VkImageView)(uintptr_t)rendererID;
-        // 包装模式下，假设 Sampler 已经在 IBLBuilder 中外部创建并绑定
+        m_ImageView = (VkImageView)rendererID;
+        CreateSampler();
     }
 
     // ==========================================
@@ -27,13 +27,20 @@ namespace Ayaya {
     }
 
     VulkanTextureCube::~VulkanTextureCube() {
-        if (m_IsWrapped) return; 
-
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         VkDevice device = context->GetDevice();
         
         vkDeviceWaitIdle(device);
+
+        // ==========================================
+        // 【核心修复 2A】：Sampler 是我们自己创建的，不管是不是包装模式，都必须销毁！
+        // ==========================================
         if (m_Sampler) vkDestroySampler(device, m_Sampler, nullptr);
+
+        // 包装模式下，Image 和 View 属于 IBLBuilder，我们无权销毁，直接返回
+        if (m_IsWrapped) return; 
+
+        // 非包装模式（从文件读取），我们自己负责销毁
         if (m_ImageView) vkDestroyImageView(device, m_ImageView, nullptr);
         if (m_Image) vmaDestroyImage(context->GetAllocator(), m_Image, m_Allocation);
     }
@@ -96,8 +103,8 @@ namespace Ayaya {
         samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         
-        samplerInfo.anisotropyEnable = VK_TRUE;
-        samplerInfo.maxAnisotropy = 16.0f;
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.maxAnisotropy = 1.0f;
         samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
         samplerInfo.compareEnable = VK_FALSE;
@@ -114,25 +121,19 @@ namespace Ayaya {
     // 【终极重头戏】：读取 6 张图，打包上传到显存
     // ==========================================
     void VulkanTextureCube::CreateFromFiles(const std::vector<std::string>& faces) {
-        if (faces.size() != 6) {
-            AYAYA_CORE_ERROR("Cubemap must have exactly 6 faces!");
-            return;
-        }
+        // 1. 检查第一张图是否为 HDR 以决定全局格式
+        bool isHDR = stbi_is_hdr(faces[0].c_str());
+        VkFormat format = isHDR ? VK_FORMAT_R32G32B32A32_SFLOAT : VK_FORMAT_R8G8B8A8_UNORM;
+        uint32_t bytesPerPixel = isHDR ? 16 : 4;
 
-        // 1. 读取 6 张图片的像素数据
-        stbi_uc* pixels[6] = { nullptr };
+        std::vector<void*> pixels(6);
         int width, height, channels;
-        // 天空盒一般不要上下翻转，遵循默认顺序
-        stbi_set_flip_vertically_on_load(false); 
 
         for (int i = 0; i < 6; i++) {
-            pixels[i] = stbi_load(faces[i].c_str(), &width, &height, &channels, STBI_rgb_alpha);
-            if (!pixels[i]) {
-                AYAYA_CORE_ERROR("Failed to load cubemap face: {0}", faces[i]);
-                // 内存泄漏保护
-                for (int j = 0; j < i; j++) stbi_image_free(pixels[j]);
-                return;
-            }
+            if (isHDR) 
+                pixels[i] = stbi_loadf(faces[i].c_str(), &width, &height, &channels, STBI_rgb_alpha);
+            else 
+                pixels[i] = stbi_load(faces[i].c_str(), &width, &height, &channels, STBI_rgb_alpha);
         }
 
         m_Width = width;

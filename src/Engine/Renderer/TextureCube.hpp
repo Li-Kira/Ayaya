@@ -15,7 +15,7 @@ namespace Ayaya {
         static std::shared_ptr<TextureCube> Create(const std::vector<std::string>& faces);
 
         // 【工厂方法】：从已有的底层显存 ID 包装 (比如从 IBLBuilder 传过来)
-        static std::shared_ptr<TextureCube> Create(uint32_t rendererID, int width = 1024, int height = 1024);
+        static std::shared_ptr<TextureCube> Create(void* rendererID, int width = 1024, int height = 1024);
     };
 
 }

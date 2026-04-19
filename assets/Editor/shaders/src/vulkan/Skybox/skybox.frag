@@ -15,5 +15,6 @@ void main() {
     // 采样 Cubemap
     vec3 envColor = texture(u_Skybox, v_TexCoords).rgb;
     
-    FragColor = vec4(envColor * pc.u_Intensity, 1.0);
+    FragColor = vec4(envColor, 1.0);
+    // FragColor = vec4(1.0, 0.0, 0.0, 1.0);
 }
