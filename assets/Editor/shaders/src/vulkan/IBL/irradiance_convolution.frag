@@ -2,8 +2,8 @@
 layout(location = 0) out vec4 FragColor;
 layout(location = 0) in vec3 v_LocalPos;
 
-// 绑定槽位
-layout(binding = 0) uniform samplerCube u_EnvironmentMap;
+// 【修复】：必须显式声明 set = 1
+layout(set = 1, binding = 0) uniform samplerCube u_EnvironmentMap;
 
 const float PI = 3.14159265359;
 
@@ -18,7 +18,7 @@ void main() {
     vec3 right = normalize(cross(up, N));
     up = normalize(cross(N, right));
        
-    float sampleDelta = 0.025;
+    float sampleDelta = 0.1;
     float nrSamples = 0.0;
     
     for(float phi = 0.0; phi < 2.0 * PI; phi += sampleDelta) {

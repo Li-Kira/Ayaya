@@ -8,10 +8,11 @@ namespace Ayaya {
         return format == FramebufferTextureFormat::DEPTH24STENCIL8;
     }
 
-    // 辅助函数：根据我们的枚举获取 OpenGL 内部格式
+    // 辅助函数 1：获取 OpenGL 内部格式 (Internal Format)
     static GLenum AyayaTextureFormatToGL(FramebufferTextureFormat format) {
         switch (format) {
             case FramebufferTextureFormat::RGBA8:       return GL_RGBA8;
+            case FramebufferTextureFormat::RG16F:       return GL_RG16F;
             case FramebufferTextureFormat::RGBA16F:     return GL_RGBA16F;
             case FramebufferTextureFormat::RGBA32F:     return GL_RGBA32F;
             case FramebufferTextureFormat::RED_INTEGER: return GL_R32I;
@@ -19,9 +20,11 @@ namespace Ayaya {
         }
     }
 
+    // 辅助函数 2：获取 OpenGL 数据通道格式 (Data Format)
     static GLenum AyayaTextureFormatToGLDataFormat(FramebufferTextureFormat format) {
         switch (format) {
             case FramebufferTextureFormat::RGBA8:       return GL_RGBA;
+            case FramebufferTextureFormat::RG16F:       return GL_RG;
             case FramebufferTextureFormat::RGBA16F:     return GL_RGBA;
             case FramebufferTextureFormat::RGBA32F:     return GL_RGBA;
             case FramebufferTextureFormat::RED_INTEGER: return GL_RED_INTEGER;
@@ -29,9 +32,11 @@ namespace Ayaya {
         }
     }
     
+    // 辅助函数 3：获取 OpenGL 数据类型 (Data Type)
     static GLenum AyayaTextureFormatToGLDataType(FramebufferTextureFormat format) {
         switch (format) {
             case FramebufferTextureFormat::RGBA8:       return GL_UNSIGNED_BYTE;
+            case FramebufferTextureFormat::RG16F:       return GL_FLOAT;
             case FramebufferTextureFormat::RGBA16F:     return GL_FLOAT;
             case FramebufferTextureFormat::RGBA32F:     return GL_FLOAT;
             case FramebufferTextureFormat::RED_INTEGER: return GL_INT;

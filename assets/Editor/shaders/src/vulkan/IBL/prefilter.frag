@@ -2,13 +2,13 @@
 layout(location = 0) out vec4 FragColor;
 layout(location = 0) in vec3 v_LocalPos;
 
-layout(binding = 0) uniform samplerCube u_EnvironmentMap;
+layout(set = 1, binding = 0) uniform samplerCube u_EnvironmentMap;
 
-// 【核心改造】：必须与顶点着色器的 Push Constant 结构完全一致！
 layout(push_constant) uniform Constants {
     mat4 u_Projection;
     mat4 u_View;
     float u_Roughness;
+    float _padding[3];
 } pc;
 
 const float PI = 3.14159265359;
@@ -45,7 +45,7 @@ void main() {
     // 获取 Push Constant 中的 Roughness
     float safeRoughness = max(pc.u_Roughness, 0.001);
 
-    const uint SAMPLE_COUNT = 1024u;
+    const uint SAMPLE_COUNT = 128u;
     vec3 prefilteredColor = vec3(0.0);
     float totalWeight = 0.0;
     

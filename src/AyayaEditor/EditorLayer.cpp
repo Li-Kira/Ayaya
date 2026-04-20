@@ -323,9 +323,9 @@ namespace Ayaya {
             // ImGui::TextDisabled("Vulkan Mode: Content Browser is paused pending Descriptor Sets.");
             // ImGui::End();
 
-            ImGui::Begin("Frame Debugger");
-            ImGui::TextDisabled("Vulkan Mode: Frame Debugger is paused pending Descriptor Sets.");
-            ImGui::End();
+            // ImGui::Begin("Frame Debugger");
+            // ImGui::TextDisabled("Vulkan Mode: Frame Debugger is paused pending Descriptor Sets.");
+            // ImGui::End();
         }
         
         UIRenderViewport();

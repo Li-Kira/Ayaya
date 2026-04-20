@@ -14,8 +14,9 @@ namespace Ayaya {
         None = 0,
         // 颜色通道
         RGBA8,
-        RGBA16F, // HDR 颜色 / 法线
-        RGBA32F, // 世界坐标 (高精度)
+        RG16F,       // <--- 【新增】：双通道 16 位浮点数，专为 BRDF LUT 等算法准备
+        RGBA16F,     // HDR 颜色 / 法线
+        RGBA32F,     // 世界坐标 (高精度)
         RED_INTEGER, // 实体 ID (用于鼠标拾取，后续可加)
         // 深度/模板
         DEPTH24STENCIL8,

@@ -1,0 +1,520 @@
+[16:36:16] AYAYA: ImGui initialized successfully.
+[16:36:16] AYAYA: VulkanTexture2D: Pixel data securely uploaded & Layout transitioned for assets/Editor/icons/folder_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png
+[16:36:16] AYAYA: VulkanTexture2D: Pixel data securely uploaded & Layout transitioned for assets/Editor/icons/docs_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png
+[16:36:16] AYAYA: VulkanTexture2D: Pixel data securely uploaded & Layout transitioned for assets/Editor/icons/image_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png
+[16:36:16] AYAYA: Window Resize Logic: 2560, 1440
+[16:36:16] AYAYA: Preferences loaded and applied.
+[16:36:16] AYAYA: Lua ScriptEngine Initialized.
+[16:36:16] AYAYA: VulkanTexture2D: Pixel data securely uploaded & Layout transitioned for Generated Texture
+[16:36:16] AYAYA: Vulkan Pipeline is running in minimal mode!
+[16:36:16] AYAYA: VulkanShader 'debug.vert' loaded successfully from SPIR-V!
+[16:36:16] AYAYA: VulkanShader 'skybox.vert' loaded successfully from SPIR-V!
+[16:36:16] AYAYA: VulkanShader 'postprocess.vert' loaded successfully from SPIR-V!
+[16:36:16] AYAYA: VulkanTexture2D: Pixel data securely uploaded & Layout transitioned for Generated Texture
+[16:36:16] AYAYA: Vulkan Pipeline is running in minimal mode!
+[16:36:16] AYAYA: VulkanShader 'debug.vert' loaded successfully from SPIR-V!
+[16:36:16] AYAYA: VulkanShader 'skybox.vert' loaded successfully from SPIR-V!
+[16:36:16] AYAYA: VulkanShader 'postprocess.vert' loaded successfully from SPIR-V!
+[16:36:16] AYAYA: VulkanTexture2D: Pixel data securely uploaded & Layout transitioned for assets/textures/skybox/hdr/newport_loft.hdr
+[16:36:16] AYAYA: VulkanShader 'equirectangular_to_cubemap.vert' loaded successfully from SPIR-V!
+[16:36:16] AYAYA: VulkanIBLBuilder: HDR to Cubemap baked successfully!
+[16:36:16] AYAYA: VulkanShader 'cubemap.vert' loaded successfully from SPIR-V!
+[mvk-error] VK_TIMEOUT: Lost VkDevice after MTLCommandBuffer "vkQueueSubmit MTLCommandBuffer on Queue 0-0" execution failed (code 2): Caused GPU Hang Error (00000003:kIOGPUCommandBufferCallbackErrorHang)
+[16:36:17] AYAYA: VulkanIBLBuilder: Irradiance Map convoluted successfully!
+[16:36:17] AYAYA: VulkanShader 'cubemap.vert' loaded successfully from SPIR-V!
+[16:36:17] AYAYA: VulkanIBLBuilder: Prefilter Map generated successfully!
+[16:36:17] AYAYA: VulkanShader 'equirectangular_to_cubemap.vert' loaded successfully from SPIR-V!
+[16:36:17] AYAYA: VulkanIBLBuilder: HDR to Cubemap baked successfully!
+[16:36:17] AYAYA: VulkanShader 'cubemap.vert' loaded successfully from SPIR-V!
+[16:36:17] AYAYA: VulkanIBLBuilder: Irradiance Map convoluted successfully!
+[16:36:17] AYAYA: VulkanShader 'cubemap.vert' loaded successfully from SPIR-V!
+[16:36:17] AYAYA: VulkanIBLBuilder: Prefilter Map generated successfully!
+Validation Error: [ VUID-vkResetCommandPool-commandPool-00040 ] | MessageID = 0xb53e2331
+vkResetCommandPool(): (VkCommandBuffer 0xaafc3c618) is in use.
+The Vulkan spec states: All VkCommandBuffer objects allocated from commandPool must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkResetCommandPool-commandPool-00040)
+Objects: 2
+    [0] VkCommandBuffer 0xaafc3c618
+    [1] VkCommandPool 0x1e000000001e
+
+Validation Error: [ VUID-vkBeginCommandBuffer-commandBuffer-00049 ] | MessageID = 0x84029a9f
+vkBeginCommandBuffer(): on active VkCommandBuffer 0xaafc3c618 before it has completed. You must check command buffer fence before this call.
+The Vulkan spec states: commandBuffer must not be in the recording or pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkBeginCommandBuffer-commandBuffer-00049)
+Objects: 1
+    [0] VkCommandBuffer 0xaafc3c618
+
+Validation Error: [ VUID-vkQueueSubmit-pCommandBuffers-00071 ] | MessageID = 0x2e2f4d65
+vkQueueSubmit(): pSubmits[0].pCommandBuffers[0] VkCommandBuffer 0xaafc3c618 is already in use and is not marked for simultaneous use.
+The Vulkan spec states: If any element of the pCommandBuffers member of any element of pSubmits was not recorded with the VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, it must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pCommandBuffers-00071)
+
+[16:36:17] AYAYA: Failed to submit draw command buffer!
+[16:36:17] AYAYA: Failed to acquire swap chain image!
+Validation Error: [ VUID-vkResetCommandPool-commandPool-00040 ] | MessageID = 0xb53e2331
+vkResetCommandPool(): (VkCommandBuffer 0xaafc3c618) is in use.
+The Vulkan spec states: All VkCommandBuffer objects allocated from commandPool must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkResetCommandPool-commandPool-00040)
+Objects: 2
+    [0] VkCommandBuffer 0xaafc3c618
+    [1] VkCommandPool 0x1e000000001e
+
+Validation Error: [ VUID-vkBeginCommandBuffer-commandBuffer-00049 ] | MessageID = 0x84029a9f
+vkBeginCommandBuffer(): on active VkCommandBuffer 0xaafc3c618 before it has completed. You must check command buffer fence before this call.
+The Vulkan spec states: commandBuffer must not be in the recording or pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkBeginCommandBuffer-commandBuffer-00049)
+Objects: 1
+    [0] VkCommandBuffer 0xaafc3c618
+
+Validation Error: [ VUID-vkQueueSubmit-pCommandBuffers-00071 ] | MessageID = 0x2e2f4d65
+vkQueueSubmit(): pSubmits[0].pCommandBuffers[0] VkCommandBuffer 0xaafc3c618 is already in use and is not marked for simultaneous use.
+The Vulkan spec states: If any element of the pCommandBuffers member of any element of pSubmits was not recorded with the VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, it must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pCommandBuffers-00071)
+
+Validation Error: [ VUID-vkQueueSubmit-pWaitSemaphores-03238 ] | MessageID = 0xb50452b0
+vkQueueSubmit(): pSubmits[0].pWaitSemaphores[0] queue (VkQueue 0xab138b858) is waiting on semaphore (VkSemaphore 0x110000000011) that has no way to be signaled.
+The Vulkan spec states: All elements of the pWaitSemaphores member of all elements of pSubmits created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY must reference a semaphore signal operation that has been submitted for execution and any semaphore signal operations on which it depends must have also been submitted for execution (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pWaitSemaphores-03238)
+Objects: 2
+    [0] VkSemaphore 0x110000000011
+    [1] VkQueue 0xab138b858
+
+[16:36:17] AYAYA: Failed to submit draw command buffer!
+[16:36:17] AYAYA: Failed to acquire swap chain image!
+Validation Error: [ VUID-vkQueueSubmit-pWaitSemaphores-03238 ] | MessageID = 0xb50452b0
+vkQueueSubmit(): pSubmits[0].pWaitSemaphores[0] queue (VkQueue 0xab138b858) is waiting on semaphore (VkSemaphore 0x140000000014) that has no way to be signaled.
+The Vulkan spec states: All elements of the pWaitSemaphores member of all elements of pSubmits created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY must reference a semaphore signal operation that has been submitted for execution and any semaphore signal operations on which it depends must have also been submitted for execution (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pWaitSemaphores-03238)
+Objects: 2
+    [0] VkSemaphore 0x140000000014
+    [1] VkQueue 0xab138b858
+
+[16:36:17] AYAYA: Failed to submit draw command buffer!
+Validation Error: [ VUID-vkAcquireNextImageKHR-semaphore-01779 ] | MessageID = 0x5717e75b
+vkAcquireNextImageKHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkAcquireNextImageKHR-semaphore-01779)
+Objects: 1
+    [0] VkSemaphore 0xe000000000e
+
+[16:36:17] AYAYA: Failed to acquire swap chain image!
+Validation Error: [ VUID-vkResetFences-pFences-01123 ] | MessageID = 0x68a5074e
+vkResetFences(): pFences[0] (VkFence 0x100000000010) is in use.
+The Vulkan spec states: Each element of pFences must not be currently associated with any queue command that has not yet completed execution on that queue (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/synchronization.html#VUID-vkResetFences-pFences-01123)
+Objects: 1
+    [0] VkFence 0x100000000010
+
+Validation Error: [ VUID-vkResetCommandBuffer-commandBuffer-00045 ] | MessageID = 0x1e7883ea
+vkResetCommandBuffer(): (VkCommandBuffer 0x10365aa08) is in use.
+The Vulkan spec states: commandBuffer must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkResetCommandBuffer-commandBuffer-00045)
+Objects: 2
+    [0] VkCommandBuffer 0x10365aa08
+    [1] VkCommandPool 0xd000000000d
+
+Validation Error: [ VUID-vkBeginCommandBuffer-commandBuffer-00049 ] | MessageID = 0x84029a9f
+vkBeginCommandBuffer(): on active VkCommandBuffer 0x10365aa08 before it has completed. You must check command buffer fence before this call.
+The Vulkan spec states: commandBuffer must not be in the recording or pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkBeginCommandBuffer-commandBuffer-00049)
+Objects: 1
+    [0] VkCommandBuffer 0x10365aa08
+
+Validation Error: [ VUID-vkQueueSubmit-pCommandBuffers-00071 ] | MessageID = 0x2e2f4d65
+vkQueueSubmit(): pSubmits[0].pCommandBuffers[0] VkCommandBuffer 0x10365aa08 is already in use and is not marked for simultaneous use.
+The Vulkan spec states: If any element of the pCommandBuffers member of any element of pSubmits was not recorded with the VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, it must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pCommandBuffers-00071)
+
+Validation Error: [ VUID-vkQueueSubmit-pWaitSemaphores-03238 ] | MessageID = 0xb50452b0
+vkQueueSubmit(): pSubmits[0].pWaitSemaphores[0] queue (VkQueue 0xab138b858) is waiting on semaphore (VkSemaphore 0xe000000000e) that has no way to be signaled.
+The Vulkan spec states: All elements of the pWaitSemaphores member of all elements of pSubmits created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY must reference a semaphore signal operation that has been submitted for execution and any semaphore signal operations on which it depends must have also been submitted for execution (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pWaitSemaphores-03238)
+Objects: 2
+    [0] VkSemaphore 0xe000000000e
+    [1] VkQueue 0xab138b858
+
+Validation Error: [ VUID-vkQueueSubmit-pSignalSemaphores-00067 ] | MessageID = 0x539277af
+vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xf000000000f) is being signaled by VkQueue 0xab138b858, but it was previously signaled by VkQueue 0xab138b858 and has not since been waited on.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+Objects: 3
+    [0] VkSemaphore 0xf000000000f
+    [1] VkQueue 0xab138b858
+    [2] VkQueue 0xab138b858
+
+[16:36:17] AYAYA: Failed to submit draw command buffer!
+Validation Error: [ VUID-vkAcquireNextImageKHR-semaphore-01779 ] | MessageID = 0x5717e75b
+vkAcquireNextImageKHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkAcquireNextImageKHR-semaphore-01779)
+Objects: 1
+    [0] VkSemaphore 0x110000000011
+
+[16:36:17] AYAYA: Failed to acquire swap chain image!
+Validation Error: [ VUID-vkResetFences-pFences-01123 ] | MessageID = 0x68a5074e
+vkResetFences(): pFences[0] (VkFence 0x130000000013) is in use.
+The Vulkan spec states: Each element of pFences must not be currently associated with any queue command that has not yet completed execution on that queue (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/synchronization.html#VUID-vkResetFences-pFences-01123)
+Objects: 1
+    [0] VkFence 0x130000000013
+
+Validation Error: [ VUID-vkResetCommandBuffer-commandBuffer-00045 ] | MessageID = 0x1e7883ea
+vkResetCommandBuffer(): (VkCommandBuffer 0x103654788) is in use.
+The Vulkan spec states: commandBuffer must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkResetCommandBuffer-commandBuffer-00045)
+Objects: 2
+    [0] VkCommandBuffer 0x103654788
+    [1] VkCommandPool 0xd000000000d
+
+Validation Error: [ VUID-vkBeginCommandBuffer-commandBuffer-00049 ] | MessageID = 0x84029a9f
+vkBeginCommandBuffer(): on active VkCommandBuffer 0x103654788 before it has completed. You must check command buffer fence before this call.
+The Vulkan spec states: commandBuffer must not be in the recording or pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkBeginCommandBuffer-commandBuffer-00049)
+Objects: 1
+    [0] VkCommandBuffer 0x103654788
+
+Validation Error: [ VUID-vkQueueSubmit-pCommandBuffers-00071 ] | MessageID = 0x2e2f4d65
+vkQueueSubmit(): pSubmits[0].pCommandBuffers[0] VkCommandBuffer 0x103654788 is already in use and is not marked for simultaneous use.
+The Vulkan spec states: If any element of the pCommandBuffers member of any element of pSubmits was not recorded with the VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, it must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pCommandBuffers-00071)
+
+Validation Error: [ VUID-vkQueueSubmit-pWaitSemaphores-03238 ] | MessageID = 0xb50452b0
+vkQueueSubmit(): pSubmits[0].pWaitSemaphores[0] queue (VkQueue 0xab138b858) is waiting on semaphore (VkSemaphore 0x110000000011) that has no way to be signaled.
+The Vulkan spec states: All elements of the pWaitSemaphores member of all elements of pSubmits created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY must reference a semaphore signal operation that has been submitted for execution and any semaphore signal operations on which it depends must have also been submitted for execution (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pWaitSemaphores-03238)
+Objects: 2
+    [0] VkSemaphore 0x110000000011
+    [1] VkQueue 0xab138b858
+
+Validation Error: [ VUID-vkQueueSubmit-pSignalSemaphores-00067 ] | MessageID = 0x539277af
+vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x120000000012) is being signaled by VkQueue 0xab138b858, but it was previously signaled by VkQueue 0xab138b858 and has not since been waited on.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+Objects: 3
+    [0] VkSemaphore 0x120000000012
+    [1] VkQueue 0xab138b858
+    [2] VkQueue 0xab138b858
+
+[16:36:17] AYAYA: Failed to submit draw command buffer!
+Validation Error: [ VUID-vkAcquireNextImageKHR-semaphore-01779 ] | MessageID = 0x5717e75b
+vkAcquireNextImageKHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkAcquireNextImageKHR-semaphore-01779)
+Objects: 1
+    [0] VkSemaphore 0x140000000014
+
+[16:36:17] AYAYA: Failed to acquire swap chain image!
+Validation Error: [ VUID-vkResetFences-pFences-01123 ] | MessageID = 0x68a5074e
+vkResetFences(): pFences[0] (VkFence 0x160000000016) is in use.
+The Vulkan spec states: Each element of pFences must not be currently associated with any queue command that has not yet completed execution on that queue (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/synchronization.html#VUID-vkResetFences-pFences-01123)
+Objects: 1
+    [0] VkFence 0x160000000016
+
+Validation Error: [ VUID-vkResetCommandBuffer-commandBuffer-00045 ] | MessageID = 0x1e7883ea
+vkResetCommandBuffer(): (VkCommandBuffer 0xaafc3c018) is in use.
+The Vulkan spec states: commandBuffer must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkResetCommandBuffer-commandBuffer-00045)
+Objects: 2
+    [0] VkCommandBuffer 0xaafc3c018
+    [1] VkCommandPool 0xd000000000d
+
+Validation Error: [ VUID-vkBeginCommandBuffer-commandBuffer-00049 ] | MessageID = 0x84029a9f
+vkBeginCommandBuffer(): on active VkCommandBuffer 0xaafc3c018 before it has completed. You must check command buffer fence before this call.
+The Vulkan spec states: commandBuffer must not be in the recording or pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkBeginCommandBuffer-commandBuffer-00049)
+Objects: 1
+    [0] VkCommandBuffer 0xaafc3c018
+
+Validation Error: [ VUID-vkQueueSubmit-pCommandBuffers-00071 ] | MessageID = 0x2e2f4d65
+vkQueueSubmit(): pSubmits[0].pCommandBuffers[0] VkCommandBuffer 0xaafc3c018 is already in use and is not marked for simultaneous use.
+The Vulkan spec states: If any element of the pCommandBuffers member of any element of pSubmits was not recorded with the VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, it must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pCommandBuffers-00071)
+
+Validation Error: [ VUID-vkQueueSubmit-pWaitSemaphores-03238 ] | MessageID = 0xb50452b0
+vkQueueSubmit(): pSubmits[0].pWaitSemaphores[0] queue (VkQueue 0xab138b858) is waiting on semaphore (VkSemaphore 0x140000000014) that has no way to be signaled.
+The Vulkan spec states: All elements of the pWaitSemaphores member of all elements of pSubmits created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY must reference a semaphore signal operation that has been submitted for execution and any semaphore signal operations on which it depends must have also been submitted for execution (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pWaitSemaphores-03238)
+Objects: 2
+    [0] VkSemaphore 0x140000000014
+    [1] VkQueue 0xab138b858
+
+Validation Error: [ VUID-vkQueueSubmit-pSignalSemaphores-00067 ] | MessageID = 0x539277af
+vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x150000000015) is being signaled by VkQueue 0xab138b858, but it was previously signaled by VkQueue 0xab138b858 and has not since been waited on.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+Objects: 3
+    [0] VkSemaphore 0x150000000015
+    [1] VkQueue 0xab138b858
+    [2] VkQueue 0xab138b858
+
+[16:36:17] AYAYA: Failed to submit draw command buffer!
+Validation Error: [ VUID-vkAcquireNextImageKHR-semaphore-01779 ] | MessageID = 0x5717e75b
+vkAcquireNextImageKHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkAcquireNextImageKHR-semaphore-01779)
+Objects: 1
+    [0] VkSemaphore 0xe000000000e
+
+[16:36:17] AYAYA: Failed to acquire swap chain image!
+Validation Error: [ VUID-vkResetFences-pFences-01123 ] | MessageID = 0x68a5074e
+vkResetFences(): pFences[0] (VkFence 0x100000000010) is in use.
+The Vulkan spec states: Each element of pFences must not be currently associated with any queue command that has not yet completed execution on that queue (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/synchronization.html#VUID-vkResetFences-pFences-01123)
+Objects: 1
+    [0] VkFence 0x100000000010
+
+Validation Error: [ VUID-vkResetCommandBuffer-commandBuffer-00045 ] | MessageID = 0x1e7883ea
+vkResetCommandBuffer(): (VkCommandBuffer 0x10365aa08) is in use.
+The Vulkan spec states: commandBuffer must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkResetCommandBuffer-commandBuffer-00045)
+Objects: 2
+    [0] VkCommandBuffer 0x10365aa08
+    [1] VkCommandPool 0xd000000000d
+
+Validation Error: [ VUID-vkBeginCommandBuffer-commandBuffer-00049 ] | MessageID = 0x84029a9f
+vkBeginCommandBuffer(): on active VkCommandBuffer 0x10365aa08 before it has completed. You must check command buffer fence before this call.
+The Vulkan spec states: commandBuffer must not be in the recording or pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkBeginCommandBuffer-commandBuffer-00049)
+Objects: 1
+    [0] VkCommandBuffer 0x10365aa08
+
+Validation Error: [ VUID-vkQueueSubmit-pCommandBuffers-00071 ] | MessageID = 0x2e2f4d65
+vkQueueSubmit(): pSubmits[0].pCommandBuffers[0] VkCommandBuffer 0x10365aa08 is already in use and is not marked for simultaneous use.
+The Vulkan spec states: If any element of the pCommandBuffers member of any element of pSubmits was not recorded with the VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, it must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pCommandBuffers-00071)
+
+Validation Error: [ VUID-vkQueueSubmit-pWaitSemaphores-03238 ] | MessageID = 0xb50452b0
+vkQueueSubmit(): pSubmits[0].pWaitSemaphores[0] queue (VkQueue 0xab138b858) is waiting on semaphore (VkSemaphore 0xe000000000e) that has no way to be signaled.
+The Vulkan spec states: All elements of the pWaitSemaphores member of all elements of pSubmits created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY must reference a semaphore signal operation that has been submitted for execution and any semaphore signal operations on which it depends must have also been submitted for execution (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pWaitSemaphores-03238)
+Objects: 2
+    [0] VkSemaphore 0xe000000000e
+    [1] VkQueue 0xab138b858
+
+Validation Error: [ VUID-vkQueueSubmit-pSignalSemaphores-00067 ] | MessageID = 0x539277af
+vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xf000000000f) is being signaled by VkQueue 0xab138b858, but it was previously signaled by VkQueue 0xab138b858 and has not since been waited on.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+Objects: 3
+    [0] VkSemaphore 0xf000000000f
+    [1] VkQueue 0xab138b858
+    [2] VkQueue 0xab138b858
+
+[16:36:17] AYAYA: Failed to submit draw command buffer!
+Validation Error: [ VUID-vkAcquireNextImageKHR-semaphore-01779 ] | MessageID = 0x5717e75b
+vkAcquireNextImageKHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkAcquireNextImageKHR-semaphore-01779)
+Objects: 1
+    [0] VkSemaphore 0x110000000011
+
+[16:36:17] AYAYA: Failed to acquire swap chain image!
+Validation Error: [ VUID-vkResetFences-pFences-01123 ] | MessageID = 0x68a5074e
+vkResetFences(): pFences[0] (VkFence 0x130000000013) is in use.
+The Vulkan spec states: Each element of pFences must not be currently associated with any queue command that has not yet completed execution on that queue (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/synchronization.html#VUID-vkResetFences-pFences-01123)
+Objects: 1
+    [0] VkFence 0x130000000013
+
+Validation Error: [ VUID-vkResetCommandBuffer-commandBuffer-00045 ] | MessageID = 0x1e7883ea
+vkResetCommandBuffer(): (VkCommandBuffer 0x103654788) is in use.
+The Vulkan spec states: commandBuffer must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkResetCommandBuffer-commandBuffer-00045)
+Objects: 2
+    [0] VkCommandBuffer 0x103654788
+    [1] VkCommandPool 0xd000000000d
+
+Validation Error: [ VUID-vkBeginCommandBuffer-commandBuffer-00049 ] | MessageID = 0x84029a9f
+vkBeginCommandBuffer(): on active VkCommandBuffer 0x103654788 before it has completed. You must check command buffer fence before this call.
+The Vulkan spec states: commandBuffer must not be in the recording or pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkBeginCommandBuffer-commandBuffer-00049)
+Objects: 1
+    [0] VkCommandBuffer 0x103654788
+
+Validation Error: [ VUID-vkQueueSubmit-pCommandBuffers-00071 ] | MessageID = 0x2e2f4d65
+vkQueueSubmit(): pSubmits[0].pCommandBuffers[0] VkCommandBuffer 0x103654788 is already in use and is not marked for simultaneous use.
+The Vulkan spec states: If any element of the pCommandBuffers member of any element of pSubmits was not recorded with the VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, it must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pCommandBuffers-00071)
+
+Validation Error: [ VUID-vkQueueSubmit-pWaitSemaphores-03238 ] | MessageID = 0xb50452b0
+vkQueueSubmit(): pSubmits[0].pWaitSemaphores[0] queue (VkQueue 0xab138b858) is waiting on semaphore (VkSemaphore 0x110000000011) that has no way to be signaled.
+The Vulkan spec states: All elements of the pWaitSemaphores member of all elements of pSubmits created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY must reference a semaphore signal operation that has been submitted for execution and any semaphore signal operations on which it depends must have also been submitted for execution (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pWaitSemaphores-03238)
+Objects: 2
+    [0] VkSemaphore 0x110000000011
+    [1] VkQueue 0xab138b858
+
+Validation Error: [ VUID-vkQueueSubmit-pSignalSemaphores-00067 ] | MessageID = 0x539277af
+vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x120000000012) is being signaled by VkQueue 0xab138b858, but it was previously signaled by VkQueue 0xab138b858 and has not since been waited on.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+Objects: 3
+    [0] VkSemaphore 0x120000000012
+    [1] VkQueue 0xab138b858
+    [2] VkQueue 0xab138b858
+
+[16:36:17] AYAYA: Failed to submit draw command buffer!
+Validation Error: [ VUID-vkAcquireNextImageKHR-semaphore-01779 ] | MessageID = 0x5717e75b
+vkAcquireNextImageKHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkAcquireNextImageKHR-semaphore-01779)
+Objects: 1
+    [0] VkSemaphore 0x140000000014
+
+[16:36:17] AYAYA: Failed to acquire swap chain image!
+Validation Error: [ VUID-vkResetFences-pFences-01123 ] | MessageID = 0x68a5074e
+vkResetFences(): pFences[0] (VkFence 0x160000000016) is in use.
+The Vulkan spec states: Each element of pFences must not be currently associated with any queue command that has not yet completed execution on that queue (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/synchronization.html#VUID-vkResetFences-pFences-01123)
+Objects: 1
+    [0] VkFence 0x160000000016
+
+Validation Error: [ VUID-vkResetCommandBuffer-commandBuffer-00045 ] | MessageID = 0x1e7883ea
+vkResetCommandBuffer(): (VkCommandBuffer 0xaafc3c018) is in use.
+The Vulkan spec states: commandBuffer must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkResetCommandBuffer-commandBuffer-00045)
+Objects: 2
+    [0] VkCommandBuffer 0xaafc3c018
+    [1] VkCommandPool 0xd000000000d
+
+Validation Error: [ VUID-vkBeginCommandBuffer-commandBuffer-00049 ] | MessageID = 0x84029a9f
+vkBeginCommandBuffer(): on active VkCommandBuffer 0xaafc3c018 before it has completed. You must check command buffer fence before this call.
+The Vulkan spec states: commandBuffer must not be in the recording or pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkBeginCommandBuffer-commandBuffer-00049)
+Objects: 1
+    [0] VkCommandBuffer 0xaafc3c018
+
+Validation Error: [ VUID-vkQueueSubmit-pCommandBuffers-00071 ] | MessageID = 0x2e2f4d65
+vkQueueSubmit(): pSubmits[0].pCommandBuffers[0] VkCommandBuffer 0xaafc3c018 is already in use and is not marked for simultaneous use.
+The Vulkan spec states: If any element of the pCommandBuffers member of any element of pSubmits was not recorded with the VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, it must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pCommandBuffers-00071)
+
+Validation Error: [ VUID-vkQueueSubmit-pWaitSemaphores-03238 ] | MessageID = 0xb50452b0
+vkQueueSubmit(): pSubmits[0].pWaitSemaphores[0] queue (VkQueue 0xab138b858) is waiting on semaphore (VkSemaphore 0x140000000014) that has no way to be signaled.
+The Vulkan spec states: All elements of the pWaitSemaphores member of all elements of pSubmits created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY must reference a semaphore signal operation that has been submitted for execution and any semaphore signal operations on which it depends must have also been submitted for execution (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pWaitSemaphores-03238)
+Objects: 2
+    [0] VkSemaphore 0x140000000014
+    [1] VkQueue 0xab138b858
+
+Validation Error: [ VUID-vkQueueSubmit-pSignalSemaphores-00067 ] | MessageID = 0x539277af
+vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x150000000015) is being signaled by VkQueue 0xab138b858, but it was previously signaled by VkQueue 0xab138b858 and has not since been waited on.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+Objects: 3
+    [0] VkSemaphore 0x150000000015
+    [1] VkQueue 0xab138b858
+    [2] VkQueue 0xab138b858
+
+[16:36:17] AYAYA: Failed to submit draw command buffer!
+Validation Error: [ VUID-vkAcquireNextImageKHR-semaphore-01779 ] | MessageID = 0x5717e75b
+vkAcquireNextImageKHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkAcquireNextImageKHR-semaphore-01779)
+Objects: 1
+    [0] VkSemaphore 0xe000000000e
+
+[16:36:17] AYAYA: Failed to acquire swap chain image!
+Validation Error: [ VUID-vkResetFences-pFences-01123 ] | MessageID = 0x68a5074e
+vkResetFences(): pFences[0] (VkFence 0x100000000010) is in use.
+The Vulkan spec states: Each element of pFences must not be currently associated with any queue command that has not yet completed execution on that queue (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/synchronization.html#VUID-vkResetFences-pFences-01123)
+Objects: 1
+    [0] VkFence 0x100000000010
+
+Validation Error: [ VUID-vkResetCommandBuffer-commandBuffer-00045 ] | MessageID = 0x1e7883ea
+vkResetCommandBuffer(): (VkCommandBuffer 0x10365aa08) is in use.
+The Vulkan spec states: commandBuffer must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkResetCommandBuffer-commandBuffer-00045)
+Objects: 2
+    [0] VkCommandBuffer 0x10365aa08
+    [1] VkCommandPool 0xd000000000d
+
+Validation Error: [ VUID-vkBeginCommandBuffer-commandBuffer-00049 ] | MessageID = 0x84029a9f
+vkBeginCommandBuffer(): on active VkCommandBuffer 0x10365aa08 before it has completed. You must check command buffer fence before this call.
+The Vulkan spec states: commandBuffer must not be in the recording or pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkBeginCommandBuffer-commandBuffer-00049)
+Objects: 1
+    [0] VkCommandBuffer 0x10365aa08
+
+Validation Error: [ VUID-vkQueueSubmit-pCommandBuffers-00071 ] | MessageID = 0x2e2f4d65
+vkQueueSubmit(): pSubmits[0].pCommandBuffers[0] VkCommandBuffer 0x10365aa08 is already in use and is not marked for simultaneous use.
+The Vulkan spec states: If any element of the pCommandBuffers member of any element of pSubmits was not recorded with the VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, it must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pCommandBuffers-00071)
+
+Validation Error: [ VUID-vkQueueSubmit-pWaitSemaphores-03238 ] | MessageID = 0xb50452b0
+vkQueueSubmit(): pSubmits[0].pWaitSemaphores[0] queue (VkQueue 0xab138b858) is waiting on semaphore (VkSemaphore 0xe000000000e) that has no way to be signaled.
+The Vulkan spec states: All elements of the pWaitSemaphores member of all elements of pSubmits created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY must reference a semaphore signal operation that has been submitted for execution and any semaphore signal operations on which it depends must have also been submitted for execution (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pWaitSemaphores-03238)
+Objects: 2
+    [0] VkSemaphore 0xe000000000e
+    [1] VkQueue 0xab138b858
+
+Validation Error: [ VUID-vkQueueSubmit-pSignalSemaphores-00067 ] | MessageID = 0x539277af
+vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xf000000000f) is being signaled by VkQueue 0xab138b858, but it was previously signaled by VkQueue 0xab138b858 and has not since been waited on.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+Objects: 3
+    [0] VkSemaphore 0xf000000000f
+    [1] VkQueue 0xab138b858
+    [2] VkQueue 0xab138b858
+
+[16:36:17] AYAYA: Failed to submit draw command buffer!
+Validation Error: [ VUID-vkAcquireNextImageKHR-semaphore-01779 ] | MessageID = 0x5717e75b
+vkAcquireNextImageKHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkAcquireNextImageKHR-semaphore-01779)
+Objects: 1
+    [0] VkSemaphore 0x110000000011
+
+[16:36:17] AYAYA: Failed to acquire swap chain image!
+Validation Error: [ VUID-vkResetFences-pFences-01123 ] | MessageID = 0x68a5074e
+vkResetFences(): pFences[0] (VkFence 0x130000000013) is in use.
+The Vulkan spec states: Each element of pFences must not be currently associated with any queue command that has not yet completed execution on that queue (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/synchronization.html#VUID-vkResetFences-pFences-01123)
+Objects: 1
+    [0] VkFence 0x130000000013
+
+Validation Error: [ VUID-vkResetCommandBuffer-commandBuffer-00045 ] | MessageID = 0x1e7883ea
+vkResetCommandBuffer(): (VkCommandBuffer 0x103654788) is in use.
+The Vulkan spec states: commandBuffer must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkResetCommandBuffer-commandBuffer-00045)
+Objects: 2
+    [0] VkCommandBuffer 0x103654788
+    [1] VkCommandPool 0xd000000000d
+
+Validation Error: [ VUID-vkBeginCommandBuffer-commandBuffer-00049 ] | MessageID = 0x84029a9f
+(Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
+vkBeginCommandBuffer(): on active VkCommandBuffer 0x103654788 before it has completed. You must check command buffer fence before this call.
+The Vulkan spec states: commandBuffer must not be in the recording or pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkBeginCommandBuffer-commandBuffer-00049)
+Objects: 1
+    [0] VkCommandBuffer 0x103654788
+
+Validation Error: [ VUID-vkQueueSubmit-pCommandBuffers-00071 ] | MessageID = 0x2e2f4d65
+(Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
+vkQueueSubmit(): pSubmits[0].pCommandBuffers[0] VkCommandBuffer 0x103654788 is already in use and is not marked for simultaneous use.
+The Vulkan spec states: If any element of the pCommandBuffers member of any element of pSubmits was not recorded with the VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, it must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pCommandBuffers-00071)
+
+Validation Error: [ VUID-vkQueueSubmit-pWaitSemaphores-03238 ] | MessageID = 0xb50452b0
+(Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
+vkQueueSubmit(): pSubmits[0].pWaitSemaphores[0] queue (VkQueue 0xab138b858) is waiting on semaphore (VkSemaphore 0x110000000011) that has no way to be signaled.
+The Vulkan spec states: All elements of the pWaitSemaphores member of all elements of pSubmits created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY must reference a semaphore signal operation that has been submitted for execution and any semaphore signal operations on which it depends must have also been submitted for execution (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pWaitSemaphores-03238)
+Objects: 2
+    [0] VkSemaphore 0x110000000011
+    [1] VkQueue 0xab138b858
+
+Validation Error: [ VUID-vkQueueSubmit-pSignalSemaphores-00067 ] | MessageID = 0x539277af
+vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x120000000012) is being signaled by VkQueue 0xab138b858, but it was previously signaled by VkQueue 0xab138b858 and has not since been waited on.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+Objects: 3
+    [0] VkSemaphore 0x120000000012
+    [1] VkQueue 0xab138b858
+    [2] VkQueue 0xab138b858
+
+[16:36:17] AYAYA: Failed to submit draw command buffer!
+Validation Error: [ VUID-vkAcquireNextImageKHR-semaphore-01779 ] | MessageID = 0x5717e75b
+vkAcquireNextImageKHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkAcquireNextImageKHR-semaphore-01779)
+Objects: 1
+    [0] VkSemaphore 0x140000000014
+
+[16:36:17] AYAYA: Failed to acquire swap chain image!
+Validation Error: [ VUID-vkResetFences-pFences-01123 ] | MessageID = 0x68a5074e
+vkResetFences(): pFences[0] (VkFence 0x160000000016) is in use.
+The Vulkan spec states: Each element of pFences must not be currently associated with any queue command that has not yet completed execution on that queue (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/synchronization.html#VUID-vkResetFences-pFences-01123)
+Objects: 1
+    [0] VkFence 0x160000000016
+
+Validation Error: [ VUID-vkResetCommandBuffer-commandBuffer-00045 ] | MessageID = 0x1e7883ea
+vkResetCommandBuffer(): (VkCommandBuffer 0xaafc3c018) is in use.
+The Vulkan spec states: commandBuffer must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkResetCommandBuffer-commandBuffer-00045)
+Objects: 2
+    [0] VkCommandBuffer 0xaafc3c018
+    [1] VkCommandPool 0xd000000000d
+
+Validation Error: [ VUID-vkQueueSubmit-pSignalSemaphores-00067 ] | MessageID = 0x539277af
+vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x150000000015) is being signaled by VkQueue 0xab138b858, but it was previously signaled by VkQueue 0xab138b858 and has not since been waited on.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+Objects: 3
+    [0] VkSemaphore 0x150000000015
+    [1] VkQueue 0xab138b858
+    [2] VkQueue 0xab138b858
+
+[16:36:17] AYAYA: Failed to submit draw command buffer!
+Validation Error: [ VUID-vkAcquireNextImageKHR-semaphore-01779 ] | MessageID = 0x5717e75b
+(Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
+vkAcquireNextImageKHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkAcquireNextImageKHR-semaphore-01779)
+Objects: 1
+    [0] VkSemaphore 0xe000000000e
+
+[16:36:17] AYAYA: Failed to acquire swap chain image!
+Validation Error: [ VUID-vkResetFences-pFences-01123 ] | MessageID = 0x68a5074e
+(Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
+vkResetFences(): pFences[0] (VkFence 0x100000000010) is in use.
+The Vulkan spec states: Each element of pFences must not be currently associated with any queue command that has not yet completed execution on that queue (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/synchronization.html#VUID-vkResetFences-pFences-01123)
+Objects: 1
+    [0] VkFence 0x100000000010
+
+Validation Error: [ VUID-vkResetCommandBuffer-commandBuffer-00045 ] | MessageID = 0x1e7883ea
+(Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
+vkResetCommandBuffer(): (VkCommandBuffer 0x10365aa08) is in use.
+The Vulkan spec states: commandBuffer must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkResetCommandBuffer-commandBuffer-00045)
+Objects: 2
+    [0] VkCommandBuffer 0x10365aa08
+    [1] VkCommandPool 0xd000000000d
+
+Validation Error: [ VUID-vkQueueSubmit-pSignalSemaphores-00067 ] | MessageID = 0x539277af
+(Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
+vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xf000000000f) is being signaled by VkQueue 0xab138b858, but it was previously signaled by VkQueue 0xab138b858 and has not since been waited on.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://vulkan.lunarg.com/doc/view/1.4.341.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+Objects: 3
+    [0] VkSemaphore 0xf000000000f
+    [1] VkQueue 0xab138b858
+    [2] VkQueue 0xab138b858
+
+[16:36:17] AYAYA: Failed to submit draw command buffer!
+[16:36:17] AYAYA: Failed to acquire swap chain image!
+[16:36:17] AYAYA: Failed to submit draw command buffer!
+[16:36:17] AYAYA: Failed to acquire swap chain image!

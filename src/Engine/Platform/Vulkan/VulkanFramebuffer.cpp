@@ -12,6 +12,7 @@ namespace Ayaya {
     static VkFormat AyayaFormatToVulkanFormat(FramebufferTextureFormat format) {
         switch (format) {
             case FramebufferTextureFormat::RGBA8:       return VK_FORMAT_R8G8B8A8_UNORM;
+            case FramebufferTextureFormat::RG16F:       return VK_FORMAT_R16G16_SFLOAT; 
             case FramebufferTextureFormat::RGBA16F:     return VK_FORMAT_R16G16B16A16_SFLOAT;
             case FramebufferTextureFormat::RGBA32F:     return VK_FORMAT_R32G32B32A32_SFLOAT;
             case FramebufferTextureFormat::RED_INTEGER: return VK_FORMAT_R32_SINT;
