@@ -18,7 +18,7 @@ namespace Ayaya {
     }
 
     void VulkanForwardTestPass::OnAttach() {
-        m_ForwardShader = Shader::Create("Debug/debug.vert", "Debug/debug.frag");
+        m_ForwardShader = Shader::Create("Debug/pbr_forward.vert", "Debug/pbr_forward.frag");
         
         m_DefaultMaterial = std::make_shared<Material>();
         m_DefaultMaterial->Name = "Forward Default Material";
