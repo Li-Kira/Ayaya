@@ -515,6 +515,8 @@ namespace Ayaya {
             
             envComp.IsDirty = false; 
         }
+
+        
     }
 
     void SceneRenderer::SetEnvironmentSettings(float intensity, const glm::vec3& ambientColor) {
