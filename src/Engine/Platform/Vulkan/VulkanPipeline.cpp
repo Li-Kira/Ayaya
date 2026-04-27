@@ -138,6 +138,7 @@ namespace Ayaya {
                 case DepthCompareOperator::Greater: return VK_COMPARE_OP_GREATER;
                 case DepthCompareOperator::NotEqual: return VK_COMPARE_OP_NOT_EQUAL;
                 case DepthCompareOperator::Always: return VK_COMPARE_OP_ALWAYS;
+                default: return VK_COMPARE_OP_LESS; // 加个 fallback
             }
             return VK_COMPARE_OP_LESS;
         };
@@ -272,15 +273,15 @@ namespace Ayaya {
         // 10. 创建管线专属 Descriptor Pool
         // ==========================================
         VkDescriptorPoolSize poolSizes[] = {
-            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10 },
-            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1500 }
+            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 20 },
+            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 40000 }
         };
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.poolSizeCount = 2;
         poolInfo.pPoolSizes = poolSizes;
-        poolInfo.maxSets = 150; 
+        poolInfo.maxSets = 3010; 
 
         if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_PipelineDescriptorPool) != VK_SUCCESS) {
             AYAYA_CORE_ERROR("Failed to create custom Descriptor Pool for Pipeline!");
@@ -324,15 +325,17 @@ namespace Ayaya {
         // ==========================================
         // 12. 分配 100 个 Set 1 (纹理) 作为环形缓冲
         // ==========================================
-        std::vector<VkDescriptorSetLayout> layouts100(100, m_DescriptorSetLayouts[1]);
-        m_TextureDescriptorSets.resize(100);
+        std::vector<VkDescriptorSetLayout> layouts3000(3000, m_DescriptorSetLayouts[1]); // 修改这里
+        m_TextureDescriptorSets.resize(3000); // 修改这里
         
         VkDescriptorSetAllocateInfo allocInfo1{};
         allocInfo1.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         allocInfo1.descriptorPool = m_PipelineDescriptorPool;
-        allocInfo1.descriptorSetCount = 100;
-        allocInfo1.pSetLayouts = layouts100.data();
-        vkAllocateDescriptorSets(device, &allocInfo1, m_TextureDescriptorSets.data());
+        allocInfo1.descriptorSetCount = 3000;
+        allocInfo1.pSetLayouts = layouts3000.data();
+        // 【核心修改】：加上结果检查！
+        VkResult result = vkAllocateDescriptorSets(device, &allocInfo1, m_TextureDescriptorSets.data());
+        AYAYA_CORE_ASSERT(result == VK_SUCCESS, "Failed to allocate 3000 texture descriptor sets! Descriptor Pool exhausted.");
     }
 
     VulkanPipeline::~VulkanPipeline() {

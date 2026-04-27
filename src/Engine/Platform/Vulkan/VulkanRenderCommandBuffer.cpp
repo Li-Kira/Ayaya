@@ -109,41 +109,10 @@ namespace Ayaya {
     // ==========================================
     // 在 VulkanRenderCommandBuffer.cpp 中
     void VulkanRenderCommandBuffer::BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<Texture2D>& texture) {
-        auto vulkanPipeline = std::dynamic_pointer_cast<VulkanPipeline>(pipeline);
         auto vulkanTexture = std::dynamic_pointer_cast<VulkanTexture2D>(texture);
+        if (!vulkanTexture || vulkanTexture->GetImageView() == VK_NULL_HANDLE) return;
         
-        if (!vulkanPipeline || !vulkanTexture) return;
-
-        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-        VkDevice device = context->GetDevice();
-
-        // ==========================================
-        // 【核心修复】：从管线的环形池中获取一个可用的 Set 1
-        // ==========================================
-        VkDescriptorSet textureSet = vulkanPipeline->GetNextTextureDescriptorSet();
-
-        // 更新该描述符集，将其指向当前贴图的 View 和 Sampler
-        VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = vulkanTexture->GetImageView();
-        imageInfo.sampler = vulkanTexture->GetSampler();
-
-        VkWriteDescriptorSet descriptorWrite{};
-        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet = textureSet;
-        descriptorWrite.dstBinding = slot; // 对应 Shader 里的 binding = slot
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pImageInfo = &imageInfo;
-
-        vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
-
-        // 立即绑定该 Set 到管线的 Set 1 槽位
-        VkCommandBuffer cmd = context->GetCurrentCommandBuffer();
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 
-                                vulkanPipeline->GetVulkanPipelineLayout(), 
-                                1, 1, &textureSet, 0, nullptr);
+        m_PendingImageInfos[slot] = { vulkanTexture->GetSampler(), vulkanTexture->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
     }
 
     void VulkanRenderCommandBuffer::BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<Framebuffer>& framebuffer, uint32_t attachmentIndex, bool isDepth) {
@@ -155,59 +124,30 @@ namespace Ayaya {
     }
 
     void VulkanRenderCommandBuffer::BindTextureCube(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<TextureCube>& texture) {
-        auto vulkanPipeline = std::dynamic_pointer_cast<VulkanPipeline>(pipeline);
         auto vulkanTexture = std::dynamic_pointer_cast<VulkanTextureCube>(texture);
+        if (!vulkanTexture || vulkanTexture->GetImageView() == VK_NULL_HANDLE) return;
         
-        if (!vulkanPipeline || !vulkanTexture) return;
-
-        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-        VkDevice device = context->GetDevice();
-
-        VkDescriptorSet textureSet = vulkanPipeline->GetNextTextureDescriptorSet();
-
-        // AYAYA_CORE_WARN("Debug TextureCube -> View: {0}, Sampler: {1}", 
-        //        (void*)vulkanTexture->GetImageView(), 
-        //        (void*)vulkanTexture->GetSampler());
-        if (vulkanTexture->GetImageView() == VK_NULL_HANDLE || vulkanTexture->GetSampler() == VK_NULL_HANDLE) {
-            AYAYA_CORE_ERROR("Vulkan: Attempted to bind an incomplete TextureCube! (View or Sampler is NULL)");
-            return;
-        }
-        VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = vulkanTexture->GetImageView(); // 这里拿到的是 CUBE 类型的 View
-        imageInfo.sampler = vulkanTexture->GetSampler();     // 必须提供 Sampler
-
-        VkWriteDescriptorSet descriptorWrite{};
-        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet = textureSet;
-        descriptorWrite.dstBinding = slot; 
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pImageInfo = &imageInfo;
-
-        vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
-
-        VkCommandBuffer cmd = context->GetCurrentCommandBuffer();
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 
-                                vulkanPipeline->GetVulkanPipelineLayout(), 
-                                1, 1, &textureSet, 0, nullptr);
+        m_PendingImageInfos[slot] = { vulkanTexture->GetSampler(), vulkanTexture->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
     }
 
     // ==========================================
     // 核心冲刷器：Draw 之前的终极发车！
     // ==========================================
     void VulkanRenderCommandBuffer::FlushDescriptorSets() {
+        // 如果小本本是空的，说明这把不需要绑贴图，直接安全退出
         if (!m_BoundPipeline || m_PendingImageInfos.empty()) return;
 
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-        VkDevice device = context->GetDevice();
-
-        // 从环形缓冲里拿出一个全新的干净集装箱
+        
+        // 从环形缓冲获取 Set
         VkDescriptorSet newSet = m_BoundPipeline->GetNextTextureDescriptorSet();
+        
+        // 【终极防御】：如果因为池子耗尽等意外真的拿到了空指针，在这里断言拦截，而不是让 Vulkan 在底层爆出难懂的 Segfault！
+        AYAYA_CORE_ASSERT(newSet != VK_NULL_HANDLE, "Failed to get a valid Descriptor Set! Check Descriptor Pool size.");
 
         std::vector<VkWriteDescriptorSet> writes;
-        // 把小本本里的记录全部写进新集装箱
+        writes.reserve(m_PendingImageInfos.size()); // 预分配容量，确保内存连续安全
+
         for (auto& pair : m_PendingImageInfos) {
             VkWriteDescriptorSet write{};
             write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -216,12 +156,19 @@ namespace Ayaya {
             write.dstArrayElement = 0;
             write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             write.descriptorCount = 1;
-            write.pImageInfo = &pair.second; // 值存在 map 里，地址稳定
+            write.pImageInfo = &pair.second; // 从 Map 中取地址是安全的
             writes.push_back(write);
         }
 
-        vkUpdateDescriptorSets(device, writes.size(), writes.data(), 0, nullptr);
+        // 一次性更新并绑定！
+        vkUpdateDescriptorSets(context->GetDevice(), writes.size(), writes.data(), 0, nullptr);
         vkCmdBindDescriptorSets(context->GetCurrentCommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_BoundPipeline->GetVulkanPipelineLayout(), 1, 1, &newSet, 0, nullptr);
+
+        // ==========================================
+        // 【核心修复】：发车完毕后，必须烧毁小本本！
+        // 否则上一个物体的 Albedo 贴图信息会残留，污染下一个物体的渲染。
+        // ==========================================
+        m_PendingImageInfos.clear();
     }
 
     // --- 绘制指令 ---

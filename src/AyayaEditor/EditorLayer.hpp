@@ -116,7 +116,7 @@ namespace Ayaya {
 
         // 统计
         SceneRenderer::Statistics m_GameStats;
-        bool m_ShowStatsPanel = true;
+        bool m_ShowStatsPanel = false;
 
         // 进度条加载系统
         std::string m_SceneToLoad = ""; // 存放等待加载的路径

@@ -28,12 +28,6 @@ namespace Ayaya {
         glm::mat4 Transform;         // 64 bytes (0 - 63)
         alignas(16) glm::vec3 Albedo;// 12 bytes (64 - 75)
         int UseAlbedoMap;            // 4 bytes  (76 - 79)
-        
-        // --- 新增的光源与材质参数 ---
-        alignas(16) glm::vec3 LightDir;   // 12 bytes (80 - 91)
-        float Metallic;                   // 4 bytes  (92 - 95)
-        alignas(16) glm::vec3 LightColor; // 12 bytes (96 - 107)
-        float Roughness;                  // 4 bytes  (108 - 111)
     };
 
     class VulkanForwardTestPass : public RenderPass {

@@ -38,8 +38,10 @@ namespace Ayaya {
         // 环形缓冲，每次索要都给一个全新的描述符集！(Set 1)
         // ==========================================
         VkDescriptorSet GetNextTextureDescriptorSet() {
+            AYAYA_CORE_ASSERT(!m_TextureDescriptorSets.empty(), "Texture Descriptor Sets array is empty!");
             uint32_t index = m_CurrentTextureSetIndex;
             m_CurrentTextureSetIndex = (m_CurrentTextureSetIndex + 1) % m_TextureDescriptorSets.size();
+            AYAYA_CORE_ASSERT(m_TextureDescriptorSets[index] != VK_NULL_HANDLE, "Descriptor Set is NULL!");
             return m_TextureDescriptorSets[index];
         }
 

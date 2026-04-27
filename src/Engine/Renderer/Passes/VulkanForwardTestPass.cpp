@@ -32,8 +32,7 @@ namespace Ayaya {
         fboSpec.Samples = 1;
         fboSpec.Width = 1280; 
         fboSpec.Height = 720;
-        // 必须使用 RGBA16F，否则高光会被强制砍成 1.0 导致纯白！
-        fboSpec.Attachments = { FramebufferTextureFormat::RGBA16F, FramebufferTextureFormat::Depth };
+        fboSpec.Attachments = { FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::Depth };
 
         m_ForwardFBOs.resize(3);
         for (int i = 0; i < 3; i++) m_ForwardFBOs[i] = Framebuffer::Create(fboSpec);
@@ -122,13 +121,13 @@ namespace Ayaya {
         cmd.BeginRenderPass(currentFBO, true, glm::vec4(0.12f, 0.12f, 0.14f, 1.0f));
 
         std::shared_ptr<Pipeline> currentPipeline = nullptr;
+        
+        // 【提取安全占位图】：提取黑板上 100% 绝对安全的白图
         auto whiteTex = context.GetTexture("WhiteTexture");
 
         auto envCubemap    = context.Get<std::shared_ptr<TextureCube>>("EnvironmentCubemap");
         auto irradianceMap = context.Get<std::shared_ptr<TextureCube>>("IrradianceMap");
         auto prefilterMap  = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap");
-        
-        // 【核心修复 1】：必须用 GetTexture 获取 BRDFLUT
         auto brdfLUT       = context.GetTexture("BRDFLUT");
 
         if (!envCubemap) {
@@ -136,21 +135,10 @@ namespace Ayaya {
             return;
         }
 
-        // ==========================================
-        // 【终极防线】：在内存中硬核创建一个 1x1 白图
-        // 彻底杜绝 Vulkan 拿到 nullptr 导致整个描述符刷新崩溃！
-        // ==========================================
-        static std::shared_ptr<Texture2D> s_FallbackWhiteTex = nullptr;
-        if (!s_FallbackWhiteTex) {
-            s_FallbackWhiteTex = Texture2D::Create(1, 1);
-            uint32_t whiteData = 0xffffffff;
-            s_FallbackWhiteTex->SetData(&whiteData, sizeof(uint32_t));
-        }
-
-        // 智能兜底：就算黑板上没有，也能用白图或天空盒顶上，保证 Vulkan 安检 100% 通过
+        // 【安全降级策略】
         std::shared_ptr<TextureCube> safeIrradiance = irradianceMap ? irradianceMap : envCubemap;
         std::shared_ptr<TextureCube> safePrefilter  = prefilterMap  ? prefilterMap  : envCubemap;
-        std::shared_ptr<Texture2D>   safeBRDF       = brdfLUT       ? brdfLUT       : s_FallbackWhiteTex;
+        std::shared_ptr<Texture2D>   safeBRDF       = brdfLUT       ? brdfLUT       : whiteTex;
 
         for (const auto& drawCmd : m_OpaqueDrawList) {
             if (currentPipeline != drawCmd.PipelineAsset) {
@@ -160,8 +148,9 @@ namespace Ayaya {
             }
 
             // ==========================================
-            // 【核心修复 2】：无条件绑定 IBL，彻底斩杀 08114 报错
+            // 【硬核安全发车规则】：每次画物体，强行填满 0、1、2、3 四个槽位！
             // ==========================================
+            cmd.BindTexture2D(currentPipeline,   "u_AlbedoMap",     0, whiteTex); // 默认纯白兜底
             cmd.BindTextureCube(currentPipeline, "u_IrradianceMap", 1, safeIrradiance);
             cmd.BindTextureCube(currentPipeline, "u_PrefilterMap",  2, safePrefilter);
             cmd.BindTexture2D(currentPipeline,   "u_BRDFLUT",       3, safeBRDF);
@@ -170,18 +159,6 @@ namespace Ayaya {
             constants.Transform = drawCmd.Transform;
             constants.Albedo = glm::vec3(1.0f);
             constants.UseAlbedoMap = 0;
-
-            // 【修改】：使用我们自己创建的绝对安全白图兜底
-            if (s_FallbackWhiteTex) cmd.BindTexture2D(currentPipeline, "u_AlbedoMap", 0, s_FallbackWhiteTex);
-
-
-            // --- 给着色器注入一个经典的左上方阳光 ---
-            constants.LightDir = glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f));
-            constants.LightColor = glm::vec3(5.0f); // 5.0 的光强，在 HDR 下会非常亮眼
-
-            // 材质默认参数
-            constants.Metallic = 0.0f;
-            constants.Roughness = 0.4f;
 
             if (drawCmd.MaterialAsset) {
                 for (const auto& prop : drawCmd.MaterialAsset->Properties) {
@@ -192,8 +169,11 @@ namespace Ayaya {
                         bool hasValidTex = (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) || (prop.RuntimeTexture != nullptr);
                         if (hasValidTex) {
                             auto tex = prop.RuntimeTexture ? prop.RuntimeTexture : AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
-                            cmd.BindTexture2D(currentPipeline, "u_AlbedoMap", 0, tex);
-                            constants.UseAlbedoMap = 1;
+                            if (tex) {
+                                // 如果真实材质存在，覆盖槽位 0 的白图兜底
+                                cmd.BindTexture2D(currentPipeline, "u_AlbedoMap", 0, tex);
+                                constants.UseAlbedoMap = 1;
+                            }
                         }
                     }
                 }

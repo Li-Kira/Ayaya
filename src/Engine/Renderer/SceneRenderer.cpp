@@ -136,6 +136,9 @@ namespace Ayaya {
             else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
                 // Vulkan 占位逻辑：防止后续拿到空指针崩溃
                 s_DefaultBRDFLUT = Texture2D::Create(1, 1); 
+                // 【必须新增】：塞入一个白像素，强制 Vulkan 底层将图像从 UNDEFINED 转换为 SHADER_READ_ONLY_OPTIMAL！
+                uint32_t whiteData = 0xffffffff;
+                s_DefaultBRDFLUT->SetData(&whiteData, sizeof(uint32_t));
             }
         }
 

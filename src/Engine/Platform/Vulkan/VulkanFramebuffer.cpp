@@ -41,6 +41,7 @@ namespace Ayaya {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         if (!context) return;
         VkDevice device = context->GetDevice();
+        
         VmaAllocator allocator = context->GetAllocator();
 
         vkDeviceWaitIdle(device);
@@ -203,21 +204,26 @@ namespace Ayaya {
         if (hasDepth) subpass.pDepthStencilAttachment = &depthRef;
 
         std::array<VkSubpassDependency, 2> dependencies;
+
+        // 依赖 1：进入渲染前，等待外部 (ImGui) 彻底读完，再开始写
         dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
         dependencies[0].dstSubpass = 0;
         dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         dependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-        dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        // 【核心修复】：绝对不能用 BY_REGION_BIT，强制全局内存屏障！
+        dependencies[0].dependencyFlags = 0; 
 
+        // 依赖 2：渲染结束后，必须把颜色写入彻底完成并刷新到显存，才能让外部 (ImGui) 采样
         dependencies[1].srcSubpass = 0;
         dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-        dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-        dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT; 
         dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        // 【核心修复】：绝对不能用 BY_REGION_BIT，强制全局内存屏障！
+        dependencies[1].dependencyFlags = 0;
 
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -225,7 +231,7 @@ namespace Ayaya {
         renderPassInfo.pAttachments = attachmentDescs.data();
         renderPassInfo.subpassCount = 1;
         renderPassInfo.pSubpasses = &subpass;
-        renderPassInfo.dependencyCount = 2;
+        renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
         renderPassInfo.pDependencies = dependencies.data();
 
         vkCreateRenderPass(device, &renderPassInfo, nullptr, &m_RenderPass);
@@ -270,8 +276,17 @@ namespace Ayaya {
 
     void VulkanFramebuffer::Resize(uint32_t width, uint32_t height) {
         if (width == 0 || height == 0 || (m_Specification.Width == width && m_Specification.Height == height)) return;
+        
         m_Specification.Width = width;
         m_Specification.Height = height;
+        
+        // ==========================================
+        // 【核心防御】：等待 GPU 彻底停歇！
+        // 绝对不能在 GPU 还在画上一帧的时候把 FBO 显存炸掉！
+        // ==========================================
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        vkDeviceWaitIdle(context->GetDevice());
+        
         Invalidate(); 
     }
 
