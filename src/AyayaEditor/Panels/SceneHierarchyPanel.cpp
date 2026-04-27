@@ -174,13 +174,40 @@ namespace Ayaya {
                 ImGui::EndPopup();
             }
 
-            // [交互 3]：将实体拖放到隐形按钮上 -> 解除父子关系 (回到根目录)
+            // ==========================================
+            // [交互 3]：处理拖放逻辑 (实体解绑 & 模型实例化)
+            // ==========================================
             if (ImGui::BeginDragDropTarget()) {
+                
+                // 拦截 1：实体拖放到空白处 -> 解除父子关系，变为根节点
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_PAYLOAD")) {
                     entt::entity droppedID = *(entt::entity*)payload->Data;
-                    // 修改为 push_back 追加到数组中
                     m_EntitiesToUnparent.push_back({ droppedID, m_Context.get() }); 
                 }
+
+                // ==========================================
+                // 【核心新增】：拦截 2：从资源管理器拖入 3D 模型文件 -> 在场景中实例化整棵树！
+                // ==========================================
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    const char* pathStr = (const char*)payload->Data;
+                    std::filesystem::path modelPath = std::filesystem::path("assets") / pathStr;
+                    
+                    if (modelPath.extension() == ".obj" || modelPath.extension() == ".fbx" || modelPath.extension() == ".gltf") {
+                        AYAYA_CORE_INFO("Instantiating Model to Scene: {0}", modelPath.string());
+                        
+                        // 1. 加载模型结构
+                        auto loadedModel = std::make_shared<Model>(modelPath.string());
+                        
+                        // 2. 调用场景实例化接口，自动生成树状层级实体
+                        Entity rootEntity = m_Context->InstantiateModel(loadedModel);
+                        
+                        // 3. 自动选中新生成的模型根节点
+                        if (rootEntity) {
+                            SetSelectedEntity(rootEntity);
+                        }
+                    }
+                }
+
                 ImGui::EndDragDropTarget();
             }
         }

@@ -12,6 +12,8 @@ class b2World;
 namespace Ayaya {
 
     class Entity; // 前向声明，解决循环依赖
+    class Model;         
+    struct ModelNode;
 
     class Scene {
     public:
@@ -36,6 +38,9 @@ namespace Ayaya {
 
         // 获取有序的根节点列表
         const std::vector<entt::entity>& GetRootEntities() const { return m_RootEntities; }
+        Entity InstantiateModel(const std::shared_ptr<Model>& model);
+        Entity InstantiateModel(const std::shared_ptr<Model>& model, Entity parentEntity);
+        Entity InstantiateModelNode(const ModelNode& node, Entity parentEntity);
 
         // ==========================================
         // 运行时的总开关 (生命周期)

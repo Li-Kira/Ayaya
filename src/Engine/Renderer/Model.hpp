@@ -7,37 +7,39 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <glm/glm.hpp>
 
 namespace Ayaya {
 
+    // 模型的节点树结构：存储原始模型文件里的层级和局部变换
+    struct ModelNode {
+        std::string Name;
+        glm::mat4 LocalTransform;
+        std::vector<std::shared_ptr<Mesh>> Meshes; // 该节点自带的网格
+        std::vector<ModelNode> Children;           // 子节点
+    };
+
     class Model {
     public:
-        // 从硬盘加载外部 3D 模型文件
         Model(const std::string& path);
-        
-        // 兼容原有的内置几何体（比如我们手捏的正方体）
-        Model(const std::shared_ptr<Mesh>& mesh);
+        Model(const std::shared_ptr<Mesh>& mesh); // 兼容单网格创建
 
         const std::vector<std::shared_ptr<Mesh>>& GetMeshes() const { return m_Meshes; }
-
-        // 新增：获取模型文件路径
         const std::string& GetPath() const { return m_Path; }
-
-        // ==========================================
-        // 新增：允许手动为内存生成的模型分配虚拟路径
-        // ==========================================
         void SetPath(const std::string& path) { m_Path = path; }
+        const ModelNode& GetRootNode() const { return m_RootNode; }
 
     private:
         void LoadModel(const std::string& path);
-        void ProcessNode(aiNode* node, const aiScene* scene);
+        // 核心修复：递归处理节点层级
+        ModelNode ProcessNode(aiNode* node, const aiScene* scene);
         std::shared_ptr<Mesh> ProcessMesh(aiMesh* mesh, const aiScene* scene);
 
     private:
-        std::vector<std::shared_ptr<Mesh>> m_Meshes;
-        std::string m_Directory; // 保存模型所在的文件夹路径，方便以后加载同目录的贴图
-        // 新增：保存模型的完整路径
+        std::vector<std::shared_ptr<Mesh>> m_Meshes; // 依然保留，用于简单的一键渲染
+        std::string m_Directory;
         std::string m_Path;
+        ModelNode m_RootNode; // 存储构建好的层级树
     };
 
 }

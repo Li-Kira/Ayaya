@@ -14,11 +14,9 @@ namespace Ayaya {
     class Entity {
     public:
         Entity() = default;
-        
-        // --- 修复 1：去掉大括号，仅仅声明，把实现留给 Entity.cpp ---
         Entity(entt::entity handle, Scene* scene);
-        
         Entity(const Entity& other) = default;
+        entt::entity GetEntityHandle() const { return m_EntityHandle; }
 
         template<typename T, typename... Args> T& AddComponent(Args&&... args) { return m_Scene->m_Registry.emplace<T>(m_EntityHandle, std::forward<Args>(args)...); }
         template<typename T> T& GetComponent() const { return m_Scene->m_Registry.get<T>(m_EntityHandle); }

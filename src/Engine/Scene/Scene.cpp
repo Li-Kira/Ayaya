@@ -8,6 +8,7 @@
 #include <box2d/b2_fixture.h>
 #include <box2d/b2_polygon_shape.h>
 #include "Scripting/ScriptEngine.hpp"
+#include <glm/gtx/matrix_decompose.hpp>
 
 namespace Ayaya {
 
@@ -72,6 +73,99 @@ namespace Ayaya {
         m_Registry.destroy(entity);
     }
 
+    // ==========================================
+    // 模型实例化逻辑
+    // ==========================================
+    Entity Scene::InstantiateModel(const std::shared_ptr<Model>& model) {
+        return InstantiateModel(model, Entity{}); 
+    }
+
+    Entity Scene::InstantiateModel(const std::shared_ptr<Model>& model, Entity parentEntity) {
+        if (!model) return {};
+        return InstantiateModelNode(model->GetRootNode(), parentEntity);
+    }
+
+    Entity Scene::InstantiateModelNode(const ModelNode& node, Entity parentEntity) {
+        // 1. 创建实体 (CreateEntity 默认会把它加到 m_RootEntities 里)
+        Entity entity = CreateEntity(node.Name.empty() ? "Model Node" : node.Name);
+
+        // 2. 解析局部矩阵并赋值给 Transform
+        auto& transform = entity.GetComponent<TransformComponent>();
+        glm::vec3 scale;
+        glm::quat rotation;
+        glm::vec3 translation;
+        glm::vec3 skew;
+        glm::vec4 perspective;
+        glm::decompose(node.LocalTransform, scale, rotation, translation, skew, perspective);
+        
+        transform.Translation = translation;
+        transform.Rotation = glm::eulerAngles(rotation);
+        transform.Scale = scale;
+
+        // 3. 构建层级关系
+        if (parentEntity) {
+            // 【安全获取/添加组件】：存在就取出来，不存在才添加，绝不触发 EnTT 崩溃！
+            auto& rel = entity.HasComponent<RelationshipComponent>() ? 
+                        entity.GetComponent<RelationshipComponent>() : 
+                        entity.AddComponent<RelationshipComponent>();
+            rel.Parent = parentEntity.GetEntityHandle();
+
+            auto& pRel = parentEntity.HasComponent<RelationshipComponent>() ? 
+                         parentEntity.GetComponent<RelationshipComponent>() : 
+                         parentEntity.AddComponent<RelationshipComponent>();
+            pRel.Children.push_back(entity.GetEntityHandle());
+
+            // 【核心修复】：既然认了爹，就把它从根节点列表 (RootEntities) 里踢出去！
+            auto it = std::find(m_RootEntities.begin(), m_RootEntities.end(), entity.GetEntityHandle());
+            if (it != m_RootEntities.end()) {
+                m_RootEntities.erase(it);
+            }
+        }
+
+        // 4. 处理网格渲染组件
+        if (!node.Meshes.empty()) {
+            if (node.Meshes.size() == 1) {
+                // 安全挂载网格
+                auto& meshComp = entity.HasComponent<MeshRendererComponent>() ? 
+                                 entity.GetComponent<MeshRendererComponent>() : 
+                                 entity.AddComponent<MeshRendererComponent>();
+                meshComp.ModelAsset = std::make_shared<Model>(node.Meshes[0]); 
+            } else {
+                for (size_t i = 0; i < node.Meshes.size(); i++) {
+                    Entity subEntity = CreateEntity(node.Name + "_SubMesh_" + std::to_string(i));
+                    
+                    // 安全构建子网格和父节点的关系
+                    auto& subRel = subEntity.HasComponent<RelationshipComponent>() ? 
+                                   subEntity.GetComponent<RelationshipComponent>() : 
+                                   subEntity.AddComponent<RelationshipComponent>();
+                    subRel.Parent = entity.GetEntityHandle();
+                    
+                    auto& entRel = entity.HasComponent<RelationshipComponent>() ? 
+                                   entity.GetComponent<RelationshipComponent>() : 
+                                   entity.AddComponent<RelationshipComponent>();
+                    entRel.Children.push_back(subEntity.GetEntityHandle());
+
+                    // 子网格也不能出现在大纲的根目录！踢出去！
+                    auto subIt = std::find(m_RootEntities.begin(), m_RootEntities.end(), subEntity.GetEntityHandle());
+                    if (subIt != m_RootEntities.end()) {
+                        m_RootEntities.erase(subIt);
+                    }
+
+                    auto& meshComp = subEntity.HasComponent<MeshRendererComponent>() ? 
+                                     subEntity.GetComponent<MeshRendererComponent>() : 
+                                     subEntity.AddComponent<MeshRendererComponent>();
+                    meshComp.ModelAsset = std::make_shared<Model>(node.Meshes[i]);
+                }
+            }
+        }
+
+        // 5. 递归处理所有子节点
+        for (const auto& childNode : node.Children) {
+            InstantiateModelNode(childNode, entity);
+        }
+
+        return entity;
+    }
 
     // ============================================================
     // 泛型辅助函数：如果原实体有该组件，就完美拷贝给新实体

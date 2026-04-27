@@ -3,47 +3,63 @@
 
 namespace Ayaya {
 
+    // 辅助函数：将 Assimp 的矩阵转换为 GLM 矩阵
+    static glm::mat4 AssimpMatToGlm(const aiMatrix4x4& from) {
+        glm::mat4 to;
+        to[0][0] = from.a1; to[1][0] = from.a2; to[2][0] = from.a3; to[3][0] = from.a4;
+        to[0][1] = from.b1; to[1][1] = from.b2; to[2][1] = from.b3; to[3][1] = from.b4;
+        to[0][2] = from.c1; to[1][2] = from.c2; to[2][2] = from.c3; to[3][2] = from.c4;
+        to[0][3] = from.d1; to[1][3] = from.d2; to[2][3] = from.d3; to[3][3] = from.d4;
+        return to;
+    }
+
     Model::Model(const std::string& path) {
         LoadModel(path);
     }
 
     Model::Model(const std::shared_ptr<Mesh>& mesh) {
         m_Meshes.push_back(mesh);
+        m_RootNode.Name = "Raw Mesh";
+        m_RootNode.LocalTransform = glm::mat4(1.0f);
+        m_RootNode.Meshes.push_back(mesh);
     }
 
     void Model::LoadModel(const std::string& path) {
-        m_Path = path; // <--- 新增：记录下自己是从哪里加载的
-        
+        m_Path = path;
         Assimp::Importer importer;
-        // 开启强大的后处理魔法：自动将多边形转为三角形、翻转 UV 的 Y 轴、自动计算缺失的法线
         const aiScene* scene = importer.ReadFile(path, 
-            aiProcess_Triangulate | 
-            aiProcess_GenSmoothNormals | 
-            aiProcess_FlipUVs | 
-            aiProcess_CalcTangentSpace);
+            aiProcess_Triangulate | aiProcess_GenSmoothNormals | 
+            aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
 
         if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
-            AYAYA_CORE_ERROR("ERROR::ASSIMP:: {0}", importer.GetErrorString());
+            AYAYA_CORE_ERROR("Assimp Error: {0}", importer.GetErrorString());
             return;
         }
 
-        // 提取目录路径 (例如 "assets/models/nanosuit.obj" -> "assets/models")
         m_Directory = path.substr(0, path.find_last_of('/'));
-
-        // 从根节点开始递归处理所有子节点
-        ProcessNode(scene->mRootNode, scene);
+        // 从根节点递归
+        m_RootNode = ProcessNode(scene->mRootNode, scene);
     }
 
-    void Model::ProcessNode(aiNode* node, const aiScene* scene) {
-        // 处理当前节点挂载的所有网格
+    ModelNode Model::ProcessNode(aiNode* node, const aiScene* scene) {
+        ModelNode modelNode;
+        modelNode.Name = node->mName.C_Str();
+        modelNode.LocalTransform = AssimpMatToGlm(node->mTransformation);
+
+        // 处理当前节点的所有网格
         for (unsigned int i = 0; i < node->mNumMeshes; i++) {
             aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-            m_Meshes.push_back(ProcessMesh(mesh, scene));
+            auto processedMesh = ProcessMesh(mesh, scene);
+            modelNode.Meshes.push_back(processedMesh);
+            m_Meshes.push_back(processedMesh); // 兼容旧逻辑
         }
-        // 递归处理所有子节点
+
+        // 递归处理子节点
         for (unsigned int i = 0; i < node->mNumChildren; i++) {
-            ProcessNode(node->mChildren[i], scene);
+            modelNode.Children.push_back(ProcessNode(node->mChildren[i], scene));
         }
+
+        return modelNode;
     }
 
     std::shared_ptr<Mesh> Model::ProcessMesh(aiMesh* mesh, const aiScene* scene) {
