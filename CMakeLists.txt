@@ -78,6 +78,7 @@ file(GLOB SCENE_SOURCES "${ENGINE_DIR}/Scene/*.cpp")
 file(GLOB SCRIPTING_SOURCES "${ENGINE_DIR}/Scripting/*.cpp")
 file(GLOB UTILS_SOURCES "${ENGINE_DIR}/Utils/*.cpp")
 file(GLOB ASSET_SOURCES "${ENGINE_DIR}/Asset/*.cpp")
+file(GLOB PROJECT_SOURCES "${ENGINE_DIR}/Project/*.cpp")
 set(GLAD_SOURCE "${ENGINE_DIR}/Platform/OpenGL/glad.c")
 
 # 收集 ImGui 源文件
@@ -107,6 +108,7 @@ set(AYAYA_SOURCES
     ${SCRIPTING_SOURCES}
     ${UTILS_SOURCES}
     ${ASSET_SOURCES}
+    ${PROJECT_SOURCES}
     ${GLAD_SOURCE}
     ${IMGUI_SOURCES} 
     ${IMGUIZMO_SOURCES} 

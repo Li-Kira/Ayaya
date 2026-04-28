@@ -1,0 +1,4 @@
+Project:
+  Name: MyEpicGame
+  StartScene: Scenes/Default.ayaya
+  AssetDirectory: Assets

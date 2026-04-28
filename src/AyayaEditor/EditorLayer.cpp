@@ -30,6 +30,7 @@ namespace Ayaya {
     }
 
     void EditorLayer::OnAttach() {
+        Project::New();
         VFS::Mount("engine", "assets");
         VFS::Mount("project", "assets");
 
@@ -338,6 +339,8 @@ namespace Ayaya {
         UIRenderViewport();
         UIRenderGameViewport();
 
+        UIRenderNewProjectPopup(); // 【新增】：渲染弹窗层
+
         ImGui::End(); // End DockSpace
     }
 
@@ -486,6 +489,220 @@ namespace Ayaya {
         if (!filepath.empty()) { 
             // 【核心】：不在这里加载！只登记路径，推迟到帧开始时处理，防止 ImGui 崩溃！
             m_SceneToLoad = filepath; 
+        }
+    }
+
+    // =====================================================================
+    // 项目管理系统 (Project Management)
+    // =====================================================================
+
+    void EditorLayer::NewProject() {
+        // 1. 弹出原生保存对话框让用户选择项目路径和名称 (.ayaproj)
+        std::string filepath = FileDialogs::SaveFile("ayaproj", "NewProject.ayaproj");
+        if (filepath.empty()) return;
+
+        std::filesystem::path projectFilePath = filepath;
+        std::filesystem::path projectDir = projectFilePath.parent_path();
+        std::filesystem::path assetDir = projectDir / "Assets"; // 默认资产根目录
+
+        // 2. 在磁盘上创建标准的物理文件夹结构
+        try {
+            std::filesystem::create_directories(assetDir);
+            std::filesystem::create_directories(assetDir / "Scenes");
+            std::filesystem::create_directories(assetDir / "Models");
+            std::filesystem::create_directories(assetDir / "Textures");
+            std::filesystem::create_directories(assetDir / "Scripts");
+            std::filesystem::create_directories(assetDir / "Materials");
+        } catch (const std::exception& e) {
+            AYAYA_CORE_ERROR("Failed to create project directories: {0}", e.what());
+            return;
+        }
+
+        // 3. 初始化 Project 配置对象
+        auto project = Project::New();
+        project->GetConfig().Name = projectFilePath.stem().string();
+        project->GetConfig().AssetDirectory = "Assets";
+        project->GetConfig().StartScene = "Scenes/Default.ayaya";
+        
+        // 保存项目文件（这也会记录项目的物理根目录位置）
+        Project::SaveActive(projectFilePath);
+
+        // 4. 【关键步骤】：动态将新项目的物理路径挂载到 project:// 虚拟协议
+        VFS::Mount("project", assetDir);
+
+        // 5. 初始化该项目的 AssetRegistry.yaml
+        AssetManager::Clear(); // 清空旧项目内存
+        AssetManager::SerializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
+
+        // 6. 自动创建一个初始场景并保存到项目内
+        NewScene();
+        std::string defaultScenePath = VFS::ResolveString("project://Scenes/Default.ayaya");
+        SceneSerializer serializer(m_ActiveScene);
+        EditorState dummyState;
+        serializer.Serialize(defaultScenePath, dummyState);
+        
+        m_CurrentScenePath = defaultScenePath;
+
+        AYAYA_CORE_INFO("Successfully created and initialized project: {0}", project->GetConfig().Name);
+    }
+
+    // =====================================================================
+    // 项目创建向导
+    // =====================================================================
+    void EditorLayer::UIRenderNewProjectPopup() {
+        if (m_ShowNewProjectPopup) {
+            ImGui::OpenPopup("Create New Project");
+            m_ShowNewProjectPopup = false; 
+        }
+
+        // ==========================================
+        // 【核心修复 1】：设定一个合理的窗口固定宽度 (例如 500 像素)
+        // 使用 ImGuiCond_Appearing 确保每次打开时重置大小
+        // ==========================================
+        ImGui::SetNextWindowSize(ImVec2(500.0f, 0.0f), ImGuiCond_Appearing);
+        
+        // 居中显示
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        
+        if (ImGui::BeginPopupModal("Create New Project", nullptr, ImGuiWindowFlags_NoResize)) {
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.9f, 1.0f), ICON_FA_FOLDER_PLUS " Configure New Project");
+            ImGui::PopFont();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // 1. 项目名称
+            ImGui::Text("Project Name");
+            ImGui::SetNextItemWidth(-1.0f); // 填满整行
+            ImGui::InputText("##ProjectName", m_NewProjectName, sizeof(m_NewProjectName));
+            
+            ImGui::Spacing();
+
+            // 2. 项目位置 (使用 Browse 按钮)
+            ImGui::Text("Project Location");
+            
+            // 【核心修复 2】：使用 PushItemWidth(-120.0f) 而不是 GetContentRegionAvail().x
+            // 这意味着：总宽度减去 120 像素，这在 AutoResize 窗口中是稳定的
+            ImGui::PushItemWidth(-110.0f); 
+            ImGui::InputText("##ProjectLocation", m_NewProjectLocation, sizeof(m_NewProjectLocation), ImGuiInputTextFlags_ReadOnly);
+            ImGui::PopItemWidth();
+
+            ImGui::SameLine();
+            
+            // 点击调用我们刚刚完善的原生文件夹弹窗
+            if (ImGui::Button("Browse...", ImVec2(100, 0))) {
+                std::string selectedDir = FileDialogs::OpenFolder();
+                if (!selectedDir.empty()) {
+                    strncpy(m_NewProjectLocation, selectedDir.c_str(), sizeof(m_NewProjectLocation) - 1);
+                    m_NewProjectLocation[sizeof(m_NewProjectLocation) - 1] = '\0'; // 确保安全截断
+                }
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // 3. 实时预览完整路径
+            std::filesystem::path finalDir = std::filesystem::path(m_NewProjectLocation) / m_NewProjectName;
+            ImGui::TextDisabled("New project folder will be created at:");
+            
+            // 【核心修复 3】：限制 TextWrapped 的宽度，防止长路径把窗口顶飞
+            ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 480.0f);
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", finalDir.generic_string().c_str());
+            ImGui::PopTextWrapPos();
+            
+            ImGui::Spacing();
+            ImGui::Spacing();
+
+            // 4. 操作按钮
+            if (ImGui::Button("Create Project", ImVec2(150, 35))) {
+                if (strlen(m_NewProjectName) > 0 && strlen(m_NewProjectLocation) > 0) {
+                    
+                    std::filesystem::path assetDir = finalDir / "Assets";
+                    std::filesystem::path projectFile = finalDir / (std::string(m_NewProjectName) + ".ayaproj");
+
+                    // 创建标准的 Unity 式物理目录
+                    std::filesystem::create_directories(assetDir / "Scenes");
+                    std::filesystem::create_directories(assetDir / "Models");
+                    std::filesystem::create_directories(assetDir / "Textures");
+                    std::filesystem::create_directories(assetDir / "Materials");
+                    std::filesystem::create_directories(finalDir / "Temp");
+
+                    // 实例化项目单例
+                    auto project = Project::New();
+                    project->GetConfig().Name = m_NewProjectName;
+                    project->GetConfig().AssetDirectory = "Assets";
+                    project->GetConfig().StartScene = "Scenes/Default.ayaya";
+                    Project::SaveActive(projectFile);
+
+                    // 动态挂载 VFS 节点
+                    VFS::Mount("project", assetDir);
+
+                    // 初始化资产数据库
+                    AssetManager::Clear();
+                    AssetManager::SerializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
+
+                    // 生成并自动保存起始场景
+                    NewScene();
+                    m_CurrentScenePath = VFS::ResolveString("project://Scenes/Default.ayaya");
+                    SaveScene();
+
+                    AYAYA_CORE_INFO("🚀 Project Ready: {0}", finalDir.string());
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(100, 35))) { ImGui::CloseCurrentPopup(); }
+            
+            ImGui::EndPopup();
+        }
+    }
+
+    void EditorLayer::OpenProject() {
+        std::string filepath = FileDialogs::OpenFile("ayaproj");
+        if (!filepath.empty()) {
+            OpenProject(filepath);
+        }
+    }
+
+    bool EditorLayer::OpenProject(const std::filesystem::path& path) {
+        // 1. 加载 .ayaproj 配置文件
+        if (Project::Load(path)) {
+            std::filesystem::path assetDir = Project::GetAssetDirectory();
+            
+            // 2. 【核心爆炸】：将 VFS 的 project 协议重定向到用户选择的文件夹！
+            VFS::Mount("project", assetDir);
+
+            // 3. 读取该项目专属的资产账本
+            std::string registryPath = VFS::ResolveString("project://AssetRegistry.yaml");
+            if (!AssetManager::DeserializeRegistry(registryPath)) {
+                // 如果是空项目没有账本，自动建一个
+                AssetManager::SerializeRegistry(registryPath);
+            }
+
+            // 4. 加载项目配置的默认场景
+            std::string startScenePath = VFS::ResolveString("project://" + Project::GetActive()->GetConfig().StartScene);
+            if (std::filesystem::exists(startScenePath)) {
+                LoadSceneWithProgress(startScenePath);
+            } else {
+                NewScene();
+            }
+
+            AYAYA_CORE_INFO("📂 Successfully opened project: {0}", Project::GetActive()->GetConfig().Name);
+            return true;
+        }
+        
+        AYAYA_CORE_ERROR("Failed to load project at {0}", path.string());
+        return false;
+    }
+
+    void EditorLayer::SaveProject() {
+        if (Project::GetActive()) {
+            auto projectPath = Project::GetProjectDirectory() / (Project::GetActive()->GetConfig().Name + ".ayaproj");
+            Project::SaveActive(projectPath);
+            AYAYA_CORE_INFO("💾 Project configuration saved.");
         }
     }
 
@@ -711,6 +928,13 @@ namespace Ayaya {
     void EditorLayer::UIRenderMenuBar() {
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("File")) {
+
+                if (ImGui::MenuItem("New Project...")) {
+                    m_ShowNewProjectPopup = true; 
+                }
+                if (ImGui::MenuItem("Open Project")) OpenProject();
+                if (ImGui::MenuItem("Save Project")) SaveProject();
+
                 if (ImGui::MenuItem("New Scene", "Ctrl+N")) NewScene();
                 if (ImGui::MenuItem("Save Scene", "Ctrl+S")) SaveScene();
                 if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S")) SaveSceneAs();

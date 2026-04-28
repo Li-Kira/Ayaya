@@ -54,6 +54,11 @@ namespace Ayaya {
         void SaveScene();
         void SaveSceneAs();
 
+        void NewProject();
+        void OpenProject();
+        bool OpenProject(const std::filesystem::path& path);
+        void SaveProject();
+
         bool OnKeyPressed(KeyPressedEvent& e);
         
         void HandleShortcuts();
@@ -124,6 +129,16 @@ namespace Ayaya {
 
         // 命令系统
         CommandHistory m_CommandHistory;
+
+        // ==========================================
+        // 新建项目弹窗 UI 状态
+        // ==========================================
+        bool m_ShowNewProjectPopup = false;
+        char m_NewProjectName[256] = "MyEpicGame";
+        char m_NewProjectLocation[256] = "C:/AyayaProjects"; 
+        
+        // 渲染弹窗的函数
+        void UIRenderNewProjectPopup();
     };
 
 

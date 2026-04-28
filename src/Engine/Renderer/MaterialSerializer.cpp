@@ -1,6 +1,8 @@
 #include "ayapch.h"
 #include "MaterialSerializer.hpp"
 #include "Asset/AssetManager.hpp"
+#include "Core/VFS.hpp"        // 【新增】
+#include "Project/Project.hpp" // 【新增】
 #include <yaml-cpp/yaml.h>
 #include <fstream>
 #include <algorithm>
@@ -47,8 +49,13 @@ namespace Ayaya {
                     << prop.Vec4Value.x << prop.Vec4Value.y << prop.Vec4Value.z << prop.Vec4Value.w << YAML::EndSeq;
             }
             
-            if (prop.Type == MaterialPropertyType::Texture2D) 
-                out << YAML::Key << "TexturePath" << YAML::Value << prop.TexturePath;
+            if (prop.Type == MaterialPropertyType::Texture2D) {
+                std::string pathToSave = prop.TexturePath;
+                if (!VFS::IsVirtualPath(pathToSave) && !pathToSave.empty()) {
+                    pathToSave = "project://" + pathToSave; 
+                }
+                out << YAML::Key << "TexturePath" << YAML::Value << pathToSave;
+            }
 
             out << YAML::EndMap;
         }
@@ -118,10 +125,17 @@ namespace Ayaya {
 
                 if (prop.Type == MaterialPropertyType::Texture2D) {
                     if (propNode["TexturePath"]) {
-                        prop.TexturePath = propNode["TexturePath"].as<std::string>();
-                        std::replace(prop.TexturePath.begin(), prop.TexturePath.end(), '\\', '/');
-                        if (!prop.TexturePath.empty()) {
-                            prop.TextureHandle = AssetManager::ImportAsset(std::filesystem::path(prop.TexturePath));
+                        std::string rawPath = propNode["TexturePath"].as<std::string>();
+                        if (!VFS::IsVirtualPath(rawPath) && !rawPath.empty()) {
+                            rawPath = "project://" + rawPath;
+                        }
+                        // 2. 解析为物理路径
+                        std::string physicalPath = VFS::ResolveString(rawPath);
+                        
+                        prop.TexturePath = rawPath; // 内存中保留虚拟路径，方便下次保存
+                        if (!physicalPath.empty()) {
+                            // 3. 调用 ImportAsset 导入物理文件
+                            prop.TextureHandle = AssetManager::ImportAsset(std::filesystem::path(physicalPath));
                         }
                     }
                 }

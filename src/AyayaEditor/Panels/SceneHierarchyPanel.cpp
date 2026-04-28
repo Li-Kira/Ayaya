@@ -6,6 +6,8 @@
 #include "Asset/AssetManager.hpp"
 #include "Renderer/Texture.hpp"
 #include "Renderer/MaterialSerializer.hpp"
+#include "Core/VFS.hpp"        // 【新增】
+#include "Project/Project.hpp" // 【新增】
 
 #include <imgui.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -189,7 +191,9 @@ namespace Ayaya {
                 // ==========================================
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                     const char* pathStr = (const char*)payload->Data;
-                    std::filesystem::path modelPath = std::filesystem::path("assets") / pathStr;
+                    std::string virtualPath = "project://" + std::string(pathStr);
+                    std::string physicalPath = VFS::ResolveString(virtualPath); // 解析为当前电脑上的真实物理路径
+                    std::filesystem::path modelPath(physicalPath);
                     
                     if (modelPath.extension() == ".obj" || modelPath.extension() == ".fbx" || modelPath.extension() == ".gltf") {
                         AYAYA_CORE_INFO("Instantiating Model to Scene: {0}", modelPath.string());
@@ -735,7 +739,9 @@ namespace Ayaya {
                 if (ImGui::BeginDragDropTarget()) { 
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                         const char* pathStr = (const char*)payload->Data;
-                        std::filesystem::path texturePath = std::filesystem::path("assets") / pathStr;
+                        std::string virtualPath = "project://" + std::string(pathStr);
+                        std::string physicalPath = VFS::ResolveString(virtualPath);
+                        std::filesystem::path texturePath(physicalPath);
 
                         if (texturePath.extension() == ".png" || texturePath.extension() == ".jpg") {
                             UUID importedHandle = AssetManager::ImportAsset(texturePath);
@@ -1271,7 +1277,9 @@ namespace Ayaya {
                         if (ImGui::BeginDragDropTarget()) {
                             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                                 const char* pathStr = (const char*)payload->Data;
-                                std::filesystem::path texPath = std::filesystem::path("assets") / pathStr;
+                                std::string virtualPath = "project://" + std::string(pathStr);
+                                std::string physicalPath = VFS::ResolveString(virtualPath);
+                                std::filesystem::path texPath(physicalPath);
                                 
                                 if (texPath.extension() == ".hdr" || texPath.extension() == ".jpg" || texPath.extension() == ".png") {
                                     
@@ -1323,7 +1331,9 @@ namespace Ayaya {
                             if (ImGui::BeginDragDropTarget()) {
                                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                                     const char* pathStr = (const char*)payload->Data;
-                                    std::filesystem::path texPath = std::filesystem::path("assets") / pathStr;
+                                    std::string virtualPath = "project://" + std::string(pathStr);
+                                    std::string physicalPath = VFS::ResolveString(virtualPath);
+                                    std::filesystem::path texPath(physicalPath);
                                     
                                     if (texPath.extension() == ".jpg" || texPath.extension() == ".png") {
                                         std::vector<EnvironmentComponent> oldComps = pureOldEnvs;
@@ -1475,7 +1485,9 @@ namespace Ayaya {
                     if (ImGui::BeginDragDropTarget()) {
                         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                             const char* pathStr = (const char*)payload->Data;
-                            std::filesystem::path modelPath = std::filesystem::path("assets") / pathStr;
+                            std::string virtualPath = "project://" + std::string(pathStr);
+                            std::string physicalPath = VFS::ResolveString(virtualPath);
+                            std::filesystem::path modelPath(physicalPath);
                             if (modelPath.extension() == ".obj" || modelPath.extension() == ".fbx" || modelPath.extension() == ".gltf") {
                                 
                                 std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
@@ -1542,7 +1554,9 @@ namespace Ayaya {
                         if (ImGui::BeginDragDropTarget()) {
                             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                                 const char* pathStr = (const char*)payload->Data;
-                                std::filesystem::path matPath = std::filesystem::path("assets") / pathStr;
+                                std::string virtualPath = "project://" + std::string(pathStr);
+                                std::string physicalPath = VFS::ResolveString(virtualPath);
+                                std::filesystem::path matPath(physicalPath);
                                 if (matPath.extension() == ".mat") {
                                     
                                     std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
@@ -1647,7 +1661,10 @@ namespace Ayaya {
                                         if (ImGui::BeginDragDropTarget()) {
                                             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                                                 const char* pathStr = (const char*)payload->Data;
-                                                std::filesystem::path texturePath = std::filesystem::path("assets") / pathStr;
+                                                std::string virtualPath = "project://" + std::string(pathStr);
+                                                std::string physicalPath = VFS::ResolveString(virtualPath);
+                                                std::filesystem::path texturePath(physicalPath);
+
                                                 if (texturePath.extension() == ".png" || texturePath.extension() == ".jpg") {
                                                     UUID importedHandle = AssetManager::ImportAsset(texturePath);
                                                     if (importedHandle != 0) {
@@ -1720,7 +1737,8 @@ namespace Ayaya {
                             std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
                             for (auto e : m_SelectedEntities) {
                                 auto templateMat = std::make_shared<Material>();
-                                if (MaterialSerializer::Deserialize(templateMat, "assets/Editor/materials/DefaultPBR.mat")) {
+                                std::string defaultMatPath = VFS::ResolveString("engine://Editor/materials/DefaultPBR.mat");
+                                if (MaterialSerializer::Deserialize(templateMat, defaultMatPath)) {
                                     e.GetComponent<MeshRendererComponent>().MaterialAsset = templateMat->Clone();
                                 } else {
                                     e.GetComponent<MeshRendererComponent>().MaterialAsset = std::make_shared<Material>();
@@ -1965,7 +1983,9 @@ namespace Ayaya {
                 if (ImGui::BeginDragDropTarget()) {
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                         const char* pathStr = (const char*)payload->Data;
-                        std::filesystem::path scriptPath = std::filesystem::path("assets") / pathStr;
+                        std::string virtualPath = "project://" + std::string(pathStr);
+                        std::string physicalPath = VFS::ResolveString(virtualPath);
+                        std::filesystem::path scriptPath(physicalPath);
                         if (scriptPath.extension() == ".lua") {
                             
                             std::vector<LuaScriptComponent> oldComps = pureOldLscs;
@@ -2244,7 +2264,8 @@ namespace Ayaya {
                         if (!e.HasComponent<MeshRendererComponent>() && !e.HasComponent<SpriteRendererComponent>()) {
                             auto& mrc = e.AddComponent<MeshRendererComponent>();
                             auto templateMat = std::make_shared<Material>();
-                            if (MaterialSerializer::Deserialize(templateMat, "assets/Editor/materials/DefaultPBR.mat")) {
+                            std::string defaultMatPath = VFS::ResolveString("engine://Editor/materials/DefaultPBR.mat"); // 使用 engine:// 协议
+                            if (MaterialSerializer::Deserialize(templateMat, defaultMatPath)) {
                                 mrc.MaterialAsset = templateMat->Clone();
                             } else {
                                 mrc.MaterialAsset = std::make_shared<Material>();

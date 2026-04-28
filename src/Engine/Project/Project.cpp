@@ -4,6 +4,14 @@
 
 namespace Ayaya {
 
+    // 【新增】：创建一个空的默认项目
+    std::shared_ptr<Project> Project::New() {
+        s_ActiveProject = std::make_shared<Project>();
+        // 默认将项目目录设为当前运行目录
+        s_ActiveProject->m_ProjectDirectory = std::filesystem::current_path();
+        return s_ActiveProject;
+    }
+
     std::shared_ptr<Project> Project::Load(const std::filesystem::path& path) {
         std::shared_ptr<Project> project = std::make_shared<Project>();
         ProjectSerializer serializer(project);
