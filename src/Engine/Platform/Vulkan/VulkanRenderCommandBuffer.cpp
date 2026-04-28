@@ -90,6 +90,7 @@ namespace Ayaya {
             // 【核心】：切换管线时，清空之前记的小本本，并记住新管线
             m_BoundPipeline = vulkanPipeline;
             m_PendingImageInfos.clear();
+            m_DescriptorSetDirty = false;
         }
     }
 
@@ -107,47 +108,72 @@ namespace Ayaya {
     // ==========================================
     // 绑定贴图：只记小本本，不跟 Vulkan 通信！
     // ==========================================
-    // 在 VulkanRenderCommandBuffer.cpp 中
+    // 1. Texture2D 绑定
     void VulkanRenderCommandBuffer::BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<Texture2D>& texture) {
         auto vulkanTexture = std::dynamic_pointer_cast<VulkanTexture2D>(texture);
         if (!vulkanTexture || vulkanTexture->GetImageView() == VK_NULL_HANDLE) return;
         
+        // ==========================================
+        // 【核心修复：状态缓存拦截】
+        // 如果这个槽位之前绑定的贴图和现在要绑的一模一样，直接退出！
+        // 绝不触发 Dirty，绝不浪费新的 Descriptor Set！
+        // ==========================================
+        if (m_PendingImageInfos.find(slot) != m_PendingImageInfos.end()) {
+            if (m_PendingImageInfos[slot].imageView == vulkanTexture->GetImageView()) return;
+        }
+        
         m_PendingImageInfos[slot] = { vulkanTexture->GetSampler(), vulkanTexture->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        m_DescriptorSetDirty = true; 
     }
 
+    // 2. Framebuffer 附件绑定
     void VulkanRenderCommandBuffer::BindTexture2D(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<Framebuffer>& framebuffer, uint32_t attachmentIndex, bool isDepth) {
         auto vulkanFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(framebuffer);
         if (!vulkanFBO) return;
         VkImageView view = isDepth ? vulkanFBO->GetDepthAttachmentImageView() : vulkanFBO->GetColorAttachmentImageView(attachmentIndex);
         if (view == VK_NULL_HANDLE) return;
+        
+        // 【拦截检查】
+        if (m_PendingImageInfos.find(slot) != m_PendingImageInfos.end()) {
+            if (m_PendingImageInfos[slot].imageView == view) return;
+        }
+
         m_PendingImageInfos[slot] = { vulkanFBO->GetSampler(), view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        m_DescriptorSetDirty = true; 
     }
 
+    // 3. TextureCube 绑定
     void VulkanRenderCommandBuffer::BindTextureCube(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, uint32_t slot, const std::shared_ptr<TextureCube>& texture) {
         auto vulkanTexture = std::dynamic_pointer_cast<VulkanTextureCube>(texture);
         if (!vulkanTexture || vulkanTexture->GetImageView() == VK_NULL_HANDLE) return;
         
+        // 【拦截检查】
+        if (m_PendingImageInfos.find(slot) != m_PendingImageInfos.end()) {
+            if (m_PendingImageInfos[slot].imageView == vulkanTexture->GetImageView()) return;
+        }
+
         m_PendingImageInfos[slot] = { vulkanTexture->GetSampler(), vulkanTexture->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        m_DescriptorSetDirty = true; 
     }
 
     // ==========================================
     // 核心冲刷器：Draw 之前的终极发车！
     // ==========================================
     void VulkanRenderCommandBuffer::FlushDescriptorSets() {
-        // 如果小本本是空的，说明这把不需要绑贴图，直接安全退出
-        if (!m_BoundPipeline || m_PendingImageInfos.empty()) return;
+        // 【核心防御 1】：如果没绑管线、没贴图、或者贴图压根没换过，直接返回！
+        // 显卡会继续沿用上一次绑定的 Descriptor Set，既安全又省性能！
+        if (!m_BoundPipeline || m_PendingImageInfos.empty() || !m_DescriptorSetDirty) return;
 
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-        
-        // 从环形缓冲获取 Set
+        VkDevice device = context->GetDevice();
+
         VkDescriptorSet newSet = m_BoundPipeline->GetNextTextureDescriptorSet();
-        
-        // 【终极防御】：如果因为池子耗尽等意外真的拿到了空指针，在这里断言拦截，而不是让 Vulkan 在底层爆出难懂的 Segfault！
-        AYAYA_CORE_ASSERT(newSet != VK_NULL_HANDLE, "Failed to get a valid Descriptor Set! Check Descriptor Pool size.");
+        AYAYA_CORE_ASSERT(newSet != VK_NULL_HANDLE, "Failed to get Descriptor Set!");
 
         std::vector<VkWriteDescriptorSet> writes;
-        writes.reserve(m_PendingImageInfos.size()); // 预分配容量，确保内存连续安全
+        writes.reserve(m_PendingImageInfos.size());
 
+        // 这里会把当前积累的【所有】有效贴图（包括上一个物体遗留的 IBL 环境光）一并写入新 Set
         for (auto& pair : m_PendingImageInfos) {
             VkWriteDescriptorSet write{};
             write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -156,19 +182,20 @@ namespace Ayaya {
             write.dstArrayElement = 0;
             write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             write.descriptorCount = 1;
-            write.pImageInfo = &pair.second; // 从 Map 中取地址是安全的
+            write.pImageInfo = &pair.second;
             writes.push_back(write);
         }
 
-        // 一次性更新并绑定！
-        vkUpdateDescriptorSets(context->GetDevice(), writes.size(), writes.data(), 0, nullptr);
+        vkUpdateDescriptorSets(device, writes.size(), writes.data(), 0, nullptr);
         vkCmdBindDescriptorSets(context->GetCurrentCommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_BoundPipeline->GetVulkanPipelineLayout(), 1, 1, &newSet, 0, nullptr);
 
         // ==========================================
-        // 【核心修复】：发车完毕后，必须烧毁小本本！
-        // 否则上一个物体的 Albedo 贴图信息会残留，污染下一个物体的渲染。
+        // 【终极修复】：打扫战场
+        // m_PendingImageInfos.clear(); <--- 彻底删掉这句罪魁祸首！绝对不能清空！
         // ==========================================
-        m_PendingImageInfos.clear();
+        
+        // 只重置脏标记，代表当前的配置已经发车完毕
+        m_DescriptorSetDirty = false; 
     }
 
     // --- 绘制指令 ---

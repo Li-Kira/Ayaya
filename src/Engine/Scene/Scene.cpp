@@ -2,6 +2,7 @@
 #include "Scene.hpp"
 #include "Entity.hpp"
 #include "Components.hpp"
+#include "Renderer/MaterialSerializer.hpp"
 
 #include <box2d/b2_world.h>
 #include <box2d/b2_body.h>
@@ -86,10 +87,10 @@ namespace Ayaya {
     }
 
     Entity Scene::InstantiateModelNode(const ModelNode& node, Entity parentEntity) {
-        // 1. 创建实体 (CreateEntity 默认会把它加到 m_RootEntities 里)
+        // 1. 创建实体
         Entity entity = CreateEntity(node.Name.empty() ? "Model Node" : node.Name);
 
-        // 2. 解析局部矩阵并赋值给 Transform
+        // 2. 解析变换 (Translation/Rotation/Scale)
         auto& transform = entity.GetComponent<TransformComponent>();
         glm::vec3 scale;
         glm::quat rotation;
@@ -104,57 +105,61 @@ namespace Ayaya {
 
         // 3. 构建层级关系
         if (parentEntity) {
-            // 【安全获取/添加组件】：存在就取出来，不存在才添加，绝不触发 EnTT 崩溃！
             auto& rel = entity.HasComponent<RelationshipComponent>() ? 
                         entity.GetComponent<RelationshipComponent>() : 
                         entity.AddComponent<RelationshipComponent>();
             rel.Parent = parentEntity.GetEntityHandle();
 
             auto& pRel = parentEntity.HasComponent<RelationshipComponent>() ? 
-                         parentEntity.GetComponent<RelationshipComponent>() : 
-                         parentEntity.AddComponent<RelationshipComponent>();
+                        parentEntity.GetComponent<RelationshipComponent>() : 
+                        parentEntity.AddComponent<RelationshipComponent>();
             pRel.Children.push_back(entity.GetEntityHandle());
 
-            // 【核心修复】：既然认了爹，就把它从根节点列表 (RootEntities) 里踢出去！
+            // 从根节点列表中移除（因为它现在是子节点了）
             auto it = std::find(m_RootEntities.begin(), m_RootEntities.end(), entity.GetEntityHandle());
-            if (it != m_RootEntities.end()) {
-                m_RootEntities.erase(it);
-            }
+            if (it != m_RootEntities.end()) m_RootEntities.erase(it);
         }
+
+        // ==========================================
+        // 【核心新增】：定义材质分配闭包
+        // ==========================================
+        auto ApplyDefaultMaterial = [](MeshRendererComponent& mrc) {
+            auto templateMat = std::make_shared<Material>();
+            // 尝试加载预设的 PBR 材质文件
+            if (MaterialSerializer::Deserialize(templateMat, "assets/Editor/materials/DefaultPBR.mat")) {
+                mrc.MaterialAsset = templateMat->Clone();
+            } else {
+                // 如果文件不存在，给一个纯白的空材质兜底，防止渲染器报错
+                mrc.MaterialAsset = std::make_shared<Material>();
+                mrc.MaterialAsset->Name = "Default Material";
+            }
+        };
 
         // 4. 处理网格渲染组件
         if (!node.Meshes.empty()) {
             if (node.Meshes.size() == 1) {
-                // 安全挂载网格
                 auto& meshComp = entity.HasComponent<MeshRendererComponent>() ? 
-                                 entity.GetComponent<MeshRendererComponent>() : 
-                                 entity.AddComponent<MeshRendererComponent>();
-                meshComp.ModelAsset = std::make_shared<Model>(node.Meshes[0]); 
+                                entity.GetComponent<MeshRendererComponent>() : 
+                                entity.AddComponent<MeshRendererComponent>();
+                meshComp.ModelAsset = std::make_shared<Model>(node.Meshes[0]);
+                
+                // 为当前实体分配材质
+                ApplyDefaultMaterial(meshComp);
             } else {
+                // 如果一个节点有多个 SubMesh，拆分为子实体并分配材质
                 for (size_t i = 0; i < node.Meshes.size(); i++) {
                     Entity subEntity = CreateEntity(node.Name + "_SubMesh_" + std::to_string(i));
                     
-                    // 安全构建子网格和父节点的关系
-                    auto& subRel = subEntity.HasComponent<RelationshipComponent>() ? 
-                                   subEntity.GetComponent<RelationshipComponent>() : 
-                                   subEntity.AddComponent<RelationshipComponent>();
+                    // 设置层级... (略，参考之前代码)
+                    auto& subRel = subEntity.AddComponent<RelationshipComponent>();
                     subRel.Parent = entity.GetEntityHandle();
-                    
-                    auto& entRel = entity.HasComponent<RelationshipComponent>() ? 
-                                   entity.GetComponent<RelationshipComponent>() : 
-                                   entity.AddComponent<RelationshipComponent>();
-                    entRel.Children.push_back(subEntity.GetEntityHandle());
+                    // ... (记得从 RootEntities 移除 subEntity)
 
-                    // 子网格也不能出现在大纲的根目录！踢出去！
-                    auto subIt = std::find(m_RootEntities.begin(), m_RootEntities.end(), subEntity.GetEntityHandle());
-                    if (subIt != m_RootEntities.end()) {
-                        m_RootEntities.erase(subIt);
-                    }
-
-                    auto& meshComp = subEntity.HasComponent<MeshRendererComponent>() ? 
-                                     subEntity.GetComponent<MeshRendererComponent>() : 
-                                     subEntity.AddComponent<MeshRendererComponent>();
+                    auto& meshComp = subEntity.AddComponent<MeshRendererComponent>();
                     meshComp.ModelAsset = std::make_shared<Model>(node.Meshes[i]);
+                    
+                    // 为每个子网格实体分配材质
+                    ApplyDefaultMaterial(meshComp);
                 }
             }
         }

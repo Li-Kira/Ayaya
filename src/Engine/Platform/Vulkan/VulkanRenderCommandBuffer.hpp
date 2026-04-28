@@ -77,6 +77,7 @@ namespace Ayaya {
         std::unordered_map<uint32_t, VkDescriptorImageInfo> m_PendingImageInfos; // 记住即将绑定的贴图
 
         void FlushDescriptorSets(); // 核心发车函数
+        bool m_DescriptorSetDirty = false;
     };
 
 }

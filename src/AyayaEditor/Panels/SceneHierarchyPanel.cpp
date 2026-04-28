@@ -7,7 +7,6 @@
 #include "Renderer/Texture.hpp"
 #include "Renderer/MaterialSerializer.hpp"
 
-
 #include <imgui.h>
 #include <glm/gtc/type_ptr.hpp>
 #include <cstring>

@@ -112,7 +112,7 @@ namespace Ayaya {
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
         samplerInfo.mipLodBias = 0.0f;
         samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 0.0f;
+        samplerInfo.maxLod = 1.0f;
 
         vkCreateSampler(context->GetDevice(), &samplerInfo, nullptr, &m_Sampler);
     }
