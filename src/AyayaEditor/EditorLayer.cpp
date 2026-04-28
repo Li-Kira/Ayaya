@@ -4,6 +4,8 @@
 #include "Scripting/ScriptEngine.hpp"
 #include "Engine/Core/EditorCommands.hpp"
 #include "Engine/Core/ImGuiBackend.hpp"
+#include "Project/Project.hpp"
+#include "Core/VFS.hpp"
 
 #include <glad/glad.h>
 #include <imgui.h>
@@ -28,10 +30,13 @@ namespace Ayaya {
     }
 
     void EditorLayer::OnAttach() {
+        VFS::Mount("engine", "assets");
+        VFS::Mount("project", "assets");
+
         // ==========================================
         // 启动时读取资产注册表
         // ==========================================
-        AssetManager::DeserializeRegistry("assets/AssetRegistry.yaml");
+        AssetManager::DeserializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
         // 初始化并加载编辑器偏好设置
         m_PreferencesPanel.Init();
         // ==========================================
@@ -47,11 +52,13 @@ namespace Ayaya {
 
         m_FrameDebuggerPanel.SetContext(m_GameRenderer);
         
+
         SetupScene();
 
         // 清理临时文件
-        if (std::filesystem::exists("assets/Editor/temp/temp_play_scene.ayaya")) {
-            std::filesystem::remove("assets/Editor/temp/temp_play_scene.ayaya");
+        std::string tempPath = VFS::ResolveString("project://temp/temp_play_scene.ayaya");
+        if (std::filesystem::exists(tempPath)) {
+            std::filesystem::remove(tempPath);
         }
     }
 
@@ -359,7 +366,7 @@ namespace Ayaya {
         Entity skyEntity = m_ActiveScene->CreateEntity("Skybox");
         auto& envComp = skyEntity.AddComponent<EnvironmentComponent>();
         envComp.Type = EnvironmentType::HDR_Equirectangular;
-        envComp.EquirectangularPath = "assets/textures/skybox/hdr/newport_loft.hdr";
+        envComp.EquirectangularPath = VFS::ResolveString("engine://textures/skybox/hdr/newport_loft.hdr");
         envComp.EquirectangularTexture = Texture2D::Create(envComp.EquirectangularPath);
         envComp.Intensity = 30000.0f; 
         envComp.AmbientColor = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -376,7 +383,7 @@ namespace Ayaya {
         // ==========================================
         if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
             auto DefaultMat = std::make_shared<Material>();
-            bool success = MaterialSerializer::Deserialize(DefaultMat, "assets/Editor/materials/DefaultPBR.mat");
+            bool success = MaterialSerializer::Deserialize(DefaultMat, VFS::ResolveString("engine://Editor/materials/DefaultPBR.mat"));
 
             if (success) {
                 mrc.MaterialAsset = DefaultMat->Clone();
@@ -1274,7 +1281,7 @@ namespace Ayaya {
         m_ActiveScene = std::make_shared<Scene>();
         SceneSerializer serializer(m_EditorScene);
         EditorState dummyState;
-        std::string tempPath = "assets/Editor/temp/temp_play_scene.ayaya";
+        std::string tempPath = VFS::ResolveString("project://temp/temp_play_scene.ayaya");
         std::filesystem::path dirPath = std::filesystem::path(tempPath).parent_path();
         if (!std::filesystem::exists(dirPath)) {
             std::filesystem::create_directories(dirPath);
@@ -1318,7 +1325,7 @@ namespace Ayaya {
             m_ActiveScene->OnRuntimeStop();
         }
 
-        std::string tempPath = "assets/Editor/temp/temp_play_scene.ayaya";
+        std::string tempPath = VFS::ResolveString("project://temp/temp_play_scene.ayaya");
         if (std::filesystem::exists(tempPath)) {
             std::filesystem::remove(tempPath);
         }

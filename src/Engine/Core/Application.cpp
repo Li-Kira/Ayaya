@@ -7,6 +7,7 @@
 #include "Renderer/Renderer.hpp"
 #include "Renderer/SceneRenderer.hpp"
 #include "Asset/AssetManager.hpp"
+#include "Core/VFS.hpp"
 
 
 #ifdef _WIN32
@@ -96,6 +97,9 @@ Hi, welcome to Ayaya engine♪
         AYAYA_CORE_INFO("\x1b[38;2;255;150;200mAyaya Engine is starting up... ♪\n{0}\x1b[0m", ayayaAscii);
         AYAYA_CORE_INFO("Log System Initialized!");
 
+        VFS::Init();
+        VFS::Mount("engine", std::filesystem::current_path() / "assets");
+
         Renderer::LoadConfig();
 
         m_Window = std::make_unique<Window>(1920, 1080, "Ayaya Engine v0.1");
@@ -115,6 +119,7 @@ Hi, welcome to Ayaya engine♪
         SceneRenderer::Shutdown();
         Renderer::Shutdown();
         AssetManager::Shutdown();
+        VFS::Shutdown();
     }
 
     void Application::PushLayer(Layer* layer) { 

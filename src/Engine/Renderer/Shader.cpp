@@ -4,18 +4,29 @@
 #include "Platform/OpenGL/OpenGLShader.hpp"
 #include "Platform/Vulkan/VulkanShader.hpp"
 #include "Core/Log.hpp"
+#include "Core/VFS.hpp"
 
 namespace Ayaya {
 
-    // 【新增】：内部辅助函数，负责将逻辑路径翻译为物理真实路径
+    // 【智能解析器】：负责将逻辑路径翻译为 VFS 虚拟路径，并最终解析为真实物理路径
     static std::string ResolveShaderPath(const std::string& logicalPath) {
-        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
-            return "assets/Editor/shaders/src/opengl/" + logicalPath;
-        } 
-        else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-            return "assets/Editor/shaders/cache/vulkan/" + logicalPath + ".spv";
+        std::string virtualPath = logicalPath;
+
+        // 1. 向下兼容机制：
+        // 如果传入的不是 "engine://" 开头的虚拟路径（比如老代码里的 "Debug/pbr_forward.vert"）
+        // 我们根据不同的底层图形 API，自动为它补全正确的虚拟路径和后缀！
+        if (!VFS::IsVirtualPath(logicalPath)) {
+            if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+                virtualPath = "engine://Editor/shaders/src/opengl/" + logicalPath;
+            } 
+            else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+                // Vulkan 自动定位到缓存目录，并自动加上 .spv 后缀
+                virtualPath = "engine://Editor/shaders/cache/vulkan/" + logicalPath + ".spv";
+            }
         }
-        return logicalPath;
+
+        // 2. 移交 VFS：将虚拟路径 (如 engine://...) 转换为当前电脑硬盘上的绝对/相对路径
+        return VFS::ResolveString(virtualPath);
     }
 
     std::shared_ptr<Shader> Shader::Create(const std::string& vertexPath, const std::string& fragmentPath) {
