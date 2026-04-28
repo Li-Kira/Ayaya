@@ -366,7 +366,7 @@ namespace Ayaya {
         Entity skyEntity = m_ActiveScene->CreateEntity("Skybox");
         auto& envComp = skyEntity.AddComponent<EnvironmentComponent>();
         envComp.Type = EnvironmentType::HDR_Equirectangular;
-        envComp.EquirectangularPath = VFS::ResolveString("engine://textures/skybox/hdr/newport_loft.hdr");
+        envComp.EquirectangularPath = VFS::ResolveString("engine://Editor/textures/skybox/hdr/newport_loft.hdr");
         envComp.EquirectangularTexture = Texture2D::Create(envComp.EquirectangularPath);
         envComp.Intensity = 30000.0f; 
         envComp.AmbientColor = glm::vec3(0.0f, 0.0f, 0.0f);
