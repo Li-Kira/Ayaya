@@ -85,7 +85,20 @@ namespace Ayaya {
             asset = Texture2D::Create(physicalPath);
         }
         else if (metadata.Type == AssetType::Model) {
-            asset = std::make_shared<Model>(physicalPath);
+            // 【核心修复】：拦截内置几何体，防止传入 Assimp
+            if (metadata.VirtualPath == "Primitive::Cube") {
+                asset = std::make_shared<Model>(Mesh::CreateCube(1.0f));
+            } 
+            else if (metadata.VirtualPath == "Primitive::Sphere") {
+                asset = std::make_shared<Model>(Mesh::CreateSphere(0.5f, 64, 64));
+            } 
+            else if (metadata.VirtualPath == "Primitive::Plane") {
+                asset = std::make_shared<Model>(Mesh::CreatePlane(1.0f, 1.0f));
+            } 
+            else {
+                // 只有真正的硬盘路径 (如 .obj, .fbx) 才调用 Model 构造函数交给 Assimp
+                asset = std::make_shared<Model>(physicalPath);
+            }
         }
         else if (metadata.Type == AssetType::Material) {
             auto material = std::make_shared<Material>();
@@ -141,7 +154,20 @@ namespace Ayaya {
         if (s_BuiltInMaterialHandle == 0) {
             s_BuiltInMaterialHandle = UUID();
             auto mat = std::make_shared<Material>();
-            mat->Name = "Built-in Default Material";
+            
+            // 【核心改造】：尝试从 VFS 引擎目录读取真实的默认 PBR 材质
+            std::string defaultMatPath = VFS::ResolveString("engine://Editor/materials/DefaultPBR.mat");
+            
+            if (MaterialSerializer::Deserialize(mat, defaultMatPath)) {
+                // 读取成功，稍微改个名字以防混淆
+                mat->Name = "Built-in Default PBR";
+            } else {
+                // 如果文件丢失，作为保底方案(Fallback)，给一个纯净的名字
+                AYAYA_CORE_WARN("AssetManager: Failed to load DefaultPBR.mat, using empty fallback material.");
+                mat->Name = "Built-in Fallback Material";
+            }
+
+            // 将读取好（或保底）的材质存入内存池
             AddAsset(s_BuiltInMaterialHandle, mat);
         }
         return s_BuiltInMaterialHandle;

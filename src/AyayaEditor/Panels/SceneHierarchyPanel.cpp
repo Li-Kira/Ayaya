@@ -85,53 +85,48 @@ namespace Ayaya {
                     Entity newEntity = m_Context->CreateEntity("Empty Entity");
                     SetSelectedEntity(newEntity); // 创建后自动选中
                 }
-                // --- 新增 3D 几何体分类 ---
+                
+                // ==========================================
+                // 【修复 1】：3D 几何体分类全面 UUID 化
+                // ==========================================
                 if (ImGui::BeginMenu("3D Object")) {
                     if (ImGui::MenuItem("Cube")) {
                         Entity entity = m_Context->CreateEntity("Cube");
                         auto& mrc = entity.AddComponent<MeshRendererComponent>();
-                        mrc.ModelAsset = std::make_shared<Model>(Mesh::CreateCube(1.0f));
-                        mrc.ModelAsset->SetPath("Primitive::Cube"); // 打上标记，防止丢失
-                        mrc.MaterialAsset = CreateWhitePBR();       // 赋予白模材质
+                        mrc.ModelHandle = AssetManager::GetBuiltInCube();
+                        mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
                         SetSelectedEntity(entity);
                     }
                     if (ImGui::MenuItem("Sphere")) {
                         Entity entity = m_Context->CreateEntity("Sphere");
                         auto& mrc = entity.AddComponent<MeshRendererComponent>();
-                        mrc.ModelAsset = std::make_shared<Model>(Mesh::CreateSphere(0.5f, 64, 64));
-                        mrc.ModelAsset->SetPath("Primitive::Sphere");
-                        mrc.MaterialAsset = CreateWhitePBR();
+                        mrc.ModelHandle = AssetManager::GetBuiltInSphere();
+                        mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
                         SetSelectedEntity(entity);
                     }
                     if (ImGui::MenuItem("Plane")) {
                         Entity entity = m_Context->CreateEntity("Plane");
                         auto& mrc = entity.AddComponent<MeshRendererComponent>();
-                        mrc.ModelAsset = std::make_shared<Model>(Mesh::CreatePlane(1.0f, 1.0f));
-                        mrc.ModelAsset->SetPath("Primitive::Plane");
-                        mrc.MaterialAsset = CreateWhitePBR();
+                        mrc.ModelHandle = AssetManager::GetBuiltInPlane();
+                        mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
                         SetSelectedEntity(entity);
                     }
                     ImGui::EndMenu();
                 }
 
                 // ==========================================
-                // 【新增】：一键创建天空盒！
+                // 一键创建天空盒！
                 // ==========================================
                 if (ImGui::MenuItem("Create Skybox")) {
                     Entity skyEntity = m_Context->CreateEntity("Skybox");
-                    
-                    // 自动挂载环境组件
                     auto& envComp = skyEntity.AddComponent<EnvironmentComponent>();
-                    
-                    // 给一个比较合理的默认初始状态 (比如默认不开启，等用户自己拖贴图)
                     envComp.Type = EnvironmentType::None; 
                     envComp.Intensity = 30000.0f;
                     envComp.AmbientColor = { 0.0f, 0.0f, 0.0f };
-                    
-                    // 创建完毕后，自动将其设为当前选中项，方便美术直接在属性面板操作
                     m_SelectedEntities.clear();
                     m_SelectedEntities.push_back(skyEntity);
                 }
+                
                 // --- 新增灯光分类 ---
                 if (ImGui::BeginMenu("Light")) {
                     if (ImGui::MenuItem("Directional Light")) {
@@ -160,15 +155,11 @@ namespace Ayaya {
                 }
 
                 // ==========================================
-                // 【新增】：一键创建后处理体积对象！
+                // 一键创建后处理体积对象！
                 // ==========================================
                 if (ImGui::MenuItem("Post Process Volume")) {
                     Entity ppvEntity = m_Context->CreateEntity("Post Process Volume");
-                    
-                    // 自动挂载后处理体积组件
                     ppvEntity.AddComponent<PostProcessVolumeComponent>();
-                    
-                    // 创建完毕后自动选中，方便立即编辑参数
                     SetSelectedEntity(ppvEntity);
                 }
 
@@ -187,26 +178,26 @@ namespace Ayaya {
                 }
 
                 // ==========================================
-                // 【核心新增】：拦截 2：从资源管理器拖入 3D 模型文件 -> 在场景中实例化整棵树！
+                // 【修复 2】：从内容浏览器拖入模型实例化，交由 AssetManager 处理！
                 // ==========================================
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                     const char* pathStr = (const char*)payload->Data;
-                    std::string virtualPath = "project://" + std::string(pathStr);
-                    std::string physicalPath = VFS::ResolveString(virtualPath); // 解析为当前电脑上的真实物理路径
-                    std::filesystem::path modelPath(physicalPath);
+                    std::string ext = std::filesystem::path(pathStr).extension().string();
                     
-                    if (modelPath.extension() == ".obj" || modelPath.extension() == ".fbx" || modelPath.extension() == ".gltf") {
-                        AYAYA_CORE_INFO("Instantiating Model to Scene: {0}", modelPath.string());
+                    if (ext == ".obj" || ext == ".fbx" || ext == ".gltf") {
                         
-                        // 1. 加载模型结构
-                        auto loadedModel = std::make_shared<Model>(modelPath.string());
+                        // 1. 无脑交给 AssetManager 导入并分配 UUID
+                        UUID importedHandle = AssetManager::ImportAsset(pathStr);
                         
-                        // 2. 调用场景实例化接口，自动生成树状层级实体
-                        Entity rootEntity = m_Context->InstantiateModel(loadedModel);
-                        
-                        // 3. 自动选中新生成的模型根节点
-                        if (rootEntity) {
-                            SetSelectedEntity(rootEntity);
+                        if (importedHandle != 0) {
+                            // 2. 用 Handle 换取 Model 智能指针
+                            auto loadedModel = AssetManager::GetAsset<Model>(importedHandle);
+                            if (loadedModel) {
+                                AYAYA_CORE_INFO("Instantiating Model to Scene: {0}", pathStr);
+                                // 3. 调用场景实例化接口
+                                Entity rootEntity = m_Context->InstantiateModel(loadedModel);
+                                if (rootEntity) SetSelectedEntity(rootEntity);
+                            }
                         }
                     }
                 }
@@ -221,27 +212,20 @@ namespace Ayaya {
         // ==========================================
         if (m_ShiftClickTarget) {
             if (m_LastClickedEntity) {
-                // 找到“锚点”和“目标”在当前可见列表中的索引
                 auto itStart = std::find(m_VisibleNodes.begin(), m_VisibleNodes.end(), m_LastClickedEntity);
                 auto itEnd = std::find(m_VisibleNodes.begin(), m_VisibleNodes.end(), m_ShiftClickTarget);
                 
                 if (itStart != m_VisibleNodes.end() && itEnd != m_VisibleNodes.end()) {
-                    m_SelectedEntities.clear(); // Shift 单击通常会替换原有选择
-                    
-                    // 确保按顺序遍历（因为你可能是从下往上 Shift 点击）
+                    m_SelectedEntities.clear(); 
                     auto minIt = std::min(itStart, itEnd);
                     auto maxIt = std::max(itStart, itEnd);
-                    
-                    for (auto it = minIt; it <= maxIt; ++it) {
-                        m_SelectedEntities.push_back(*it);
-                    }
+                    for (auto it = minIt; it <= maxIt; ++it) m_SelectedEntities.push_back(*it);
                 }
             } else {
-                // 如果之前没点过任何东西，Shift 点击等同于普通单选
                 SetSelectedEntity(m_ShiftClickTarget);
                 m_LastClickedEntity = m_ShiftClickTarget;
             }
-            m_ShiftClickTarget = {}; // 结算完毕，清空标记
+            m_ShiftClickTarget = {}; 
         }
 
         // ==========================================
@@ -253,7 +237,7 @@ namespace Ayaya {
                 Entity newEntity = m_Context->DuplicateEntity(entity);
                 newSelections.push_back(newEntity);
             }
-            m_SelectedEntities = newSelections; // 批量选中所有新生成的物体
+            m_SelectedEntities = newSelections; 
             m_EntitiesToDuplicate.clear();
         }
 
@@ -262,10 +246,8 @@ namespace Ayaya {
         // ==========================================
         if (!m_EntitiesToDestroy.empty()) {
             for (auto entity : m_EntitiesToDestroy) {
-                // 如果删除的物体在选中列表中，把它踢出去
                 auto it = std::find(m_SelectedEntities.begin(), m_SelectedEntities.end(), entity);
                 if (it != m_SelectedEntities.end()) m_SelectedEntities.erase(it);
-                
                 m_Context->DestroyEntity(entity);
             }
             m_EntitiesToDestroy.clear();
@@ -1235,9 +1217,7 @@ namespace Ayaya {
                 int currentTypeIdx = (int)refEnv.Type;
                 if (ImGui::Combo("Type", &currentTypeIdx, envTypeStrings, 4)) {
                     std::vector<EnvironmentComponent> oldComps = pureOldEnvs;
-                    
-                    // 【核心魔法】：强行“弄脏”备份数据！保证撤回到旧状态时触发渲染器重新加载！
-                    for (auto& c : oldComps) c.IsDirty = true;
+                    for (auto& c : oldComps) c.IsDirty = true; // 强行“弄脏”备份数据以触发重绘
 
                     for (auto e : m_SelectedEntities) {
                         auto& comp = e.GetComponent<EnvironmentComponent>();
@@ -1270,42 +1250,39 @@ namespace Ayaya {
                     if (refEnv.Type == EnvironmentType::HDR_Equirectangular || refEnv.Type == EnvironmentType::LDR_Equirectangular) {
                         ImGui::Spacing();
                         ImGui::Text("Equirectangular Map");
-                        std::string pathDisplay = refEnv.EquirectangularPath.empty() ? "Drop .hdr / .jpg here" : refEnv.EquirectangularPath;
                         
+                        // 【修复】：使用 UUID 判断，不再使用字符串路径
+                        std::string pathDisplay = (refEnv.EquirectangularHandle == 0) ? "Drop .hdr / .jpg here" : "Map Loaded (ID: " + std::to_string((uint64_t)refEnv.EquirectangularHandle) + ")";
                         ImGui::Button(pathDisplay.c_str(), ImVec2(-1.0f, 30.0f));
 
                         if (ImGui::BeginDragDropTarget()) {
                             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                                 const char* pathStr = (const char*)payload->Data;
-                                std::string virtualPath = "project://" + std::string(pathStr);
-                                std::string physicalPath = VFS::ResolveString(virtualPath);
-                                std::filesystem::path texPath(physicalPath);
+                                std::string ext = std::filesystem::path(pathStr).extension().string();
                                 
-                                if (texPath.extension() == ".hdr" || texPath.extension() == ".jpg" || texPath.extension() == ".png") {
+                                if (ext == ".hdr" || ext == ".jpg" || ext == ".png") {
+                                    // 【修复】：无脑交给 AssetManager 分配 UUID
+                                    UUID importedHandle = AssetManager::ImportAsset(pathStr);
                                     
-                                    std::vector<EnvironmentComponent> oldComps = pureOldEnvs;
-                                    // 【核心魔法】：同样强行弄脏旧状态
-                                    for (auto& c : oldComps) c.IsDirty = true;
+                                    if (importedHandle != 0) {
+                                        std::vector<EnvironmentComponent> oldComps = pureOldEnvs;
+                                        for (auto& c : oldComps) c.IsDirty = true;
 
-                                    for (auto e : m_SelectedEntities) {
-                                        auto& comp = e.GetComponent<EnvironmentComponent>();
-                                        comp.EquirectangularPath = texPath.string();
-                                        
-                                        if (texPath.extension() == ".hdr") comp.Type = EnvironmentType::HDR_Equirectangular;
-                                        else comp.Type = EnvironmentType::LDR_Equirectangular;
-                                        
-                                        comp.EquirectangularTexture = Texture2D::Create(comp.EquirectangularPath);
-                                        comp.IsDirty = true;
+                                        for (auto e : m_SelectedEntities) {
+                                            auto& comp = e.GetComponent<EnvironmentComponent>();
+                                            comp.EquirectangularHandle = importedHandle;
+                                            comp.Type = (ext == ".hdr") ? EnvironmentType::HDR_Equirectangular : EnvironmentType::LDR_Equirectangular;
+                                            comp.IsDirty = true; // 通知渲染器重新烘焙
+                                        }
+
+                                        auto macroCmd = std::make_shared<MacroCommand>("Assign Equirectangular Map to " + getTargetName());
+                                        for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                                            macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<EnvironmentComponent>>(
+                                                m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<EnvironmentComponent>()
+                                            ));
+                                        }
+                                        EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                                     }
-
-                                    auto macroCmd = std::make_shared<MacroCommand>("Assign Equirectangular Map to " + getTargetName());
-                                    for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
-                                        macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<EnvironmentComponent>>(
-                                            m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<EnvironmentComponent>()
-                                        ));
-                                    }
-                                    EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
-
                                 } else {
                                     AYAYA_CORE_WARN("Invalid environment map format! Please use .hdr or .jpg/.png");
                                 }
@@ -1314,81 +1291,41 @@ namespace Ayaya {
                         }
                     } 
                     // ------------------------------------------
-                    // 4. 传统 6 面体贴图
+                    // 4. 传统 6 面体贴图 (统一为单一资产 UUID 拖拽)
                     // ------------------------------------------
                     else if (refEnv.Type == EnvironmentType::Classic_Cubemap) {
                         ImGui::Spacing();
-                        ImGui::Text("Cubemap Faces (Drag & Drop .jpg/.png)");
-                        const char* faceNames[] = { "Right (+X)", "Left (-X)", "Top (+Y)", "Bottom (-Y)", "Front (+Z)", "Back (-Z)" };
+                        ImGui::Text("Cubemap Asset");
                         
-                        for(int i = 0; i < 6; ++i) {
-                            ImGui::PushID(i);
-                            ImGui::Text("%s", faceNames[i]);
-                            
-                            std::string faceDisplay = refEnv.CubemapFaces[i].empty() ? "Drop Image Here" : refEnv.CubemapFaces[i];
-                            ImGui::Button(faceDisplay.c_str(), ImVec2(-1.0f, 30.0f));
+                        // 【修复】：废除 6 个面的繁琐 UI，统一为一个 CubemapHandle 槽位
+                        std::string faceDisplay = (refEnv.CubemapHandle == 0) ? "Drop .cube / .dds Asset Here" : "Cubemap Loaded (ID: " + std::to_string((uint64_t)refEnv.CubemapHandle) + ")";
+                        ImGui::Button(faceDisplay.c_str(), ImVec2(-1.0f, 30.0f));
 
-                            if (ImGui::BeginDragDropTarget()) {
-                                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                                    const char* pathStr = (const char*)payload->Data;
-                                    std::string virtualPath = "project://" + std::string(pathStr);
-                                    std::string physicalPath = VFS::ResolveString(virtualPath);
-                                    std::filesystem::path texPath(physicalPath);
-                                    
-                                    if (texPath.extension() == ".jpg" || texPath.extension() == ".png") {
-                                        std::vector<EnvironmentComponent> oldComps = pureOldEnvs;
-
-                                        for (auto e : m_SelectedEntities) {
-                                            e.GetComponent<EnvironmentComponent>().CubemapFaces[i] = texPath.string();
-                                        }
-
-                                        auto macroCmd = std::make_shared<MacroCommand>("Assign Cubemap Face " + std::string(faceNames[i]) + " to " + getTargetName());
-                                        for (size_t j = 0; j < m_SelectedEntities.size(); ++j) {
-                                            macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<EnvironmentComponent>>(
-                                                m_SelectedEntities[j], oldComps[j], m_SelectedEntities[j].GetComponent<EnvironmentComponent>()
-                                            ));
-                                        }
-                                        EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
-
-                                    } else {
-                                        AYAYA_CORE_WARN("Invalid cubemap face format! Please use .jpg or .png");
-                                    }
-                                }
-                                ImGui::EndDragDropTarget();
-                            }
-                            ImGui::PopID();
-                        }
-                        
-                        ImGui::Spacing();
-                        if (ImGui::Button("Load Cubemap & Bake", ImVec2(-1.0f, 35.0f))) {
-                            std::vector<EnvironmentComponent> oldComps = pureOldEnvs;
-                            // 【核心魔法】：撤回“烘焙操作”时，也要触发底层状态刷新
-                            for (auto& c : oldComps) c.IsDirty = true; 
-
-                            bool allFacesPresent = true;
-                            for (auto e : m_SelectedEntities) {
-                                auto& comp = e.GetComponent<EnvironmentComponent>();
-                                for (int i = 0; i < 6; i++) {
-                                    if (comp.CubemapFaces[i].empty()) allFacesPresent = false;
-                                }
+                        if (ImGui::BeginDragDropTarget()) {
+                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                                const char* pathStr = (const char*)payload->Data;
                                 
-                                if (allFacesPresent) {
-                                    comp.ClassicCubemapTexture = TextureCube::Create(comp.CubemapFaces);
-                                    comp.IsDirty = true; 
-                                } else {
-                                    AYAYA_CORE_WARN("Please assign all 6 faces before baking!");
-                                }
-                            }
+                                UUID importedHandle = AssetManager::ImportAsset(pathStr);
+                                if (importedHandle != 0) {
+                                    std::vector<EnvironmentComponent> oldComps = pureOldEnvs;
+                                    for (auto& c : oldComps) c.IsDirty = true;
 
-                            if (allFacesPresent) {
-                                auto macroCmd = std::make_shared<MacroCommand>("Bake Cubemap Environment of " + getTargetName());
-                                for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
-                                    macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<EnvironmentComponent>>(
-                                        m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<EnvironmentComponent>()
-                                    ));
+                                    for (auto e : m_SelectedEntities) {
+                                        auto& comp = e.GetComponent<EnvironmentComponent>();
+                                        comp.CubemapHandle = importedHandle;
+                                        comp.IsDirty = true;
+                                    }
+
+                                    auto macroCmd = std::make_shared<MacroCommand>("Assign Cubemap Asset to " + getTargetName());
+                                    for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                                        macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<EnvironmentComponent>>(
+                                            m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<EnvironmentComponent>()
+                                        ));
+                                    }
+                                    EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                                 }
-                                EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                             }
+                            ImGui::EndDragDropTarget();
                         }
                     }
                 }
@@ -1425,11 +1362,23 @@ namespace Ayaya {
         if (allHaveMeshRenderer) {
             ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.8f, 0.4f, 1.0f)); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(MeshRendererComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_CUBE " Mesh Renderer");
+            
+            // 【优化 1】：增加 AllowItemOverlap 标志，允许我们在标题栏同一行放置删除按钮
+            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap;
+            bool opened = ImGui::TreeNodeEx((void*)typeid(MeshRendererComponent).hash_code(), flags, ICON_FA_CUBE " Mesh Renderer");
+            
             ImGui::PopStyleColor();
             ImGui::PopFont();
             
             bool removeComponent = false;
+
+            // 【优化 2】：在组件标题栏最右侧，添加一个直观的垃圾桶删除按钮
+            ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 30.0f);
+            if (ImGui::Button(ICON_FA_TRASH "##RemoveMRC")) {
+                removeComponent = true;
+            }
+
+            // 保留原有的右键移除菜单作为备用习惯
             if (ImGui::BeginPopupContextItem()) {
                 if (ImGui::MenuItem("Remove Component")) removeComponent = true;
                 ImGui::EndPopup();
@@ -1438,17 +1387,14 @@ namespace Ayaya {
             if (opened) {
                 auto& refMrc = referenceEntity.GetComponent<MeshRendererComponent>();
 
-                // 动态名字生成器
                 auto getTargetName = [&]() -> std::string {
                     if (m_SelectedEntities.size() == 1) return "'" + m_SelectedEntities[0].GetComponent<TagComponent>().Tag + "'";
                     return std::to_string(m_SelectedEntities.size()) + " Entities";
                 };
 
-                // 【物理快照】：在任何交互前捕获绝对纯净的旧状态
                 std::vector<MeshRendererComponent> pureOldMrcs;
                 for (auto e : m_SelectedEntities) pureOldMrcs.push_back(e.GetComponent<MeshRendererComponent>());
 
-                // 【终极重用】：一个用于打包“瞬时操作（如拖入文件、点击按钮）”的辅助函数
                 auto commitInstantCommand = [&](const std::string& actionName, const std::vector<MeshRendererComponent>& oldComps) {
                     auto macroCmd = std::make_shared<MacroCommand>(actionName + " of " + getTargetName());
                     for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
@@ -1467,69 +1413,50 @@ namespace Ayaya {
                     
                     ImGui::Text("Mesh Source");
                     std::string modelDisplay = "Drop .obj / .fbx here";
-                    if (refMrc.ModelAsset) {
-                        std::string path = refMrc.ModelAsset->GetPath();
-                        if (!path.empty()) {
-                            modelDisplay = path;
-                        } else {
-                            modelDisplay = "Primitive::Cube";
-                            refMrc.ModelAsset->SetPath("Primitive::Cube"); 
-                        }
+                    
+                    if (refMrc.ModelHandle != 0) {
+                        // 【优化 3】：屏蔽冰冷的 UUID，只显示分配状态
+                        modelDisplay = "Model Assigned";
                     }
 
                     if (ImGui::Button(modelDisplay.c_str(), ImVec2(-1.0f, 30.0f))) {
                         ImGui::OpenPopup("ModelSelectionPopup");
                     }
 
-                    // 拦截 1：拖放模型
                     if (ImGui::BeginDragDropTarget()) {
                         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                             const char* pathStr = (const char*)payload->Data;
-                            std::string virtualPath = "project://" + std::string(pathStr);
-                            std::string physicalPath = VFS::ResolveString(virtualPath);
-                            std::filesystem::path modelPath(physicalPath);
-                            if (modelPath.extension() == ".obj" || modelPath.extension() == ".fbx" || modelPath.extension() == ".gltf") {
-                                
-                                std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
-                                for (auto e : m_SelectedEntities) {
-                                    e.GetComponent<MeshRendererComponent>().ModelAsset = std::make_shared<Model>(modelPath.string());
+                            std::string ext = std::filesystem::path(pathStr).extension().string();
+                            
+                            if (ext == ".obj" || ext == ".fbx" || ext == ".gltf") {
+                                UUID importedHandle = AssetManager::ImportAsset(pathStr);
+                                if (importedHandle != 0) {
+                                    std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
+                                    for (auto e : m_SelectedEntities) e.GetComponent<MeshRendererComponent>().ModelHandle = importedHandle;
+                                    commitInstantCommand("Assign Model", oldComps);
                                 }
-                                commitInstantCommand("Assign Model", oldComps);
                             }
                         }
                         ImGui::EndDragDropTarget();
                     }
 
-                    // 拦截 2：内置几何体切换
                     if (ImGui::BeginPopup("ModelSelectionPopup")) {
                         ImGui::TextDisabled("Built-in Primitives");
                         ImGui::Separator();
                         
                         if (ImGui::MenuItem("Cube")) {
                             std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
-                            for (auto e : m_SelectedEntities) {
-                                auto model = std::make_shared<Model>(Mesh::CreateCube(1.0f));
-                                model->SetPath("Primitive::Cube");
-                                e.GetComponent<MeshRendererComponent>().ModelAsset = model;
-                            }
+                            for (auto e : m_SelectedEntities) e.GetComponent<MeshRendererComponent>().ModelHandle = AssetManager::GetBuiltInCube();
                             commitInstantCommand("Assign Cube", oldComps);
                         }
                         if (ImGui::MenuItem("Sphere")) {
                             std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
-                            for (auto e : m_SelectedEntities) {
-                                auto model = std::make_shared<Model>(Mesh::CreateSphere(0.5f, 64, 64));
-                                model->SetPath("Primitive::Sphere");
-                                e.GetComponent<MeshRendererComponent>().ModelAsset = model;
-                            }
+                            for (auto e : m_SelectedEntities) e.GetComponent<MeshRendererComponent>().ModelHandle = AssetManager::GetBuiltInSphere();
                             commitInstantCommand("Assign Sphere", oldComps);
                         }
                         if (ImGui::MenuItem("Plane")) {
                             std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
-                            for (auto e : m_SelectedEntities) {
-                                auto model = std::make_shared<Model>(Mesh::CreatePlane(1.0f, 1.0f));
-                                model->SetPath("Primitive::Plane");
-                                e.GetComponent<MeshRendererComponent>().ModelAsset = model;
-                            }
+                            for (auto e : m_SelectedEntities) e.GetComponent<MeshRendererComponent>().ModelHandle = AssetManager::GetBuiltInPlane();
                             commitInstantCommand("Assign Plane", oldComps);
                         }
                         ImGui::EndPopup();
@@ -1543,43 +1470,44 @@ namespace Ayaya {
                 ImGui::Spacing();
                 if (ImGui::TreeNodeEx("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
                     
-                    if (refMrc.MaterialAsset) {
-                        auto& mat = refMrc.MaterialAsset;
-                        
+                    std::shared_ptr<Material> currentMat = nullptr;
+                    if (refMrc.MaterialHandle != 0 && AssetManager::IsAssetHandleValid(refMrc.MaterialHandle)) {
+                        currentMat = AssetManager::GetAsset<Material>(refMrc.MaterialHandle);
+                    }
+
+                    if (currentMat) {
                         ImGui::Text("Material Asset (.mat)");
-                        std::string matDisplay = (!mat->AssetPath.empty()) ? mat->AssetPath : "Default / Internal";
+                        
+                        // 【优化 4】：直接读取材质的名称 (Name)，不显示长串 UUID
+                        std::string matDisplay = currentMat->Name.empty() ? "Material Assigned" : currentMat->Name;
                         ImGui::Button(matDisplay.c_str(), ImVec2(-1.0f, 30.0f));
 
-                        // 拦截 3：批量拖拽应用材质
                         if (ImGui::BeginDragDropTarget()) {
                             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                                 const char* pathStr = (const char*)payload->Data;
-                                std::string virtualPath = "project://" + std::string(pathStr);
-                                std::string physicalPath = VFS::ResolveString(virtualPath);
-                                std::filesystem::path matPath(physicalPath);
-                                if (matPath.extension() == ".mat") {
-                                    
-                                    std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
-                                    for (auto e : m_SelectedEntities) {
-                                        auto newMat = std::make_shared<Material>();
-                                        if (MaterialSerializer::Deserialize(newMat, matPath.string())) {
-                                            e.GetComponent<MeshRendererComponent>().MaterialAsset = newMat; 
-                                        }
+                                std::string ext = std::filesystem::path(pathStr).extension().string();
+                                
+                                if (ext == ".mat") {
+                                    UUID importedHandle = AssetManager::ImportAsset(pathStr);
+                                    if (importedHandle != 0) {
+                                        std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
+                                        for (auto e : m_SelectedEntities) e.GetComponent<MeshRendererComponent>().MaterialHandle = importedHandle;
+                                        commitInstantCommand("Assign Material", oldComps);
                                     }
-                                    commitInstantCommand("Assign Material", oldComps);
                                 }
                             }
                             ImGui::EndDragDropTarget();
                         }
 
-                        // 保存到本地的操作不涉及组件级数据修改，无需撤回
                         if (ImGui::Button("Save to .mat")) {
-                            if (mat->AssetPath.empty() || mat->AssetPath.find("assets/Editor/") != std::string::npos) {
+                            std::string physicalPath = AssetManager::GetAssetPhysicalPath(refMrc.MaterialHandle);
+                            
+                            if (physicalPath.empty() || physicalPath.find("assets/Editor/") != std::string::npos) {
                                 if (!std::filesystem::exists("assets/materials")) {
                                     std::filesystem::create_directories("assets/materials");
                                 }
-                                std::string baseName = mat->Name;
-                                if (baseName == "Empty Material" || baseName.empty() || baseName.find("(Instance)") != std::string::npos) {
+                                std::string baseName = currentMat->Name;
+                                if (baseName == "Built-in Default Material" || baseName == "Empty Material" || baseName.empty() || baseName.find("(Instance)") != std::string::npos) {
                                     baseName = "NewMaterial";
                                 }
                                 std::string finalPath = "assets/materials/" + baseName + ".mat";
@@ -1588,174 +1516,139 @@ namespace Ayaya {
                                     finalPath = "assets/materials/" + baseName + " (" + std::to_string(index) + ").mat";
                                     index++;
                                 }
-                                mat->AssetPath = finalPath;
-                                mat->Name = std::filesystem::path(finalPath).stem().string();
+                                currentMat->Name = std::filesystem::path(finalPath).stem().string();
+                                
+                                MaterialSerializer::Serialize(currentMat, finalPath);
+                                
+                                UUID newMatHandle = AssetManager::ImportAsset(finalPath);
+                                if (newMatHandle != 0) {
+                                    std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
+                                    for (auto e : m_SelectedEntities) e.GetComponent<MeshRendererComponent>().MaterialHandle = newMatHandle;
+                                    commitInstantCommand("Save and Assign New Material", oldComps);
+                                }
+                            } else {
+                                MaterialSerializer::Serialize(currentMat, physicalPath);
                             }
-                            MaterialSerializer::Serialize(mat, mat->AssetPath);
-                            AYAYA_CORE_INFO("Material saved to {0}", mat->AssetPath);
                         }
                         
                         ImGui::SameLine();
 
-                        // 拦截 4：移除材质
                         if (ImGui::Button("Remove Material")) {
                             std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
-                            for (auto e : m_SelectedEntities) e.GetComponent<MeshRendererComponent>().MaterialAsset = nullptr;
+                            for (auto e : m_SelectedEntities) e.GetComponent<MeshRendererComponent>().MaterialHandle = 0;
                             commitInstantCommand("Remove Material", oldComps);
                         }
 
-                        if (refMrc.MaterialAsset) { 
-                            ImGui::Text("Shader: %s", refMrc.MaterialAsset->ShaderName.c_str());
-                            ImGui::Separator();
+                        ImGui::Text("Shader: %s", currentMat->ShaderName.c_str());
+                        ImGui::Separator();
 
-                            ImGui::Columns(2, "MaterialProperties", false);
-                            ImGui::SetColumnWidth(0, 140.0f * uiScale);
-                            std::string lastCategory = ""; 
+                        ImGui::Columns(2, "MaterialProperties", false);
+                        ImGui::SetColumnWidth(0, 140.0f * uiScale);
+                        std::string lastCategory = ""; 
 
-                            // 材质属性修改区：保留原有逻辑
-                            for (auto& prop : refMrc.MaterialAsset->Properties) {
-                                std::string currentCategory = "Other";
-                                if (prop.UniformName.find("Albedo") != std::string::npos) currentCategory = "Albedo";
-                                else if (prop.UniformName.find("Metallic") != std::string::npos) currentCategory = "Metallic";
-                                else if (prop.UniformName.find("Roughness") != std::string::npos) currentCategory = "Roughness";
-                                else if (prop.UniformName.find("Normal") != std::string::npos) currentCategory = "Normal";
-                                else if (prop.UniformName.find("Emission") != std::string::npos || prop.UniformName.find("Emissive") != std::string::npos) currentCategory = "Emission";
-                                else if (prop.UniformName.find("AO") != std::string::npos || prop.UniformName.find("Ambient") != std::string::npos) currentCategory = "AO";
+                        for (auto& prop : currentMat->Properties) {
+                            std::string currentCategory = "Other";
+                            if (prop.UniformName.find("Albedo") != std::string::npos) currentCategory = "Albedo";
+                            else if (prop.UniformName.find("Metallic") != std::string::npos) currentCategory = "Metallic";
+                            else if (prop.UniformName.find("Roughness") != std::string::npos) currentCategory = "Roughness";
+                            else if (prop.UniformName.find("Normal") != std::string::npos) currentCategory = "Normal";
+                            else if (prop.UniformName.find("Emission") != std::string::npos || prop.UniformName.find("Emissive") != std::string::npos) currentCategory = "Emission";
+                            else if (prop.UniformName.find("AO") != std::string::npos || prop.UniformName.find("Ambient") != std::string::npos) currentCategory = "AO";
 
-                                if (currentCategory != lastCategory) {
-                                    if (!lastCategory.empty()) ImGui::Separator();
-                                    lastCategory = currentCategory;
-                                }
-
-                                ImGui::PushID(prop.UniformName.c_str()); 
-                                ImGui::AlignTextToFramePadding(); 
-                                ImGui::Text("%s", prop.DisplayName.c_str());
-                                ImGui::NextColumn();
-                                ImGui::SetNextItemWidth(-1.0f); 
-                                
-                                bool propChanged = false;
-
-                                switch (prop.Type) {
-                                    case MaterialPropertyType::Float: propChanged = ImGui::SliderFloat("##val", &prop.FloatValue, 0.0f, 1.0f); break;
-                                    case MaterialPropertyType::Int: propChanged = ImGui::InputInt("##val", &prop.IntValue); break;
-                                    case MaterialPropertyType::Bool: propChanged = ImGui::Checkbox("##val", &prop.BoolValue); break;
-                                    case MaterialPropertyType::Vec2: propChanged = ImGui::DragFloat2("##val", glm::value_ptr(prop.Vec2Value), 0.05f); break;
-                                    case MaterialPropertyType::Vec3: propChanged = ImGui::ColorEdit3("##val", glm::value_ptr(prop.Vec3Value), ImGuiColorEditFlags_NoInputs); break;
-                                    case MaterialPropertyType::Vec4: propChanged = ImGui::ColorEdit4("##val", glm::value_ptr(prop.Vec4Value), ImGuiColorEditFlags_NoInputs); break;
-                                    case MaterialPropertyType::Texture2D:
-                                    {
-                                        ImVec2 textureSlotSize = { 64.0f * uiScale, 64.0f * uiScale };
-                                        if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
-                                            auto tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
-                                            
-                                            // ==========================================
-                                            // 【修复 1 & 2】：跨平台 ID 与动态 UV 翻转
-                                            // ==========================================
-                                            ImVec2 uv0 = tex->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
-                                            ImVec2 uv1 = tex->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
-                                            ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), textureSlotSize, uv0, uv1);
-                                        } else {
-                                            ImGui::Button("Null", textureSlotSize);
-                                        }
-
-                                        if (ImGui::BeginDragDropTarget()) {
-                                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                                                const char* pathStr = (const char*)payload->Data;
-                                                std::string virtualPath = "project://" + std::string(pathStr);
-                                                std::string physicalPath = VFS::ResolveString(virtualPath);
-                                                std::filesystem::path texturePath(physicalPath);
-
-                                                if (texturePath.extension() == ".png" || texturePath.extension() == ".jpg") {
-                                                    UUID importedHandle = AssetManager::ImportAsset(texturePath);
-                                                    if (importedHandle != 0) {
-                                                        
-                                                        // ==========================================
-                                                        // 【修复 3-A】：覆盖前，把旧贴图扔进垃圾桶续命！
-                                                        // ==========================================
-                                                        if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
-                                                            m_TextureGarbageBin.push_back(AssetManager::GetAsset<Texture2D>(prop.TextureHandle));
-                                                        }
-
-                                                        prop.TextureHandle = importedHandle;
-                                                        prop.TexturePath = texturePath.string(); 
-                                                        propChanged = true;
-                                                    }
-                                                }
-                                            }
-                                            ImGui::EndDragDropTarget();
-                                        }
-
-                                        if (prop.TextureHandle != 0) {
-                                            ImGui::SameLine();
-                                            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textureSlotSize.y * 0.5f - 12.0f);
-                                            if (ImGui::Button("X##Remove")) {
-                                                
-                                                // ==========================================
-                                                // 【修复 3-B】：移除前，把旧贴图扔进垃圾桶续命！
-                                                // ==========================================
-                                                if (AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
-                                                    m_TextureGarbageBin.push_back(AssetManager::GetAsset<Texture2D>(prop.TextureHandle));
-                                                }
-
-                                                prop.TextureHandle = 0;
-                                                prop.TexturePath = "";
-                                                propChanged = true;
-                                            }
-                                        }
-                                        break;
-                                    }
-                                    default: break;
-                                }
-
-                                if (propChanged) {
-                                    for (auto e : m_SelectedEntities) {
-                                        if (e.HasComponent<MeshRendererComponent>()) {
-                                            auto currentMat = e.GetComponent<MeshRendererComponent>().MaterialAsset;
-                                            if (currentMat) {
-                                                for (auto& p : currentMat->Properties) {
-                                                    if (p.UniformName == prop.UniformName) {
-                                                        p = prop; 
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                ImGui::NextColumn(); 
-                                ImGui::PopID();
+                            if (currentCategory != lastCategory) {
+                                if (!lastCategory.empty()) ImGui::Separator();
+                                lastCategory = currentCategory;
                             }
-                            ImGui::Columns(1);
+
+                            ImGui::PushID(prop.UniformName.c_str()); 
+                            ImGui::AlignTextToFramePadding(); 
+                            ImGui::Text("%s", prop.DisplayName.c_str());
+                            ImGui::NextColumn();
+                            ImGui::SetNextItemWidth(-1.0f); 
+                            
+                            bool propChanged = false;
+
+                            switch (prop.Type) {
+                                case MaterialPropertyType::Float: propChanged = ImGui::SliderFloat("##val", &prop.FloatValue, 0.0f, 1.0f); break;
+                                case MaterialPropertyType::Int: propChanged = ImGui::InputInt("##val", &prop.IntValue); break;
+                                case MaterialPropertyType::Bool: propChanged = ImGui::Checkbox("##val", &prop.BoolValue); break;
+                                case MaterialPropertyType::Vec2: propChanged = ImGui::DragFloat2("##val", glm::value_ptr(prop.Vec2Value), 0.05f); break;
+                                case MaterialPropertyType::Vec3: propChanged = ImGui::ColorEdit3("##val", glm::value_ptr(prop.Vec3Value), ImGuiColorEditFlags_NoInputs); break;
+                                case MaterialPropertyType::Vec4: propChanged = ImGui::ColorEdit4("##val", glm::value_ptr(prop.Vec4Value), ImGuiColorEditFlags_NoInputs); break;
+                                case MaterialPropertyType::Texture2D:
+                                {
+                                    ImVec2 textureSlotSize = { 64.0f * uiScale, 64.0f * uiScale };
+                                    
+                                    std::shared_ptr<Texture2D> tex = nullptr;
+                                    if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
+                                        tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
+                                    }
+
+                                    if (tex) {
+                                        ImVec2 uv0 = tex->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
+                                        ImVec2 uv1 = tex->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
+                                        ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), textureSlotSize, uv0, uv1);
+                                    } else {
+                                        ImGui::Button("Null", textureSlotSize);
+                                    }
+
+                                    if (ImGui::BeginDragDropTarget()) {
+                                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                                            const char* pathStr = (const char*)payload->Data;
+                                            std::string ext = std::filesystem::path(pathStr).extension().string();
+
+                                            if (ext == ".png" || ext == ".jpg") {
+                                                UUID importedHandle = AssetManager::ImportAsset(pathStr);
+                                                if (importedHandle != 0) {
+                                                    if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
+                                                        m_TextureGarbageBin.push_back(AssetManager::GetAsset<Texture2D>(prop.TextureHandle));
+                                                    }
+                                                    prop.TextureHandle = importedHandle;
+                                                    propChanged = true;
+                                                }
+                                            }
+                                        }
+                                        ImGui::EndDragDropTarget();
+                                    }
+
+                                    if (prop.TextureHandle != 0) {
+                                        ImGui::SameLine();
+                                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textureSlotSize.y * 0.5f - 12.0f);
+                                        if (ImGui::Button("X##Remove")) {
+                                            if (AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
+                                                m_TextureGarbageBin.push_back(AssetManager::GetAsset<Texture2D>(prop.TextureHandle));
+                                            }
+                                            prop.TextureHandle = 0;
+                                            propChanged = true;
+                                        }
+                                    }
+                                    break;
+                                }
+                                default: break;
+                            }
+
+                            ImGui::NextColumn(); 
+                            ImGui::PopID();
                         }
+                        ImGui::Columns(1);
                     } 
                     else {
-                        // 拦截 5：添加默认材质
                         ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
                         ImGui::TextColored(ImVec4(1.0f, 0.2f, 0.6f, 1.0f), "Warning: No Material Assigned!");
                         ImGui::PopFont();
                         if (ImGui::Button("Add Default Material", ImVec2(-1.0f, 30.0f))) {
                             std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
                             for (auto e : m_SelectedEntities) {
-                                auto templateMat = std::make_shared<Material>();
-                                std::string defaultMatPath = VFS::ResolveString("engine://Editor/materials/DefaultPBR.mat");
-                                if (MaterialSerializer::Deserialize(templateMat, defaultMatPath)) {
-                                    e.GetComponent<MeshRendererComponent>().MaterialAsset = templateMat->Clone();
-                                } else {
-                                    e.GetComponent<MeshRendererComponent>().MaterialAsset = std::make_shared<Material>();
-                                }
+                                e.GetComponent<MeshRendererComponent>().MaterialHandle = AssetManager::GetBuiltInMaterial();
                             }
                             commitInstantCommand("Add Default Material", oldComps);
                         }
                     }
 
-                    // ==========================================
-                    // 3. 投影管理参数
-                    // ==========================================
                     ImGui::Spacing();
                     ImGui::Separator();
                     ImGui::Spacing();
                     
-                    // 拦截 6：阴影开关
                     bool castShadows = refMrc.CastShadows;
                     if (ImGui::Checkbox("Cast Shadows", &castShadows)) {
                         std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
@@ -1974,34 +1867,43 @@ namespace Ayaya {
                 for (auto e : m_SelectedEntities) pureOldLscs.push_back(e.GetComponent<LuaScriptComponent>());
 
                 ImGui::Text("Script Source");
-                std::string pathDisplay = refLsc.ScriptPath.empty() ? "Drop .lua file here" : refLsc.ScriptPath;
+                std::string pathDisplay = "Drop .lua file here";
+                
+                // 【改造】：检查 UUID 是否存在
+                if (refLsc.ScriptHandle != 0) {
+                    pathDisplay = "Script Loaded (ID: " + std::to_string((uint64_t)refLsc.ScriptHandle) + ")";
+                }
                 ImGui::Button(pathDisplay.c_str(), ImVec2(-1.0f, 30.0f));
 
                 // ==========================================
-                // 交互 1：支持拖拽 .lua 文件绑定脚本 (瞬时命令打包)
+                // 交互 1：支持拖拽 .lua 文件绑定脚本 (极简 UUID 转换)
                 // ==========================================
                 if (ImGui::BeginDragDropTarget()) {
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                         const char* pathStr = (const char*)payload->Data;
-                        std::string virtualPath = "project://" + std::string(pathStr);
-                        std::string physicalPath = VFS::ResolveString(virtualPath);
-                        std::filesystem::path scriptPath(physicalPath);
-                        if (scriptPath.extension() == ".lua") {
+                        std::string ext = std::filesystem::path(pathStr).extension().string();
+                        
+                        if (ext == ".lua") {
+                            // 无脑交给 AssetManager 分配 UUID
+                            UUID importedHandle = AssetManager::ImportAsset(pathStr);
                             
-                            std::vector<LuaScriptComponent> oldComps = pureOldLscs;
-                            
-                            for (auto e : m_SelectedEntities) {
-                                e.GetComponent<LuaScriptComponent>().ScriptPath = scriptPath.string();
-                            }
+                            if (importedHandle != 0) {
+                                std::vector<LuaScriptComponent> oldComps = pureOldLscs;
+                                
+                                // 批量赋予新的 UUID
+                                for (auto e : m_SelectedEntities) {
+                                    e.GetComponent<LuaScriptComponent>().ScriptHandle = importedHandle;
+                                }
 
-                            // 提交拖放撤回指令
-                            auto macroCmd = std::make_shared<MacroCommand>("Assign Lua Script to " + getTargetName());
-                            for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
-                                macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<LuaScriptComponent>>(
-                                    m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<LuaScriptComponent>()
-                                ));
+                                // 提交拖放撤回指令
+                                auto macroCmd = std::make_shared<MacroCommand>("Assign Lua Script to " + getTargetName());
+                                for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                                    macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<LuaScriptComponent>>(
+                                        m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<LuaScriptComponent>()
+                                    ));
+                                }
+                                EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                             }
-                            EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                         }
                     }
                     ImGui::EndDragDropTarget();
@@ -2010,35 +1912,26 @@ namespace Ayaya {
                 ImGui::Spacing();
                 
                 // ==========================================
-                // 交互 2：允许用户手动输入路径 (持续状态拦截)
+                // 交互 2：一键移除脚本 (替代原本容易越界的字符串修改)
                 // ==========================================
-                char buffer[256];
-                memset(buffer, 0, sizeof(buffer));
-                strncpy(buffer, refLsc.ScriptPath.c_str(), sizeof(buffer) - 1);
-                
-                static std::vector<LuaScriptComponent> s_OldLscs;
+                if (refLsc.ScriptHandle != 0) {
+                    if (ImGui::Button("Remove Script", ImVec2(-1.0f, 24.0f))) {
+                        std::vector<LuaScriptComponent> oldComps = pureOldLscs;
+                        
+                        // 清空句柄
+                        for (auto e : m_SelectedEntities) {
+                            e.GetComponent<LuaScriptComponent>().ScriptHandle = 0;
+                        }
 
-                // 实时应用输入
-                if (ImGui::InputText("Path##ScriptPath", buffer, sizeof(buffer))) {
-                    for (auto e : m_SelectedEntities) {
-                        e.GetComponent<LuaScriptComponent>().ScriptPath = std::string(buffer);
+                        // 提交撤回指令
+                        auto macroCmd = std::make_shared<MacroCommand>("Remove Lua Script from " + getTargetName());
+                        for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                            macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<LuaScriptComponent>>(
+                                m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<LuaScriptComponent>()
+                            ));
+                        }
+                        EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                     }
-                }
-
-                // 拦截开始：鼠标点进输入框的瞬间，加载快照
-                if (ImGui::IsItemActivated()) {
-                    s_OldLscs = pureOldLscs;
-                }
-
-                // 拦截结束：按下回车或点击空白处结束编辑瞬间，提交指令
-                if (ImGui::IsItemDeactivatedAfterEdit()) {
-                    auto macroCmd = std::make_shared<MacroCommand>("Change Lua Script Path of " + getTargetName());
-                    for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
-                        macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<LuaScriptComponent>>(
-                            m_SelectedEntities[i], s_OldLscs[i], m_SelectedEntities[i].GetComponent<LuaScriptComponent>()
-                        ));
-                    }
-                    EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                 }
 
                 ImGui::TreePop();
@@ -2263,13 +2156,8 @@ namespace Ayaya {
                     for (auto e : m_SelectedEntities) {
                         if (!e.HasComponent<MeshRendererComponent>() && !e.HasComponent<SpriteRendererComponent>()) {
                             auto& mrc = e.AddComponent<MeshRendererComponent>();
-                            auto templateMat = std::make_shared<Material>();
-                            std::string defaultMatPath = VFS::ResolveString("engine://Editor/materials/DefaultPBR.mat"); // 使用 engine:// 协议
-                            if (MaterialSerializer::Deserialize(templateMat, defaultMatPath)) {
-                                mrc.MaterialAsset = templateMat->Clone();
-                            } else {
-                                mrc.MaterialAsset = std::make_shared<Material>();
-                            }
+                            mrc.ModelHandle = AssetManager::GetBuiltInCube();
+                            mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
                         }
                     }
                     ImGui::CloseCurrentPopup();

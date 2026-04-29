@@ -18,14 +18,21 @@ namespace Ayaya {
 #ifdef _WIN32
         OPENFILENAMEA ofn;
         CHAR szFile[260] = { 0 };
+        std::string filterStr(filter);
+        for (char& c : filterStr) {
+            if (c == '|') c = '\0';
+        }
+
         ZeroMemory(&ofn, sizeof(OPENFILENAME));
         ofn.lStructSize = sizeof(OPENFILENAME);
         ofn.hwndOwner = NULL; 
         ofn.lpstrFile = szFile;
         ofn.nMaxFile = sizeof(szFile);
-        ofn.lpstrFilter = filter;
+        // c_str() 会在末尾自动补上一个 \0，加上前面替换的，正好满足 Windows 的双 \0 结尾要求！
+        ofn.lpstrFilter = filterStr.c_str(); 
         ofn.nFilterIndex = 1;
         ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+        
         if (GetOpenFileNameA(&ofn) == TRUE) {
             return ofn.lpstrFile;
         }
@@ -46,17 +53,27 @@ namespace Ayaya {
     std::string FileDialogs::SaveFile(const char* filter, const std::string& defaultName) {
         // ... (保持你原有的 SaveFile 代码不变) ...
 #ifdef _WIN32
-        OPENFILENAMEA ofn;
+       OPENFILENAMEA ofn;
         CHAR szFile[260] = { 0 };
         strncpy(szFile, defaultName.c_str(), sizeof(szFile) - 1);
+
+        // ==========================================
+        // 【核心修复】：同样在这里替换 '|' 为 '\0'
+        // ==========================================
+        std::string filterStr(filter);
+        for (char& c : filterStr) {
+            if (c == '|') c = '\0';
+        }
+
         ZeroMemory(&ofn, sizeof(OPENFILENAME));
         ofn.lStructSize = sizeof(OPENFILENAME);
         ofn.hwndOwner = NULL;
         ofn.lpstrFile = szFile;
         ofn.nMaxFile = sizeof(szFile);
-        ofn.lpstrFilter = filter;
+        ofn.lpstrFilter = filterStr.c_str(); // 使用转换后的字符串
         ofn.nFilterIndex = 1;
         ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
+        
         if (GetSaveFileNameA(&ofn) == TRUE) {
             return ofn.lpstrFile;
         }

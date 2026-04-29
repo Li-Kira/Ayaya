@@ -12,7 +12,7 @@ namespace Ayaya {
         // 挂载项目根目录
         VFS::Mount("project", s_ActiveProject->m_ProjectDirectory);
         // 挂载引擎自带资源目录
-        VFS::Mount("engine", std::filesystem::current_path() / "assets/Editor");
+        VFS::Mount("engine", std::filesystem::current_path() / "assets");
         
         return s_ActiveProject;
     }
@@ -31,7 +31,7 @@ namespace Ayaya {
             VFS::Mount("project", s_ActiveProject->m_ProjectDirectory);
             
             // 2. 引擎挂载点：指向引擎的公共资源目录
-            VFS::Mount("engine", std::filesystem::current_path() / "assets/Editor");
+            VFS::Mount("engine", std::filesystem::current_path() / "assets");
 
             return s_ActiveProject;
         }

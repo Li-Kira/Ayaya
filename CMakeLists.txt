@@ -199,15 +199,9 @@ target_link_libraries(Sandbox PRIVATE Ayaya)
 # =========================================================================
 # 10. 智能跨平台资源复制逻辑
 # =========================================================================
-if(WIN32)
-    # Windows 下如果没有开发者模式权限，软链接会报错，这里改用直接复制文件夹
-    set(COPY_COMMAND copy_directory)
-    set(COPY_COMMENT "Copying assets directory for")
-else()
-    # Mac/Linux 下使用软链接，保持同步和节省空间
-    set(COPY_COMMAND create_symlink)
-    set(COPY_COMMENT "Creating symlink to assets for")
-endif()
+set(COPY_COMMAND create_symlink)
+set(COPY_COMMENT "Creating symlink to assets for")
+
 
 # 为 Editor 复制/链接资源
 add_custom_command(TARGET AyayaEditor POST_BUILD

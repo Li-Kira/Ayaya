@@ -98,7 +98,6 @@ Hi, welcome to Ayaya engine♪
         AYAYA_CORE_INFO("Log System Initialized!");
 
         VFS::Init();
-        VFS::Mount("engine", std::filesystem::current_path() / "assets");
 
         Renderer::LoadConfig();
 

@@ -31,7 +31,6 @@ namespace Ayaya {
 
     void EditorLayer::OnAttach() {
         Project::New();
-        VFS::Mount("engine", "assets");
 
         // ==========================================
         // 启动时读取资产注册表
@@ -376,7 +375,7 @@ namespace Ayaya {
         Entity skyEntity = m_ActiveScene->CreateEntity("Skybox");
         auto& envComp = skyEntity.AddComponent<EnvironmentComponent>();
         envComp.Type = EnvironmentType::HDR_Equirectangular;
-        envComp.EquirectangularHandle = AssetManager::ImportAsset("engine://Editor/textures/skybox/hdr/newport_loft.hdr");
+        envComp.EquirectangularHandle = AssetManager::ImportAsset("assets/Editor/textures/skybox/hdr/newport_loft.hdr");
         envComp.Type = EnvironmentType::HDR_Equirectangular;
         envComp.Intensity = 30000.0f; 
         envComp.AmbientColor = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -387,22 +386,11 @@ namespace Ayaya {
         cubeEntity.GetComponent<TransformComponent>().Scale = { 1.0f, 1.0f, 1.0f };
         cubeEntity.GetComponent<TransformComponent>().Translation = { 0.0f, 0.0f, 0.0f };
         auto& mrc = cubeEntity.AddComponent<MeshRendererComponent>(); 
+        mrc.ModelHandle = AssetManager::GetBuiltInCube();
 
-        // ==========================================
-        // 【核心防御 2】：只有 OpenGL 模式才去反序列化材质和 Mesh！
-        // ==========================================
         if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
-            auto DefaultMat = std::make_shared<Material>();
-            bool success = MaterialSerializer::Deserialize(DefaultMat, VFS::ResolveString("engine://Editor/materials/DefaultPBR.mat"));
-
-            if (success) {
-                mrc.MaterialAsset = DefaultMat->Clone();
-            } else {
-                AYAYA_CORE_WARN("Failed to load DefaultPBR.mat!");
-                mrc.MaterialAsset = std::make_shared<Material>(); 
-            }
+            mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
         }
-
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
     }
 
@@ -505,7 +493,7 @@ namespace Ayaya {
 
     void EditorLayer::NewProject() {
         // 1. 弹出原生保存对话框让用户选择项目路径和名称 (.ayaproj)
-        std::string filepath = FileDialogs::SaveFile("ayaproj", "NewProject.ayaproj");
+        std::string filepath = FileDialogs::SaveFile("Ayaya Project (*.ayaproj)|*.ayaproj");
         if (filepath.empty()) return;
 
         std::filesystem::path projectFilePath = filepath;
@@ -668,7 +656,7 @@ namespace Ayaya {
     }
 
     void EditorLayer::OpenProject() {
-        std::string filepath = FileDialogs::OpenFile("ayaproj");
+        std::string filepath = FileDialogs::OpenFile("Ayaya Project (*.ayaproj)|*.ayaproj");
         if (!filepath.empty()) {
             m_ProjectToLoad = filepath;
         }
@@ -936,16 +924,16 @@ namespace Ayaya {
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("File")) {
 
-                if (ImGui::MenuItem("New Project...")) {
+                if (ImGui::MenuItem("New Project", "Ctrl+N")) {
                     m_ShowNewProjectPopup = true; 
                 }
-                if (ImGui::MenuItem("Open Project")) OpenProject();
-                if (ImGui::MenuItem("Save Project")) SaveProject();
+                if (ImGui::MenuItem("Save Project", "Ctrl+S")) SaveProject();
+                if (ImGui::MenuItem("Open Project", "Ctrl+O")) OpenProject();
 
-                if (ImGui::MenuItem("New Scene", "Ctrl+N")) NewScene();
-                if (ImGui::MenuItem("Save Scene", "Ctrl+S")) SaveScene();
-                if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S")) SaveSceneAs();
-                if (ImGui::MenuItem("Load Scene", "Ctrl+O")) OpenScene();
+                // if (ImGui::MenuItem("New Scene", "Ctrl+N")) NewScene();
+                // if (ImGui::MenuItem("Save Scene", "Ctrl+S")) SaveScene();
+                // if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S")) SaveSceneAs();
+                // if (ImGui::MenuItem("Load Scene", "Ctrl+O")) OpenScene();
 
                 ImGui::Separator();
                 if (ImGui::MenuItem("Exit")) Application::Get().Close(); 
@@ -1199,7 +1187,8 @@ namespace Ayaya {
                 if (!entity.IsActiveInHierarchy()) continue;
 
                 auto& meshComp = entity.GetComponent<MeshRendererComponent>();
-                if (!meshComp.ModelAsset) continue; 
+                auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
+                if (!model) continue; 
 
                 glm::mat4 transform = entity.GetWorldTransform();
                 
@@ -1210,7 +1199,7 @@ namespace Ayaya {
                 glm::vec3 localRayOrigin = glm::vec3(inverseTransform * glm::vec4(rayOrigin, 1.0f));
                 glm::vec3 localRayDir = glm::normalize(glm::vec3(inverseTransform * glm::vec4(rayWorldDir, 0.0f)));
 
-                for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
+                for (auto& mesh : model->GetMeshes()) {
                     const auto& aabb = mesh->GetAABB(); 
 
                     // 健壮的 AABB 相交测试（防除零引发的 INF 陷阱）
