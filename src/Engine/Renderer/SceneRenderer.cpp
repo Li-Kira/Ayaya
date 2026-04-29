@@ -484,15 +484,19 @@ namespace Ayaya {
         void* baseCubemapID = nullptr;
 
         if (envComp.Type == EnvironmentType::HDR_Equirectangular || envComp.Type == EnvironmentType::LDR_Equirectangular) {
-            if (!envComp.EquirectangularTexture) return;
+            auto equiTex = AssetManager::GetAsset<Texture2D>(envComp.EquirectangularHandle);
+            if (!equiTex) return;
+
             std::shared_ptr<Shader> convertShader = Shader::Create("IBL/equirectangular_to_cubemap.vert", "IBL/equirectangular_to_cubemap.frag");
-            baseCubemapID = IBLBuilder::ConvertEquirectangularToCubemap(envComp.EquirectangularTexture, s_SkyboxMesh, convertShader);
+            baseCubemapID = IBLBuilder::ConvertEquirectangularToCubemap(equiTex, s_SkyboxMesh, convertShader);
             m_Data->EnvironmentCubemap = TextureCube::Create(baseCubemapID, 1024, 1024);
         }
         else if (envComp.Type == EnvironmentType::Classic_Cubemap) {
-            if (!envComp.ClassicCubemapTexture) return;
-            baseCubemapID = (void*)(uintptr_t)envComp.ClassicCubemapTexture->GetRendererID();
-            m_Data->EnvironmentCubemap = envComp.ClassicCubemapTexture;
+            auto cubeTex = AssetManager::GetAsset<TextureCube>(envComp.CubemapHandle);
+            if (!cubeTex) return;
+
+            baseCubemapID = (void*)(uintptr_t)cubeTex->GetRendererID();
+            m_Data->EnvironmentCubemap = cubeTex;
 
             // ==========================================
             // 【核心修复】：隔离 OpenGL 原生调用

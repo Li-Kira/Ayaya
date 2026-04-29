@@ -1,0 +1,16 @@
+AssetRegistry:
+  - Handle: 11659007175665491503
+    FilePath: Textures/backpack/roughness.jpg
+    Type: 2
+  - Handle: 9644468637421287884
+    FilePath: Textures/backpack/specular.jpg
+    Type: 2
+  - Handle: 17964634789068884914
+    FilePath: Textures/backpack/normal.png
+    Type: 2
+  - Handle: 6346177905724677716
+    FilePath: Textures/backpack/ao.jpg
+    Type: 2
+  - Handle: 4120785591959968966
+    FilePath: Textures/backpack/diffuse.jpg
+    Type: 2

@@ -3,22 +3,22 @@
 
 namespace Ayaya {
 
-    // 定义当前引擎支持的资产类型
+    // 定义引擎支持的完整资产类型
     enum class AssetType : uint16_t {
         None = 0,
         Scene,
         Texture2D,
-        TextureCube
+        TextureCube,
+        Model,       // 新增：3D模型
+        Material,    // 新增：材质属性
+        LuaScript    // 新增：Lua脚本文件
     };
 
     class Asset {
     public:
-        // 核心：每个存在于内存中的资源，都有一个独一无二的 UUID
-        UUID Handle; 
+        UUID Handle; // 每个资产唯一的身份证
 
         virtual ~Asset() = default;
-
-        // 子类必须实现，用于在运行时判断这是什么资源
         virtual AssetType GetType() const = 0; 
     };
 

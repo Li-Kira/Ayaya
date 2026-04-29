@@ -69,26 +69,31 @@ namespace Ayaya {
         Frustum cameraFrustum(viewProj);
 
         // 1. 收集与视锥体剔除
+        // 1. 收集与视锥体剔除
         auto meshGroup = context.ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
         for (auto entityID : meshGroup) {
             Entity entity{ entityID, context.ActiveScene.get() };
             if (!entity.IsActiveInHierarchy()) continue;
 
             auto& meshComp = entity.GetComponent<MeshRendererComponent>();
-            if (!meshComp.ModelAsset) continue;
+            
+            auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
+            if (!model) continue;
 
             glm::mat4 transform = entity.GetWorldTransform();
             bool isVisible = false;
-            for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
+            for (auto& mesh : model->GetMeshes()) {
                 if (cameraFrustum.IsBoxVisible(mesh->GetAABB(), transform)) { isVisible = true; break; }
             }
             if (!isVisible) continue;
 
-            bool isFallback = (!meshComp.MaterialAsset || meshComp.MaterialAsset->Properties.empty());
+            auto material = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
+            
+            bool isFallback = (!material || material->Properties.empty());
             auto targetPipeline = isFallback ? m_FallbackPipeline : m_GBufferPipeline;
-            auto targetMaterial = isFallback ? m_FallbackMaterial : meshComp.MaterialAsset;
+            auto targetMaterial = isFallback ? m_FallbackMaterial : material;
 
-            for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
+            for (auto& mesh : model->GetMeshes()) {
                 m_OpaqueDrawList.push_back({ transform, mesh, targetMaterial, targetPipeline, entity, meshComp.CastShadows, meshComp.ReceiveShadows });
             }
         }

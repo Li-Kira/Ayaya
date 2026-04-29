@@ -1,0 +1,95 @@
+Scene: Untitled
+EditorState:
+  ShowGrid: true
+  ShowSkybox: true
+  CameraPosition: [-3.816408, 3.0563211, 5.8634005]
+  CameraDistance: 7.2
+  CameraPitch: -0.2385955
+  CameraYaw: -0.5769982
+  CameraFocalPoint: [0, 1.3546865, 0]
+Entities:
+  - Entity: 7490458185314675923
+    TagComponent:
+      Tag: Main Camera
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 1.9, 5]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    CameraComponent:
+      Primary: true
+      FixedAspectRatio: false
+      EV100: 14.5
+      ClearFlag: 1
+      BackgroundColor: [0.0071174502, 0.0071174502, 0.0071174502, 1]
+      Camera:
+        ProjectionType: 1
+        PerspectiveFOV: 0.7853982
+        PerspectiveNear: 0.01
+        PerspectiveFar: 1000
+        OrthographicSize: 5
+        OrthographicNear: -1
+        OrthographicFar: 1000
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 6150662150699103715
+    TagComponent:
+      Tag: Directional Light
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [-0.7853982, 0.7853982, 0]
+      Scale: [1, 1, 1]
+    DirectionalLightComponent:
+      Color: [1, 1, 1]
+      Illuminance: 100000
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 12106110878936625411
+    TagComponent:
+      Tag: Cube
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 1.9284852, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelPath: Primitive::Cube
+      MaterialPath: assets/materials/testPhysics/NewMaterial (1).mat
+    Rigidbody2DComponent:
+      BodyType: 1
+      FixedRotation: false
+    BoxCollider2DComponent:
+      Offset: [0, 0]
+      Size: [0.5, 0.5]
+      Density: 1
+      Friction: 0.5
+      Restitution: 0
+      RestitutionThreshold: 0.5
+    LuaScriptComponent:
+      ScriptPath: assets/scripts/Player.lua
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 4084377776818254852
+    TagComponent:
+      Tag: Floor
+      IsActive: true
+    TransformComponent:
+      Translation: [2.9802322e-08, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [15, 1, 1]
+    MeshRendererComponent:
+      ModelPath: Primitive::Cube
+      MaterialPath: assets/materials/testPhysics/NewMaterial (1).mat
+    Rigidbody2DComponent:
+      BodyType: 0
+      FixedRotation: false
+    BoxCollider2DComponent:
+      Offset: [0, 0]
+      Size: [0.5, 0.5]
+      Density: 1
+      Friction: 0.5
+      Restitution: 0
+      RestitutionThreshold: 0.5
+    RelationshipComponent:
+      Parent: 0

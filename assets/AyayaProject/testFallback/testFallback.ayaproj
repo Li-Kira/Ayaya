@@ -1,0 +1,4 @@
+Project:
+  Name: testFallback
+  StartScene: Scenes/testFallback.ayaya
+  AssetDirectory: Assets

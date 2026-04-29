@@ -12,20 +12,22 @@ namespace Ayaya {
     static std::string ResolveShaderPath(const std::string& logicalPath) {
         std::string virtualPath = logicalPath;
 
-        // 1. 向下兼容机制：
-        // 如果传入的不是 "engine://" 开头的虚拟路径（比如老代码里的 "Debug/pbr_forward.vert"）
-        // 我们根据不同的底层图形 API，自动为它补全正确的虚拟路径和后缀！
-        if (!VFS::IsVirtualPath(logicalPath)) {
+        // 获取协议头
+        std::string scheme = VFS::GetScheme(logicalPath);
+
+        // 【极简逻辑】：如果没有任何协议头（比如传入 "Skybox/skybox.vert"）
+        // 我们将其视为 C++ 底层无感调用的引擎内置 Shader，自动为其补全 API 路径和协议头
+        if (scheme.empty()) {
             if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
                 virtualPath = "engine://Editor/shaders/src/opengl/" + logicalPath;
-            } 
-            else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-                // Vulkan 自动定位到缓存目录，并自动加上 .spv 后缀
+            } else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
                 virtualPath = "engine://Editor/shaders/cache/vulkan/" + logicalPath + ".spv";
             }
         }
+        // 如果 scheme 是 "project"，说明用户传入了 "project://shaders/my_shader.glsl"
+        // 那么它会跳过补全，直接交给下面的 VFS 解析为项目物理路径。
 
-        // 2. 移交 VFS：将虚拟路径 (如 engine://...) 转换为当前电脑硬盘上的绝对/相对路径
+        // 移交 VFS：将虚拟路径转换为当前电脑硬盘上的绝对路径
         return VFS::ResolveString(virtualPath);
     }
 

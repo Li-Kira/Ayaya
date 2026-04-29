@@ -90,18 +90,20 @@ namespace Ayaya {
             if (!entity.IsActiveInHierarchy()) continue;
 
             auto& meshComp = entity.GetComponent<MeshRendererComponent>();
-            if (!meshComp.ModelAsset) continue;
+            auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
+            if (!model) continue;
 
             glm::mat4 transform = entity.GetWorldTransform();
             bool isVisible = false;
-            for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
+            for (auto& mesh : model->GetMeshes()) {
                 if (cameraFrustum.IsBoxVisible(mesh->GetAABB(), transform)) { isVisible = true; break; }
             }
             if (!isVisible) continue;
 
-            auto targetMaterial = meshComp.MaterialAsset ? meshComp.MaterialAsset : m_DefaultMaterial;
+            auto material = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
+            auto targetMaterial = material ? material : m_DefaultMaterial;
 
-            for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
+            for (auto& mesh : model->GetMeshes()) {
                 VulkanForwardCommandData drawCmd;
                 drawCmd.Transform = transform;
                 drawCmd.MeshAsset = mesh;

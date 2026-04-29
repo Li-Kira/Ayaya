@@ -125,6 +125,7 @@ namespace Ayaya {
 
         // 进度条加载系统
         std::string m_SceneToLoad = ""; // 存放等待加载的路径
+        std::string m_ProjectToLoad = "";
         void LoadSceneWithProgress(const std::string& filepath); // 真正的加载执行器
 
         // 命令系统
@@ -134,7 +135,7 @@ namespace Ayaya {
         // 新建项目弹窗 UI 状态
         // ==========================================
         bool m_ShowNewProjectPopup = false;
-        char m_NewProjectName[256] = "MyEpicGame";
+        char m_NewProjectName[256] = "MyProject";
         char m_NewProjectLocation[256] = "C:/AyayaProjects"; 
         
         // 渲染弹窗的函数

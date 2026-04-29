@@ -3,6 +3,7 @@
 #include "Entity.hpp"
 #include "Components.hpp"
 #include "Renderer/MaterialSerializer.hpp"
+#include "Asset/AssetManager.hpp"
 
 #include <box2d/b2_world.h>
 #include <box2d/b2_body.h>
@@ -124,15 +125,8 @@ namespace Ayaya {
         // 【核心新增】：定义材质分配闭包
         // ==========================================
         auto ApplyDefaultMaterial = [](MeshRendererComponent& mrc) {
-            auto templateMat = std::make_shared<Material>();
-            // 尝试加载预设的 PBR 材质文件
-            if (MaterialSerializer::Deserialize(templateMat, "assets/Editor/materials/DefaultPBR.mat")) {
-                mrc.MaterialAsset = templateMat->Clone();
-            } else {
-                // 如果文件不存在，给一个纯白的空材质兜底，防止渲染器报错
-                mrc.MaterialAsset = std::make_shared<Material>();
-                mrc.MaterialAsset->Name = "Default Material";
-            }
+            // 极简！直接借用全局内置的默认材质 Handle
+            mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
         };
 
         // 4. 处理网格渲染组件
@@ -141,24 +135,34 @@ namespace Ayaya {
                 auto& meshComp = entity.HasComponent<MeshRendererComponent>() ? 
                                 entity.GetComponent<MeshRendererComponent>() : 
                                 entity.AddComponent<MeshRendererComponent>();
-                meshComp.ModelAsset = std::make_shared<Model>(node.Meshes[0]);
                 
-                // 为当前实体分配材质
+                // 【核心修复】：Model 不再有 Handle，由外部掌控 UUID！
+                auto runtimeModel = std::make_shared<Model>(node.Meshes[0]);
+                UUID runtimeModelHandle = UUID(); // 1. 生成一个独立的 UUID
+                
+                // 2. 使用新接口：同时传入 Handle 和 对象指针
+                AssetManager::AddAsset(runtimeModelHandle, runtimeModel); 
+                
+                // 3. 将这个 UUID 记录在组件中
+                meshComp.ModelHandle = runtimeModelHandle; 
                 ApplyDefaultMaterial(meshComp);
             } else {
-                // 如果一个节点有多个 SubMesh，拆分为子实体并分配材质
                 for (size_t i = 0; i < node.Meshes.size(); i++) {
                     Entity subEntity = CreateEntity(node.Name + "_SubMesh_" + std::to_string(i));
                     
-                    // 设置层级... (略，参考之前代码)
                     auto& subRel = subEntity.AddComponent<RelationshipComponent>();
                     subRel.Parent = entity.GetEntityHandle();
-                    // ... (记得从 RootEntities 移除 subEntity)
+                    auto it = std::find(m_RootEntities.begin(), m_RootEntities.end(), subEntity.GetEntityHandle());
+                    if (it != m_RootEntities.end()) m_RootEntities.erase(it);
 
                     auto& meshComp = subEntity.AddComponent<MeshRendererComponent>();
-                    meshComp.ModelAsset = std::make_shared<Model>(node.Meshes[i]);
                     
-                    // 为每个子网格实体分配材质
+                    auto runtimeModel = std::make_shared<Model>(node.Meshes[i]);
+                    UUID runtimeModelHandle = UUID(); 
+                    
+                    AssetManager::AddAsset(runtimeModelHandle, runtimeModel); 
+                    
+                    meshComp.ModelHandle = runtimeModelHandle;
                     ApplyDefaultMaterial(meshComp);
                 }
             }

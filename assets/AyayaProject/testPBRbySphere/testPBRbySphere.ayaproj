@@ -1,0 +1,4 @@
+Project:
+  Name: testPBRbySphere
+  StartScene: Scenes/testPBRbySphere.ayaya
+  AssetDirectory: Assets

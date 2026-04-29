@@ -1,0 +1,76 @@
+AssetRegistry:
+  - Handle: 7423743394317000540
+    FilePath: Textures/wall/roughness.png
+    Type: 2
+  - Handle: 15395030391682230178
+    FilePath: Textures/gold/ao.png
+    Type: 2
+  - Handle: 11546216304786227496
+    FilePath: Textures/wall/normal.png
+    Type: 2
+  - Handle: 7774418197044766845
+    FilePath: Textures/wall/albedo.png
+    Type: 2
+  - Handle: 13210623503571934241
+    FilePath: Textures/plastic/metallic.png
+    Type: 2
+  - Handle: 13116345736002475680
+    FilePath: Textures/gold/roughness.png
+    Type: 2
+  - Handle: 16879409883861907218
+    FilePath: Textures/grass/albedo.png
+    Type: 2
+  - Handle: 13780048953041708437
+    FilePath: Textures/plastic/normal.png
+    Type: 2
+  - Handle: 11377549321893466279
+    FilePath: Textures/plastic/albedo.png
+    Type: 2
+  - Handle: 16511177026795328368
+    FilePath: Textures/rusted_iron/albedo.png
+    Type: 2
+  - Handle: 16907184433836023982
+    FilePath: Textures/grass/roughness.png
+    Type: 2
+  - Handle: 11615585580297351681
+    FilePath: Textures/grass/metallic.png
+    Type: 2
+  - Handle: 13508889729014500835
+    FilePath: Textures/gold/albedo.png
+    Type: 2
+  - Handle: 7770075752252521595
+    FilePath: Textures/plastic/roughness.png
+    Type: 2
+  - Handle: 14617417570748005753
+    FilePath: Textures/grass/normal.png
+    Type: 2
+  - Handle: 10683904155613206846
+    FilePath: Textures/wall/metallic.png
+    Type: 2
+  - Handle: 8033107911875714549
+    FilePath: Textures/gold/metallic.png
+    Type: 2
+  - Handle: 8119993489991845841
+    FilePath: Textures/plastic/ao.png
+    Type: 2
+  - Handle: 15975021614662050448
+    FilePath: Textures/gold/normal.png
+    Type: 2
+  - Handle: 7897194544800321721
+    FilePath: Textures/grass/ao.png
+    Type: 2
+  - Handle: 4776178563177633726
+    FilePath: Textures/rusted_iron/metallic.png
+    Type: 2
+  - Handle: 13345481839339124582
+    FilePath: Textures/wall/ao.png
+    Type: 2
+  - Handle: 11885307402786970119
+    FilePath: Textures/rusted_iron/roughness.png
+    Type: 2
+  - Handle: 9161725357607572101
+    FilePath: Textures/rusted_iron/ao.png
+    Type: 2
+  - Handle: 1666612433744613360
+    FilePath: Textures/rusted_iron/normal.png
+    Type: 2

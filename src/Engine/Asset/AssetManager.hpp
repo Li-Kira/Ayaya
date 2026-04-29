@@ -1,64 +1,95 @@
 #pragma once
+
+#include "Core/UUID.hpp"
 #include "Asset.hpp"
+
 #include <memory>
 #include <unordered_map>
 #include <filesystem>
+#include <string>
 
 namespace Ayaya {
 
-    // 新增：资产的元数据，记录它在硬盘上的真身
+    // ==========================================
+    // 资产元数据：记录在硬盘注册表中的信息
+    // ==========================================
     struct AssetMetadata {
         AssetType Type = AssetType::None;
-        std::filesystem::path FilePath;
+        std::string VirtualPath; // 存储跨平台的虚拟路径 (如 project://... 或 engine://...)
     };
 
     class AssetManager {
     public:
-        // 将已经加载好的资源托管给仓库
-        static void AddAsset(const std::shared_ptr<Asset>& asset);
+        static void Init();
+        static void Shutdown();
+        static void Clear(); // 清空当前内存池和账本（切换场景/项目时使用）
 
         // ==========================================
-        // 新增：资产注册表核心 API
+        // 核心：泛型资产存取接口 (无侵入式设计)
+        // ==========================================
+        
+        // 手动将一个运行时创建的对象推入资产池，并与 UUID 绑定
+        template<typename T>
+        static void AddAsset(UUID handle, const std::shared_ptr<T>& asset) {
+            // std::shared_ptr<T> 会自动且安全地隐式转换为 std::shared_ptr<void>
+            s_Assets[handle] = asset; 
+        }
+
+        // 懒加载核心：通过 UUID 换取真实的智能指针
+        template<typename T>
+        static std::shared_ptr<T> GetAsset(UUID handle) {
+            // 1. 查内存池 (极速返回)
+            if (s_Assets.find(handle) != s_Assets.end()) {
+                // 将 void 智能指针安全地还原为目标类型
+                return std::static_pointer_cast<T>(s_Assets[handle]);
+            }
+
+            // 2. 内存没有？查账本进行硬盘懒加载
+            if (s_Registry.find(handle) != s_Registry.end()) {
+                return std::static_pointer_cast<T>(LoadAssetFromFile(handle));
+            }
+
+            // 3. 全都没找到，返回空指针
+            return nullptr;
+        }
+
+        // ==========================================
+        // 资产注册表 API
         // ==========================================
         static UUID ImportAsset(const std::filesystem::path& filepath);
         static void SerializeRegistry(const std::string& path);
         static bool DeserializeRegistry(const std::string& path);
         
         // ==========================================
-        // 核心修复：完整的懒加载 (Lazy Load) 逻辑！
+        // 内置单例资产 API (全局唯一，节省显存)
         // ==========================================
-        template<typename T>
-        static std::shared_ptr<T> GetAsset(UUID handle) {
-            // 1. 如果内存池里有，极速返回
-            if (s_Assets.find(handle) != s_Assets.end()) {
-                return std::dynamic_pointer_cast<T>(s_Assets[handle]);
-            }
+        static UUID GetBuiltInCube();
+        static UUID GetBuiltInSphere();
+        static UUID GetBuiltInPlane();
+        static UUID GetBuiltInMaterial();
 
-            // 2. 内存没有？没关系！去硬盘账本里查！如果有记录，立刻读取！
-            if (s_Registry.find(handle) != s_Registry.end()) {
-                return std::dynamic_pointer_cast<T>(LoadAssetFromFile(handle));
-            }
-
-            // 3. 只有当内存和账本里都找不到时，才返回空指针
-            return nullptr;
-        }
-
-        // 检查某个资源是否存在
+        // ==========================================
+        // 实用工具接口
+        // ==========================================
         static bool IsAssetHandleValid(UUID handle);
-
-        // 清空仓库缓存
-        static void Clear();
-
-        static void Shutdown();
+        
+        // 根据 Handle 获取在当前电脑硬盘上的真实绝对路径 (专供 Lua 脚本引擎等底层读取使用)
+        static std::string GetAssetPhysicalPath(UUID handle);
 
     private:
-        // 内部专用：真正执行硬盘读取的函数
-        static std::shared_ptr<Asset> LoadAssetFromFile(UUID handle);
+        // 内部专用：真正执行硬盘读取的函数，返回擦除了类型的 void 指针
+        static std::shared_ptr<void> LoadAssetFromFile(UUID handle);
 
     private:
-        // 仓库账本：UUID -> 资产指针
-        static std::unordered_map<UUID, std::shared_ptr<Asset>> s_Assets;   // 内存池 (缓存)
-        static std::unordered_map<UUID, AssetMetadata> s_Registry;          // 硬盘账本 (注册表)
+        // 【核心黑科技】：使用 void 擦除类型！完美接纳所有实体类，无需它们继承任何基类！
+        static std::unordered_map<UUID, std::shared_ptr<void>> s_Assets;
+        static std::unordered_map<UUID, AssetMetadata> s_Registry;
+
+        // 内置单例资产的句柄缓存
+        static UUID s_BuiltInCubeHandle;
+        static UUID s_BuiltInSphereHandle;
+        static UUID s_BuiltInPlaneHandle;
+        static UUID s_BuiltInMaterialHandle;
     };
 
 }

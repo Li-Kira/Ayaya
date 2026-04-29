@@ -2,7 +2,6 @@
 #include "SceneSerializer.hpp"
 #include "Entity.hpp"
 #include "Components.hpp"
-#include "Renderer/MaterialSerializer.hpp"
 
 #include <yaml-cpp/yaml.h>
 #include <fstream>
@@ -77,7 +76,6 @@ namespace Ayaya {
         return out;
     }
 
-    // 辅助重载：让 YAML::Emitter 支持直接流式输出 glm::vec3
     YAML::Emitter& operator<<(YAML::Emitter& out, const glm::vec3& v) {
         out << YAML::Flow;
         out << YAML::BeginSeq << v.x << v.y << v.z << YAML::EndSeq;
@@ -124,16 +122,12 @@ namespace Ayaya {
             out << YAML::BeginMap;
             auto& cc = entity.GetComponent<CameraComponent>();
             
-            // 基础属性
             out << YAML::Key << "Primary" << YAML::Value << cc.Primary;
             out << YAML::Key << "FixedAspectRatio" << YAML::Value << cc.FixedAspectRatio;
             out << YAML::Key << "EV100" << YAML::Value << cc.EV100;
             out << YAML::Key << "ClearFlag" << YAML::Value << (int)cc.ClearFlag; 
             out << YAML::Key << "BackgroundColor" << YAML::Value << cc.BackgroundColor;
             
-            // ==========================================
-            // 核心修复：完整保存内部的 SceneCamera 矩阵参数！
-            // ==========================================
             out << YAML::Key << "Camera" << YAML::BeginMap;
             out << YAML::Key << "ProjectionType" << YAML::Value << (int)cc.Camera.GetProjectionType();
             out << YAML::Key << "PerspectiveFOV" << YAML::Value << cc.Camera.GetPerspectiveFOV();
@@ -142,83 +136,32 @@ namespace Ayaya {
             out << YAML::Key << "OrthographicSize" << YAML::Value << cc.Camera.GetOrthographicSize();
             out << YAML::Key << "OrthographicNear" << YAML::Value << cc.Camera.GetOrthographicNearClip();
             out << YAML::Key << "OrthographicFar" << YAML::Value << cc.Camera.GetOrthographicFarClip();
-            out << YAML::EndMap; // 结束 Camera 内部 Map
+            out << YAML::EndMap; 
 
-            out << YAML::EndMap; // 结束 CameraComponent Map
+            out << YAML::EndMap; 
         }
 
         if (entity.HasComponent<SpriteRendererComponent>()) {
             out << YAML::Key << "SpriteRendererComponent";
-            out << YAML::BeginMap; // 开始组件 Map
-            
+            out << YAML::BeginMap; 
             auto& src = entity.GetComponent<SpriteRendererComponent>();
             out << YAML::Key << "Color" << YAML::Value << src.Color;
-            out << YAML::Key << "TextureHandle" << YAML::Value << (uint64_t)src.TextureHandle;
-            
-            out << YAML::EndMap; // 结束组件 Map
+            out << YAML::Key << "TextureHandle" << YAML::Value << (uint64_t)src.TextureHandle; // 纯粹的数字
+            out << YAML::EndMap; 
         }
 
         // ==========================================
-        // 保存 3D 网格组件
+        // 【暴瘦】：3D 网格组件的保存 (砍掉了几百行处理字符串和材质逻辑的代码)
         // ==========================================
         if (entity.HasComponent<MeshRendererComponent>()) {
             out << YAML::Key << "MeshRendererComponent";
             out << YAML::BeginMap; 
-            
             auto& mrc = entity.GetComponent<MeshRendererComponent>();
             
-            // 1. 记录模型路径
-            if (mrc.ModelAsset && !mrc.ModelAsset->GetPath().empty()) {
-                out << YAML::Key << "ModelPath" << YAML::Value << mrc.ModelAsset->GetPath();
-            }
-
-            // ==========================================
-            // 2. 核心：在保存场景时，级联保存材质！
-            // ==========================================
-            if (mrc.MaterialAsset) {
-                auto& mat = mrc.MaterialAsset;
-                
-                // 检查：如果这是一个没有路径的游离材质，或者是编辑器内置的只读模板
-                if (mat->AssetPath.empty() || mat->AssetPath.find("assets/Editor/") != std::string::npos) {
-                    
-                    if (!std::filesystem::exists("assets/materials")) {
-                        std::filesystem::create_directories("assets/materials");
-                    }
-                    
-                    std::string baseName = mat->Name;
-                    if (baseName == "Empty Material" || baseName.empty() || baseName.find("(Instance)") != std::string::npos) {
-                        baseName = "NewMaterial";
-                    }
-                    
-                    std::string finalPath = "assets/materials/" + baseName + ".mat";
-                    int index = 1;
-                    
-                    // 查重并追加序号
-                    while (std::filesystem::exists(finalPath)) {
-                        finalPath = "assets/materials/" + baseName + " (" + std::to_string(index) + ").mat";
-                        index++;
-                    }
-                    
-                    mat->AssetPath = finalPath;
-                    mat->Name = std::filesystem::path(finalPath).stem().string();
-                    
-                    // 落地保存为新文件
-                    MaterialSerializer::Serialize(mat, mat->AssetPath);
-                    AYAYA_CORE_INFO("Auto-saved new material to {0}", mat->AssetPath);
-                } 
-                else {
-                    // 如果它已经是一个存在的用户材质，顺手覆盖保存它的最新参数！
-                    // 这样就算用户在面板上调了颜色忘记点 Save，保存场景时也会一并把材质文件更新
-                    MaterialSerializer::Serialize(mat, mat->AssetPath);
-                }
-
-                // 3. 将最终确定的合法路径写入场景文件
-                out << YAML::Key << "MaterialPath" << YAML::Value << mat->AssetPath;
-
-                // 4. 阴影参数
-                out << YAML::Key << "CastShadows" << YAML::Value << mrc.CastShadows;
-                out << YAML::Key << "ReceiveShadows" << YAML::Value << mrc.ReceiveShadows;
-            }
+            out << YAML::Key << "ModelHandle" << YAML::Value << (uint64_t)mrc.ModelHandle;
+            out << YAML::Key << "MaterialHandle" << YAML::Value << (uint64_t)mrc.MaterialHandle;
+            out << YAML::Key << "CastShadows" << YAML::Value << mrc.CastShadows;
+            out << YAML::Key << "ReceiveShadows" << YAML::Value << mrc.ReceiveShadows;
             
             out << YAML::EndMap; 
         }
@@ -228,27 +171,23 @@ namespace Ayaya {
             out << YAML::BeginMap;
             auto& dlc = entity.GetComponent<DirectionalLightComponent>();
             out << YAML::Key << "Color" << YAML::Value << dlc.Color;
-            // 新增：保存照度 (Lux)
             out << YAML::Key << "Illuminance" << YAML::Value << dlc.Illuminance; 
             out << YAML::EndMap;
         }
 
         if (entity.HasComponent<PointLightComponent>()) {
             out << YAML::Key << "PointLightComponent";
-            out << YAML::BeginMap; // PointLightComponent
-            
+            out << YAML::BeginMap; 
             auto& plc = entity.GetComponent<PointLightComponent>();
             out << YAML::Key << "Color" << YAML::Value << plc.Color;
             out << YAML::Key << "LuminousPower" << YAML::Value << plc.LuminousPower;
-            
             out << YAML::Key << "Radius" << YAML::Value << plc.Radius;
             out << YAML::Key << "Falloff" << YAML::Value << plc.Falloff;
-
-            out << YAML::EndMap; // PointLightComponent
+            out << YAML::EndMap; 
         }
 
         // ==========================================
-        // 保存 Environment (天空盒) 组件
+        // 【暴瘦】：环境天空盒的保存
         // ==========================================
         if (entity.HasComponent<EnvironmentComponent>()) {
             out << YAML::Key << "EnvironmentComponent";
@@ -256,62 +195,42 @@ namespace Ayaya {
             auto& env = entity.GetComponent<EnvironmentComponent>();
             
             out << YAML::Key << "Type" << YAML::Value << (int)env.Type;
-            out << YAML::Key << "EquirectangularPath" << YAML::Value << env.EquirectangularPath;
             out << YAML::Key << "Intensity" << YAML::Value << env.Intensity;
             out << YAML::Key << "AmbientColor" << YAML::Value << env.AmbientColor;
-            
-            out << YAML::Key << "CubemapFaces" << YAML::Value << YAML::BeginSeq;
-            for (const auto& face : env.CubemapFaces) out << face;
-            out << YAML::EndSeq;
+            out << YAML::Key << "EquirectangularHandle" << YAML::Value << (uint64_t)env.EquirectangularHandle;
+            out << YAML::Key << "CubemapHandle" << YAML::Value << (uint64_t)env.CubemapHandle;
             
             out << YAML::EndMap;
         }
 
-        // ==========================================
-        // 保存 后处理体积组件 (Post Process Volume)
-        // ==========================================
         if (entity.HasComponent<PostProcessVolumeComponent>()) {
             out << YAML::Key << "PostProcessVolumeComponent";
             out << YAML::BeginMap; 
-            
             auto& ppv = entity.GetComponent<PostProcessVolumeComponent>();
             out << YAML::Key << "IsGlobal" << YAML::Value << ppv.IsGlobal;
-            
             out << YAML::Key << "ToneMappingType" << YAML::Value << ppv.ToneMappingType;
             out << YAML::Key << "Exposure" << YAML::Value << ppv.Exposure;
-            
             out << YAML::Key << "EnableBloom" << YAML::Value << ppv.EnableBloom;
             out << YAML::Key << "BloomThreshold" << YAML::Value << ppv.BloomThreshold;
             out << YAML::Key << "BloomKnee" << YAML::Value << ppv.BloomKnee;
             out << YAML::Key << "BloomRadius" << YAML::Value << ppv.BloomRadius;
             out << YAML::Key << "BloomIntensity" << YAML::Value << ppv.BloomIntensity;
-            
             out << YAML::Key << "EnableFXAA" << YAML::Value << ppv.EnableFXAA;
-            
             out << YAML::EndMap; 
         }
 
-        // ==========================================
-        // 保存 2D 刚体组件
-        // ==========================================
         if (entity.HasComponent<Rigidbody2DComponent>()) {
             out << YAML::Key << "Rigidbody2DComponent";
             out << YAML::BeginMap; 
-            
             auto& rb2d = entity.GetComponent<Rigidbody2DComponent>();
             out << YAML::Key << "BodyType" << YAML::Value << (int)rb2d.Type;
             out << YAML::Key << "FixedRotation" << YAML::Value << rb2d.FixedRotation;
-            
             out << YAML::EndMap; 
         }
 
-        // ==========================================
-        // 保存 2D 碰撞盒组件
-        // ==========================================
         if (entity.HasComponent<BoxCollider2DComponent>()) {
             out << YAML::Key << "BoxCollider2DComponent";
             out << YAML::BeginMap; 
-            
             auto& bc2d = entity.GetComponent<BoxCollider2DComponent>();
             out << YAML::Key << "Offset" << YAML::Value << bc2d.Offset;
             out << YAML::Key << "Size" << YAML::Value << bc2d.Size;
@@ -319,19 +238,20 @@ namespace Ayaya {
             out << YAML::Key << "Friction" << YAML::Value << bc2d.Friction;
             out << YAML::Key << "Restitution" << YAML::Value << bc2d.Restitution;
             out << YAML::Key << "RestitutionThreshold" << YAML::Value << bc2d.RestitutionThreshold;
-            
             out << YAML::EndMap; 
         }
 
+        // ==========================================
+        // 【暴瘦】：脚本组件的保存
+        // ==========================================
         if (entity.HasComponent<LuaScriptComponent>()) {
             out << YAML::Key << "LuaScriptComponent";
             out << YAML::BeginMap; 
             auto& lsc = entity.GetComponent<LuaScriptComponent>();
-            out << YAML::Key << "ScriptPath" << YAML::Value << lsc.ScriptPath;
+            out << YAML::Key << "ScriptHandle" << YAML::Value << (uint64_t)lsc.ScriptHandle;
             out << YAML::EndMap; 
         }
 
-        // --- 核心：保存父子层级关系 UUID ---
         if (entity.HasComponent<RelationshipComponent>()) {
             out << YAML::Key << "RelationshipComponent";
             out << YAML::BeginMap;
@@ -339,7 +259,6 @@ namespace Ayaya {
             
             uint64_t parentUUID = 0;
             if (rel.Parent != entt::null) {
-                // 修复：使用传进来的 scene 指针，而不是违规访问私有变量
                 Entity parentEntity{ rel.Parent, scene }; 
                 parentUUID = parentEntity.GetComponent<IDComponent>().ID;
             }
@@ -347,21 +266,16 @@ namespace Ayaya {
             out << YAML::EndMap;
         }
 
-        out << YAML::EndMap; // End Entity Map
+        out << YAML::EndMap; 
     }
 
-    // --- 新增：深度优先递归保存 ---
-    // --- 新增：深度优先递归保存 ---
     static void SerializeEntityRecursively(YAML::Emitter& out, Entity entity, Scene* scene) {
         if (!entity) return;
         
-        // 1. 先保存自己
         SerializeEntity(out, entity, scene);
         
-        // 2. 按照顺序递归保存所有的子节点
         if (entity.HasComponent<RelationshipComponent>()) {
             auto& rel = entity.GetComponent<RelationshipComponent>();
-            // 遍历所有子节点的 ID，递归调用
             for (auto childID : rel.Children) {
                 Entity child = { childID, scene };
                 SerializeEntityRecursively(out, child, scene);
@@ -373,12 +287,7 @@ namespace Ayaya {
         YAML::Emitter out;
         out << YAML::BeginMap;
         out << YAML::Key << "Scene" << YAML::Value << "Untitled";
-        // ==========================================
-        // 新增：写入编辑器环境状态
-        // ==========================================
-        // ==========================================
-        // 智能写入编辑器环境状态 (自动遍历)
-        // ==========================================
+        
         out << YAML::Key << "EditorState" << YAML::BeginMap;
         editorState.ForEach([&](const char* key, const auto& value) {
             out << YAML::Key << key << YAML::Value << value;
@@ -387,10 +296,6 @@ namespace Ayaya {
 
         out << YAML::Key << "Entities" << YAML::Value << YAML::BeginSeq;
 
-        // =======================================================
-        // 【核心修复】：不再使用无序的 EnTT view，
-        // 而是严格按照大纲树的真实显示顺序进行深度优先遍历！
-        // =======================================================
         auto rootEntities = m_Scene->GetRootEntities();
         for (auto entityID : rootEntities) {
             Entity entity = { entityID, m_Scene.get() };
@@ -419,18 +324,12 @@ namespace Ayaya {
 
         if (!data["Scene"]) return false;
 
-        // ==========================================
-        // 智能读取编辑器环境状态（全自动安全回退机制）
-        // ==========================================
-        outEditorState = EditorState(); // 1. 无论如何先重置为默认状态
+        outEditorState = EditorState(); 
         auto editorStateNode = data["EditorState"];
         
         if (editorStateNode) {
-            // 2. 遍历结构体里的每一个字段，尝试从 YAML 读取
             outEditorState.ForEach([&](const char* key, auto& value) {
-                // 安全检查：如果 YAML 里有这个节点才读取覆盖，否则保留默认值
                 if (editorStateNode[key]) {
-                    // C++14 黑科技：自动推导该字段的类型 (bool, float, vec3 等)，并安全解析
                     using FieldType = std::decay_t<decltype(value)>;
                     value = editorStateNode[key].as<FieldType>();
                 }
@@ -443,21 +342,17 @@ namespace Ayaya {
         auto entities = data["Entities"];
         if (!entities) return true;
 
-        // 【新增】：获取实体总数，用于计算进度百分比
         int totalEntities = entities.size();
         int currentEntityIndex = 0;
 
-        // 建立一张表：UUID -> 刚刚在内存里创建的 EnTT Entity
         std::unordered_map<uint64_t, Entity> sceneEntities;
         
-        // 记录一下每个物体读取出来的父节点 UUID
         struct EntityRel {
             Entity ChildEntity;
             uint64_t ParentUUID;
         };
         std::vector<EntityRel> relationshipsToResolve;
 
-        // --- 第一遍：纯粹创建实体和基础组件 ---
         for (auto entity : entities) {
             uint64_t uuid = entity["Entity"].as<uint64_t>();
 
@@ -466,13 +361,11 @@ namespace Ayaya {
             auto tagComponent = entity["TagComponent"];
             if (tagComponent) {
                 name = tagComponent["Tag"].as<std::string>();
-                
                 if (tagComponent["IsActive"]) {
                     isActive = tagComponent["IsActive"].as<bool>();
                 }
             }
 
-            // 在这里调用回调，把进度和名字传给 UI 进度条
             if (progressCallback) {
                 float progress = (float)currentEntityIndex / (float)totalEntities;
                 progressCallback(progress, "Spawning Entity: " + name);
@@ -495,21 +388,13 @@ namespace Ayaya {
             auto cameraComponent = entity["CameraComponent"];
             if (cameraComponent) {
                 auto& cc = deserializedEntity.AddComponent<CameraComponent>();
-                
-                // 读取基础属性
                 cc.Primary = cameraComponent["Primary"].as<bool>();
                 cc.FixedAspectRatio = cameraComponent["FixedAspectRatio"].as<bool>();
 
-                if (cameraComponent["EV100"]) 
-                    cc.EV100 = cameraComponent["EV100"].as<float>();
-                if (cameraComponent["ClearFlag"]) 
-                    cc.ClearFlag = (CameraComponent::ClearFlags)cameraComponent["ClearFlag"].as<int>();
-                if (cameraComponent["BackgroundColor"]) 
-                    cc.BackgroundColor = cameraComponent["BackgroundColor"].as<glm::vec4>();
+                if (cameraComponent["EV100"]) cc.EV100 = cameraComponent["EV100"].as<float>();
+                if (cameraComponent["ClearFlag"]) cc.ClearFlag = (CameraComponent::ClearFlags)cameraComponent["ClearFlag"].as<int>();
+                if (cameraComponent["BackgroundColor"]) cc.BackgroundColor = cameraComponent["BackgroundColor"].as<glm::vec4>();
 
-                // ==========================================
-                // 核心修复：完美恢复相机的投影与裁剪面参数！
-                // ==========================================
                 auto cameraProps = cameraComponent["Camera"];
                 if (cameraProps) {
                     cc.Camera.SetProjectionType((SceneCamera::ProjectionType)cameraProps["ProjectionType"].as<int>());
@@ -526,7 +411,7 @@ namespace Ayaya {
             if (spriteRendererComponent) {
                 auto& src = deserializedEntity.AddComponent<SpriteRendererComponent>();
                 src.Color = spriteRendererComponent["Color"].as<glm::vec4>();
-                if (spriteRendererComponent["TextureHandle"]) { // <-- 新增
+                if (spriteRendererComponent["TextureHandle"]) { 
                     src.TextureHandle = spriteRendererComponent["TextureHandle"].as<uint64_t>();
                 }
             }
@@ -540,62 +425,17 @@ namespace Ayaya {
             }
 
             // ==========================================
-            // 读取 3D 网格组件
+            // 【暴瘦】：直接读取 Handle 给 MeshRenderer！不再当场 Load！
             // ==========================================
             auto meshRendererComponent = entity["MeshRendererComponent"];
             if (meshRendererComponent) {
                 auto& mrc = deserializedEntity.AddComponent<MeshRendererComponent>();
                 
-                // 1. 读取并加载模型
-                if (meshRendererComponent["ModelPath"]) {
-                    std::string modelPath = meshRendererComponent["ModelPath"].as<std::string>();
-                    if (modelPath == "Primitive::Sphere") {
-                        mrc.ModelAsset = std::make_shared<Model>(Mesh::CreateSphere(0.5f, 64, 64));
-                        mrc.ModelAsset->SetPath(modelPath);
-                    } 
-                    else if (modelPath == "Primitive::Cube") {
-                        mrc.ModelAsset = std::make_shared<Model>(Mesh::CreateCube());
-                        mrc.ModelAsset->SetPath(modelPath);
-                    }
-                    else if (modelPath == "Primitive::Plane") {
-                        mrc.ModelAsset = std::make_shared<Model>(Mesh::CreatePlane());
-                        mrc.ModelAsset->SetPath(modelPath);
-                    }
-                    else if (!modelPath.empty()) {
-                        // 如果不是内置图元，则正常从硬盘读取 obj/fbx 模型
-                        mrc.ModelAsset = std::make_shared<Model>(modelPath);
-                    }
-                }
+                if (meshRendererComponent["ModelHandle"]) mrc.ModelHandle = meshRendererComponent["ModelHandle"].as<uint64_t>();
+                if (meshRendererComponent["MaterialHandle"]) mrc.MaterialHandle = meshRendererComponent["MaterialHandle"].as<uint64_t>();
 
-                // 2. 读取并加载材质资产
-                if (meshRendererComponent["MaterialPath"]) {
-                    std::string matPath = meshRendererComponent["MaterialPath"].as<std::string>();
-                    
-                    mrc.MaterialAsset = std::make_shared<Material>();
-                    
-                    // ==========================================
-                    // 核心修复：如果材质文件读取失败，直接将指针置空！
-                    // ==========================================
-                    bool success = MaterialSerializer::Deserialize(mrc.MaterialAsset, matPath);
-                    if (!success) {
-                        AYAYA_CORE_WARN("Material file '{0}' is missing! Assigning Fallback Material.", matPath);
-                        // 置空指针。SceneRenderer 看到 nullptr 会自动使用品红色的 Fallback Shader
-                        mrc.MaterialAsset = nullptr; 
-                    }
-                }
-
-                // 【新增】：安全读取阴影状态，如果旧版文件里没有这个节点，就默认给 false
-                if (meshRendererComponent["CastShadows"]) {
-                    mrc.CastShadows = meshRendererComponent["CastShadows"].as<bool>();
-                } else {
-                    mrc.CastShadows = false; 
-                }
-
-                if (meshRendererComponent["ReceiveShadows"]) {
-                    mrc.ReceiveShadows = meshRendererComponent["ReceiveShadows"].as<bool>();
-                } else {
-                    mrc.ReceiveShadows = false;
-                }
+                mrc.CastShadows = meshRendererComponent["CastShadows"] ? meshRendererComponent["CastShadows"].as<bool>() : false; 
+                mrc.ReceiveShadows = meshRendererComponent["ReceiveShadows"] ? meshRendererComponent["ReceiveShadows"].as<bool>() : false;
             }
 
             auto dirLightComponent = entity["DirectionalLightComponent"];
@@ -603,97 +443,50 @@ namespace Ayaya {
                 auto& dlc = deserializedEntity.AddComponent<DirectionalLightComponent>();
                 dlc.Color = dirLightComponent["Color"].as<glm::vec3>();
 
-                // 兼容性检查：如果旧场景没有照度属性，默认给 100000 勒克斯 (正午阳光)
-                if (dirLightComponent["Illuminance"]) {
-                    dlc.Illuminance = dirLightComponent["Illuminance"].as<float>();
-                } else {
-                    dlc.Illuminance = 100000.0f;
-                }
+                if (dirLightComponent["Illuminance"]) dlc.Illuminance = dirLightComponent["Illuminance"].as<float>();
+                else dlc.Illuminance = 100000.0f;
             }
 
-            // ==========================================
-            // 新增：反序列化 PointLightComponent
-            // ==========================================
             auto pointLightComponent = entity["PointLightComponent"];
             if (pointLightComponent) {
                 auto& plc = deserializedEntity.AddComponent<PointLightComponent>();
-                
-                if (pointLightComponent["Color"])
-                        plc.Color = pointLightComponent["Color"].as<glm::vec3>();
-                        
-                if (pointLightComponent["LuminousPower"])
-                    plc.LuminousPower = pointLightComponent["LuminousPower"].as<float>();
-
-                if (pointLightComponent["Radius"])
-                    plc.Radius = pointLightComponent["Radius"].as<float>();
-                    
-                if (pointLightComponent["Falloff"])
-                    plc.Falloff = pointLightComponent["Falloff"].as<float>();
+                if (pointLightComponent["Color"]) plc.Color = pointLightComponent["Color"].as<glm::vec3>();
+                if (pointLightComponent["LuminousPower"]) plc.LuminousPower = pointLightComponent["LuminousPower"].as<float>();
+                if (pointLightComponent["Radius"]) plc.Radius = pointLightComponent["Radius"].as<float>();
+                if (pointLightComponent["Falloff"]) plc.Falloff = pointLightComponent["Falloff"].as<float>();
             }
 
             // ==========================================
-            // 读取 Environment (天空盒) 组件
+            // 【暴瘦】：环境天空盒直接读取 Handle
             // ==========================================
             auto envComponent = entity["EnvironmentComponent"];
             if (envComponent) {
                 auto& env = deserializedEntity.AddComponent<EnvironmentComponent>();
                 
                 env.Type = (EnvironmentType)envComponent["Type"].as<int>();
-                env.EquirectangularPath = envComponent["EquirectangularPath"].as<std::string>();
                 env.Intensity = envComponent["Intensity"].as<float>();
+                if (envComponent["AmbientColor"]) env.AmbientColor = envComponent["AmbientColor"].as<glm::vec3>();
 
-                if (envComponent["AmbientColor"]) {
-                    env.AmbientColor = envComponent["AmbientColor"].as<glm::vec3>();
-                }
-
-                if (envComponent["CubemapFaces"]) {
-                    env.CubemapFaces.clear();
-                    for (auto face : envComponent["CubemapFaces"]) {
-                        env.CubemapFaces.push_back(face.as<std::string>());
-                    }
-                }
-
-                // ==========================================
-                // 核心：读取完毕后，立即在内存中加载纹理，并激活脏标记！
-                // 这样引擎在读完场景的第一帧，就会极其智能地在后台把 IBL 光照全部烘焙好！
-                // ==========================================
-                if ((env.Type == EnvironmentType::HDR_Equirectangular || env.Type == EnvironmentType::LDR_Equirectangular) 
-                    && !env.EquirectangularPath.empty()) 
-                {
-                    env.EquirectangularTexture = Texture2D::Create(env.EquirectangularPath);
-                    env.IsDirty = true; 
-                } 
-                else if (env.Type == EnvironmentType::Classic_Cubemap && !env.CubemapFaces[0].empty()) 
-                {
-                    env.ClassicCubemapTexture = TextureCube::Create(env.CubemapFaces);
-                    env.IsDirty = true;
-                }
+                if (envComponent["EquirectangularHandle"]) env.EquirectangularHandle = envComponent["EquirectangularHandle"].as<uint64_t>();
+                if (envComponent["CubemapHandle"]) env.CubemapHandle = envComponent["CubemapHandle"].as<uint64_t>();
+                
+                env.IsDirty = true; // 告诉渲染器这玩意需要加载
             }
 
-            // ==========================================
-            // 读取 后处理体积组件 (Post Process Volume)
-            // ==========================================
             auto ppvComponent = entity["PostProcessVolumeComponent"];
             if (ppvComponent) {
                 auto& ppv = deserializedEntity.AddComponent<PostProcessVolumeComponent>();
-                
                 ppv.IsGlobal = ppvComponent["IsGlobal"].as<bool>();
-                
                 ppv.ToneMappingType = ppvComponent["ToneMappingType"].as<int>();
                 ppv.Exposure = ppvComponent["Exposure"].as<float>();
-                
                 ppv.EnableBloom = ppvComponent["EnableBloom"].as<bool>();
                 ppv.BloomThreshold = ppvComponent["BloomThreshold"].as<float>();
                 ppv.BloomKnee = ppvComponent["BloomKnee"].as<float>();
                 ppv.BloomRadius = ppvComponent["BloomRadius"].as<float>();
                 ppv.BloomIntensity = ppvComponent["BloomIntensity"].as<float>();
-                
                 ppv.EnableFXAA = ppvComponent["EnableFXAA"].as<bool>();
             }
 
-            // ==========================================
-            // 读取 2D 刚体组件
-            // ==========================================
             auto rigidbody2DComponent = entity["Rigidbody2DComponent"];
             if (rigidbody2DComponent) {
                 auto& rb2d = deserializedEntity.AddComponent<Rigidbody2DComponent>();
@@ -701,9 +494,6 @@ namespace Ayaya {
                 rb2d.FixedRotation = rigidbody2DComponent["FixedRotation"].as<bool>();
             }
 
-            // ==========================================
-            // 读取 2D 碰撞盒组件
-            // ==========================================
             auto boxCollider2DComponent = entity["BoxCollider2DComponent"];
             if (boxCollider2DComponent) {
                 auto& bc2d = deserializedEntity.AddComponent<BoxCollider2DComponent>();
@@ -715,22 +505,25 @@ namespace Ayaya {
                 bc2d.RestitutionThreshold = boxCollider2DComponent["RestitutionThreshold"].as<float>();
             }
 
+            // ==========================================
+            // 【暴瘦】：Lua 组件只读取 Handle
+            // ==========================================
             auto luaScriptComponent = entity["LuaScriptComponent"];
             if (luaScriptComponent) {
                 auto& lsc = deserializedEntity.AddComponent<LuaScriptComponent>();
-                lsc.ScriptPath = luaScriptComponent["ScriptPath"].as<std::string>();
+                if (luaScriptComponent["ScriptHandle"]) {
+                    lsc.ScriptHandle = luaScriptComponent["ScriptHandle"].as<uint64_t>();
+                }
             }
 
-            currentEntityIndex++; // 实体计数器 +1
+            currentEntityIndex++; 
         }
 
         if (progressCallback) progressCallback(1.0f, "Resolving Relationships...");
         
-        // --- 第二遍：完美复原父子层级！ ---
         for (auto& rel : relationshipsToResolve) {
             if (sceneEntities.find(rel.ParentUUID) != sceneEntities.end()) {
                 Entity parentEntity = sceneEntities[rel.ParentUUID];
-                // 使用 false，表示完全按照文件里存的 localTransform 建立关系，不需要补偿矩阵
                 rel.ChildEntity.SetParent(parentEntity, false); 
             }
         }

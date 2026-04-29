@@ -1,0 +1,4 @@
+Project:
+  Name: testBloom
+  StartScene: Scenes/testBloom.ayaya
+  AssetDirectory: Assets

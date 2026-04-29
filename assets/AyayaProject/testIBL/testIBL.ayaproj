@@ -1,0 +1,4 @@
+Project:
+  Name: testIBL
+  StartScene: Scenes/testIBL.ayaya
+  AssetDirectory: Assets

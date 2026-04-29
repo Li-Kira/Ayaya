@@ -1,0 +1,108 @@
+Scene: Untitled
+EditorState:
+  ShowGrid: true
+  ShowSkybox: true
+  CameraPosition: [-3.3658295, 2.0980597, 3.9774184]
+  CameraDistance: 2.7294528
+  CameraPitch: -0.1968987
+  CameraYaw: -0.7357381
+  CameraFocalPoint: [-1.5693941, 1.5640998, 1.9930748]
+Entities:
+  - Entity: 9207422813788464392
+    TagComponent:
+      Tag: Main Camera
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 5]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    CameraComponent:
+      Primary: true
+      FixedAspectRatio: false
+      EV100: 14.5
+      ClearFlag: 0
+      BackgroundColor: [0.12, 0.12, 0.14, 1]
+      Camera:
+        ProjectionType: 0
+        PerspectiveFOV: 0.7853982
+        PerspectiveNear: 0.01
+        PerspectiveFar: 1000
+        OrthographicSize: 5
+        OrthographicNear: -1
+        OrthographicFar: 1000
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 7648224349506625606
+    TagComponent:
+      Tag: Directional Light
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [-0.7853982, 0.7853982, 0]
+      Scale: [1, 1, 1]
+    DirectionalLightComponent:
+      Color: [1, 1, 1]
+      Illuminance: 100000
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 941355425607113630
+    TagComponent:
+      Tag: Parent Empty Node
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 6123212960334515091
+    TagComponent:
+      Tag: Cube
+      IsActive: true
+    TransformComponent:
+      Translation: [-1.5, 0, -7.450581e-09]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      MaterialPath: materials/testPBR/NewMaterial.mat
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 941355425607113630
+  - Entity: 2260445115966781348
+    TagComponent:
+      Tag: Assimp Model
+      IsActive: true
+    TransformComponent:
+      Translation: [1.5, 0, -1.4901161e-08]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelPath: models/backpack/backpack.obj
+      MaterialPath: materials/testPBR/PBR.mat
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 2717292969850671077
+    TagComponent:
+      Tag: SkyBox
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    EnvironmentComponent:
+      Type: 3
+      EquirectangularPath: engine://textures/skybox/hdr/newport_loft.hdr
+      Intensity: 30000
+      AmbientColor: [0.1, 0.1, 0.1]
+      CubemapFaces:
+        - engine://textures/skybox/skybox_01/right.jpg
+        - engine://textures/skybox/skybox_01/left.jpg
+        - engine://textures/skybox/skybox_01/top.jpg
+        - engine://textures/skybox/skybox_01/bottom.jpg
+        - engine://textures/skybox/skybox_01/front.jpg
+        - engine://textures/skybox/skybox_01/back.jpg
+    RelationshipComponent:
+      Parent: 0

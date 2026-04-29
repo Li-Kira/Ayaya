@@ -99,24 +99,16 @@ namespace Ayaya {
     };
 
     // ==========================================
-    // 新增：3D 网格渲染组件
+    // 3D 网格渲染组件
     // ==========================================
     struct MeshRendererComponent {
-        std::shared_ptr<Model> ModelAsset; 
-        
-        // ==========================================
-        // 升级：组件不再直接持有颜色，而是持有一个材质资产！
-        // ==========================================
-        std::shared_ptr<Material> MaterialAsset;
+        UUID ModelHandle = 0;     // 指向 AssetManager 里的 Model 资产
+        UUID MaterialHandle = 0;  // 指向 AssetManager 里的 Material 资产
 
-        bool CastShadows = false;     // 是否产生阴影
-        bool ReceiveShadows = false;  // 是否接收阴影
+        bool CastShadows = true;     // 是否产生阴影
+        bool ReceiveShadows = true;  // 是否接收阴影
 
-        MeshRendererComponent() {
-            // 默认依然给它塞一个我们引擎自带的 1x1 正方体，确保不会空指针
-            ModelAsset = std::make_shared<Model>(Mesh::CreateCube(1.0f));
-            MaterialAsset = std::make_shared<Material>();
-        }
+        MeshRendererComponent() = default;
         MeshRendererComponent(const MeshRendererComponent&) = default;
     };
 
@@ -156,19 +148,14 @@ namespace Ayaya {
     struct EnvironmentComponent {
         EnvironmentType Type = EnvironmentType::HDR_Equirectangular;
         
-        std::string EquirectangularPath = ""; 
-        std::vector<std::string> CubemapFaces = {"", "", "", "", "", ""};
-        
-        std::shared_ptr<Texture2D> EquirectangularTexture = nullptr;
-        std::shared_ptr<TextureCube> ClassicCubemapTexture = nullptr;
+        // 资产引用全部替换为 64位 无符号整型 UUID
+        UUID EquirectangularHandle = 0; 
+        UUID CubemapHandle = 0; // 替代原来那个 std::vector<std::string> 
         
         float Intensity = 30000.0f; 
         float Lod = 0.0f;           
         bool IsDirty = false;       
 
-        // ==========================================
-        // 【新增】：当没有天空盒，或需要额外补光时的基础环境光颜色
-        // ==========================================
         glm::vec3 AmbientColor = { 0.1f, 0.1f, 0.1f }; // 默认给一个微弱的暗灰色
 
         EnvironmentComponent() = default;
@@ -235,14 +222,14 @@ namespace Ayaya {
     // Lua 脚本组件
     // ==========================================
     struct LuaScriptComponent {
-        std::string ScriptPath = ""; 
+        UUID ScriptHandle = 0; // 脚本资产的唯一 ID
 
         // 仅在运行时有效，用于存储当前实体的专属 Lua 环境 (沙盒)
         void* RuntimeEnvironment = nullptr; 
 
         LuaScriptComponent() = default;
         LuaScriptComponent(const LuaScriptComponent&) = default;
-        LuaScriptComponent(const std::string& path) : ScriptPath(path) {}
+        LuaScriptComponent(UUID scriptHandle) : ScriptHandle(scriptHandle) {}
     };
 
 }

@@ -91,13 +91,15 @@ namespace Ayaya {
             if (!entity.IsActiveInHierarchy()) continue;
 
             auto& meshComp = entity.GetComponent<MeshRendererComponent>();
-            if (!meshComp.ModelAsset) continue; 
+            auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
+            if (!model) continue;
 
             std::shared_ptr<Material> activeMaterial = m_FallbackMaterial;
             std::shared_ptr<Pipeline> activePipeline = m_FallbackPipeline;
 
-            if (meshComp.MaterialAsset) {
-                activeMaterial = meshComp.MaterialAsset;
+            auto material = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
+            if (material) {
+                activeMaterial = material;
                 activePipeline = m_GBufferPipeline;
             }
 
@@ -109,7 +111,7 @@ namespace Ayaya {
             drawCmd.CastShadows = meshComp.CastShadows;
             drawCmd.ReceiveShadows = meshComp.ReceiveShadows;
 
-            for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
+            for (auto& mesh : model->GetMeshes()) {
                 drawCmd.MeshAsset = mesh;
                 m_OpaqueDrawList.push_back(drawCmd);
             }

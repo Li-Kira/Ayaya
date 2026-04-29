@@ -296,9 +296,10 @@ namespace Ayaya {
 
                 cmd.PushConstant(m_SelectionMeshPipeline, "u_Color", glm::vec3(1.0f, 1.0f, 1.0f)); 
                 auto& meshComp = hoveredEntity.GetComponent<MeshRendererComponent>();
-                if (meshComp.ModelAsset) {
+                auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
+                if (model) {
                     cmd.PushConstant(m_SelectionMeshPipeline, "u_Transform", transform);
-                    for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
+                    for (auto& mesh : model->GetMeshes()) {
                         cmd.DrawIndexed(mesh->GetVertexArray(), mesh->GetIndexCount());
                     }
                 }

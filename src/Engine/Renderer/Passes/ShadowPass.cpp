@@ -3,6 +3,7 @@
 #include "Engine/Scene/Components.hpp"
 #include "Engine/Scene/Scene.hpp"
 #include "Engine/Scene/Entity.hpp"
+#include "Asset/AssetManager.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace Ayaya {
@@ -65,16 +66,16 @@ namespace Ayaya {
             if (!entity.IsActiveInHierarchy()) continue;
             
             auto& meshComp = entity.GetComponent<MeshRendererComponent>();
-            if (!meshComp.ModelAsset || !meshComp.CastShadows) continue; 
+            auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
+            if (!model || !meshComp.CastShadows) continue; 
 
             cmd.PushConstant(m_Pipeline, "u_Transform", entity.GetWorldTransform());
             
-            for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
+            for (auto& mesh : model->GetMeshes()) {
                 std::string tag = entity.GetComponent<TagComponent>().Tag;
                 uint32_t tris = mesh->GetIndexCount() / 3;
 
                 if (context.RecordAndCheckDrawCall("Shadow Pass", tag, "Shadow Map", tris)) {
-                    // 【现代绑定接口】：抛弃 GetVertexArray，直接传入 mesh 对象！
                     cmd.DrawIndexed(mesh, mesh->GetIndexCount());
                 }
             }

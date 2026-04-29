@@ -1,0 +1,129 @@
+Scene: Untitled
+EditorState:
+  ShowGrid: true
+  ShowSkybox: true
+  CameraPosition: [-1.4011785, 1.4229293, 3.8456283]
+  CameraDistance: 4.0768633
+  CameraPitch: -0.2347161
+  CameraYaw: -0.8515272
+  CameraFocalPoint: [1.5816995, 0.47478592, 1.2332964]
+Entities:
+  - Entity: 13032611445651691836
+    TagComponent:
+      Tag: Main Camera
+      IsActive: true
+    TransformComponent:
+      Translation: [-1.41, 0.8, 3.95]
+      Rotation: [-0.22526963, -0.79203045, 0]
+      Scale: [1, 1, 1]
+    CameraComponent:
+      Primary: true
+      FixedAspectRatio: false
+      EV100: 14.4
+      ClearFlag: 0
+      BackgroundColor: [0.016, 0.016, 0.02, 1]
+      Camera:
+        ProjectionType: 0
+        PerspectiveFOV: 0.7853982
+        PerspectiveNear: 0.01
+        PerspectiveFar: 1000
+        OrthographicSize: 5
+        OrthographicNear: -1
+        OrthographicFar: 1000
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 3382714323834212857
+    TagComponent:
+      Tag: Directional Light
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [-0.7853982, 0.7853982, 0]
+      Scale: [1, 1, 1]
+    DirectionalLightComponent:
+      Color: [1, 1, 1]
+      Illuminance: 100000
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 15002636031007978404
+    TagComponent:
+      Tag: Skybox
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    EnvironmentComponent:
+      Type: 1
+      EquirectangularPath: engine://textures/skybox/hdr/newport_loft.hdr
+      Intensity: 30000
+      AmbientColor: [0, 0, 0]
+      CubemapFaces:
+        - ""
+        - ""
+        - ""
+        - ""
+        - ""
+        - ""
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 3511314518912848117
+    TagComponent:
+      Tag: Cube
+      IsActive: true
+    TransformComponent:
+      Translation: [7.450581e-09, -0.026332468, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelPath: Primitive::Cube
+      MaterialPath: assets/materials/testShadow/NewMaterial (2).mat
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 13464463400447904707
+    TagComponent:
+      Tag: Floor
+      IsActive: true
+    TransformComponent:
+      Translation: [0, -0.98502016, 0]
+      Rotation: [0, -0, 0]
+      Scale: [12.886407, 0.8245674, 12.886407]
+    MeshRendererComponent:
+      ModelPath: Primitive::Cube
+      MaterialPath: assets/materials/testShadow/NewMaterial (2).mat
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 3820141738589717809
+    TagComponent:
+      Tag: Sphere
+      IsActive: true
+    TransformComponent:
+      Translation: [1.644043, -0.04235842, 1.622345]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelPath: Primitive::Sphere
+      MaterialPath: assets/materials/testShadow/NewMaterial (2).mat
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 15235985101757188787
+    TagComponent:
+      Tag: Plane
+      IsActive: true
+    TransformComponent:
+      Translation: [2.2405396, 0.21371458, 2.53302]
+      Rotation: [1.5091423, 9.683578e-07, 0.5709486]
+      Scale: [0.9999994, 1.000001, 1.000001]
+    MeshRendererComponent:
+      ModelPath: Primitive::Plane
+      MaterialPath: assets/materials/testShadow/NewMaterial (2).mat
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0

@@ -295,8 +295,10 @@ namespace Ayaya {
 
         if (selectedEntity && selectedEntity.HasComponent<MeshRendererComponent>()) {
             auto& meshComp = selectedEntity.GetComponent<MeshRendererComponent>();
-            if (meshComp.ModelAsset) {
-                for (auto& mesh : meshComp.ModelAsset->GetMeshes()) {
+            auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
+            
+            if (model) {
+                for (auto& mesh : model->GetMeshes()) {
                     OutlineMeshCommand cmdData;
                     cmdData.Transform = selectedEntity.GetWorldTransform();
                     cmdData.MeshAsset = mesh;

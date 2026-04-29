@@ -32,7 +32,6 @@ namespace Ayaya {
     void EditorLayer::OnAttach() {
         Project::New();
         VFS::Mount("engine", "assets");
-        VFS::Mount("project", "assets");
 
         // ==========================================
         // 启动时读取资产注册表
@@ -72,7 +71,15 @@ namespace Ayaya {
 
     void EditorLayer::OnUpdate(Timestep ts) {
         // ==========================================
-        // 0. 执行挂起的场景加载任务 (带实时进度条)
+        // 0. 执行挂起的项目加载任务 (最优先)
+        // ==========================================
+        if (!m_ProjectToLoad.empty()) {
+            OpenProject(m_ProjectToLoad); // 这里会安全地触发进度条
+            m_ProjectToLoad = "";         // 清空标记
+        }
+
+        // ==========================================
+        // 0.1 执行挂起的场景加载任务 (带实时进度条)
         // ==========================================
         if (!m_SceneToLoad.empty()) {
             LoadSceneWithProgress(m_SceneToLoad);
@@ -369,8 +376,8 @@ namespace Ayaya {
         Entity skyEntity = m_ActiveScene->CreateEntity("Skybox");
         auto& envComp = skyEntity.AddComponent<EnvironmentComponent>();
         envComp.Type = EnvironmentType::HDR_Equirectangular;
-        envComp.EquirectangularPath = VFS::ResolveString("engine://Editor/textures/skybox/hdr/newport_loft.hdr");
-        envComp.EquirectangularTexture = Texture2D::Create(envComp.EquirectangularPath);
+        envComp.EquirectangularHandle = AssetManager::ImportAsset("engine://Editor/textures/skybox/hdr/newport_loft.hdr");
+        envComp.Type = EnvironmentType::HDR_Equirectangular;
         envComp.Intensity = 30000.0f; 
         envComp.AmbientColor = glm::vec3(0.0f, 0.0f, 0.0f);
         envComp.IsDirty = true;
@@ -663,7 +670,7 @@ namespace Ayaya {
     void EditorLayer::OpenProject() {
         std::string filepath = FileDialogs::OpenFile("ayaproj");
         if (!filepath.empty()) {
-            OpenProject(filepath);
+            m_ProjectToLoad = filepath;
         }
     }
 
