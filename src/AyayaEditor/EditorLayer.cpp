@@ -694,13 +694,42 @@ namespace Ayaya {
     }
 
     void EditorLayer::SaveProject() {
-        if (Project::GetActive()) {
-            auto projectPath = Project::GetProjectDirectory() / (Project::GetActive()->GetConfig().Name + ".ayaproj");
-            Project::SaveActive(projectPath);
-            AYAYA_CORE_INFO("💾 Project configuration saved.");
-        }
-    }
+    if (Project::GetActive()) {
+        // 1. 保存项目配置文件 (.ayaproj)
+        auto projectPath = Project::GetProjectDirectory() / (Project::GetActive()->GetConfig().Name + ".ayaproj");
+        Project::SaveActive(projectPath);
 
+        // 2. 保存当前场景 (.ayaya)
+        if (!m_CurrentScenePath.empty()) {
+            SaveScene();
+        }
+
+        // ==========================================
+        // 【核心修复】：保存内存中所有的材质资产
+        // ==========================================
+        AYAYA_CORE_INFO("Saving all materials...");
+        for (auto& [handle, assetPtr] : AssetManager::GetLoadedAssets()) {
+            auto metadata = AssetManager::GetMetadata(handle);
+            
+            // 如果这个资产是材质类型
+            if (metadata.Type == AssetType::Material) {
+                std::string physicalPath = AssetManager::GetAssetPhysicalPath(handle);
+                // 排除引擎内置材质，只保存项目路径下的材质
+                if (!physicalPath.empty() && physicalPath.find("assets/Editor/") == std::string::npos) {
+                    auto material = std::static_pointer_cast<Material>(assetPtr);
+                    MaterialSerializer::Serialize(material, physicalPath);
+                }
+            }
+        }
+
+        // 3. 最后保存资产账本 (AssetRegistry.yaml)
+        // 确保所有在保存过程中新产生的 UUID 映射都被写入
+        std::string registryPath = VFS::ResolveString("project://AssetRegistry.yaml");
+        AssetManager::SerializeRegistry(registryPath);
+
+        AYAYA_CORE_INFO("💾 Project Saved: Config, Scene, Materials and Registry are all synced to disk.");
+    }
+}
     void EditorLayer::LoadSceneWithProgress(const std::string& filepath) {
         std::shared_ptr<Scene> newScene = std::make_shared<Scene>();
         SceneSerializer serializer(newScene);
@@ -843,7 +872,7 @@ namespace Ayaya {
                 SaveSceneAs();
             } else {
                 AYAYA_CORE_INFO("👉 Shortcut Triggered: Save Scene");
-                SaveScene();
+                // SaveScene();
                 SaveProject();
             }
         }

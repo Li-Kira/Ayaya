@@ -64,8 +64,8 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
-      ModelHandle: 3253907554452062105
-      MaterialHandle: 1827409700130443451
+      ModelHandle: 2523746688260431696
+      MaterialHandle: 16203188161052311077
       CastShadows: false
       ReceiveShadows: false
     RelationshipComponent:

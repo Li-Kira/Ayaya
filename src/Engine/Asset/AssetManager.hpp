@@ -76,6 +76,14 @@ namespace Ayaya {
         // 根据 Handle 获取在当前电脑硬盘上的真实绝对路径 (专供 Lua 脚本引擎等底层读取使用)
         static std::string GetAssetPhysicalPath(UUID handle);
 
+        // 获取当前内存中所有已加载的资产
+        static const std::unordered_map<UUID, std::shared_ptr<void>>& GetLoadedAssets() { return s_Assets; }
+        // 获取指定 Handle 的元数据（用于判断类型）
+        static AssetMetadata GetMetadata(UUID handle) { 
+            if (s_Registry.count(handle)) return s_Registry[handle];
+            return {};
+        }
+
     private:
         // 内部专用：真正执行硬盘读取的函数，返回擦除了类型的 void 指针
         static std::shared_ptr<void> LoadAssetFromFile(UUID handle);
