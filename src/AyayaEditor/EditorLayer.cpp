@@ -825,13 +825,15 @@ namespace Ayaya {
         // --- New Scene (Ctrl + N) ---
         if (ImGui::IsKeyPressed(ImGuiKey_N, false) && control) {
             AYAYA_CORE_INFO("👉 Shortcut Triggered: New Scene");
-            NewScene();
+            // NewScene();
+            NewProject();
         }
 
         // --- Open Scene (Ctrl + O) ---
         if (ImGui::IsKeyPressed(ImGuiKey_O, false) && control) {
             AYAYA_CORE_INFO("👉 Shortcut Triggered: Open Scene");
-            OpenScene();
+            // OpenScene();
+            OpenProject();
         }
 
         // --- Save / Save As (Ctrl + S / Ctrl + Shift + S) ---
@@ -842,6 +844,7 @@ namespace Ayaya {
             } else {
                 AYAYA_CORE_INFO("👉 Shortcut Triggered: Save Scene");
                 SaveScene();
+                SaveProject();
             }
         }
 

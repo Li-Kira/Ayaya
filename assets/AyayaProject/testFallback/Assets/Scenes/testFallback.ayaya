@@ -2,58 +2,98 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition: [-0.113675416, 1.2723625, 9.918073]
+  CameraPosition:
+  - -0.113675416
+  - 1.2723625
+  - 9.918073
   CameraDistance: 10
   CameraPitch: -0.12758207
   CameraYaw: -0.0114609385
-  CameraFocalPoint: [0, 0, 0]
+  CameraFocalPoint:
+  - 0
+  - 0
+  - 0
 Entities:
-  - Entity: 3605041423657451279
-    TagComponent:
-      Tag: Main Camera
-      IsActive: true
-    TransformComponent:
-      Translation: [0, 0, 5]
-      Rotation: [0, 0, 0]
-      Scale: [1, 1, 1]
-    CameraComponent:
-      Primary: true
-      FixedAspectRatio: false
-      EV100: 14.5
-      ClearFlag: 0
-      BackgroundColor: [0.12, 0.12, 0.14, 1]
-      Camera:
-        ProjectionType: 1
-        PerspectiveFOV: 0.7853982
-        PerspectiveNear: 0.01
-        PerspectiveFar: 1000
-        OrthographicSize: 5
-        OrthographicNear: -1
-        OrthographicFar: 1000
-    RelationshipComponent:
-      Parent: 0
-  - Entity: 12244199376743892501
-    TagComponent:
-      Tag: Directional Light
-      IsActive: true
-    TransformComponent:
-      Translation: [0, 0, 0]
-      Rotation: [-0.7853982, 0.7853982, 0]
-      Scale: [1, 1, 1]
-    DirectionalLightComponent:
-      Color: [1, 1, 1]
-      Illuminance: 100000
-    RelationshipComponent:
-      Parent: 0
-  - Entity: 3087155304286953667
-    TagComponent:
-      Tag: Cube
-      IsActive: true
-    TransformComponent:
-      Translation: [0, 0, 0]
-      Rotation: [0, 0, 0]
-      Scale: [1, 1, 1]
-    MeshRendererComponent:
-      ModelPath: models/rock.obj
-    RelationshipComponent:
-      Parent: 0
+- Entity: 3605041423657451279
+  TagComponent:
+    Tag: Main Camera
+    IsActive: true
+  TransformComponent:
+    Translation:
+    - 0
+    - 0
+    - 5
+    Rotation:
+    - 0
+    - 0
+    - 0
+    Scale:
+    - 1
+    - 1
+    - 1
+  CameraComponent:
+    Primary: true
+    FixedAspectRatio: false
+    EV100: 14.5
+    ClearFlag: 0
+    BackgroundColor:
+    - 0.12
+    - 0.12
+    - 0.14
+    - 1
+    Camera:
+      ProjectionType: 1
+      PerspectiveFOV: 0.7853982
+      PerspectiveNear: 0.01
+      PerspectiveFar: 1000
+      OrthographicSize: 5
+      OrthographicNear: -1
+      OrthographicFar: 1000
+  RelationshipComponent:
+    Parent: 0
+- Entity: 12244199376743892501
+  TagComponent:
+    Tag: Directional Light
+    IsActive: true
+  TransformComponent:
+    Translation:
+    - 0
+    - 0
+    - 0
+    Rotation:
+    - -0.7853982
+    - 0.7853982
+    - 0
+    Scale:
+    - 1
+    - 1
+    - 1
+  DirectionalLightComponent:
+    Color:
+    - 1
+    - 1
+    - 1
+    Illuminance: 100000
+  RelationshipComponent:
+    Parent: 0
+- Entity: 3087155304286953667
+  TagComponent:
+    Tag: Cube
+    IsActive: true
+  TransformComponent:
+    Translation:
+    - 0
+    - 0
+    - 0
+    Rotation:
+    - 0
+    - 0
+    - 0
+    Scale:
+    - 1
+    - 1
+    - 1
+  MeshRendererComponent:
+    ModelHandle: 7976695696455325811
+  RelationshipComponent:
+    Parent: 0

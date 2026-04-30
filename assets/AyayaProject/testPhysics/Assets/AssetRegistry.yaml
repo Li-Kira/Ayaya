@@ -1,0 +1,7 @@
+AssetRegistry:
+- Handle: 13667759871508313252
+  Type: 5
+  VirtualPath: project://Materials/testPhysics/NewMaterial (1).mat
+- Handle: 9851217184559765644
+  Type: 4
+  VirtualPath: Primitive::Cube

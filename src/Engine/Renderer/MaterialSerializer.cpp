@@ -42,9 +42,11 @@ namespace Ayaya {
                     << prop.Vec4Value.x << prop.Vec4Value.y << prop.Vec4Value.z << prop.Vec4Value.w << YAML::EndSeq;
             }
             
-            if (prop.Type == MaterialPropertyType::Texture2D) {
-                // 【改造】：不再需要 UpgradeToVirtualPath，直接原样保存内存中的路径
-                out << YAML::Key << "TexturePath" << YAML::Value << prop.TexturePath;
+            // ==========================================
+            // 【核心修复 1】：保存时直接写入 64 位的 TextureHandle
+            // ==========================================
+            if (prop.Type == MaterialPropertyType::Texture2D || prop.Type == MaterialPropertyType::TextureCube) {
+                out << YAML::Key << "TextureHandle" << YAML::Value << (uint64_t)prop.TextureHandle;
             }
 
             out << YAML::EndMap;
@@ -96,16 +98,17 @@ namespace Ayaya {
                     prop.Vec4Value = glm::vec4(vecNode[0].as<float>(), vecNode[1].as<float>(), vecNode[2].as<float>(), vecNode[3].as<float>());
                 }
 
-                if (prop.Type == MaterialPropertyType::Texture2D) {
-                    if (propNode["TexturePath"]) {
-                        // 【改造】：直接读取 YAML 中的路径，不再进行清洗
-                        prop.TexturePath = propNode["TexturePath"].as<std::string>();
-
-                        if (!prop.TexturePath.empty()) {
-                            // 相信 VFS，直接解析
-                            std::string physicalPath = VFS::ResolveString(prop.TexturePath);
-                            prop.TextureHandle = AssetManager::ImportAsset(std::filesystem::path(physicalPath));
-                        }
+                // ==========================================
+                // 【核心修复 2】：读取时直接获取 TextureHandle
+                // ==========================================
+                if (prop.Type == MaterialPropertyType::Texture2D || prop.Type == MaterialPropertyType::TextureCube) {
+                    // 优先读取新的 UUID 架构
+                    if (propNode["TextureHandle"]) {
+                        prop.TextureHandle = propNode["TextureHandle"].as<uint64_t>();
+                    } 
+                    // 兼容极古老版本的数据：如果发现了旧的 TexturePath，直接归零，防止崩溃
+                    else if (propNode["TexturePath"]) {
+                        prop.TextureHandle = 0;
                     }
                 }
 

@@ -2,6 +2,7 @@
 #include "VFS.hpp"
 #include "Core/Log.hpp"
 #include <algorithm>
+#include <cctype>
 
 namespace Ayaya {
 
@@ -9,6 +10,13 @@ namespace Ayaya {
         std::replace(path.begin(), path.end(), '\\', '/');
         if (!path.empty() && path.back() == '/') path.pop_back();
         return path;
+    }
+
+    // 【新增】：统一转小写函数
+    static std::string ToLower(const std::string& str) {
+        std::string result = str;
+        std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) { return std::tolower(c); });
+        return result;
     }
 
     void VFS::Init() {
@@ -76,28 +84,37 @@ namespace Ayaya {
 
     std::string VFS::GetVirtualPath(const std::filesystem::path& physicalPath) {
         std::string target = Normalize(std::filesystem::absolute(physicalPath).lexically_normal().string());
+        
+        // 【核心修复】：生成一份全小写的 Target，专门用于安全比对
+        std::string targetLower = ToLower(target);
 
-        // 优先检查是否属于项目目录 (因为项目可能建在引擎文件夹旁边，先判断具体的)
+        // 1. 优先检查是否属于项目目录
         if (s_MountPoints.count("project")) {
             std::string projectDir = Normalize(s_MountPoints["project"].string());
-            if (target.find(projectDir) == 0) {
+            std::string projectDirLower = ToLower(projectDir);
+            
+            // 使用全小写进行安全匹配！
+            if (targetLower.find(projectDirLower) == 0) {
+                // 截取时依然使用原始的大小写字符串
                 std::string rel = target.substr(projectDir.length());
                 if (!rel.empty() && rel[0] == '/') rel = rel.substr(1);
                 return "project://" + rel; 
             }
         }
 
-        // 再检查是否属于引擎目录
+        // 2. 再检查是否属于引擎目录
         if (s_MountPoints.count("engine")) {
             std::string engineDir = Normalize(s_MountPoints["engine"].string());
-            if (target.find(engineDir) == 0) {
+            std::string engineDirLower = ToLower(engineDir);
+            
+            if (targetLower.find(engineDirLower) == 0) {
                 std::string rel = target.substr(engineDir.length());
                 if (!rel.empty() && rel[0] == '/') rel = rel.substr(1);
                 return "engine://" + rel; 
             }
         }
 
-        // 如果都不在，说明用户从桌面等外部位置拖入，原样返回绝对路径
+        // 3. 如果都不在，说明是外部导入的文件，原样返回绝对路径
         return target; 
     }
 }

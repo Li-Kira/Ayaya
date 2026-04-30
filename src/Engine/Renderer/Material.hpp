@@ -9,7 +9,8 @@ namespace Ayaya {
 
     class RenderCommandBuffer;
     class Pipeline;
-    class Texture2D; // 【新增】：前向声明贴图对象
+    class Texture2D;
+    class TextureCube;
 
     enum class MaterialPropertyType {
         Float     = 0, 
@@ -20,7 +21,8 @@ namespace Ayaya {
         Vec4      = 5, 
         Mat3      = 6,
         Mat4      = 7,
-        Texture2D = 8
+        Texture2D   = 8,
+        TextureCube = 9
     };
 
     struct MaterialProperty {
@@ -41,6 +43,7 @@ namespace Ayaya {
         
         // 【核心修改】：将数字 ID 替换为纹理对象的智能指针
         std::shared_ptr<Texture2D> RuntimeTexture = nullptr;
+        std::shared_ptr<TextureCube> RuntimeTextureCube = nullptr;
 
         std::string TexturePath = ""; // 完美保留！
     };
@@ -89,6 +92,8 @@ namespace Ayaya {
         // 动态 FBO 纹理绑定 (给 LightingPass / PostProcessPass 专用)
         // 【核心修改】：动态纹理绑定 (给特定运行时效果注入贴图)
         void SetRuntimeTexture(const std::string& name, const std::shared_ptr<Texture2D>& texture);
+        // 【新增】：动态 TextureCube 绑定 (例如注入预滤波环境贴图 PrefilterMap)
+        void SetRuntimeTextureCube(const std::string& name, const std::shared_ptr<TextureCube>& texture);
 
     private:
         template<typename T>

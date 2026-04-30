@@ -77,7 +77,7 @@ Entities:
       Scale: [1, 1, 1]
     SpriteRendererComponent:
       Color: [0.8407821, 0.58948684, 0.58948684, 1]
-      TextureHandle: 2661707628446602832
+      TextureHandle: 0
     RelationshipComponent:
       Parent: 0
   - Entity: 7583564679239796218
@@ -90,6 +90,6 @@ Entities:
       Scale: [1, 1, 1]
     SpriteRendererComponent:
       Color: [1, 1, 1, 1]
-      TextureHandle: 1714573547907950975
+      TextureHandle: 0
     RelationshipComponent:
       Parent: 0

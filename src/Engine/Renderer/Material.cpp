@@ -98,4 +98,10 @@ namespace Ayaya {
             p.TextureHandle = 0; // 清除可能残留的资产 ID
         });
     }
+    
+    void Material::SetRuntimeTextureCube(const std::string& name, const std::shared_ptr<TextureCube>& texture) {
+    SetPropertyInternal(name, MaterialPropertyType::TextureCube, [&texture](MaterialProperty& prop) {
+        prop.RuntimeTextureCube = texture;
+    });
+}
 }

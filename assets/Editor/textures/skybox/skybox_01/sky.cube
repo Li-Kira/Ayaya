@@ -1,0 +1,7 @@
+Cubemap:
+  Right:  right.jpg
+  Left:   left.jpg
+  Top:    top.jpg
+  Bottom: bottom.jpg
+  Front:  front.jpg
+  Back:   back.jpg

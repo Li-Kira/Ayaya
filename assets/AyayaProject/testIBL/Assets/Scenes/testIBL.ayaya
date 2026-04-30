@@ -2,133 +2,215 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition: [-4.283255, 0.3064561, 6.0702715]
+  CameraPosition:
+  - -4.283255
+  - 0.3064561
+  - 6.0702715
   CameraDistance: 15.5768385
   CameraPitch: 0.020974759
   CameraYaw: -0.38750583
-  CameraFocalPoint: [1.6016312, 0.63315254, -8.348441]
+  CameraFocalPoint:
+  - 1.6016312
+  - 0.63315254
+  - -8.348441
 Entities:
-  - Entity: 2539045586045542760
-    TagComponent:
-      Tag: Main Camera
-      IsActive: true
-    TransformComponent:
-      Translation: [-1.2, 0, 6.6]
-      Rotation: [0, 0, 0]
-      Scale: [1, 1, 1]
-    CameraComponent:
-      Primary: true
-      FixedAspectRatio: false
-      EV100: 14.5
-      ClearFlag: 0
-      BackgroundColor: [0.12, 0.12, 0.14, 1]
-      Camera:
-        ProjectionType: 0
-        PerspectiveFOV: 0.7853982
-        PerspectiveNear: 0.01
-        PerspectiveFar: 1000
-        OrthographicSize: 5
-        OrthographicNear: -1
-        OrthographicFar: 1000
-    RelationshipComponent:
-      Parent: 0
-  - Entity: 14508535908888558386
-    TagComponent:
-      Tag: Directional Light
-      IsActive: true
-    TransformComponent:
-      Translation: [0, 0, 0]
-      Rotation: [-0.7853982, 0.7853982, 0]
-      Scale: [1, 1, 1]
-    DirectionalLightComponent:
-      Color: [1, 1, 1]
-      Illuminance: 100000
-    RelationshipComponent:
-      Parent: 0
-  - Entity: 8907969295862716992
-    TagComponent:
-      Tag: Skybox
-      IsActive: true
-    TransformComponent:
-      Translation: [0, 0, 0]
-      Rotation: [0, 0, 0]
-      Scale: [1, 1, 1]
-    EnvironmentComponent:
-      Type: 1
-      EquirectangularPath: engine://textures/skybox/hdr/newport_loft.hdr
-      Intensity: 30000
-      AmbientColor: [0, 0, 0]
-      CubemapFaces:
-        - ""
-        - ""
-        - ""
-        - ""
-        - ""
-        - ""
-    RelationshipComponent:
-      Parent: 0
-  - Entity: 4763011572870788973
-    TagComponent:
-      Tag: RustedIron
-      IsActive: true
-    TransformComponent:
-      Translation: [-5, 0, 0]
-      Rotation: [0, -0, 0]
-      Scale: [1.5, 1.5, 1.5]
-    MeshRendererComponent:
-      ModelPath: Primitive::Sphere
-      MaterialPath: materials/testIBL/NewMaterial (18).mat
-    RelationshipComponent:
-      Parent: 0
-  - Entity: 15844447476958604292
-    TagComponent:
-      Tag: Gold
-      IsActive: true
-    TransformComponent:
-      Translation: [-3, 0, 0]
-      Rotation: [0, -0, 0]
-      Scale: [1.5, 1.5, 1.5]
-    MeshRendererComponent:
-      ModelPath: Primitive::Sphere
-      MaterialPath: materials/testIBL/NewMaterial (19).mat
-    RelationshipComponent:
-      Parent: 0
-  - Entity: 919855047660872479
-    TagComponent:
-      Tag: Grass
-      IsActive: true
-    TransformComponent:
-      Translation: [-1, 0, 0]
-      Rotation: [0, -0, 0]
-      Scale: [1.5, 1.5, 1.5]
-    MeshRendererComponent:
-      ModelPath: Primitive::Sphere
-      MaterialPath: materials/testIBL/NewMaterial (20).mat
-    RelationshipComponent:
-      Parent: 0
-  - Entity: 8185535601720665130
-    TagComponent:
-      Tag: Plastic
-      IsActive: true
-    TransformComponent:
-      Translation: [1, -1.4901161e-08, 0]
-      Rotation: [0, -0, 0]
-      Scale: [1.5, 1.5, 1.5]
-    MeshRendererComponent:
-      ModelPath: Primitive::Sphere
-      MaterialPath: materials/testIBL/NewMaterial (21).mat
-    RelationshipComponent:
-      Parent: 0
-  - Entity: 7803857549155461724
-    TagComponent:
-      Tag: Wall
-      IsActive: true
-    TransformComponent:
-      Translation: [3, 0, -2.9802322e-08]
-      Rotation: [0, -0, 0]
-      Scale: [1.5, 1.5, 1.5]
-    MeshRendererComponent:
-      ModelPath: Primitive::Sphere
-      MaterialPath: materials/testIBL/NewMaterial (22).mat
-    RelationshipComponent:
-      Parent: 0
+- Entity: 2539045586045542760
+  TagComponent:
+    Tag: Main Camera
+    IsActive: true
+  TransformComponent:
+    Translation:
+    - -1.2
+    - 0
+    - 6.6
+    Rotation:
+    - 0
+    - 0
+    - 0
+    Scale:
+    - 1
+    - 1
+    - 1
+  CameraComponent:
+    Primary: true
+    FixedAspectRatio: false
+    EV100: 14.5
+    ClearFlag: 0
+    BackgroundColor:
+    - 0.12
+    - 0.12
+    - 0.14
+    - 1
+    Camera:
+      ProjectionType: 0
+      PerspectiveFOV: 0.7853982
+      PerspectiveNear: 0.01
+      PerspectiveFar: 1000
+      OrthographicSize: 5
+      OrthographicNear: -1
+      OrthographicFar: 1000
+  RelationshipComponent:
+    Parent: 0
+- Entity: 14508535908888558386
+  TagComponent:
+    Tag: Directional Light
+    IsActive: true
+  TransformComponent:
+    Translation:
+    - 0
+    - 0
+    - 0
+    Rotation:
+    - -0.7853982
+    - 0.7853982
+    - 0
+    Scale:
+    - 1
+    - 1
+    - 1
+  DirectionalLightComponent:
+    Color:
+    - 1
+    - 1
+    - 1
+    Illuminance: 100000
+  RelationshipComponent:
+    Parent: 0
+- Entity: 8907969295862716992
+  TagComponent:
+    Tag: Skybox
+    IsActive: true
+  TransformComponent:
+    Translation:
+    - 0
+    - 0
+    - 0
+    Rotation:
+    - 0
+    - 0
+    - 0
+    Scale:
+    - 1
+    - 1
+    - 1
+  EnvironmentComponent:
+    Type: 1
+    Intensity: 30000
+    AmbientColor:
+    - 0
+    - 0
+    - 0
+    EquirectangularHandle: 15915456042159194739
+    CubemapHandle: 0
+  RelationshipComponent:
+    Parent: 0
+- Entity: 4763011572870788973
+  TagComponent:
+    Tag: RustedIron
+    IsActive: true
+  TransformComponent:
+    Translation:
+    - -5
+    - 0
+    - 0
+    Rotation:
+    - 0
+    - 0
+    - 0
+    Scale:
+    - 1.5
+    - 1.5
+    - 1.5
+  MeshRendererComponent:
+    ModelHandle: 5496529260383706383
+    MaterialHandle: 10912462420963535169
+  RelationshipComponent:
+    Parent: 0
+- Entity: 15844447476958604292
+  TagComponent:
+    Tag: Gold
+    IsActive: true
+  TransformComponent:
+    Translation:
+    - -3
+    - 0
+    - 0
+    Rotation:
+    - 0
+    - 0
+    - 0
+    Scale:
+    - 1.5
+    - 1.5
+    - 1.5
+  MeshRendererComponent:
+    ModelHandle: 5496529260383706383
+    MaterialHandle: 3861410939376451146
+  RelationshipComponent:
+    Parent: 0
+- Entity: 919855047660872479
+  TagComponent:
+    Tag: Grass
+    IsActive: true
+  TransformComponent:
+    Translation:
+    - -1
+    - 0
+    - 0
+    Rotation:
+    - 0
+    - 0
+    - 0
+    Scale:
+    - 1.5
+    - 1.5
+    - 1.5
+  MeshRendererComponent:
+    ModelHandle: 5496529260383706383
+    MaterialHandle: 17516450878731606923
+  RelationshipComponent:
+    Parent: 0
+- Entity: 8185535601720665130
+  TagComponent:
+    Tag: Plastic
+    IsActive: true
+  TransformComponent:
+    Translation:
+    - 1
+    - -1.4901161e-08
+    - 0
+    Rotation:
+    - 0
+    - 0
+    - 0
+    Scale:
+    - 1.5
+    - 1.5
+    - 1.5
+  MeshRendererComponent:
+    ModelHandle: 5496529260383706383
+    MaterialHandle: 14612748983573141288
+  RelationshipComponent:
+    Parent: 0
+- Entity: 7803857549155461724
+  TagComponent:
+    Tag: Wall
+    IsActive: true
+  TransformComponent:
+    Translation:
+    - 3
+    - 0
+    - -2.9802322e-08
+    Rotation:
+    - 0
+    - 0
+    - 0
+    Scale:
+    - 1.5
+    - 1.5
+    - 1.5
+  MeshRendererComponent:
+    ModelHandle: 5496529260383706383
+    MaterialHandle: 9111461900954793751
+  RelationshipComponent:
+    Parent: 0

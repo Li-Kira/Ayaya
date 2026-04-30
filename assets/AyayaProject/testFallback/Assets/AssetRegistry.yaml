@@ -1,2 +1,4 @@
 AssetRegistry:
-  []
+- Handle: 7976695696455325811
+  Type: 4
+  VirtualPath: project://models/rock.obj

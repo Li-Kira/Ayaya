@@ -1,6 +1,7 @@
 #include "ayapch.h"
 #include "AssetManager.hpp"
 #include "Renderer/Texture.hpp"
+#include "Renderer/TextureCube.hpp"
 #include "Renderer/Model.hpp"
 #include "Renderer/Material.hpp"
 #include "Renderer/MaterialSerializer.hpp"
@@ -54,6 +55,7 @@ namespace Ayaya {
         else if (ext == ".obj" || ext == ".fbx")             type = AssetType::Model;
         else if (ext == ".mat")                              type = AssetType::Material;
         else if (ext == ".lua")                              type = AssetType::LuaScript;
+        else if (ext == ".cube")                             type = AssetType::TextureCube;
 
         if (type == AssetType::None) {
             AYAYA_CORE_WARN("AssetManager: Unsupported asset format '{0}'", ext);
@@ -106,6 +108,10 @@ namespace Ayaya {
                 asset = material;
             }
         }
+        else if (metadata.Type == AssetType::TextureCube) {
+            // 调用我们接下来要写的单文件重载函数
+            asset = TextureCube::Create(physicalPath); 
+        }
 
         // LuaScript 类型的资源实际上不需要“加载到内存生成 C++ 对象”，
         // 脚本引擎在运行时直接调用 GetAssetPhysicalPath 去读文本文件即可，所以这里不需要做处理。
@@ -121,11 +127,27 @@ namespace Ayaya {
     }
 
     // =====================================================================
-    // 内置单例资产获取 (完美解决之前的报错)
+    // 内置单例资产获取
+    // =====================================================================
+    // =====================================================================
+    // 核心修复：内置单例资产获取 (永久绑定 UUID 并自动注册)
     // =====================================================================
     UUID AssetManager::GetBuiltInCube() {
         if (s_BuiltInCubeHandle == 0) {
-            s_BuiltInCubeHandle = UUID();
+            // 1. 先去账本里找，看以前有没有给 Cube 注册过固定户口
+            for (const auto& [handle, metadata] : s_Registry) {
+                if (metadata.VirtualPath == "Primitive::Cube") {
+                    s_BuiltInCubeHandle = handle;
+                    break;
+                }
+            }
+            // 2. 如果是第一次分配，生成新 UUID 并强制写入项目账本
+            if (s_BuiltInCubeHandle == 0) {
+                s_BuiltInCubeHandle = UUID();
+                s_Registry[s_BuiltInCubeHandle] = { AssetType::Model, "Primitive::Cube" };
+                SerializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
+            }
+            // 3. 生成实体放入内存
             auto cube = std::make_shared<Model>(Mesh::CreateCube(1.0f));
             AddAsset(s_BuiltInCubeHandle, cube); 
         }
@@ -134,7 +156,17 @@ namespace Ayaya {
 
     UUID AssetManager::GetBuiltInSphere() {
         if (s_BuiltInSphereHandle == 0) {
-            s_BuiltInSphereHandle = UUID();
+            for (const auto& [handle, metadata] : s_Registry) {
+                if (metadata.VirtualPath == "Primitive::Sphere") {
+                    s_BuiltInSphereHandle = handle;
+                    break;
+                }
+            }
+            if (s_BuiltInSphereHandle == 0) {
+                s_BuiltInSphereHandle = UUID();
+                s_Registry[s_BuiltInSphereHandle] = { AssetType::Model, "Primitive::Sphere" };
+                SerializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
+            }
             auto sphere = std::make_shared<Model>(Mesh::CreateSphere(0.5f, 64, 64));
             AddAsset(s_BuiltInSphereHandle, sphere);
         }
@@ -143,7 +175,17 @@ namespace Ayaya {
 
     UUID AssetManager::GetBuiltInPlane() {
         if (s_BuiltInPlaneHandle == 0) {
-            s_BuiltInPlaneHandle = UUID();
+            for (const auto& [handle, metadata] : s_Registry) {
+                if (metadata.VirtualPath == "Primitive::Plane") {
+                    s_BuiltInPlaneHandle = handle;
+                    break;
+                }
+            }
+            if (s_BuiltInPlaneHandle == 0) {
+                s_BuiltInPlaneHandle = UUID();
+                s_Registry[s_BuiltInPlaneHandle] = { AssetType::Model, "Primitive::Plane" };
+                SerializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
+            }
             auto plane = std::make_shared<Model>(Mesh::CreatePlane(1.0f, 1.0f));
             AddAsset(s_BuiltInPlaneHandle, plane);
         }
@@ -152,22 +194,28 @@ namespace Ayaya {
 
     UUID AssetManager::GetBuiltInMaterial() {
         if (s_BuiltInMaterialHandle == 0) {
-            s_BuiltInMaterialHandle = UUID();
+            for (const auto& [handle, metadata] : s_Registry) {
+                // 兼容带不带 Editor 的情况
+                if (metadata.VirtualPath == "engine://materials/DefaultPBR.mat" || 
+                    metadata.VirtualPath == "engine://Editor/materials/DefaultPBR.mat") {
+                    s_BuiltInMaterialHandle = handle;
+                    break;
+                }
+            }
+            if (s_BuiltInMaterialHandle == 0) {
+                s_BuiltInMaterialHandle = UUID();
+                s_Registry[s_BuiltInMaterialHandle] = { AssetType::Material, "engine://Editor/materials/DefaultPBR.mat" };
+                SerializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
+            }
+
             auto mat = std::make_shared<Material>();
-            
-            // 【核心改造】：尝试从 VFS 引擎目录读取真实的默认 PBR 材质
             std::string defaultMatPath = VFS::ResolveString("engine://Editor/materials/DefaultPBR.mat");
             
             if (MaterialSerializer::Deserialize(mat, defaultMatPath)) {
-                // 读取成功，稍微改个名字以防混淆
                 mat->Name = "Built-in Default PBR";
             } else {
-                // 如果文件丢失，作为保底方案(Fallback)，给一个纯净的名字
-                AYAYA_CORE_WARN("AssetManager: Failed to load DefaultPBR.mat, using empty fallback material.");
                 mat->Name = "Built-in Fallback Material";
             }
-
-            // 将读取好（或保底）的材质存入内存池
             AddAsset(s_BuiltInMaterialHandle, mat);
         }
         return s_BuiltInMaterialHandle;
