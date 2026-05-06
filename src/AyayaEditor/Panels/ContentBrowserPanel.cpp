@@ -114,8 +114,6 @@ namespace Ayaya {
             float cursorPosX = ImGui::GetCursorPosX();
             ImFont* font = ImGui::GetFont();
             
-            // 【修复】：绕过直接访问 FontSize，改用全局缩放系数。
-            // (如果你的引擎没有做动态字体缩放，这里其实直接写 float fontScale = 1.0f; 也是完全一样的！)
             float fontScale = ImGui::GetIO().FontGlobalScale; 
             
             const char* text = filenameString.c_str();
@@ -123,7 +121,7 @@ namespace Ayaya {
             
             float wrapWidth = m_ThumbnailSize; 
             int lineCount = 0;
-            const int maxLines = 2; // 成熟引擎的标准：最多显示两行，防止破坏网格布局
+            const int maxLines = 2;
 
             while (text < text_end && lineCount < maxLines) {
                 // 利用 ImGui 原生字体库计算安全的换行点，完美支持中英文单词切分！

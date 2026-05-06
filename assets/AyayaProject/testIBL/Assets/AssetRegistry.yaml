@@ -2,60 +2,75 @@ AssetRegistry:
   - Handle: 10838048528107095979
     Type: 2
     VirtualPath: project://Textures/gold/normal.png
-  - Handle: 7107234707708541594
+  - Handle: 9541127929940663277
     Type: 2
-    VirtualPath: project://Textures/grass/ao.png
+    VirtualPath: project://Textures/wall/metallic.png
+  - Handle: 12814967349563861021
+    Type: 2
+    VirtualPath: project://Textures/gold/albedo.png
   - Handle: 17636062698109624207
     Type: 2
     VirtualPath: project://Textures/rusted_iron/metallic.png
-  - Handle: 13504872671699068263
-    Type: 5
-    VirtualPath: project://Materials/testIBL/NewMaterial (22).mat
   - Handle: 5583827983618115307
     Type: 5
     VirtualPath: project://Materials/testIBL/NewMaterial (19).mat
-  - Handle: 7507803886353582249
+  - Handle: 13504872671699068263
     Type: 5
-    VirtualPath: project://Materials/testIBL/NewMaterial (18).mat
+    VirtualPath: project://Materials/testIBL/NewMaterial (22).mat
+  - Handle: 7107234707708541594
+    Type: 2
+    VirtualPath: project://Textures/grass/ao.png
+  - Handle: 9141752323759020403
+    Type: 2
+    VirtualPath: project://Textures/plastic/metallic.png
+  - Handle: 5922846508314193453
+    Type: 2
+    VirtualPath: project://Textures/plastic/albedo.png
+  - Handle: 14612748983573141288
+    Type: 5
+    VirtualPath: project://materials/testIBL/NewMaterial (21).mat
+  - Handle: 15915456042159194739
+    Type: 2
+    VirtualPath: engine://textures/skybox/hdr/newport_loft.hdr
   - Handle: 11177805141162727094
     Type: 5
     VirtualPath: project://Materials/testIBL/NewMaterial (21).mat
-  - Handle: 17591400011739918656
+  - Handle: 7507803886353582249
+    Type: 5
+    VirtualPath: project://Materials/testIBL/NewMaterial (18).mat
+  - Handle: 16159455308519504395
     Type: 2
-    VirtualPath: project://Textures/gold/ao.png
+    VirtualPath: project://Textures/grass/albedo.png
+  - Handle: 5743487640436738366
+    Type: 2
+    VirtualPath: project://Textures/plastic/ao.png
   - Handle: 9019127543390468806
     Type: 2
     VirtualPath: project://Textures/grass/metallic.png
   - Handle: 3663823157078525662
     Type: 2
     VirtualPath: project://Textures/rusted_iron/ao.png
-  - Handle: 12814967349563861021
-    Type: 2
-    VirtualPath: project://Textures/gold/albedo.png
-  - Handle: 14612748983573141288
-    Type: 5
-    VirtualPath: project://materials/testIBL/NewMaterial (21).mat
   - Handle: 6115586205591575161
     Type: 5
     VirtualPath: project://Materials/testIBL/NewMaterial (20).mat
-  - Handle: 16159455308519504395
-    Type: 2
-    VirtualPath: project://Textures/grass/albedo.png
   - Handle: 15587153503004010377
     Type: 2
     VirtualPath: project://Textures/wall/normal.png
   - Handle: 4761356711737382985
     Type: 2
     VirtualPath: project://Textures/rusted_iron/normal.png
+  - Handle: 9445529993207598244
+    Type: 2
+    VirtualPath: project://Textures/rusted_iron/roughness.png
   - Handle: 13275780580976378705
     Type: 2
     VirtualPath: project://Textures/plastic/normal.png
   - Handle: 11952428337756061720
     Type: 2
     VirtualPath: project://Textures/gold/metallic.png
-  - Handle: 9445529993207598244
+  - Handle: 17591400011739918656
     Type: 2
-    VirtualPath: project://Textures/rusted_iron/roughness.png
+    VirtualPath: project://Textures/gold/ao.png
   - Handle: 16840923429999924695
     Type: 2
     VirtualPath: project://Textures/rusted_iron/albedo.png
@@ -65,27 +80,18 @@ AssetRegistry:
   - Handle: 9111461900954793751
     Type: 5
     VirtualPath: project://materials/testIBL/NewMaterial (22).mat
-  - Handle: 6309370633670162567
-    Type: 2
-    VirtualPath: project://Textures/wall/albedo.png
-  - Handle: 15915456042159194739
-    Type: 2
-    VirtualPath: engine://textures/skybox/hdr/newport_loft.hdr
   - Handle: 3861410939376451146
     Type: 5
     VirtualPath: project://materials/testIBL/NewMaterial (19).mat
   - Handle: 5583736032448410479
     Type: 2
     VirtualPath: project://Textures/grass/roughness.png
-  - Handle: 9141752323759020403
-    Type: 2
-    VirtualPath: project://Textures/plastic/metallic.png
-  - Handle: 5922846508314193453
-    Type: 2
-    VirtualPath: project://Textures/plastic/albedo.png
   - Handle: 17516450878731606923
     Type: 5
     VirtualPath: project://materials/testIBL/NewMaterial (20).mat
+  - Handle: 6309370633670162567
+    Type: 2
+    VirtualPath: project://Textures/wall/albedo.png
   - Handle: 5169689634235946272
     Type: 2
     VirtualPath: project://Textures/gold/roughness.png
@@ -95,9 +101,6 @@ AssetRegistry:
   - Handle: 10912462420963535169
     Type: 5
     VirtualPath: project://materials/testIBL/NewMaterial (18).mat
-  - Handle: 9541127929940663277
-    Type: 2
-    VirtualPath: project://Textures/wall/metallic.png
   - Handle: 13486365429649847448
     Type: 2
     VirtualPath: project://Textures/grass/normal.png
@@ -107,6 +110,3 @@ AssetRegistry:
   - Handle: 5733503243408443556
     Type: 2
     VirtualPath: project://Textures/wall/ao.png
-  - Handle: 5743487640436738366
-    Type: 2
-    VirtualPath: project://Textures/plastic/ao.png

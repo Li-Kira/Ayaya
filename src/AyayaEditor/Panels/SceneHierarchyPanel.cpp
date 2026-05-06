@@ -38,6 +38,44 @@ namespace Ayaya {
         return mat;
     }
 
+    static std::filesystem::path ResolvePayloadPath(const char* pathStr) {
+        std::string pStr = pathStr;
+        
+        // 1. 【核心防御】如果传过来的是已经带 VFS 协议的路径 (project:// 或 engine://)
+        // 直接利用 VFS 完美反解析为硬盘物理绝对路径！
+        // 这一步直接避开了底层系统把 project:// 错误压缩为 project:/ 的 Bug！
+        if (pStr.find("://") != std::string::npos) {
+            return VFS::ResolveString(pStr);
+        }
+
+        // 2. 清洗路径斜杠（防兜底）
+        std::replace(pStr.begin(), pStr.end(), '\\', '/');
+        if (!pStr.empty() && pStr[0] == '/') pStr = pStr.substr(1);
+        std::filesystem::path draggedPath = pStr;
+
+        if (draggedPath.is_absolute()) return draggedPath;
+
+        // 3. 向上寻路找 assets
+        std::filesystem::path currentDir = std::filesystem::current_path();
+        while (currentDir.has_parent_path()) {
+            std::filesystem::path realAssetsDir = currentDir / "assets";
+            if (std::filesystem::exists(realAssetsDir)) {
+                std::filesystem::path candidate = realAssetsDir / draggedPath;
+                if (std::filesystem::exists(candidate)) return candidate;
+            }
+            if (currentDir == currentDir.parent_path()) break; 
+            currentDir = currentDir.parent_path();
+        }
+
+        // 4. 项目目录兜底
+        if (Project::GetActive()) {
+            std::filesystem::path pProj = Project::GetProjectDirectory() / draggedPath;
+            if (std::filesystem::exists(pProj)) return pProj;
+        }
+
+        return std::filesystem::absolute(draggedPath);
+    }
+
     SceneHierarchyPanel::SceneHierarchyPanel(const std::shared_ptr<Scene>& context) {
         SetContext(context);
     }
@@ -463,6 +501,23 @@ namespace Ayaya {
         // 取第一个实体作为展示和同步的基准
         Entity referenceEntity = m_SelectedEntities[0];
 
+        DrawTagComponent(referenceEntity);
+        DrawTransformComponent(referenceEntity);
+        DrawSpriteRendererComponent(referenceEntity, uiScale);
+        DrawCameraComponent(referenceEntity);
+        DrawDirectionalLightComponent(referenceEntity);
+        DrawPointLightComponent(referenceEntity);
+        DrawEnvironmentComponent(referenceEntity);
+        DrawMeshRendererComponent(referenceEntity, uiScale);
+        DrawPostProcessVolumeComponent(referenceEntity, uiScale);
+        DrawLuaScriptComponent(referenceEntity);
+        DrawRigidbody2DComponent(referenceEntity);
+        DrawBoxCollider2DComponent(referenceEntity);
+
+        DrawAddComponentButton(referenceEntity, uiScale);
+    }
+
+    void SceneHierarchyPanel::DrawTagComponent(Entity referenceEntity) {
         // ==========================================
         // --- 绘制 Tag 组件 ---
         // ==========================================
@@ -553,7 +608,9 @@ namespace Ayaya {
             }
         }
         ImGui::Separator();
+    }
 
+    void SceneHierarchyPanel::DrawTransformComponent(Entity referenceEntity) {
         // ==========================================
         // --- 绘制 Transform 组件 ---
         // ==========================================
@@ -647,7 +704,9 @@ namespace Ayaya {
                 ImGui::TreePop();
             }
         }
+    }
 
+    void SceneHierarchyPanel::DrawSpriteRendererComponent(Entity referenceEntity, float uiScale) {
         // ==========================================
         // --- 绘制 Sprite Renderer 组件 ---
         // ==========================================
@@ -721,12 +780,11 @@ namespace Ayaya {
                 if (ImGui::BeginDragDropTarget()) { 
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                         const char* pathStr = (const char*)payload->Data;
-                        std::string virtualPath = "project://" + std::string(pathStr);
-                        std::string physicalPath = VFS::ResolveString(virtualPath);
-                        std::filesystem::path texturePath(physicalPath);
+                        std::filesystem::path resolvedPath = ResolvePayloadPath(pathStr);
+                        std::string ext = resolvedPath.extension().string();
 
-                        if (texturePath.extension() == ".png" || texturePath.extension() == ".jpg") {
-                            UUID importedHandle = AssetManager::ImportAsset(texturePath);
+                        if (ext == ".png" || ext == ".jpg") {
+                            UUID importedHandle = AssetManager::ImportAsset(resolvedPath);
                             if (importedHandle != 0) {
                                 
                                 // 【撤回拦截】：拖放瞬间，备份旧状态
@@ -747,7 +805,7 @@ namespace Ayaya {
                                 }
                                 EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
 
-                                AYAYA_CORE_INFO("Successfully imported and applied texture: {0}", texturePath.string());
+                                AYAYA_CORE_INFO("Successfully imported and applied texture: {0}", resolvedPath.string());
                             }
                         } else {
                             AYAYA_CORE_WARN("Dropped file is not a supported image format!");
@@ -789,7 +847,9 @@ namespace Ayaya {
                 for (auto e : m_SelectedEntities) e.RemoveComponent<SpriteRendererComponent>();
             }
         }
+    }
 
+    void SceneHierarchyPanel::DrawCameraComponent(Entity referenceEntity) {
         // ==========================================
         // --- 绘制 Camera 组件 ---
         // ==========================================
@@ -1004,7 +1064,9 @@ namespace Ayaya {
                 for (auto e : m_SelectedEntities) e.RemoveComponent<CameraComponent>();
             }
         }
+    }
 
+    void SceneHierarchyPanel::DrawDirectionalLightComponent(Entity referenceEntity) {
         // ==========================================
         // --- 绘制 Directional Light 组件 ---
         // ==========================================
@@ -1075,7 +1137,9 @@ namespace Ayaya {
                 for (auto e : m_SelectedEntities) e.RemoveComponent<DirectionalLightComponent>();
             }
         }
+    }
 
+    void SceneHierarchyPanel::DrawPointLightComponent(Entity referenceEntity) {
         // ==========================================
         // --- 绘制 Point Light 组件 ---
         // ==========================================
@@ -1162,7 +1226,9 @@ namespace Ayaya {
                 for (auto e : m_SelectedEntities) e.RemoveComponent<PointLightComponent>();
             }
         }
+    }
 
+    void SceneHierarchyPanel::DrawEnvironmentComponent(Entity referenceEntity) {
         // ==========================================
         // --- 绘制 Environment (天空盒) 组件 ---
         // ==========================================
@@ -1258,11 +1324,12 @@ namespace Ayaya {
                         if (ImGui::BeginDragDropTarget()) {
                             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                                 const char* pathStr = (const char*)payload->Data;
-                                std::string ext = std::filesystem::path(pathStr).extension().string();
+                                std::filesystem::path resolvedPath = ResolvePayloadPath(pathStr);
+                                std::string ext = resolvedPath.extension().string();
                                 
                                 if (ext == ".hdr" || ext == ".jpg" || ext == ".png") {
                                     // 【修复】：无脑交给 AssetManager 分配 UUID
-                                    UUID importedHandle = AssetManager::ImportAsset(pathStr);
+                                    UUID importedHandle = AssetManager::ImportAsset(resolvedPath);
                                     
                                     if (importedHandle != 0) {
                                         std::vector<EnvironmentComponent> oldComps = pureOldEnvs;
@@ -1304,8 +1371,9 @@ namespace Ayaya {
                         if (ImGui::BeginDragDropTarget()) {
                             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                                 const char* pathStr = (const char*)payload->Data;
+                                std::filesystem::path resolvedPath = ResolvePayloadPath(pathStr);
                                 
-                                UUID importedHandle = AssetManager::ImportAsset(pathStr);
+                                UUID importedHandle = AssetManager::ImportAsset(resolvedPath);
                                 if (importedHandle != 0) {
                                     std::vector<EnvironmentComponent> oldComps = pureOldEnvs;
                                     for (auto& c : oldComps) c.IsDirty = true;
@@ -1350,7 +1418,9 @@ namespace Ayaya {
                 for (auto e : m_SelectedEntities) e.RemoveComponent<EnvironmentComponent>();
             }
         }
+    }
 
+    void SceneHierarchyPanel::DrawMeshRendererComponent(Entity referenceEntity, float uiScale) {
         // ==========================================
         // --- 绘制 Mesh Renderer 组件 ---
         // ==========================================
@@ -1471,7 +1541,7 @@ namespace Ayaya {
                     if (ImGui::BeginDragDropTarget()) {
                         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                             const char* pathStr = (const char*)payload->Data;
-                            std::filesystem::path resolvedPath = resolvePayloadPath(pathStr); // 【修复】：运用智能解析器
+                            std::filesystem::path resolvedPath = ResolvePayloadPath(pathStr); 
                             std::string ext = resolvedPath.extension().string();
                             
                             if (ext == ".obj" || ext == ".fbx" || ext == ".gltf") {
@@ -1642,12 +1712,12 @@ namespace Ayaya {
                                     if (ImGui::BeginDragDropTarget()) {
                                         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                                             const char* pathStr = (const char*)payload->Data;
-                                            std::filesystem::path resolvedPath = resolvePayloadPath(pathStr); // 【修复】：运用智能解析器
+                                            std::filesystem::path resolvedPath = resolvePayloadPath(pathStr);
                                             std::string ext = resolvedPath.extension().string();
 
                                             // 顺便加上 .hdr 支持
                                             if (ext == ".png" || ext == ".jpg" || ext == ".hdr") {
-                                                UUID importedHandle = AssetManager::ImportAsset(resolvedPath); // 【修复】
+                                                UUID importedHandle = AssetManager::ImportAsset(resolvedPath);
                                                 if (importedHandle != 0) {
                                                     if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
                                                         m_TextureGarbageBin.push_back(AssetManager::GetAsset<Texture2D>(prop.TextureHandle));
@@ -1721,7 +1791,9 @@ namespace Ayaya {
                 for (auto e : m_SelectedEntities) e.RemoveComponent<MeshRendererComponent>();
             }
         }
+    }
 
+    void SceneHierarchyPanel::DrawPostProcessVolumeComponent(Entity referenceEntity, float uiScale) {
         // ==========================================
         // --- 绘制 Post Process Volume 组件 ---
         // ==========================================
@@ -1881,7 +1953,9 @@ namespace Ayaya {
                 for (auto e : m_SelectedEntities) e.RemoveComponent<PostProcessVolumeComponent>();
             }
         }
+    }
 
+    void SceneHierarchyPanel::DrawLuaScriptComponent(Entity referenceEntity) {
         // ==========================================
         // --- 绘制 Lua Script 组件 ---
         // ==========================================
@@ -1989,7 +2063,9 @@ namespace Ayaya {
                 for (auto e : m_SelectedEntities) e.RemoveComponent<LuaScriptComponent>();
             }
         }
+    }
 
+    void SceneHierarchyPanel::DrawRigidbody2DComponent(Entity referenceEntity) {
         // ==========================================
         // --- 绘制 Rigidbody 2D 组件 ---
         // ==========================================
@@ -2068,7 +2144,9 @@ namespace Ayaya {
                 for (auto e : m_SelectedEntities) e.RemoveComponent<Rigidbody2DComponent>();
             }
         }
+    }
 
+    void SceneHierarchyPanel::DrawBoxCollider2DComponent(Entity referenceEntity) {
         // ==========================================
         // --- 绘制 BoxCollider 2D 组件 ---
         // ==========================================
@@ -2155,7 +2233,9 @@ namespace Ayaya {
                 for (auto e : m_SelectedEntities) e.RemoveComponent<BoxCollider2DComponent>();
             }
         }
+    }
 
+    void SceneHierarchyPanel::DrawAddComponentButton(Entity referenceEntity, float uiScale) {
         // ==========================================
         // “添加组件” 按钮 (基于第一个实体判定，给所有实体添加)
         // ==========================================

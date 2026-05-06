@@ -1,46 +1,28 @@
 AssetRegistry:
-  - Handle: 12279238825151638930
-    Type: 4
-    VirtualPath: project://Models/backpack/backpack.obj
+  - Handle: 9269055279227325805
+    Type: 2
+    VirtualPath: project://Textures/backpack/specular.jpg
+  - Handle: 17525142522252290110
+    Type: 2
+    VirtualPath: project://Textures/backpack/roughness.jpg
+  - Handle: 13946038664939340440
+    Type: 5
+    VirtualPath: project://Materials/testPBR/NewMaterial.mat
+  - Handle: 1827409700130443451
+    Type: 5
+    VirtualPath: project://Materials/testPBR/NewMaterial.mat
   - Handle: 409720215039591649
     Type: 2
     VirtualPath: project://Textures/backpack/diffuse.jpg
   - Handle: 9692791962244485496
     Type: 3
     VirtualPath: engine://Editor/textures/skybox/skybox_01/sky.cube
-  - Handle: 13731058858046846449
-    Type: 2
-    VirtualPath: project://Textures/backpack/normal.png
-  - Handle: 1827409700130443451
-    Type: 5
-    VirtualPath: project://Materials/testPBR/NewMaterial.mat
-  - Handle: 10509706410398950003
-    Type: 2
-    VirtualPath: /Users/likirac/Desktop/Project/Learn/Ayaya/build/AyayaProject/testPBR/Assets/Textures/backpack/diffuse.jpg
   - Handle: 9474477140366850679
     Type: 2
     VirtualPath: project://Textures/backpack/ao.jpg
-  - Handle: 11173970559144881808
+  - Handle: 13731058858046846449
     Type: 2
-    VirtualPath: engine://AyayaProject/testPBR/Assets/Textures/backpack/diffuse.jpg
-  - Handle: 13946038664939340440
-    Type: 5
-    VirtualPath: project://Materials/testPBR/NewMaterial.mat
-  - Handle: 17525142522252290110
-    Type: 2
-    VirtualPath: project://Textures/backpack/roughness.jpg
-  - Handle: 9269055279227325805
-    Type: 2
-    VirtualPath: project://Textures/backpack/specular.jpg
-  - Handle: 8353095941000195413
-    Type: 2
-    VirtualPath: engine://AyayaProject/testPBR/Assets/Textures/backpack/specular.jpg
-  - Handle: 6179440015184395164
-    Type: 2
-    VirtualPath: engine://AyayaProject/testPBR/Assets/Textures/backpack/normal.png
-  - Handle: 4311146831178510099
-    Type: 2
-    VirtualPath: engine://AyayaProject/testPBR/Assets/Textures/backpack/roughness.jpg
-  - Handle: 3278932708130569369
-    Type: 2
-    VirtualPath: engine://AyayaProject/testPBR/Assets/Textures/backpack/ao.jpg
+    VirtualPath: project://Textures/backpack/normal.png
+  - Handle: 12279238825151638930
+    Type: 4
+    VirtualPath: project://Models/backpack/backpack.obj

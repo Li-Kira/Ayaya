@@ -12,15 +12,15 @@ Properties:
   - UniformName: u_AlbedoMap
     DisplayName: Albedo Texture
     Type: 8
-    TextureHandle: 11173970559144881808
+    TextureHandle: 409720215039591649
   - UniformName: u_UseNormalMap
     DisplayName: Enable Normal Map
     Type: 2
-    BoolValue: false
+    BoolValue: true
   - UniformName: u_NormalMap
     DisplayName: Normal Map
     Type: 8
-    TextureHandle: 0
+    TextureHandle: 13731058858046846449
   - UniformName: u_Metallic
     DisplayName: Metallic
     Type: 0
@@ -28,11 +28,11 @@ Properties:
   - UniformName: u_UseMetallicMap
     DisplayName: Enable Metallic Map
     Type: 2
-    BoolValue: false
+    BoolValue: true
   - UniformName: u_MetallicMap
     DisplayName: Metallic Texture
     Type: 8
-    TextureHandle: 0
+    TextureHandle: 9269055279227325805
   - UniformName: u_Roughness
     DisplayName: Roughness
     Type: 0
@@ -40,7 +40,7 @@ Properties:
   - UniformName: u_UseRoughnessMap
     DisplayName: Enable Roughness Map
     Type: 2
-    BoolValue: false
+    BoolValue: true
   - UniformName: u_RoughnessMap
     DisplayName: Roughness Texture
     Type: 8
@@ -52,8 +52,8 @@ Properties:
   - UniformName: u_UseAOMap
     DisplayName: Enable AO Map
     Type: 2
-    BoolValue: false
+    BoolValue: true
   - UniformName: u_AOMap
     DisplayName: AO Texture
     Type: 8
-    TextureHandle: 6983049041360085190
+    TextureHandle: 9474477140366850679

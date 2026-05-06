@@ -1,0 +1,4 @@
+Project:
+  Name: testSprite
+  StartScene: Scenes/testSprite.ayaya
+  AssetDirectory: Assets

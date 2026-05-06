@@ -1,0 +1,4 @@
+Project:
+  Name: testPhysics
+  StartScene: Scenes/testPhysics.ayaya
+  AssetDirectory: Assets

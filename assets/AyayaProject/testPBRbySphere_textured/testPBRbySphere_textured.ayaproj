@@ -1,0 +1,4 @@
+Project:
+  Name: testPBRbySphere_textured
+  StartScene: Scenes/testPBRbySphere_textured.ayaya
+  AssetDirectory: Assets

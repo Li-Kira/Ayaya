@@ -12,7 +12,7 @@ Properties:
   - UniformName: u_AlbedoMap
     DisplayName: Albedo Texture
     Type: 8
-    TexturePath: Textures/grass/albedo.png
+    TextureHandle: 16159455308519504395
   - UniformName: u_UseNormalMap
     DisplayName: Enable Normal Map
     Type: 2
@@ -20,7 +20,7 @@ Properties:
   - UniformName: u_NormalMap
     DisplayName: Normal Map
     Type: 8
-    TexturePath: Textures/grass/normal.png
+    TextureHandle: 13486365429649847448
   - UniformName: u_Metallic
     DisplayName: Metallic
     Type: 0
@@ -32,7 +32,7 @@ Properties:
   - UniformName: u_MetallicMap
     DisplayName: Metallic Texture
     Type: 8
-    TexturePath: Textures/grass/metallic.png
+    TextureHandle: 9019127543390468806
   - UniformName: u_Roughness
     DisplayName: Roughness
     Type: 0
@@ -44,7 +44,7 @@ Properties:
   - UniformName: u_RoughnessMap
     DisplayName: Roughness Texture
     Type: 8
-    TexturePath: Textures/grass/roughness.png
+    TextureHandle: 5583736032448410479
   - UniformName: u_AO
     DisplayName: Ambient Occlusion
     Type: 0
@@ -56,4 +56,4 @@ Properties:
   - UniformName: u_AOMap
     DisplayName: AO Texture
     Type: 8
-    TexturePath: Textures/grass/ao.png
+    TextureHandle: 7107234707708541594

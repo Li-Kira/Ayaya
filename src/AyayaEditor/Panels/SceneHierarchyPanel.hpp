@@ -51,7 +51,21 @@ namespace Ayaya {
 
     private:
         void DrawEntityNode(Entity entity);
-        void DrawComponents(); // 移除参数，直接从内部的 m_SelectedEntities 获取
+        void DrawComponents();
+
+        void DrawTagComponent(Entity referenceEntity);
+        void DrawTransformComponent(Entity referenceEntity);
+        void DrawSpriteRendererComponent(Entity referenceEntity, float uiScale);
+        void DrawCameraComponent(Entity referenceEntity);
+        void DrawDirectionalLightComponent(Entity referenceEntity);
+        void DrawPointLightComponent(Entity referenceEntity);
+        void DrawEnvironmentComponent(Entity referenceEntity);
+        void DrawMeshRendererComponent(Entity referenceEntity, float uiScale);
+        void DrawPostProcessVolumeComponent(Entity referenceEntity, float uiScale);
+        void DrawLuaScriptComponent(Entity referenceEntity);
+        void DrawRigidbody2DComponent(Entity referenceEntity);
+        void DrawBoxCollider2DComponent(Entity referenceEntity);
+        void DrawAddComponentButton(Entity referenceEntity, float uiScale);
 
     private:
         std::shared_ptr<Scene> m_Context;
