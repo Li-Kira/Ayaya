@@ -228,7 +228,7 @@ namespace Ayaya {
         cmd.BlitDepth(gbufferFBO, m_LightingFBO, width, height);
 
         // 3. 正向渲染：天空盒
-        auto envMap = context.Get<std::shared_ptr<TextureCube>>("EnvironmentMap", nullptr);
+        auto envMap = context.Get<std::shared_ptr<TextureCube>>("EnvironmentCubemap", nullptr);
         if (envMap && context.Get<bool>("ShowSkybox", true)) {
             cmd.BindPipeline(m_SkyboxPipeline);
             context.Stats.ShaderBinds++;
