@@ -191,7 +191,11 @@ namespace Ayaya {
         // ==========================================
         auto whiteTex = context.GetTexture("WhiteTexture");
         if (whiteTex) {
-            cmd.BindTexture2D(m_DeferredPipeline, "u_ShadowMap", 5, whiteTex);
+            if (shadowFBO) {
+                cmd.BindTexture2D(m_DeferredPipeline, "u_ShadowMap", 5, shadowFBO, 0, true);
+            } else {
+                cmd.BindTexture2D(m_DeferredPipeline, "u_ShadowMap", 5, whiteTex);
+            }
             cmd.BindTexture2D(m_DeferredPipeline, "u_BRDFLUT", 10, whiteTex);
         }
 
@@ -204,13 +208,6 @@ namespace Ayaya {
         if (irrMap && preMap) {
             cmd.BindTextureCube(m_DeferredPipeline, "u_IrradianceMap", 8, irrMap);
             cmd.BindTextureCube(m_DeferredPipeline, "u_PrefilteredMap", 9, preMap);
-            
-            // 只有绑好了贴图，才允许发车！
-            cmd.DrawTriangleStrip(4); 
-        } 
-        else {
-            AYAYA_CORE_WARN("No Skybox found! Skipping Lighting Pass to prevent Vulkan Crash.");
-            // ⚠️ 绝对不能在这里或者在这段 if 之后执行 cmd.DrawTriangleStrip(4); ！！！
         }
 
         bool hasEnvMap = (irrMap && preMap);

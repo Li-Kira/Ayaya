@@ -210,6 +210,7 @@ namespace Ayaya {
         }
 
         cmd.EndRenderPass();
+        cmd.InsertExecutionBarrier(); // flush TBDR tile writes before PostProcess reads this FBO
         context.Set("Forward_Output", currentFBO); 
         context.Set("Final_Output", currentFBO);   
         context.Framebuffers["ForwardTest"] = currentFBO;

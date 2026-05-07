@@ -832,9 +832,8 @@ namespace Ayaya {
         VkDevice device = context->GetDevice();
         auto allocator = context->GetAllocator();
 
-        // ==========================================
-        // 【核心修复 2B】：把我们当时埋下的显存炸弹拆掉！
-        // ==========================================
+        vkDeviceWaitIdle(device);
+
         for (auto& res : s_TrackedIBLResources) {
             vkDestroyImageView(device, res.View, nullptr);
             vmaDestroyImage(allocator, res.Image, res.Alloc);

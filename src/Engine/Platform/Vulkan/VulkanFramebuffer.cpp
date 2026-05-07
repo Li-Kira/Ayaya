@@ -125,7 +125,9 @@ namespace Ayaya {
             vkCreateImageView(device, &viewInfo, nullptr, &imageView);
             m_ColorImageViews.push_back(imageView);
 
-            // 【核心渲染管线图纸】：定义画完后自动变为 Shader 可读格式！
+            // initialLayout must match the previous frame's finalLayout (SHADER_READ_ONLY_OPTIMAL)
+            // so MoltenVK on Apple Silicon can properly flush TBDR tile caches before clearing.
+            // Using UNDEFINED here skips the cache flush and causes magenta flickering on M1/M2.
             VkAttachmentDescription desc{};
             desc.format = vkFormat;
             desc.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -133,8 +135,8 @@ namespace Ayaya {
             desc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
             desc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
             desc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            desc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            desc.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; // <--- 致命关键点！
+            desc.initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            desc.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             attachmentDescs.push_back(desc);
 
             VkAttachmentReference ref{};
@@ -251,6 +253,34 @@ namespace Ayaya {
         fboInfo.height = m_Specification.Height;
         fboInfo.layers = 1;
         vkCreateFramebuffer(device, &fboInfo, nullptr, &m_Framebuffer);
+
+        // ==========================================
+        // 4.5 将新创建的颜色图像从 UNDEFINED 过渡到 SHADER_READ_ONLY_OPTIMAL
+        // 否则 RenderPass 以 SHADER_READ_ONLY_OPTIMAL 作为 initialLayout 时会报 VUID 09600
+        // ==========================================
+        {
+            VkCommandBuffer cmd = context->BeginSingleTimeCommands();
+            for (auto& image : m_ColorImages) {
+                VkImageMemoryBarrier barrier{};
+                barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.image = image;
+                barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                barrier.subresourceRange.baseMipLevel = 0;
+                barrier.subresourceRange.levelCount = 1;
+                barrier.subresourceRange.baseArrayLayer = 0;
+                barrier.subresourceRange.layerCount = 1;
+                barrier.srcAccessMask = 0;
+                barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                vkCmdPipelineBarrier(cmd,
+                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    0, 0, nullptr, 0, nullptr, 1, &barrier);
+            }
+            context->EndSingleTimeCommands(cmd);
+        }
 
         // ==========================================
         // 5. 创建全局读取采样器与 ImGui 注册

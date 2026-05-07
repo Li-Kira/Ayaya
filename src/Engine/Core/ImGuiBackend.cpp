@@ -37,6 +37,22 @@ namespace Ayaya {
             auto vulkanContext = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
             VkCommandBuffer cmdBuffer = vulkanContext->GetCurrentCommandBuffer();
             // ==========================================
+            // 全局内存屏障：确保离屏 FBO 的颜色写入对 ImGui 片元着色器可见
+            // Apple TBDR GPU 必须在 RenderPass 切换时显式刷新 tile memory
+            // ==========================================
+            VkMemoryBarrier globalBarrier{};
+            globalBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+            globalBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            globalBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            vkCmdPipelineBarrier(cmdBuffer,
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                0,
+                1, &globalBarrier,
+                0, nullptr,
+                0, nullptr);
+
+            // ==========================================
             // 【终极交接】：在这里开启指向主屏幕的 RenderPass，并包裹 ImGui 的绘制！
             // ==========================================
             VkRenderPassBeginInfo renderPassInfo{};

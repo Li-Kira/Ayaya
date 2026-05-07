@@ -29,6 +29,9 @@
 #include "Renderer/Passes/VulkanLightingPass.hpp"
 #include "Renderer/Passes/VulkanPostProcessPass.hpp"
 #include "Renderer/Passes/VulkanForwardTestPass.hpp"
+#include "Renderer/Passes/VulkanShadowPass.hpp"
+#include "Renderer/Passes/VulkanBloomPass.hpp"
+#include "Renderer/Passes/VulkanFXAAPass.hpp"
 
 #include "Core/Application.hpp"
 #include "Platform/Vulkan/VulkanContext.hpp"
@@ -167,15 +170,15 @@ namespace Ayaya {
             glGenQueries(1, &m_Data->GPUTimeQuery);
         }
         else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-            AYAYA_CORE_WARN("Vulkan Pipeline is running in minimal mode!");
-            // Vulkan 模式下暂不执行任何 OpenGL 的 VAO 或 Query 创建
-
-            // m_Pipeline.AddPass(std::make_shared<VulkanClearPass>());
+            AYAYA_CORE_INFO("Vulkan Pipeline: Deferred Rendering Mode");
+            // m_Pipeline.AddPass(std::make_shared<VulkanShadowPass>());
             // m_Pipeline.AddPass(std::make_shared<VulkanGBufferPass>());
             // m_Pipeline.AddPass(std::make_shared<VulkanLightingPass>());
+            // m_Pipeline.AddPass(std::make_shared<VulkanBloomPass>());
             m_Pipeline.AddPass(std::make_shared<VulkanForwardTestPass>());
-            m_Pipeline.AddPass(std::make_shared<VulkanPostProcessPass>());
             
+            m_Pipeline.AddPass(std::make_shared<VulkanPostProcessPass>());
+            // m_Pipeline.AddPass(std::make_shared<VulkanFXAAPass>());
             m_Pipeline.Init();
         }
     }
@@ -393,15 +396,17 @@ namespace Ayaya {
     }
 
     void* SceneRenderer::GetFinalColorAttachmentRendererID() {
-        // 1. 优先寻找完整管线的最后输出 (正式模式)
+        // 1. 优先寻找 FXAA 输出
+        if (m_RenderContext.Framebuffers.find("FXAA") != m_RenderContext.Framebuffers.end()) {
+            auto fbo = m_RenderContext.Framebuffers["FXAA"];
+            if (fbo) return fbo->GetColorAttachmentRendererID(0);
+        }
+        // 2. PostProcess 输出
         if (m_RenderContext.Framebuffers.find("PostProcess") != m_RenderContext.Framebuffers.end()) {
             auto fbo = m_RenderContext.Framebuffers["PostProcess"];
             if (fbo) return fbo->GetColorAttachmentRendererID(0);
         }
-
-        // ==========================================
-        // 2. 【核心修复】：向下兼容！如果没开后处理，尝试寻找向前渲染测试的产物
-        // ==========================================
+        // 3. 向前兼容：前向渲染产物
         if (m_RenderContext.Framebuffers.find("ForwardTest") != m_RenderContext.Framebuffers.end()) {
             auto fbo = m_RenderContext.Framebuffers["ForwardTest"];
             if (fbo) return fbo->GetColorAttachmentRendererID(0);
@@ -411,12 +416,14 @@ namespace Ayaya {
     }
 
     void* SceneRenderer::GetPostProcessFBORendererID() {
-        // 同理，高清截图器等功能也需要向下兼容
+        if (m_RenderContext.Framebuffers.find("FXAA") != m_RenderContext.Framebuffers.end()) {
+            auto fbo = m_RenderContext.Framebuffers["FXAA"];
+            if (fbo) return fbo->GetColorAttachmentRendererID(0);
+        }
         if (m_RenderContext.Framebuffers.find("PostProcess") != m_RenderContext.Framebuffers.end()) {
             auto fbo = m_RenderContext.Framebuffers["PostProcess"];
             if (fbo) return fbo->GetColorAttachmentRendererID(0);
         }
-
         if (m_RenderContext.Framebuffers.find("ForwardTest") != m_RenderContext.Framebuffers.end()) {
             auto fbo = m_RenderContext.Framebuffers["ForwardTest"];
             if (fbo) return fbo->GetColorAttachmentRendererID(0);

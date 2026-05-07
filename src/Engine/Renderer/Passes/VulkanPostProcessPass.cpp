@@ -61,10 +61,12 @@ namespace Ayaya {
         context.Stats.ShaderBinds++;
 
         // ==========================================
-        // 1. 获取主画面 (抓取之前 VulkanForwardTestPass 的产物)
+        // 1. 获取主画面 (优先取延迟管线的 Lighting 产物，兼容前向管线的 ForwardTest)
         // ==========================================
         std::shared_ptr<Framebuffer> screenFBO;
-        if (context.Framebuffers.find("ForwardTest") != context.Framebuffers.end()) {
+        if (context.Framebuffers.find("Lighting") != context.Framebuffers.end()) {
+            screenFBO = context.Framebuffers["Lighting"];
+        } else if (context.Framebuffers.find("ForwardTest") != context.Framebuffers.end()) {
             screenFBO = context.Framebuffers["ForwardTest"];
         }
 
@@ -116,6 +118,7 @@ namespace Ayaya {
         }
         
         cmd.EndRenderPass();
+        cmd.InsertExecutionBarrier(); // flush TBDR tile writes before ImGui samples this FBO
 
         // 最终输出挂载到黑板上
         context.Set("Final_Output", currentFBO);
