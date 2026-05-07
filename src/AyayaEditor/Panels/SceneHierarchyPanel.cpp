@@ -1317,20 +1317,30 @@ namespace Ayaya {
                         ImGui::Spacing();
                         ImGui::Text("Equirectangular Map");
                         
-                        // 【修复】：使用 UUID 判断，不再使用字符串路径
-                        std::string pathDisplay = (refEnv.EquirectangularHandle == 0) ? "Drop .hdr / .jpg here" : "Map Loaded (ID: " + std::to_string((uint64_t)refEnv.EquirectangularHandle) + ")";
-                        ImGui::Button(pathDisplay.c_str(), ImVec2(-1.0f, 30.0f));
+                        std::string pathDisplay = "Drop .hdr / .jpg here";
+                        if (refEnv.EquirectangularHandle != 0) {
+                            AssetMetadata meta = AssetManager::GetMetadata(refEnv.EquirectangularHandle);
+                            const std::string& vpath = meta.VirtualPath;
+                            if (!vpath.empty()) {
+                                auto pos = vpath.find_last_of("/\\");
+                                pathDisplay = (pos != std::string::npos) ? vpath.substr(pos + 1) : vpath;
+                            } else {
+                                pathDisplay = "Map Loaded (ID: " + std::to_string((uint64_t)refEnv.EquirectangularHandle) + ")";
+                            }
+                        }
+
+                        if (ImGui::Button(pathDisplay.c_str(), ImVec2(-1.0f, 30.0f)))
+                            ImGui::OpenPopup("EnvEquirectPopup");
 
                         if (ImGui::BeginDragDropTarget()) {
                             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                                 const char* pathStr = (const char*)payload->Data;
                                 std::filesystem::path resolvedPath = ResolvePayloadPath(pathStr);
                                 std::string ext = resolvedPath.extension().string();
-                                
+
                                 if (ext == ".hdr" || ext == ".jpg" || ext == ".png") {
-                                    // 【修复】：无脑交给 AssetManager 分配 UUID
                                     UUID importedHandle = AssetManager::ImportAsset(resolvedPath);
-                                    
+
                                     if (importedHandle != 0) {
                                         std::vector<EnvironmentComponent> oldComps = pureOldEnvs;
                                         for (auto& c : oldComps) c.IsDirty = true;
@@ -1339,7 +1349,7 @@ namespace Ayaya {
                                             auto& comp = e.GetComponent<EnvironmentComponent>();
                                             comp.EquirectangularHandle = importedHandle;
                                             comp.Type = (ext == ".hdr") ? EnvironmentType::HDR_Equirectangular : EnvironmentType::LDR_Equirectangular;
-                                            comp.IsDirty = true; // 通知渲染器重新烘焙
+                                            comp.IsDirty = true;
                                         }
 
                                         auto macroCmd = std::make_shared<MacroCommand>("Assign Equirectangular Map to " + getTargetName());
@@ -1356,6 +1366,33 @@ namespace Ayaya {
                             }
                             ImGui::EndDragDropTarget();
                         }
+
+                        if (ImGui::BeginPopup("EnvEquirectPopup")) {
+                            ImGui::TextDisabled("Built-in HDR");
+                            ImGui::Separator();
+                            if (ImGui::MenuItem("Newport Loft")) {
+                                std::filesystem::path builtinPath = VFS::ResolveString("engine://textures/skybox/hdr/newport_loft.hdr");
+                                UUID importedHandle = AssetManager::ImportAsset(builtinPath);
+                                if (importedHandle != 0) {
+                                    std::vector<EnvironmentComponent> oldComps = pureOldEnvs;
+                                    for (auto& c : oldComps) c.IsDirty = true;
+                                    for (auto e : m_SelectedEntities) {
+                                        auto& comp = e.GetComponent<EnvironmentComponent>();
+                                        comp.EquirectangularHandle = importedHandle;
+                                        comp.Type = EnvironmentType::HDR_Equirectangular;
+                                        comp.IsDirty = true;
+                                    }
+                                    auto macroCmd = std::make_shared<MacroCommand>("Assign Built-in HDR to " + getTargetName());
+                                    for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                                        macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<EnvironmentComponent>>(
+                                            m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<EnvironmentComponent>()
+                                        ));
+                                    }
+                                    EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
+                                }
+                            }
+                            ImGui::EndPopup();
+                        }
                     } 
                     // ------------------------------------------
                     // 4. 传统 6 面体贴图 (统一为单一资产 UUID 拖拽)
@@ -1364,15 +1401,26 @@ namespace Ayaya {
                         ImGui::Spacing();
                         ImGui::Text("Cubemap Asset");
                         
-                        // 【修复】：废除 6 个面的繁琐 UI，统一为一个 CubemapHandle 槽位
-                        std::string faceDisplay = (refEnv.CubemapHandle == 0) ? "Drop .cube / .dds Asset Here" : "Cubemap Loaded (ID: " + std::to_string((uint64_t)refEnv.CubemapHandle) + ")";
-                        ImGui::Button(faceDisplay.c_str(), ImVec2(-1.0f, 30.0f));
+                        std::string faceDisplay = "Drop .cube / .dds here";
+                        if (refEnv.CubemapHandle != 0) {
+                            AssetMetadata meta = AssetManager::GetMetadata(refEnv.CubemapHandle);
+                            const std::string& vpath = meta.VirtualPath;
+                            if (!vpath.empty()) {
+                                auto pos = vpath.find_last_of("/\\");
+                                faceDisplay = (pos != std::string::npos) ? vpath.substr(pos + 1) : vpath;
+                            } else {
+                                faceDisplay = "Cubemap Loaded (ID: " + std::to_string((uint64_t)refEnv.CubemapHandle) + ")";
+                            }
+                        }
+
+                        if (ImGui::Button(faceDisplay.c_str(), ImVec2(-1.0f, 30.0f)))
+                            ImGui::OpenPopup("EnvCubemapPopup");
 
                         if (ImGui::BeginDragDropTarget()) {
                             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                                 const char* pathStr = (const char*)payload->Data;
                                 std::filesystem::path resolvedPath = ResolvePayloadPath(pathStr);
-                                
+
                                 UUID importedHandle = AssetManager::ImportAsset(resolvedPath);
                                 if (importedHandle != 0) {
                                     std::vector<EnvironmentComponent> oldComps = pureOldEnvs;
@@ -1394,6 +1442,32 @@ namespace Ayaya {
                                 }
                             }
                             ImGui::EndDragDropTarget();
+                        }
+
+                        if (ImGui::BeginPopup("EnvCubemapPopup")) {
+                            ImGui::TextDisabled("Built-in Skybox");
+                            ImGui::Separator();
+                            if (ImGui::MenuItem("Skybox 01")) {
+                                std::filesystem::path builtinPath = VFS::ResolveString("engine://Editor/textures/skybox/skybox_01/sky.cube");
+                                UUID importedHandle = AssetManager::ImportAsset(builtinPath);
+                                if (importedHandle != 0) {
+                                    std::vector<EnvironmentComponent> oldComps = pureOldEnvs;
+                                    for (auto& c : oldComps) c.IsDirty = true;
+                                    for (auto e : m_SelectedEntities) {
+                                        auto& comp = e.GetComponent<EnvironmentComponent>();
+                                        comp.CubemapHandle = importedHandle;
+                                        comp.IsDirty = true;
+                                    }
+                                    auto macroCmd = std::make_shared<MacroCommand>("Assign Built-in Skybox to " + getTargetName());
+                                    for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                                        macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<EnvironmentComponent>>(
+                                            m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<EnvironmentComponent>()
+                                        ));
+                                    }
+                                    EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
+                                }
+                            }
+                            ImGui::EndPopup();
                         }
                     }
                 }
@@ -1528,10 +1602,23 @@ namespace Ayaya {
                     
                     ImGui::Text("Mesh Source");
                     std::string modelDisplay = "Drop .obj / .fbx here";
-                    
+
                     if (refMrc.ModelHandle != 0) {
-                        // 【优化 3】：屏蔽冰冷的 UUID，只显示分配状态
-                        modelDisplay = "Model Assigned";
+                        AssetMetadata meta = AssetManager::GetMetadata(refMrc.ModelHandle);
+                        const std::string& vpath = meta.VirtualPath;
+
+                        if (vpath == "Primitive::Cube")
+                            modelDisplay = "Built-in: Cube";
+                        else if (vpath == "Primitive::Sphere")
+                            modelDisplay = "Built-in: Sphere";
+                        else if (vpath == "Primitive::Plane")
+                            modelDisplay = "Built-in: Plane";
+                        else if (!vpath.empty()) {
+                            auto pos = vpath.find_last_of("/\\");
+                            modelDisplay = (pos != std::string::npos) ? vpath.substr(pos + 1) : vpath;
+                        } else {
+                            modelDisplay = "Model Assigned";
+                        }
                     }
 
                     if (ImGui::Button(modelDisplay.c_str(), ImVec2(-1.0f, 30.0f))) {

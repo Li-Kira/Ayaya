@@ -57,7 +57,7 @@ Entities:
       Type: 1
       Intensity: 30000
       AmbientColor: [0, 0, 0]
-      EquirectangularHandle: 0
+      EquirectangularHandle: 14828108441568776407
       CubemapHandle: 0
     RelationshipComponent:
       Parent: 0

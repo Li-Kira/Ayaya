@@ -1,13 +1,16 @@
 AssetRegistry:
-  - Handle: 15745339095957734719
-    Type: 4
-    VirtualPath: Primitive::Plane
-  - Handle: 2993178328822462900
-    Type: 4
-    VirtualPath: Primitive::Sphere
-  - Handle: 953920616495543238
-    Type: 4
-    VirtualPath: Primitive::Cube
   - Handle: 13774308301806651622
     Type: 5
     VirtualPath: project://Materials/testShadow/NewMaterial (2).mat
+  - Handle: 953920616495543238
+    Type: 4
+    VirtualPath: Primitive::Cube
+  - Handle: 14828108441568776407
+    Type: 2
+    VirtualPath: engine://textures/skybox/hdr/newport_loft.hdr
+  - Handle: 2993178328822462900
+    Type: 4
+    VirtualPath: Primitive::Sphere
+  - Handle: 15745339095957734719
+    Type: 4
+    VirtualPath: Primitive::Plane

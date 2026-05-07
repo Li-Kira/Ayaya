@@ -473,10 +473,13 @@ namespace Ayaya {
     }
 
     void SceneRenderer::SetEnvironment(EnvironmentComponent& envComp) {
+        // Clear stale environment data first — prevents previous skybox from
+        // lingering when the new EnvironmentComponent fails to load its assets.
+        m_Data->EnvironmentCubemap = nullptr;
+        m_Data->IrradianceMap = nullptr;
+        m_Data->PrefilterMap = nullptr;
+
         if (envComp.Type == EnvironmentType::None) {
-            m_Data->EnvironmentCubemap = nullptr;
-            m_Data->IrradianceMap = nullptr;
-            m_Data->PrefilterMap = nullptr;
             envComp.IsDirty = false;
             return;
         }
@@ -485,7 +488,7 @@ namespace Ayaya {
 
         if (envComp.Type == EnvironmentType::HDR_Equirectangular || envComp.Type == EnvironmentType::LDR_Equirectangular) {
             auto equiTex = AssetManager::GetAsset<Texture2D>(envComp.EquirectangularHandle);
-            if (!equiTex) return;
+            if (!equiTex) return; // asset not ready — keep IsDirty=true, retry next frame
 
             std::shared_ptr<Shader> convertShader = Shader::Create("IBL/equirectangular_to_cubemap.vert", "IBL/equirectangular_to_cubemap.frag");
             baseCubemapID = IBLBuilder::ConvertEquirectangularToCubemap(equiTex, s_SkyboxMesh, convertShader);
@@ -493,25 +496,21 @@ namespace Ayaya {
         }
         else if (envComp.Type == EnvironmentType::Classic_Cubemap) {
             auto cubeTex = AssetManager::GetAsset<TextureCube>(envComp.CubemapHandle);
-            if (!cubeTex) return;
+            if (!cubeTex) return; // asset not ready — keep IsDirty=true, retry next frame
 
             baseCubemapID = (void*)(uintptr_t)cubeTex->GetRendererID();
             m_Data->EnvironmentCubemap = cubeTex;
 
-            // ==========================================
-            // 【核心修复】：隔离 OpenGL 原生调用
-            // 仅在 OpenGL 模式下执行传统的管线绑定和 Mipmap 生成
-            // ==========================================
             if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
-                uint32_t glTextureID = (uint32_t)(uintptr_t)baseCubemapID; 
+                uint32_t glTextureID = (uint32_t)(uintptr_t)baseCubemapID;
                 glBindTexture(GL_TEXTURE_CUBE_MAP, glTextureID);
-                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); 
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
                 glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
                 glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
             }
         }
 
-        if (baseCubemapID != nullptr) { // <--- 判断非空
+        if (baseCubemapID != nullptr) {
             std::shared_ptr<Shader> irradianceShader = Shader::Create("IBL/cubemap.vert", "IBL/irradiance_convolution.frag");
             void* irrID = IBLBuilder::CreateIrradianceMap(baseCubemapID, s_SkyboxMesh, irradianceShader);
             m_Data->IrradianceMap = TextureCube::Create(irrID, 32, 32);
@@ -519,11 +518,9 @@ namespace Ayaya {
             std::shared_ptr<Shader> prefilterShader = Shader::Create("IBL/cubemap.vert", "IBL/prefilter.frag");
             void* preID = IBLBuilder::CreatePrefilterMap(baseCubemapID, s_SkyboxMesh, prefilterShader);
             m_Data->PrefilterMap = TextureCube::Create(preID, 128, 128);
-            
-            envComp.IsDirty = false; 
-        }
 
-        
+            envComp.IsDirty = false;
+        }
     }
 
     void SceneRenderer::SetEnvironmentSettings(float intensity, const glm::vec3& ambientColor) {
