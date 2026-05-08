@@ -73,10 +73,10 @@ namespace Ayaya {
         virtual void InsertExecutionBarrier() override;
 
     private:
-        std::shared_ptr<VulkanPipeline> m_BoundPipeline; // 记住当前管线
-        std::unordered_map<uint32_t, VkDescriptorImageInfo> m_PendingImageInfos; // 记住即将绑定的贴图
+        std::shared_ptr<VulkanPipeline> m_BoundPipeline;
+        std::unordered_map<uint32_t, VkDescriptorImageInfo> m_PendingImageInfos;
 
-        void FlushDescriptorSets(); // 核心发车函数
+        void FlushDescriptorSets();
         bool m_DescriptorSetDirty = false;
     };
 

@@ -31,7 +31,7 @@ AssetRegistry:
     VirtualPath: project://materials/testIBL/NewMaterial (21).mat
   - Handle: 15915456042159194739
     Type: 2
-    VirtualPath: engine://textures/skybox/hdr/newport_loft.hdr
+    VirtualPath: engine://Editor/textures/skybox/hdr/newport_loft.hdr
   - Handle: 11177805141162727094
     Type: 5
     VirtualPath: project://Materials/testIBL/NewMaterial (21).mat

@@ -1,4 +1,7 @@
 AssetRegistry:
-- Handle: 7976695696455325811
-  Type: 4
-  VirtualPath: project://models/rock.obj
+  - Handle: 16339333775266456098
+    Type: 5
+    VirtualPath: engine://Editor/materials/DefaultPBR.mat
+  - Handle: 7976695696455325811
+    Type: 4
+    VirtualPath: project://models/rock.obj

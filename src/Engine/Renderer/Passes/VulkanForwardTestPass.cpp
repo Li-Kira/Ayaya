@@ -157,6 +157,10 @@ namespace Ayaya {
 
         if (!envCubemap) {
             cmd.EndRenderPass();
+            // 即使 envCubemap 为空，也必须注册 Forward FBO，否则 PostProcess 会拿到上一帧的僵尸画布
+            context.Set("Forward_Output", currentFBO);
+            context.Set("Final_Output", currentFBO);
+            context.Framebuffers["ForwardTest"] = currentFBO;
             return;
         }
 

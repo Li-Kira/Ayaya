@@ -163,4 +163,4 @@ AssetRegistry:
   VirtualPath: project://Materials/testPBRbySphere/Sphere_M100_R100_Mat.mat
 - Handle: 14090763844030406105
   Type: 2
-  VirtualPath: engine://textures/skybox/hdr/newport_loft.hdr
+  VirtualPath: engine://Editor/textures/skybox/hdr/newport_loft.hdr
