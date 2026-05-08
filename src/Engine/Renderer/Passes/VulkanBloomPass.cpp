@@ -134,6 +134,8 @@ namespace Ayaya {
             cmd.EndRenderPass();
         }
 
+        cmd.InsertExecutionBarrier(); // flush tile writes before PostProcess reads bloom output
+
         context.Set("Bloom_Output", std::dynamic_pointer_cast<void>(m_MipChain[0].FBO));
         context.Framebuffers["Bloom"] = m_MipChain[0].FBO;
     }

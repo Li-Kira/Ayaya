@@ -19,10 +19,8 @@ namespace Ayaya {
     };
 
     struct alignas(16) SkyboxPushConstants {
-        glm::mat4 Projection;       // 64 bytes (0 - 63)
-        glm::mat4 View;             // 64 bytes (64 - 127)
-        glm::mat4 Transform;        // 64 bytes (128 - 191)
-        float Intensity;            // 4 bytes  (192 - 195)
+        glm::mat4 ViewProjection;   // 64 bytes (0 - 63) - matches shader u_ViewProjection
+        float Intensity;            // 4 bytes  (64 - 67) - matches shader u_Intensity
     };
 
     struct alignas(16) GridPushConstants {

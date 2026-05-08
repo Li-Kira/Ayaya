@@ -4,7 +4,7 @@ layout(location = 0) out vec4 o_Color;
 layout(location = 0) in vec2 v_TexCoord;
 
 // 明确绑定贴图槽位
-layout(binding = 0) uniform sampler2D u_Image;
+layout(set = 1, binding = 0) uniform sampler2D u_Image;
 
 // 【核心改造】：将散装的 Uniform 统合进 Push Constant
 layout(push_constant) uniform Constants {

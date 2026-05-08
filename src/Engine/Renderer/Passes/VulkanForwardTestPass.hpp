@@ -16,7 +16,7 @@ namespace Ayaya {
         glm::mat4 Transform;
         std::shared_ptr<Mesh> MeshAsset;
         std::shared_ptr<Material> MaterialAsset;
-        std::shared_ptr<Pipeline> PipelineAsset; 
+        std::shared_ptr<Pipeline> PipelineAsset;
         Entity TargetEntity;
     };
 
@@ -28,6 +28,13 @@ namespace Ayaya {
         glm::mat4 Transform;         // 64 bytes (0 - 63)
         alignas(16) glm::vec3 Albedo;// 12 bytes (64 - 75)
         int UseAlbedoMap;            // 4 bytes  (76 - 79)
+        float Metallic;              // 4 bytes  (80 - 83)
+        float Roughness;             // 4 bytes  (84 - 87)
+        float AO;                    // 4 bytes  (88 - 91)
+        int UseMetallicMap;          // 4 bytes  (92 - 95)
+        int UseRoughnessMap;         // 4 bytes  (96 - 99)
+        int UseAOMap;                // 4 bytes  (100 - 103)
+        int UseNormalMap;            // 4 bytes  (104 - 107)
     };
 
     class VulkanForwardTestPass : public RenderPass {
@@ -42,13 +49,19 @@ namespace Ayaya {
     private:
         // 【核心修改】：将单一 FBO 升级为多帧隔离的 FBO 数组
         std::vector<std::shared_ptr<Framebuffer>> m_ForwardFBOs;
-        
+
         std::shared_ptr<Shader> m_ForwardShader;
-        std::shared_ptr<Material> m_DefaultMaterial; 
+        std::shared_ptr<Material> m_DefaultMaterial;
         std::shared_ptr<Pipeline> m_ForwardPipeline;
 
         std::shared_ptr<Shader> m_SkyboxShader;
         std::shared_ptr<Pipeline> m_SkyboxPipeline;
+
+        // 选中描边
+        std::shared_ptr<Framebuffer> m_SelectionFBO;
+        std::shared_ptr<Shader> m_OutlineShader;
+        std::shared_ptr<Pipeline> m_OutlinePipeline;
+
         std::vector<VulkanForwardCommandData> m_OpaqueDrawList;
     };
 

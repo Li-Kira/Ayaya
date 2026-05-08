@@ -164,9 +164,6 @@ namespace Ayaya {
         auto shadowFBO = context.Get<std::shared_ptr<Framebuffer>>("ShadowMap_Output", nullptr);
         glm::mat4 lightSpaceMatrix = context.Get<glm::mat4>("LightSpaceMatrix", glm::mat4(1.0f));
 
-        // 【核心安全】：请求 GPU 等待 GBuffer 和 ShadowMap 写完！
-        cmd.InsertExecutionBarrier();
-
         float physicalExposure = context.Get<float>("PhysicalExposure", 1.0f);
         glm::vec4 hdrClearColor = glm::vec4(context.Get<glm::vec3>("AmbientColor", glm::vec3(0.06f)), 1.0f);
 
@@ -236,9 +233,8 @@ namespace Ayaya {
             cmd.BindTextureCube(m_SkyboxPipeline, "u_Skybox", 0, envMap);
 
             SkyboxPushConstants skyConstants{};
-            skyConstants.Projection = context.Get<glm::mat4>("CameraProjection", glm::mat4(1.0f));
-            skyConstants.View = context.Get<glm::mat4>("CameraView", glm::mat4(1.0f));
-            skyConstants.Transform = glm::mat4(1.0f);
+            glm::mat4 viewNoTranslation = glm::mat4(glm::mat3(context.ViewMatrix));
+            skyConstants.ViewProjection = context.ProjectionMatrix * viewNoTranslation;
             skyConstants.Intensity = context.Get<float>("EnvironmentIntensity", 1.0f);
             cmd.PushConstantData(m_SkyboxPipeline, &skyConstants, sizeof(SkyboxPushConstants));
 
@@ -405,6 +401,7 @@ namespace Ayaya {
         }
         
         cmd.EndRenderPass();
+        cmd.InsertExecutionBarrier(); // flush tile writes before Bloom/PostProcess reads this FBO
 
         // ==========================================
         // 产出数据交接

@@ -79,6 +79,7 @@ namespace Ayaya {
         }
 
         cmd.EndRenderPass();
+        cmd.InsertExecutionBarrier(); // flush tile writes before ImGui samples this FBO
 
         context.Set("Final_Output", std::dynamic_pointer_cast<void>(m_FXAAFBO));
         context.Framebuffers["FXAA"] = m_FXAAFBO;

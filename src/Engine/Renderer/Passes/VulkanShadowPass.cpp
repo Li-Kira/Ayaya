@@ -81,6 +81,7 @@ namespace Ayaya {
         }
 
         cmd.EndRenderPass();
+        cmd.InsertExecutionBarrier(); // flush tile writes before LightingPass reads ShadowMap
 
         context.Set("ShadowMap_Output", m_ShadowMapFBO);
         context.Framebuffers["ShadowMap"] = m_ShadowMapFBO;

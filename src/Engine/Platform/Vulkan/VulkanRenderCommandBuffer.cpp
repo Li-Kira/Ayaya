@@ -81,8 +81,9 @@ namespace Ayaya {
             VkCommandBuffer cmdBuffer = context->GetCurrentCommandBuffer();
             vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanPipeline->GetVulkanPipeline());
 
-            // 绑定 UBO (Set 0)
-            VkDescriptorSet set0 = vulkanPipeline->GetVulkanDescriptorSet(0);
+            // 绑定 UBO (Set 0) — 使用当前帧索引避免三重缓冲数据错乱
+            uint32_t frameIndex = context->GetCurrentFrameIndex() % 3;
+            VkDescriptorSet set0 = vulkanPipeline->GetVulkanDescriptorSet(0, frameIndex);
             if (set0 != VK_NULL_HANDLE) {
                 vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanPipeline->GetVulkanPipelineLayout(), 0, 1, &set0, 0, nullptr);
             }
@@ -132,14 +133,16 @@ namespace Ayaya {
         if (!vulkanFBO) return;
         VkImageView view = isDepth ? vulkanFBO->GetDepthAttachmentImageView() : vulkanFBO->GetColorAttachmentImageView(attachmentIndex);
         if (view == VK_NULL_HANDLE) return;
-        
+
         // 【拦截检查】
         if (m_PendingImageInfos.find(slot) != m_PendingImageInfos.end()) {
             if (m_PendingImageInfos[slot].imageView == view) return;
         }
 
-        m_PendingImageInfos[slot] = { vulkanFBO->GetSampler(), view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-        m_DescriptorSetDirty = true; 
+        // 深度附件使用 DEPTH_STENCIL_READ_ONLY_OPTIMAL，颜色附件使用 SHADER_READ_ONLY_OPTIMAL
+        VkImageLayout layout = isDepth ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        m_PendingImageInfos[slot] = { vulkanFBO->GetSampler(), view, layout };
+        m_DescriptorSetDirty = true;
     }
 
     // 3. TextureCube 绑定
@@ -205,8 +208,8 @@ namespace Ayaya {
         uint32_t currentFrame = context->GetCurrentFrameIndex() % 3;
         VkCommandBuffer cmd = context->GetCurrentCommandBuffer();
 
-        // 1. 【核心修复】：绑定相机数据 (Set 0)
-        VkDescriptorSet cameraSet = m_BoundPipeline->GetVulkanDescriptorSet(0);
+        // 1. 【核心修复】：绑定相机数据 (Set 0) — 使用当前帧索引
+        VkDescriptorSet cameraSet = m_BoundPipeline->GetVulkanDescriptorSet(0, currentFrame);
         if (cameraSet != VK_NULL_HANDLE) {
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 
                                     m_BoundPipeline->GetVulkanPipelineLayout(), 0, 1, &cameraSet, 0, nullptr);
@@ -231,29 +234,66 @@ namespace Ayaya {
     }
 
     void VulkanRenderCommandBuffer::DrawArrays(uint32_t vertexCount) {
-        FlushDescriptorSets(); // 发车！
+        if (!m_BoundPipeline) return;
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-        vkCmdDraw(context->GetCurrentCommandBuffer(), vertexCount, 1, 0, 0);
+        VkCommandBuffer cmd = context->GetCurrentCommandBuffer();
+        uint32_t frameIndex = context->GetCurrentFrameIndex() % 3;
+
+        // 必须重新绑定 Set 0，确保 UBO 数据对应当前帧
+        VkDescriptorSet cameraSet = m_BoundPipeline->GetVulkanDescriptorSet(0, frameIndex);
+        if (cameraSet != VK_NULL_HANDLE) {
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    m_BoundPipeline->GetVulkanPipelineLayout(), 0, 1, &cameraSet, 0, nullptr);
+        }
+        FlushDescriptorSets();
+        vkCmdDraw(cmd, vertexCount, 1, 0, 0);
     }
 
     void VulkanRenderCommandBuffer::DrawArrays(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount) {
-        FlushDescriptorSets(); // 发车！
+        if (!m_BoundPipeline) return;
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        VkCommandBuffer cmd = context->GetCurrentCommandBuffer();
+        uint32_t frameIndex = context->GetCurrentFrameIndex() % 3;
+
+        VkDescriptorSet cameraSet = m_BoundPipeline->GetVulkanDescriptorSet(0, frameIndex);
+        if (cameraSet != VK_NULL_HANDLE) {
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    m_BoundPipeline->GetVulkanPipelineLayout(), 0, 1, &cameraSet, 0, nullptr);
+        }
+        FlushDescriptorSets();
         uint32_t count = vertexCount ? vertexCount : mesh->GetVertexCount();
-        vkCmdDraw(context->GetCurrentCommandBuffer(), count, 1, 0, 0);
+        vkCmdDraw(cmd, count, 1, 0, 0);
     }
 
     void VulkanRenderCommandBuffer::DrawTriangleStrip(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount) {
-        FlushDescriptorSets(); // 发车！
+        if (!m_BoundPipeline) return;
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        VkCommandBuffer cmd = context->GetCurrentCommandBuffer();
+        uint32_t frameIndex = context->GetCurrentFrameIndex() % 3;
+
+        VkDescriptorSet cameraSet = m_BoundPipeline->GetVulkanDescriptorSet(0, frameIndex);
+        if (cameraSet != VK_NULL_HANDLE) {
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    m_BoundPipeline->GetVulkanPipelineLayout(), 0, 1, &cameraSet, 0, nullptr);
+        }
+        FlushDescriptorSets();
         uint32_t count = vertexCount ? vertexCount : mesh->GetVertexCount();
-        vkCmdDraw(context->GetCurrentCommandBuffer(), count, 1, 0, 0);
+        vkCmdDraw(cmd, count, 1, 0, 0);
     }
 
     void VulkanRenderCommandBuffer::DrawTriangleStrip(uint32_t vertexCount) {
-        FlushDescriptorSets(); // 发车！
+        if (!m_BoundPipeline) return;
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-        vkCmdDraw(context->GetCurrentCommandBuffer(), vertexCount, 1, 0, 0);
+        VkCommandBuffer cmd = context->GetCurrentCommandBuffer();
+        uint32_t frameIndex = context->GetCurrentFrameIndex() % 3;
+
+        VkDescriptorSet cameraSet = m_BoundPipeline->GetVulkanDescriptorSet(0, frameIndex);
+        if (cameraSet != VK_NULL_HANDLE) {
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    m_BoundPipeline->GetVulkanPipelineLayout(), 0, 1, &cameraSet, 0, nullptr);
+        }
+        FlushDescriptorSets();
+        vkCmdDraw(cmd, vertexCount, 1, 0, 0);
     }
 
     void VulkanRenderCommandBuffer::DrawArrays(const std::shared_ptr<VertexArray>& vertexArray, uint32_t vertexCount) {
@@ -266,7 +306,8 @@ namespace Ayaya {
         // 1. 【核心修复】：必须绑定 Set 0！
         // 哪怕后处理 Shader 里没用到，Vulkan 也要求布局槽位必须对齐填满！
         // ==========================================
-        VkDescriptorSet cameraSet = m_BoundPipeline->GetVulkanDescriptorSet(0);
+        uint32_t frameIndex = context->GetCurrentFrameIndex() % 3;
+        VkDescriptorSet cameraSet = m_BoundPipeline->GetVulkanDescriptorSet(0, frameIndex);
         if (cameraSet != VK_NULL_HANDLE) {
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, 
                                     m_BoundPipeline->GetVulkanPipelineLayout(), 0, 1, &cameraSet, 0, nullptr);
@@ -300,13 +341,13 @@ namespace Ayaya {
 
         VkMemoryBarrier memoryBarrier{};
         memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        memoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-        memoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        memoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+        memoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
 
         vkCmdPipelineBarrier(
             cmdBuffer,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
             0,
             1, &memoryBarrier,
             0, nullptr,

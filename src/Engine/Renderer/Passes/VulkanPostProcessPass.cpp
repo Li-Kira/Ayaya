@@ -71,28 +71,26 @@ namespace Ayaya {
         }
 
         auto whiteTex = context.GetTexture("WhiteTexture");
+        auto blackTex = context.GetTexture("BlackTexture");
 
-        // Vulkan 规定所有描述符槽位都必须绑定有效数据，否则会报错
         if (screenFBO) {
             cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, screenFBO, 0);
         } else {
             cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, whiteTex);
         }
 
-        // ==========================================
-        // 2. 绑定杂项 (描边、泛光)
-        // ==========================================
+        // 描边/泛光 fallback 用黑色纹理，避免白色触发全局 selection overlay
         std::shared_ptr<Framebuffer> selectionFBO;
         if (context.Framebuffers.find("Selection") != context.Framebuffers.end()) selectionFBO = context.Framebuffers["Selection"];
         if (selectionFBO) cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, selectionFBO, 0);
-        else cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, whiteTex);
+        else cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, blackTex);
 
         std::shared_ptr<Framebuffer> bloomFBO;
         if (context.Framebuffers.find("Bloom") != context.Framebuffers.end()) bloomFBO = context.Framebuffers["Bloom"];
         bool isBloomEnabled = (bloomFBO != nullptr) && context.Get<bool>("EnableBloom", true);
-        
+
         if (isBloomEnabled) cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, bloomFBO, 0);
-        else cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, whiteTex);
+        else cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, blackTex);
 
         // ==========================================
         // 3. 推送参数

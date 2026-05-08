@@ -3,7 +3,7 @@
 layout(location = 0) out vec4 o_Color;
 layout(location = 0) in vec2 v_TexCoord;
 
-layout(binding = 0) uniform sampler2D u_Image;
+layout(set = 1, binding = 0) uniform sampler2D u_Image;
 
 // 【核心改造】：提取到 Push Constant
 layout(push_constant) uniform Constants {

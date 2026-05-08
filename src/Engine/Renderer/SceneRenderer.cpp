@@ -81,6 +81,7 @@ namespace Ayaya {
         glm::vec3 CameraPosition;
         
         std::shared_ptr<Texture2D> WhiteTexture;
+        std::shared_ptr<Texture2D> BlackTexture;
         std::shared_ptr<Mesh> GridMesh;
 
         std::shared_ptr<Mesh> SkyboxMesh;
@@ -115,8 +116,14 @@ namespace Ayaya {
     void SceneRenderer::Init() {
         m_Data->WhiteTexture = Texture2D::Create(1, 1);
         if (m_Data->WhiteTexture) {
-            uint32_t whiteTextureData = 0xffffffff; 
+            uint32_t whiteTextureData = 0xffffffff;
             m_Data->WhiteTexture->SetData(&whiteTextureData, sizeof(uint32_t));
+        }
+
+        m_Data->BlackTexture = Texture2D::Create(1, 1);
+        if (m_Data->BlackTexture) {
+            uint32_t blackTextureData = 0x00000000;
+            m_Data->BlackTexture->SetData(&blackTextureData, sizeof(uint32_t));
         }
 
         m_Data->GridMesh = Mesh::CreatePlane(1.0f, 1.0f);
@@ -176,7 +183,6 @@ namespace Ayaya {
             // m_Pipeline.AddPass(std::make_shared<VulkanLightingPass>());
             // m_Pipeline.AddPass(std::make_shared<VulkanBloomPass>());
             m_Pipeline.AddPass(std::make_shared<VulkanForwardTestPass>());
-            
             m_Pipeline.AddPass(std::make_shared<VulkanPostProcessPass>());
             // m_Pipeline.AddPass(std::make_shared<VulkanFXAAPass>());
             m_Pipeline.Init();
@@ -315,6 +321,7 @@ namespace Ayaya {
         m_RenderContext.Set("DirLightDir", glm::vec3(m_Data->LightData.DirLightDir));
 
         m_RenderContext.SetTexture("WhiteTexture", m_Data->WhiteTexture);
+        m_RenderContext.SetTexture("BlackTexture", m_Data->BlackTexture);
         m_RenderContext.Set<std::shared_ptr<Mesh>>("SkyboxMesh", m_Data->SkyboxMesh);
         m_RenderContext.Set<std::shared_ptr<Mesh>>("GridMesh", m_Data->GridMesh);
         m_RenderContext.SetTexture("BRDFLUT", m_Data->BRDFLUT);

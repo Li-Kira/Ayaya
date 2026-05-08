@@ -15,6 +15,13 @@ layout(push_constant) uniform TransformData {
     mat4 ModelMatrix;
     vec3 Albedo;
     int UseAlbedoMap;
+    float Metallic;
+    float Roughness;
+    float AO;
+    int UseMetallicMap;
+    int UseRoughnessMap;
+    int UseAOMap;
+    int UseNormalMap;
 } u_Push;
 
 // ==========================================

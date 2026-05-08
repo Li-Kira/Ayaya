@@ -4,4 +4,4 @@ EditorPreferences:
   UIScale: 1
   MaxUndoSteps: 100
   EnableVSync: false 
-  GraphicsAPI: 1
+  GraphicsAPI: 0

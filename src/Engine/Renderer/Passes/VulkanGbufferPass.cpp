@@ -58,7 +58,7 @@ namespace Ayaya {
         gbufferPipeSpec.DepthTest = true;
         gbufferPipeSpec.DepthWrite = true;
         gbufferPipeSpec.Blend = false; 
-        gbufferPipeSpec.BackfaceCulling = CullMode::Back;
+        gbufferPipeSpec.BackfaceCulling = CullMode::None; // 禁用背面剔除以匹配前向渲染路径
 
         PipelineSpecification fallbackPipeSpec = gbufferPipeSpec;
         fallbackPipeSpec.Shader = m_FallbackShader;
@@ -239,6 +239,7 @@ namespace Ayaya {
         }
 
         cmd.EndRenderPass();
+        cmd.InsertExecutionBarrier(); // flush TBDR tile writes before LightingPass reads this FBO
 
         // ==========================================
         // 4. 将产物贴在黑板上，供 Lighting Pass 和 ImGui 使用
