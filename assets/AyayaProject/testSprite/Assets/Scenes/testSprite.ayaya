@@ -2,157 +2,88 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition:
-  - -2.35658
-  - 0.73991024
-  - 2.8589547
+  CameraPosition: [-2.35658, 0.73991024, 2.8589547]
   CameraDistance: 4.9151998
   CameraPitch: -0.08859568
   CameraYaw: -0.41499808
-  CameraFocalPoint:
-  - -0.3826021
-  - 0.30501428
-  - -1.6213877
+  CameraFocalPoint: [-0.3826021, 0.30501428, -1.6213877]
 Entities:
-- Entity: 1331957056433747720
-  TagComponent:
-    Tag: Main Camera
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -2.114
-    - 0.866
-    - 2.953
-    Rotation:
-    - -0.22526963
-    - -0.612279
-    - 0
-    Scale:
-    - 1
-    - 1
-    - 1
-  CameraComponent:
-    Primary: true
-    FixedAspectRatio: false
-    EV100: 14.5
-    ClearFlag: 1
-    BackgroundColor:
-    - 0.00732654
-    - 0.00732654
-    - 0.008379877
-    - 1
-    Camera:
-      ProjectionType: 0
-      PerspectiveFOV: 0.7853982
-      PerspectiveNear: 0.01
-      PerspectiveFar: 1000
-      OrthographicSize: 5
-      OrthographicNear: -1
-      OrthographicFar: 1000
-  RelationshipComponent:
-    Parent: 0
-- Entity: 4765580762933760265
-  TagComponent:
-    Tag: Directional Light
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 0
-    - 0
-    - 0
-    Rotation:
-    - -0.7853982
-    - 0.7853982
-    - 0
-    Scale:
-    - 1
-    - 1
-    - 1
-  DirectionalLightComponent:
-    Color:
-    - 1
-    - 1
-    - 1
-    Illuminance: 100000
-  RelationshipComponent:
-    Parent: 0
-- Entity: 11960822433719980928
-  TagComponent:
-    Tag: Skybox
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 0
-    - 0
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 1
-    - 1
-    - 1
-  EnvironmentComponent:
-    Type: 0
-    Intensity: 0
-    AmbientColor:
-    - 0
-    - 0
-    - 0
-    EquirectangularHandle: 0
-    CubemapHandle: 0
-  RelationshipComponent:
-    Parent: 0
-- Entity: 13364770188189102645
-  TagComponent:
-    Tag: Empty Entity
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 0.18949786
-    - 0
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 1
-    - 1
-    - 1
-  SpriteRendererComponent:
-    Color:
-    - 0.8407821
-    - 0.58948684
-    - 0.58948684
-    - 1
-    TextureHandle: 0
-  RelationshipComponent:
-    Parent: 0
-- Entity: 7583564679239796218
-  TagComponent:
-    Tag: Empty Entity (1)
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -1.4484609
-    - 0
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 1
-    - 1
-    - 1
-  SpriteRendererComponent:
-    Color:
-    - 1
-    - 1
-    - 1
-    - 1
-    TextureHandle: 0
-  RelationshipComponent:
-    Parent: 0
+  - Entity: 1331957056433747720
+    TagComponent:
+      Tag: Main Camera
+      IsActive: true
+    TransformComponent:
+      Translation: [-2.114, 0.866, 2.953]
+      Rotation: [-0.22526963, -0.612279, 0]
+      Scale: [1, 1, 1]
+    CameraComponent:
+      Primary: true
+      FixedAspectRatio: false
+      EV100: 14.5
+      ClearFlag: 1
+      BackgroundColor: [0.00732654, 0.00732654, 0.008379877, 1]
+      Camera:
+        ProjectionType: 0
+        PerspectiveFOV: 0.7853982
+        PerspectiveNear: 0.01
+        PerspectiveFar: 1000
+        OrthographicSize: 5
+        OrthographicNear: -1
+        OrthographicFar: 1000
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 4765580762933760265
+    TagComponent:
+      Tag: Directional Light
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [-0.7853982, 0.7853982, 0]
+      Scale: [1, 1, 1]
+    DirectionalLightComponent:
+      Color: [1, 1, 1]
+      Illuminance: 100000
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 11960822433719980928
+    TagComponent:
+      Tag: Skybox
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    EnvironmentComponent:
+      Type: 0
+      Intensity: 0
+      AmbientColor: [0, 0, 0]
+      EquirectangularHandle: 0
+      CubemapHandle: 0
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 13364770188189102645
+    TagComponent:
+      Tag: Empty Entity
+      IsActive: true
+    TransformComponent:
+      Translation: [0.18949786, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    SpriteRendererComponent:
+      Color: [0.8407821, 0.58948684, 0.58948684, 1]
+      TextureHandle: 1869855536195217183
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 7583564679239796218
+    TagComponent:
+      Tag: Empty Entity (1)
+      IsActive: true
+    TransformComponent:
+      Translation: [-1.4484609, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    SpriteRendererComponent:
+      Color: [1, 1, 1, 1]
+      TextureHandle: 0
+    RelationshipComponent:
+      Parent: 0

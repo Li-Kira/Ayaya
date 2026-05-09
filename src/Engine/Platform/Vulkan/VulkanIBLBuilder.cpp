@@ -16,6 +16,11 @@ namespace Ayaya {
     // 内存泄漏追踪器：记录 IBLBuilder 自己创建的原生对象，防止退出时报 VMA 错误
     struct IBLResource { VkImage Image; VmaAllocation Alloc; VkImageView View; };
     static std::vector<IBLResource> s_TrackedIBLResources;
+    VkSampler VulkanIBLBuilder::s_SourceCubemapSampler = VK_NULL_HANDLE;
+
+    void VulkanIBLBuilder::SetSourceCubemapSampler(void* sampler) {
+        s_SourceCubemapSampler = (VkSampler)sampler;
+    }
 
     void* VulkanIBLBuilder::ConvertEquirectangularToCubemap(const std::shared_ptr<Texture2D>& hdrTexture, 
                                                                const std::shared_ptr<Mesh>& cubeMesh, 
@@ -260,6 +265,7 @@ namespace Ayaya {
         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &cubeBarrier);
 
         context->EndSingleTimeCommands(cmd);
+        vkDeviceWaitIdle(device); // 确保 validation 层完全同步，避免临时 pipeline 析构时 descriptor set 报错
         AYAYA_CORE_INFO("VulkanIBLBuilder: HDR to Cubemap baked successfully!");
 
         // 返回生成的 ImageView 句柄，外部的 TextureCube 会自动包装它！
@@ -335,35 +341,13 @@ namespace Ayaya {
             return nullptr;
         }
 
-        // 3. 绑定环境变量 (传入的 void* envCubemap 是 VkImageView)
+        // 3. 绑定源环境 Cubemap (使用 TextureCube 的原生采样器，避免临时采样器兼容问题)
         VkDescriptorSet descSet = vulkanPipeline->GetNextTextureDescriptorSet();
-
-        // 创建临时采样器 — 显式设置所有字段，避免默认值在 MoltenVK 上出问题
-        VkSamplerCreateInfo samplerInfo{};
-        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_LINEAR;
-        samplerInfo.minFilter = VK_FILTER_LINEAR;
-        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.anisotropyEnable = VK_FALSE;
-        samplerInfo.maxAnisotropy = 1.0f;
-        samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-        samplerInfo.unnormalizedCoordinates = VK_FALSE;
-        samplerInfo.compareEnable = VK_FALSE;
-        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-        samplerInfo.mipLodBias = 0.0f;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 8.0f;
-        VkSampler tempSampler;
-        VkResult sampResult = vkCreateSampler(device, &samplerInfo, nullptr, &tempSampler);
-        AYAYA_CORE_ASSERT(sampResult == VK_SUCCESS, "Failed to create IBL temp sampler!");
 
         VkDescriptorImageInfo descImageInfo{};
         descImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         descImageInfo.imageView = (VkImageView)envCubemap;
-        descImageInfo.sampler = tempSampler;
+        descImageInfo.sampler = s_SourceCubemapSampler;
 
         VkWriteDescriptorSet write{};
         write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -477,8 +461,7 @@ namespace Ayaya {
         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &cubeBarrier);
 
         context->EndSingleTimeCommands(cmd);
-        vkDestroySampler(device, tempSampler, nullptr);
-        
+        vkDeviceWaitIdle(device);
         AYAYA_CORE_INFO("VulkanIBLBuilder: Irradiance Map convoluted successfully!");
         return (void*)cubeView;
     }
@@ -552,31 +535,12 @@ namespace Ayaya {
             return nullptr;
         }
 
-        // 3. 绑定描述符集 (显式设置全部字段，对齐 Irradiance 修复)
+        // 3. 绑定源环境 Cubemap (使用 TextureCube 的原生采样器)
         VkDescriptorSet descSet = vulkanPipeline->GetNextTextureDescriptorSet();
-        VkSamplerCreateInfo samplerInfo{};
-        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_LINEAR; samplerInfo.minFilter = VK_FILTER_LINEAR;
-        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.anisotropyEnable = VK_FALSE;
-        samplerInfo.maxAnisotropy = 1.0f;
-        samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-        samplerInfo.unnormalizedCoordinates = VK_FALSE;
-        samplerInfo.compareEnable = VK_FALSE;
-        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-        samplerInfo.mipLodBias = 0.0f;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 8.0f;
-        VkSampler tempSampler;
-        VkResult sampResult = vkCreateSampler(device, &samplerInfo, nullptr, &tempSampler);
-        AYAYA_CORE_ASSERT(sampResult == VK_SUCCESS, "Failed to create IBL temp sampler!");
 
         VkDescriptorImageInfo descImageInfo{};
         descImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        descImageInfo.imageView = (VkImageView)envCubemap; descImageInfo.sampler = tempSampler;
+        descImageInfo.imageView = (VkImageView)envCubemap; descImageInfo.sampler = s_SourceCubemapSampler;
 
         VkWriteDescriptorSet write{};
         write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -699,8 +663,7 @@ namespace Ayaya {
         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &cubeBarrier);
 
         context->EndSingleTimeCommands(cmd);
-        vkDestroySampler(device, tempSampler, nullptr);
-        
+        vkDeviceWaitIdle(device);
         AYAYA_CORE_INFO("VulkanIBLBuilder: Prefilter Map generated successfully!");
         return (void*)cubeView;
     }
@@ -839,7 +802,7 @@ namespace Ayaya {
         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &lutBarrier);
 
         context->EndSingleTimeCommands(cmd);
-        
+        vkDeviceWaitIdle(device);
         AYAYA_CORE_INFO("VulkanIBLBuilder: BRDF LUT generated successfully!");
         return (void*)lutView;
     }

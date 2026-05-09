@@ -186,7 +186,8 @@ void main() {
     }
 
     // ---- IBL 环境光 (Split-Sum Approximation) ----
-    vec3 F_ibl = fresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
+    float NdotV = max(dot(N, V), 0.0);
+    vec3 F_ibl = fresnelSchlickRoughness(NdotV, F0, roughness);
     vec3 kS_ibl = F_ibl;
     vec3 kD_ibl = (vec3(1.0) - kS_ibl) * (1.0 - metallic);
 
@@ -196,7 +197,7 @@ void main() {
 
     const float MAX_REFLECTION_LOD = 4.0;
     vec3 prefilteredColor = textureLod(u_PrefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb * u_Push.EnvironmentIntensity;
-    vec2 brdf = texture(u_BRDFLUT, vec2(max(dot(N, V), 1e-5), roughness)).rg;
+    vec2 brdf = texture(u_BRDFLUT, vec2(max(NdotV, 1e-5), roughness)).rg;
     vec3 specular_ibl = prefilteredColor * (F_ibl * brdf.x + brdf.y);
 
     vec3 ambient = (kD_ibl * diffuse + specular_ibl) * ao;

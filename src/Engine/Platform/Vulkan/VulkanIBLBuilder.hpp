@@ -24,6 +24,9 @@ namespace Ayaya {
 
         // 在 VulkanIBLBuilder 类中新增：
         static void ClearResources();
+        static void SetSourceCubemapSampler(void* sampler);
+    private:
+        static VkSampler s_SourceCubemapSampler;
     };
 
 }

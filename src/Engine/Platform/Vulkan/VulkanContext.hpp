@@ -83,6 +83,7 @@ namespace Ayaya {
         uint32_t m_FramesInFlight = 3;
 
         VkCommandPool m_CommandPool = VK_NULL_HANDLE;
+        VkCommandPool m_OneTimeCommandPool = VK_NULL_HANDLE; // 独立 pool，避免验证层状态污染主命令缓冲区
 
         std::vector<VkSemaphore> m_ImageAvailableSemaphores; 
         std::vector<VkSemaphore> m_RenderFinishedSemaphores; 

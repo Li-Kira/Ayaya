@@ -36,6 +36,7 @@
 #include "Core/Application.hpp"
 #include "Platform/Vulkan/VulkanContext.hpp"
 #include "Platform/Vulkan/VulkanIBLBuilder.hpp"
+#include "Platform/Vulkan/VulkanTextureCube.hpp"
 
 // 3. 第三方库
 #include <glad/glad.h>
@@ -506,6 +507,12 @@ namespace Ayaya {
             std::shared_ptr<Shader> convertShader = Shader::Create("IBL/equirectangular_to_cubemap.vert", "IBL/equirectangular_to_cubemap.frag");
             baseCubemapID = IBLBuilder::ConvertEquirectangularToCubemap(equiTex, s_SkyboxMesh, convertShader);
             m_Data->EnvironmentCubemap = TextureCube::Create(baseCubemapID, 1024, 1024);
+
+            // 将 TextureCube 的采样器传递给 IBL 烘焙函数，避免临时采样器兼容问题
+            if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+                auto vkCube = std::dynamic_pointer_cast<VulkanTextureCube>(m_Data->EnvironmentCubemap);
+                VulkanIBLBuilder::SetSourceCubemapSampler((void*)vkCube->GetSampler());
+            }
         }
         else if (envComp.Type == EnvironmentType::Classic_Cubemap) {
             auto cubeTex = AssetManager::GetAsset<TextureCube>(envComp.CubemapHandle);

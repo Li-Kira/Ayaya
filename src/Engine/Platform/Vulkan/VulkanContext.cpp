@@ -34,7 +34,9 @@ namespace Ayaya {
         
         if (m_CommandPool != VK_NULL_HANDLE) {
             vkDestroyCommandPool(m_Device, m_CommandPool, nullptr);
-            AYAYA_CORE_INFO("Vulkan Command Pool and Sync Objects destroyed.");
+        }
+        if (m_OneTimeCommandPool != VK_NULL_HANDLE) {
+            vkDestroyCommandPool(m_Device, m_OneTimeCommandPool, nullptr);
         }
 
         CleanupSwapChain();
@@ -192,14 +194,8 @@ namespace Ayaya {
         deviceExtensions.push_back("VK_KHR_portability_subset");
 #endif
 
-        // UPDATE_AFTER_BIND 需要的描述符索引特性 (Vulkan 1.2+)
-        VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
-        indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-        indexingFeatures.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
-
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        createInfo.pNext = &indexingFeatures;
         createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
         createInfo.pEnabledFeatures = &deviceFeatures;
@@ -406,11 +402,19 @@ namespace Ayaya {
 
         VkCommandPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT; 
+        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         poolInfo.queueFamilyIndex = queueFamilyIndices.GraphicsFamily.value();
 
         VkResult result = vkCreateCommandPool(m_Device, &poolInfo, nullptr, &m_CommandPool);
         AYAYA_CORE_ASSERT(result == VK_SUCCESS, "Failed to create Command Pool!");
+
+        // 独立的一次性命令池 — 避免验证层将临时 descriptor set 绑定状态泄漏到主命令缓冲区
+        VkCommandPoolCreateInfo oneTimePoolInfo{};
+        oneTimePoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        oneTimePoolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+        oneTimePoolInfo.queueFamilyIndex = queueFamilyIndices.GraphicsFamily.value();
+        result = vkCreateCommandPool(m_Device, &oneTimePoolInfo, nullptr, &m_OneTimeCommandPool);
+        AYAYA_CORE_ASSERT(result == VK_SUCCESS, "Failed to create One-Time Command Pool!");
     }
 
     void VulkanContext::CreateSyncObjects() {
@@ -492,7 +496,15 @@ namespace Ayaya {
 
         // 只有在这里成功拿到了画面，才可以放行围栏！
         vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame]);
-        vkResetCommandBuffer(m_CommandBuffers[m_CurrentFrame], 0);
+
+        // 释放旧 buffer 再重新分配 — 确保 MoltenVK validation 层完全清除 descriptor set 绑定追踪
+        vkFreeCommandBuffers(m_Device, m_CommandPool, 1, &m_CommandBuffers[m_CurrentFrame]);
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandPool = m_CommandPool;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = 1;
+        vkAllocateCommandBuffers(m_Device, &allocInfo, &m_CommandBuffers[m_CurrentFrame]);
 
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -544,7 +556,7 @@ namespace Ayaya {
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandPool = m_CommandPool;
+        allocInfo.commandPool = m_OneTimeCommandPool; // 使用独立 pool
         allocInfo.commandBufferCount = 1;
 
         VkCommandBuffer commandBuffer;
@@ -568,8 +580,10 @@ namespace Ayaya {
 
         vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
         vkQueueWaitIdle(m_GraphicsQueue);
+        vkDeviceWaitIdle(m_Device); // 确保 MoltenVK validation 层完全同步
 
-        vkFreeCommandBuffers(m_Device, m_CommandPool, 1, &commandBuffer);
+        // 重置整个一次性 pool，彻底清除 validation 层的 descriptor set 绑定追踪
+        vkResetCommandPool(m_Device, m_OneTimeCommandPool, 0);
     }
 
     void VulkanContext::CleanupSwapChain() {
