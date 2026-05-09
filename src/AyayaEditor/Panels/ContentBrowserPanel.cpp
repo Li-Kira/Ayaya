@@ -4,7 +4,9 @@
 #include "Core/Log.hpp"
 
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <unordered_set>
+#include <algorithm>
 
 namespace Ayaya {
 
@@ -64,6 +66,7 @@ namespace Ayaya {
     }
 
     void ContentBrowserPanel::OnImGuiRender() {
+        float scale = ImGui::GetIO().FontGlobalScale;
         ImGui::Begin("Content Browser");
 
         std::filesystem::path activeAssetDir = Project::GetProjectDirectory();
@@ -72,122 +75,163 @@ namespace Ayaya {
             m_CurrentDirectory = m_BaseDirectory;
         }
 
+        // ==========================================
+        // 顶部控制栏 (面包屑导航 + 搜索框)
+        // ==========================================
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+
+        float btnSize = 24.0f * scale;
         if (m_CurrentDirectory != m_BaseDirectory) {
-            if (ImGui::Button("<- Back")) {
-                m_CurrentDirectory = m_CurrentDirectory.parent_path();
-            }
-            ImGui::Separator();
+            if (ImGui::Button("<", ImVec2(btnSize, btnSize))) m_CurrentDirectory = m_CurrentDirectory.parent_path();
+            ImGui::SameLine();
+        } else {
+            ImGui::BeginDisabled();
+            ImGui::Button("<", ImVec2(btnSize, btnSize));
+            ImGui::EndDisabled();
+            ImGui::SameLine();
         }
 
-        float bottomBarHeight = 32.0f;
-        ImGui::BeginChild("ScrollingRegion", ImVec2(0, -bottomBarHeight), false);
+        std::string relPathStr = std::filesystem::relative(m_CurrentDirectory, m_BaseDirectory).string();
+        if (relPathStr == "." || relPathStr == "") {
+            ImGui::Button(m_BaseDirectory.filename().string().c_str());
+        } else {
+            if (ImGui::Button(m_BaseDirectory.filename().string().c_str()))
+                m_CurrentDirectory = m_BaseDirectory;
+            std::filesystem::path buildPath = m_BaseDirectory;
+            auto relParts = std::filesystem::relative(m_CurrentDirectory, m_BaseDirectory);
+            for (const auto& part : relParts) {
+                if (part == "") continue;
+                ImGui::SameLine(0, 4.0f * scale); ImGui::Text(">"); ImGui::SameLine(0, 4.0f * scale);
+                buildPath /= part;
+                if (ImGui::Button(part.string().c_str())) {
+                    m_CurrentDirectory = buildPath;
+                    break;
+                }
+            }
+        }
+        ImGui::PopStyleColor();
 
-        float padding = 16.0f;
-        float cellSize = m_ThumbnailSize + padding;
+        // 搜索框
+        float searchWidth = 200.0f * scale;
+        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - searchWidth);
+        ImGui::SetNextItemWidth(searchWidth);
+        ImGui::InputTextWithHint("##Search", "Search...", m_SearchFilter, sizeof(m_SearchFilter));
+
+        ImGui::Separator();
+
+        // ==========================================
+        // 主内容区
+        // ==========================================
+        ImGui::BeginChild("ScrollingRegion", ImVec2(0, -32.0f * scale), false);
+
+        float padding = 16.0f * scale;
+        float cellSize = m_ThumbnailSize * scale + padding;
         float panelWidth = ImGui::GetContentRegionAvail().x;
         int columnCount = (int)(panelWidth / cellSize);
         if (columnCount < 1) columnCount = 1;
 
-        ImGui::Columns(columnCount, 0, false);
+        std::string searchStr = m_SearchFilter;
+        std::transform(searchStr.begin(), searchStr.end(), searchStr.begin(), ::tolower);
 
-        for (auto& directoryEntry : std::filesystem::directory_iterator(m_CurrentDirectory)) {
-            const auto& path = directoryEntry.path();
-            std::string filenameString = path.filename().string();
+        if (ImGui::BeginTable("ContentBrowserTable", columnCount, ImGuiTableFlags_SizingFixedFit)) {
+            for (auto& directoryEntry : std::filesystem::directory_iterator(m_CurrentDirectory)) {
+                const auto& path = directoryEntry.path();
+                std::string filenameString = path.filename().string();
 
-            if (filenameString.empty() || filenameString[0] == '.') continue;
-            if (path.extension() == ".yaml") continue;
-            if (IsBuildArtifact(path)) continue;
+                if (filenameString.empty() || filenameString[0] == '.') continue;
+                if (path.extension() == ".yaml") continue;
+                if (IsBuildArtifact(path)) continue;
 
-            // 图标：目录/图片/普通文件
-            std::shared_ptr<Texture2D> icon = m_FileIcon;
-            if (directoryEntry.is_directory()) {
-                icon = m_DirectoryIcon;
-            } else if (path.extension() == ".png" || path.extension() == ".jpg") {
-                auto thumb = GetThumbnail(path);
-                icon = thumb ? thumb : m_PngIcon;
-            }
+                if (!searchStr.empty()) {
+                    std::string lower = filenameString;
+                    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+                    if (lower.find(searchStr) == std::string::npos) continue;
+                }
 
-            ImGui::PushID(filenameString.c_str());
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+                ImGui::TableNextColumn();
 
-            if (icon) {
-                ImVec2 uv0 = icon->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
-                ImVec2 uv1 = icon->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
-                ImGui::ImageButton(filenameString.c_str(), (ImTextureID)icon->GetImGuiTextureID(),
-                                   { m_ThumbnailSize, m_ThumbnailSize }, uv0, uv1);
-            } else {
-                ImGui::Button(directoryEntry.is_directory() ? "[DIR]" : "[FILE]",
-                              { m_ThumbnailSize, m_ThumbnailSize });
-            }
+                std::shared_ptr<Texture2D> icon = m_FileIcon;
+                if (directoryEntry.is_directory()) {
+                    icon = m_DirectoryIcon;
+                } else if (path.extension() == ".png" || path.extension() == ".jpg") {
+                    auto thumb = GetThumbnail(path);
+                    icon = thumb ? thumb : m_PngIcon;
+                }
 
-            // 悬停显示完整文件名
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", filenameString.c_str());
+                ImGui::PushID(filenameString.c_str());
 
-            if (ImGui::BeginDragDropSource()) {
-                std::string vfsPath = VFS::GetVirtualPath(path);
-                ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", vfsPath.c_str(), vfsPath.size() + 1);
+                float thumbSize = m_ThumbnailSize * scale;
+                ImVec2 cursorPos = ImGui::GetCursorPos();
+
+                // 用 ImageButton 保持拖拽兼容性
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+                ImGui::SetCursorPos(ImVec2(cursorPos.x + padding / 2.0f, cursorPos.y + 4.0f * scale));
                 if (icon) {
                     ImVec2 uv0 = icon->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
                     ImVec2 uv1 = icon->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
-                    ImGui::Image((ImTextureID)icon->GetImGuiTextureID(), { 32.0f, 32.0f }, uv0, uv1);
-                }
-                ImGui::Text("%s", filenameString.c_str());
-                ImGui::EndDragDropSource();
-            }
-
-            ImGui::PopStyleColor();
-
-            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-                if (directoryEntry.is_directory()) {
-                    m_CurrentDirectory /= path.filename();
-                }
-            }
-
-            // 文件名居中显示
-            float cursorPosX = ImGui::GetCursorPosX();
-            ImFont* font = ImGui::GetFont();
-            float fontScale = ImGui::GetIO().FontGlobalScale;
-            const char* text = filenameString.c_str();
-            const char* text_end = text + filenameString.length();
-            float wrapWidth = m_ThumbnailSize;
-            int lineCount = 0;
-            const int maxLines = 2;
-
-            while (text < text_end && lineCount < maxLines) {
-                const char* line_end = font->CalcWordWrapPositionA(fontScale, text, text_end, wrapWidth);
-                if (line_end == text) line_end++;
-
-                std::string line(text, line_end);
-                if (lineCount == maxLines - 1 && line_end < text_end) {
-                    line += "...";
-                }
-
-                float lineWidth = ImGui::CalcTextSize(line.c_str()).x;
-                float offset = (wrapWidth - lineWidth) * 0.5f;
-                if (offset > 0.0f) {
-                    ImGui::SetCursorPosX(cursorPosX + offset);
+                    ImGui::ImageButton(filenameString.c_str(), (ImTextureID)icon->GetImGuiTextureID(),
+                                       { thumbSize, thumbSize }, uv0, uv1);
                 } else {
-                    ImGui::SetCursorPosX(cursorPosX);
+                    ImGui::Button(filenameString.c_str(), { thumbSize, thumbSize });
+                }
+                ImGui::PopStyleColor();
+
+                bool hovered = ImGui::IsItemHovered();
+                bool doubleClicked = hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
+                if (hovered) ImGui::SetTooltip("%s", filenameString.c_str());
+
+                // 拖拽 — 传绝对物理路径，接收端用 VFS::GetVirtualPath 自行转换
+                if (ImGui::BeginDragDropSource()) {
+                    std::string absPath = std::filesystem::absolute(path).string();
+                    ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", absPath.c_str(), absPath.size() + 1);
+                    if (icon) {
+                        ImVec2 uv0 = icon->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
+                        ImVec2 uv1 = icon->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
+                        ImGui::Image((ImTextureID)icon->GetImGuiTextureID(), { 32.0f, 32.0f }, uv0, uv1);
+                    }
+                    ImGui::Text("%s", filenameString.c_str());
+                    ImGui::EndDragDropSource();
                 }
 
-                ImGui::TextUnformatted(line.c_str());
+                // 双击进入目录
+                if (doubleClicked && directoryEntry.is_directory())
+                    m_CurrentDirectory /= path.filename();
 
-                text = line_end;
-                while (text < text_end && (*text == ' ' || *text == '\n')) text++;
-                lineCount++;
+                // 文件名 (居中 + 截断)
+                ImGui::SetCursorPos(ImVec2(cursorPos.x, cursorPos.y + thumbSize + 8.0f * scale));
+                ImFont* font = ImGui::GetFont();
+                float fontScale = ImGui::GetIO().FontGlobalScale;
+                const char* text = filenameString.c_str();
+                const char* text_end = text + filenameString.length();
+                int lineCount = 0;
+                const int maxLines = 2;
+
+                while (text < text_end && lineCount < maxLines) {
+                    const char* line_end = font->CalcWordWrapPositionA(fontScale, text, text_end, cellSize);
+                    if (line_end == text) line_end++;
+                    std::string line(text, line_end);
+                    if (lineCount == maxLines - 1 && line_end < text_end) line += "...";
+                    float lineWidth = ImGui::CalcTextSize(line.c_str()).x;
+                    float offsetX = (cellSize - lineWidth) * 0.5f;
+                    ImGui::SetCursorPosX(cursorPos.x + std::max(0.0f, offsetX));
+                    ImGui::TextUnformatted(line.c_str());
+                    text = line_end;
+                    while (text < text_end && (*text == ' ' || *text == '\n')) text++;
+                    lineCount++;
+                }
+
+                ImGui::PopID();
             }
-
-            ImGui::NextColumn();
-            ImGui::PopID();
+            ImGui::EndTable();
         }
-        ImGui::Columns(1);
         ImGui::EndChild();
 
-        // 缩略图大小滑杆
-        float sliderWidth = 120.0f;
-        ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - sliderWidth - 10.0f);
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 8.0f);
+        // ==========================================
+        // 底栏: 缩略图大小滑杆
+        // ==========================================
+        float sliderWidth = 120.0f * scale;
+        ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - sliderWidth - 10.0f * scale);
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 8.0f * scale);
         ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.12f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
@@ -201,5 +245,4 @@ namespace Ayaya {
 
         ImGui::End();
     }
-
 }

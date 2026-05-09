@@ -739,30 +739,28 @@ namespace Ayaya {
         // 核心魔法：独立于引擎主循环的“渲染泵”
         // ==========================================
         auto progressCallback = [&](float progress, const std::string& message) {
-            // 1. 手动开启一个全新的 ImGui 帧 (已封装)
             ImGuiBackend::BeginFrame();
 
-            // 2. 绘制全屏暗色遮罩与进度条 (UI 逻辑保留在 EditorLayer)
             ImGuiViewport* viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(viewport->Pos);
             ImGui::SetNextWindowSize(viewport->Size);
-            
-            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.08f, 0.085f, 0.09f, 1.0f)); 
+
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.08f, 0.085f, 0.09f, 1.0f));
             ImGui::Begin("LoadingScreen", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
             ImVec2 windowSize = ImGui::GetWindowSize();
             float barWidth = 600.0f;
             ImGui::SetCursorPos(ImVec2((windowSize.x - barWidth) * 0.5f, windowSize.y * 0.5f - 50.0f));
-            
+
             ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : ImGui::GetIO().Fonts->Fonts[0]);
             ImGui::TextColored(ImVec4(0.17f, 0.45f, 0.85f, 1.0f), "Loading Scene...");
             ImGui::PopFont();
-            
+
             ImGui::SetCursorPosX((windowSize.x - barWidth) * 0.5f);
             ImGui::TextDisabled("%s", message.c_str());
 
             ImGui::SetCursorPosX((windowSize.x - barWidth) * 0.5f);
-            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.17f, 0.45f, 0.85f, 1.0f)); 
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.17f, 0.45f, 0.85f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.04f, 0.04f, 0.045f, 1.0f));
             ImGui::ProgressBar(progress, ImVec2(barWidth, 24.0f));
             ImGui::PopStyleColor(2);
@@ -770,7 +768,6 @@ namespace Ayaya {
             ImGui::End();
             ImGui::PopStyleColor();
 
-            // 3. 强制推送渲染、处理多视口并交换缓冲区 (已封装)
             ImGuiBackend::EndFrameAndSwapBuffers();
         };
 
@@ -932,7 +929,7 @@ namespace Ayaya {
 
                 ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.25f, nullptr, &dock_main_id);
                 ImGuiID dock_id_right_bottom = ImGui::DockBuilderSplitNode(dock_id_right, ImGuiDir_Down, 0.5f, nullptr, &dock_id_right);
-                ImGuiID dock_id_bottom = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.35f, NULL, &dock_main_id);
+                ImGuiID dock_id_bottom = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.4f, NULL, &dock_main_id);
                 ImGuiID dock_id_game = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.5f, nullptr, &dock_main_id);
 
                 // ==========================================

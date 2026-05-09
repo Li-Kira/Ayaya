@@ -496,15 +496,7 @@ namespace Ayaya {
 
         // 只有在这里成功拿到了画面，才可以放行围栏！
         vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame]);
-
-        // 释放旧 buffer 再重新分配 — 确保 MoltenVK validation 层完全清除 descriptor set 绑定追踪
-        vkFreeCommandBuffers(m_Device, m_CommandPool, 1, &m_CommandBuffers[m_CurrentFrame]);
-        VkCommandBufferAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.commandPool = m_CommandPool;
-        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandBufferCount = 1;
-        vkAllocateCommandBuffers(m_Device, &allocInfo, &m_CommandBuffers[m_CurrentFrame]);
+        vkResetCommandBuffer(m_CommandBuffers[m_CurrentFrame], 0);
 
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
