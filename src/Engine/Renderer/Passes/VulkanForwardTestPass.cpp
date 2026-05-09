@@ -32,7 +32,7 @@ namespace Ayaya {
         fboSpec.Samples = 1;
         fboSpec.Width = 1280;
         fboSpec.Height = 720;
-        fboSpec.Attachments = { FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::Depth };
+        fboSpec.Attachments = { FramebufferTextureFormat::RGBA16F, FramebufferTextureFormat::Depth };
 
         m_ForwardFBOs.resize(3);
         for (int i = 0; i < 3; i++) m_ForwardFBOs[i] = Framebuffer::Create(fboSpec);
@@ -164,6 +164,11 @@ namespace Ayaya {
             return;
         }
 
+        // 环境参数 — 对齐 OpenGL 的 u_Intensity / u_AmbientColor
+        float envIntensity = context.Get<float>("EnvironmentIntensity", 1.0f);
+        glm::vec3 envAmbient = context.Get<glm::vec3>("EnvironmentAmbientColor", glm::vec3(0.1f))
+                             * envIntensity;
+
         // 【安全降级策略】
         std::shared_ptr<TextureCube> safeIrradiance = irradianceMap ? irradianceMap : envCubemap;
         std::shared_ptr<TextureCube> safePrefilter  = prefilterMap  ? prefilterMap  : envCubemap;
@@ -190,7 +195,7 @@ namespace Ayaya {
 
             ForwardPushConstants constants{};
             constants.Transform = drawCmd.Transform;
-            constants.Albedo = glm::vec3(1.0f);
+            constants.Albedo = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
             constants.UseAlbedoMap = 0;
             constants.Metallic = 0.0f;
             constants.Roughness = 0.5f;
@@ -199,11 +204,16 @@ namespace Ayaya {
             constants.UseRoughnessMap = 0;
             constants.UseAOMap = 0;
             constants.UseNormalMap = 0;
+            constants.EnvironmentIntensity = envIntensity;
+            constants._pad0 = 0.0f;
+            constants._pad1 = 0.0f;
+            constants._pad2 = 0.0f;
+            constants.EnvironmentAmbientColor = glm::vec4(envAmbient, 1.0f);
 
             if (drawCmd.MaterialAsset) {
                 for (const auto& prop : drawCmd.MaterialAsset->Properties) {
                     if (prop.Type == MaterialPropertyType::Vec3 && prop.UniformName == "u_Albedo") {
-                        constants.Albedo = prop.Vec3Value;
+                        constants.Albedo = glm::vec4(prop.Vec3Value, 1.0f);
                     }
                     else if (prop.Type == MaterialPropertyType::Float && prop.UniformName == "u_Metallic") {
                         constants.Metallic = prop.FloatValue;

@@ -39,13 +39,15 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
 }
 
 vec2 IntegrateBRDF(float NdotV, float roughness) {
+    // 防止 NdotV=0 时除零产生 NaN，加小 epsilon
+    float safeNdotV = max(NdotV, 1e-5);
     vec3 V;
-    V.x = sqrt(1.0 - NdotV*NdotV);
+    V.x = sqrt(1.0 - safeNdotV * safeNdotV);
     V.y = 0.0;
-    V.z = NdotV;
+    V.z = safeNdotV;
 
     float A = 0.0;
-    float B = 0.0; 
+    float B = 0.0;
 
     vec3 N = vec3(0.0, 0.0, 1.0);
     const uint SAMPLE_COUNT = 1024u;
@@ -60,7 +62,7 @@ vec2 IntegrateBRDF(float NdotV, float roughness) {
 
         if(NdotL > 0.0) {
             float G = GeometrySmith(N, V, L, roughness);
-            float G_Vis = (G * VdotH) / (NdotH * NdotV);
+            float G_Vis = (G * VdotH) / max(NdotH * safeNdotV, 1e-5);
             float Fc = pow(1.0 - VdotH, 5.0);
 
             A += (1.0 - Fc) * G_Vis;

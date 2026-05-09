@@ -11,10 +11,9 @@ layout(push_constant) uniform Constants {
     float u_Intensity;
 } pc;
 
-void main() {    
-    // 采样 Cubemap
+void main() {
     vec3 envColor = texture(u_Skybox, v_TexCoords).rgb;
-    
-    FragColor = vec4(envColor, 1.0);
-    // FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+
+    // 对齐 OpenGL：乘强度 + 除曝光，使天空盒以屏幕亮度显示
+    FragColor = vec4(envColor * pc.u_Intensity, 1.0);
 }

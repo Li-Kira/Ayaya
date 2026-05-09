@@ -28,8 +28,8 @@ void main() {
         hdrColor += bloomColor * pc.BloomIntensity;
     }
 
-    // 1. 物理曝光缩放 — Forward PBR 输出已为物理辐射度，无需二次缩放
-    // hdrColor *= pc.Exposure;
+    // 1. 物理曝光缩放 — 对齐 OpenGL，HDR 物理值需要曝光才能正确显示
+    hdrColor *= pc.Exposure;
 
     vec3 mapped = vec3(0.0);
     // 2. 色调映射
@@ -39,7 +39,7 @@ void main() {
         mapped = ACESFilm(hdrColor);
     }
 
-    // 3. 伽马校正
+    // 3. 伽马校正 — swapchain 为 UNORM 格式，无硬件 sRGB 转换，shader 必须手动做
     mapped = pow(mapped, vec3(1.0 / 2.2));
     vec3 finalColor = mapped;
 

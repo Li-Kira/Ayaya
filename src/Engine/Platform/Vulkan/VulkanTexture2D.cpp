@@ -17,6 +17,13 @@ namespace Ayaya {
         Invalidate();
     }
 
+    // 从已有 VkImageView 包装 (用于 IBL BRDF LUT 等预先烘焙的纹理)
+    VulkanTexture2D::VulkanTexture2D(void* rendererID, uint32_t width, uint32_t height)
+        : m_Width(width), m_Height(height), m_IsWrapped(true) {
+        m_ImageView = (VkImageView)rendererID;
+        CreateSampler();
+    }
+
     VulkanTexture2D::VulkanTexture2D(const std::string& path) : m_Path(path) {
         int w, h, channels;
         
@@ -30,7 +37,16 @@ namespace Ayaya {
             m_Format = VK_FORMAT_R32G32B32A32_SFLOAT; // 或者 R16G16B16A16_SFLOAT
         } else {
             pixels = stbi_load(path.c_str(), &w, &h, &channels, STBI_rgb_alpha);
-            m_Format = VK_FORMAT_R8G8B8A8_UNORM;
+            // 只有颜色贴图用 SRGB；法线/金属度/粗糙度/AO 是数学数据，必须用线性
+            std::string lowerPath = path;
+            for (auto& c : lowerPath) c = (char)std::tolower(c);
+            bool isLinearData = (lowerPath.find("normal")   != std::string::npos ||
+                                 lowerPath.find("metallic") != std::string::npos ||
+                                 lowerPath.find("roughness")!= std::string::npos ||
+                                 lowerPath.find("ao.")     != std::string::npos ||
+                                 lowerPath.find("height")  != std::string::npos ||
+                                 lowerPath.find("displace")!= std::string::npos);
+            m_Format = isLinearData ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R8G8B8A8_SRGB;
         }
 
         if (!pixels) {
@@ -52,9 +68,6 @@ namespace Ayaya {
         VkDevice device = context->GetDevice();
         vkDeviceWaitIdle(device);
 
-        // ==========================================
-        // 【核心修复】：探活保护！
-        // ==========================================
         if (m_ImGuiDescriptorSet) {
             if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().BackendRendererUserData != nullptr) {
                 ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)m_ImGuiDescriptorSet);
@@ -62,7 +75,13 @@ namespace Ayaya {
             m_ImGuiDescriptorSet = nullptr;
         }
 
-        vkDeviceWaitIdle(device); // 销毁前确保 GPU 没在用它
+        // 包装模式：Image/ImageView 属于外部 (如 IBLBuilder)，只销毁自己的 Sampler
+        if (m_IsWrapped) {
+            if (m_Sampler) vkDestroySampler(device, m_Sampler, nullptr);
+            return;
+        }
+
+        vkDeviceWaitIdle(device);
         if (m_Sampler) vkDestroySampler(device, m_Sampler, nullptr);
         if (m_ImageView) vkDestroyImageView(device, m_ImageView, nullptr);
         if (m_Image) vmaDestroyImage(context->GetAllocator(), m_Image, m_Allocation);

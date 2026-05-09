@@ -112,7 +112,7 @@ namespace Ayaya {
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
         samplerInfo.mipLodBias = 0.0f;
         samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 1.0f;
+        samplerInfo.maxLod = 32.0f; // 足够覆盖 IBL 预过滤贴图的所有 mip 级别 (max 11)
 
         vkCreateSampler(context->GetDevice(), &samplerInfo, nullptr, &m_Sampler);
     }

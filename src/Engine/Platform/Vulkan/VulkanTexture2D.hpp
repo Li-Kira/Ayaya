@@ -9,11 +9,12 @@ namespace Ayaya {
     public:
         VulkanTexture2D(uint32_t width, uint32_t height);
         VulkanTexture2D(const std::string& path);
+        VulkanTexture2D(void* rendererID, uint32_t width, uint32_t height);
         virtual ~VulkanTexture2D() override;
 
         virtual uint32_t GetWidth() const override { return m_Width; }
         virtual uint32_t GetHeight() const override { return m_Height; }
-        
+
         // Vulkan 实际上不需要传统的 RendererID
         virtual uint32_t GetRendererID() const override { return 0; }
 
@@ -40,7 +41,8 @@ namespace Ayaya {
         uint32_t m_Width = 0;
         uint32_t m_Height = 0;
         std::string m_Path;
-        
+        bool m_IsWrapped = false;
+
         VkImage m_Image = VK_NULL_HANDLE;
         VmaAllocation m_Allocation = VK_NULL_HANDLE;
         VkImageView m_ImageView = VK_NULL_HANDLE;

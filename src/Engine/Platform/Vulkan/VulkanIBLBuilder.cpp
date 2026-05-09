@@ -7,6 +7,7 @@
 #include "Platform/Vulkan/VulkanPipeline.hpp"
 #include "Platform/Vulkan/VulkanTexture2D.hpp"
 #include "Core/Application.hpp"
+#include <cmath>
 #include <glm/gtc/matrix_transform.hpp>
 #include <vk_mem_alloc.h>
 
@@ -49,7 +50,7 @@ namespace Ayaya {
         // ==========================================
         VmaAllocationCreateInfo allocInfo{};
         allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY; // 分配在速度最快的纯显存(VRAM)中
-        
+
         // 把 nullptr 换成 &allocInfo
         vmaCreateImage(allocator, &imageInfo, &allocInfo, &cubeImage, &cubeAlloc, nullptr);
 
@@ -336,8 +337,8 @@ namespace Ayaya {
 
         // 3. 绑定环境变量 (传入的 void* envCubemap 是 VkImageView)
         VkDescriptorSet descSet = vulkanPipeline->GetNextTextureDescriptorSet();
-        
-        // 创建一个临时采样器用于采样源 Cubemap
+
+        // 创建临时采样器 — 显式设置所有字段，避免默认值在 MoltenVK 上出问题
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -346,18 +347,28 @@ namespace Ayaya {
         samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.maxAnisotropy = 1.0f;
+        samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        samplerInfo.mipLodBias = 0.0f;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.maxLod = 8.0f;
         VkSampler tempSampler;
-        vkCreateSampler(device, &samplerInfo, nullptr, &tempSampler);
+        VkResult sampResult = vkCreateSampler(device, &samplerInfo, nullptr, &tempSampler);
+        AYAYA_CORE_ASSERT(sampResult == VK_SUCCESS, "Failed to create IBL temp sampler!");
 
         VkDescriptorImageInfo descImageInfo{};
         descImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        descImageInfo.imageView = (VkImageView)envCubemap; 
+        descImageInfo.imageView = (VkImageView)envCubemap;
         descImageInfo.sampler = tempSampler;
 
         VkWriteDescriptorSet write{};
         write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         write.dstSet = descSet;
-        write.dstBinding = 0; 
+        write.dstBinding = 0;
         write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         write.descriptorCount = 1;
         write.pImageInfo = &descImageInfo;
@@ -541,7 +552,7 @@ namespace Ayaya {
             return nullptr;
         }
 
-        // 3. 绑定描述符集 (代码与 Irradiance 完全相同)
+        // 3. 绑定描述符集 (显式设置全部字段，对齐 Irradiance 修复)
         VkDescriptorSet descSet = vulkanPipeline->GetNextTextureDescriptorSet();
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -550,8 +561,18 @@ namespace Ayaya {
         samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.maxAnisotropy = 1.0f;
+        samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        samplerInfo.mipLodBias = 0.0f;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.maxLod = 8.0f;
         VkSampler tempSampler;
-        vkCreateSampler(device, &samplerInfo, nullptr, &tempSampler);
+        VkResult sampResult = vkCreateSampler(device, &samplerInfo, nullptr, &tempSampler);
+        AYAYA_CORE_ASSERT(sampResult == VK_SUCCESS, "Failed to create IBL temp sampler!");
 
         VkDescriptorImageInfo descImageInfo{};
         descImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

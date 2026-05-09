@@ -209,6 +209,7 @@ namespace Ayaya {
         vkCreateDescriptorSetLayout(device, &set0Info, nullptr, &m_DescriptorSetLayouts[0]);
 
         std::vector<VkDescriptorSetLayoutBinding> set1Bindings;
+        std::vector<VkDescriptorBindingFlags> set1BindingFlags;
         for (uint32_t i = 0; i < 12; i++) {
             VkDescriptorSetLayoutBinding samplerBind{};
             samplerBind.binding = i;
@@ -216,9 +217,18 @@ namespace Ayaya {
             samplerBind.descriptorCount = 1;
             samplerBind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
             set1Bindings.push_back(samplerBind);
+            set1BindingFlags.push_back(VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT);
         }
+
+        VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo{};
+        bindingFlagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+        bindingFlagsInfo.bindingCount = (uint32_t)set1BindingFlags.size();
+        bindingFlagsInfo.pBindingFlags = set1BindingFlags.data();
+
         VkDescriptorSetLayoutCreateInfo set1Info{};
         set1Info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        set1Info.pNext = &bindingFlagsInfo;
+        set1Info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
         set1Info.bindingCount = (uint32_t)set1Bindings.size();
         set1Info.pBindings = set1Bindings.data();
         vkCreateDescriptorSetLayout(device, &set1Info, nullptr, &m_DescriptorSetLayouts[1]);
@@ -279,6 +289,7 @@ namespace Ayaya {
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
         poolInfo.poolSizeCount = 2;
         poolInfo.pPoolSizes = poolSizes;
         poolInfo.maxSets = 3010; 

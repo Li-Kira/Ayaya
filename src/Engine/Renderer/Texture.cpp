@@ -42,7 +42,7 @@ namespace Ayaya {
         switch (RendererAPI::GetAPI()) {
             case RendererAPI::API::None:    AYAYA_CORE_ERROR("RendererAPI::None is currently not supported!"); return nullptr;
             case RendererAPI::API::OpenGL:  return std::make_shared<OpenGLTexture2D>(rendererID, width, height);
-            case RendererAPI::API::Vulkan:  AYAYA_CORE_ERROR("Vulkan Texture2D (from ID) is under construction!"); return nullptr;
+            case RendererAPI::API::Vulkan:  return std::make_shared<VulkanTexture2D>(rendererID, width, height);
             case RendererAPI::API::Metal:   AYAYA_CORE_ERROR("Metal Texture2D is under construction!"); return nullptr;
         }
         AYAYA_CORE_ERROR("Unknown RendererAPI!");

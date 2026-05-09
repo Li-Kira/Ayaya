@@ -144,11 +144,10 @@ namespace Ayaya {
                 s_DefaultBRDFLUT = Texture2D::Create(brdfID, 512, 512);
             } 
             else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-                // Vulkan 占位逻辑：防止后续拿到空指针崩溃
-                s_DefaultBRDFLUT = Texture2D::Create(1, 1); 
-                // 【必须新增】：塞入一个白像素，强制 Vulkan 底层将图像从 UNDEFINED 转换为 SHADER_READ_ONLY_OPTIMAL！
-                uint32_t whiteData = 0xffffffff;
-                s_DefaultBRDFLUT->SetData(&whiteData, sizeof(uint32_t));
+                // Vulkan 路径：烘焙真正的 BRDF LUT
+                std::shared_ptr<Shader> brdfShader = Shader::Create("IBL/brdf.vert", "IBL/brdf.frag");
+                void* brdfID = IBLBuilder::CreateBRDFLUT(brdfShader, nullptr);
+                s_DefaultBRDFLUT = Texture2D::Create(brdfID, 512, 512);
             }
         }
 
@@ -347,7 +346,7 @@ namespace Ayaya {
         float bThreshold = 1.0f, bKnee = 0.1f, bRadius = 0.005f, bIntensity = 1.0f;
         bool  enableFXAA = false;
 
-        // 遍历场景，寻找全局的 Volume (目前暂时只取找到的第一个)
+        // 遍历场景，寻找全局的 Volume
         auto volumeView = scene->Reg().view<PostProcessVolumeComponent>();
         for (auto entityID : volumeView) {
             auto& volume = volumeView.get<PostProcessVolumeComponent>(entityID);
