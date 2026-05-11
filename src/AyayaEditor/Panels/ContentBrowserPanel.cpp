@@ -160,45 +160,62 @@ namespace Ayaya {
 
                 ImGui::PushID(filenameString.c_str());
 
+                // ==========================================
+                // 【核心修复】：基于隐形按钮的全单元格交互
+                // ==========================================
                 float thumbSize = m_ThumbnailSize * scale;
                 ImVec2 cursorPos = ImGui::GetCursorPos();
 
-                // 用 ImageButton 保持拖拽兼容性
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-                ImGui::SetCursorPos(ImVec2(cursorPos.x + padding / 2.0f, cursorPos.y + 4.0f * scale));
-                if (icon) {
-                    ImVec2 uv0 = icon->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
-                    ImVec2 uv1 = icon->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
-                    ImGui::ImageButton(filenameString.c_str(), (ImTextureID)icon->GetImGuiTextureID(),
-                                       { thumbSize, thumbSize }, uv0, uv1);
-                } else {
-                    ImGui::Button(filenameString.c_str(), { thumbSize, thumbSize });
-                }
-                ImGui::PopStyleColor();
+                // 预留两行文字高度 + 图标高度 + 间距，计算出卡片整体高度
+                float textHeight = ImGui::GetTextLineHeight() * 2.0f;
+                float itemHeight = 4.0f * scale + thumbSize + 8.0f * scale + textHeight;
+                ImVec2 itemSize(cellSize, itemHeight);
 
+                // 1. 绘制隐形交互区（覆盖整个单元格）
+                ImGui::SetCursorPos(cursorPos);
+                ImGui::InvisibleButton("##ItemHitbox", itemSize);
+                
                 bool hovered = ImGui::IsItemHovered();
                 bool doubleClicked = hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
-                if (hovered) ImGui::SetTooltip("%s", filenameString.c_str());
+                
+                if (hovered) {
+                    // 添加圆角高亮背景底板
+                    ImGui::GetWindowDrawList()->AddRectFilled(
+                        ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), 
+                        IM_COL32(80, 80, 80, 150), 6.0f * scale);
+                    ImGui::SetTooltip("%s", filenameString.c_str());
+                }
 
-                // 拖拽 — 传绝对物理路径，接收端用 VFS::GetVirtualPath 自行转换
+                // 2. 绑定全区域拖拽逻辑到刚画出的这个 InvisibleButton 上
                 if (ImGui::BeginDragDropSource()) {
                     std::string absPath = std::filesystem::absolute(path).string();
                     ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", absPath.c_str(), absPath.size() + 1);
                     if (icon) {
                         ImVec2 uv0 = icon->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
                         ImVec2 uv1 = icon->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
-                        ImGui::Image((ImTextureID)icon->GetImGuiTextureID(), { 32.0f, 32.0f }, uv0, uv1);
+                        ImGui::Image((ImTextureID)icon->GetImGuiTextureID(), { 32.0f * scale, 32.0f * scale }, uv0, uv1);
                     }
                     ImGui::Text("%s", filenameString.c_str());
                     ImGui::EndDragDropSource();
                 }
 
                 // 双击进入目录
-                if (doubleClicked && directoryEntry.is_directory())
+                if (doubleClicked && directoryEntry.is_directory()) {
                     m_CurrentDirectory /= path.filename();
+                }
 
-                // 文件名 (居中 + 截断)
-                ImGui::SetCursorPos(ImVec2(cursorPos.x, cursorPos.y + thumbSize + 8.0f * scale));
+                // 3. 手动绘制纯净图标 (居中，并放置在掩膜层上方)
+                float imageOffsetX = (cellSize - thumbSize) * 0.5f;
+                ImGui::SetCursorPos(ImVec2(cursorPos.x + imageOffsetX, cursorPos.y + 4.0f * scale));
+                if (icon) {
+                    ImVec2 uv0 = icon->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
+                    ImVec2 uv1 = icon->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
+                    // 彻底舍弃自带边框的 ImageButton，直接渲染原生的 Image
+                    ImGui::Image((ImTextureID)icon->GetImGuiTextureID(), { thumbSize, thumbSize }, uv0, uv1);
+                }
+
+                // 4. 手动绘制文本 (居中 + 折断处理)
+                ImGui::SetCursorPos(ImVec2(cursorPos.x, cursorPos.y + 4.0f * scale + thumbSize + 8.0f * scale));
                 ImFont* font = ImGui::GetFont();
                 float fontScale = ImGui::GetIO().FontGlobalScale;
                 const char* text = filenameString.c_str();
@@ -211,14 +228,27 @@ namespace Ayaya {
                     if (line_end == text) line_end++;
                     std::string line(text, line_end);
                     if (lineCount == maxLines - 1 && line_end < text_end) line += "...";
+                    
                     float lineWidth = ImGui::CalcTextSize(line.c_str()).x;
                     float offsetX = (cellSize - lineWidth) * 0.5f;
+                    
+                    // 防止文本框偏移越界
                     ImGui::SetCursorPosX(cursorPos.x + std::max(0.0f, offsetX));
                     ImGui::TextUnformatted(line.c_str());
+                    
                     text = line_end;
                     while (text < text_end && (*text == ' ' || *text == '\n')) text++;
                     lineCount++;
                 }
+
+                // ==========================================
+                // 5. 补齐光标 Y 轴，防止 Table 高度塌陷
+                // 【核心修复】：提交一个 Dummy 空白占位符！
+                // 告诉 ImGui 引擎：“我确实把画笔移到了这里，且我在这里放了一个 0x0 大小的隐形盒子”，
+                // 从而合法扩展父级边界，彻底解决拖动滑杆导致的 Assert 闪退！
+                // ==========================================
+                ImGui::SetCursorPos(ImVec2(cursorPos.x, cursorPos.y + itemHeight));
+                ImGui::Dummy(ImVec2(0.0f, 0.0f));
 
                 ImGui::PopID();
             }

@@ -41,21 +41,27 @@ namespace Ayaya {
     static std::filesystem::path ResolvePayloadPath(const char* pathStr) {
         std::string pStr = pathStr;
         
-        // 1. 【核心防御】如果传过来的是已经带 VFS 协议的路径 (project:// 或 engine://)
-        // 直接利用 VFS 完美反解析为硬盘物理绝对路径！
-        // 这一步直接避开了底层系统把 project:// 错误压缩为 project:/ 的 Bug！
+        // 1. 【核心防御】如果传过来的是已经带 VFS 协议的路径
         if (pStr.find("://") != std::string::npos) {
             return VFS::ResolveString(pStr);
         }
 
-        // 2. 清洗路径斜杠（防兜底）
-        std::replace(pStr.begin(), pStr.end(), '\\', '/');
-        if (!pStr.empty() && pStr[0] == '/') pStr = pStr.substr(1);
+        // 2. 【核心修复】：先直接当做绝对路径测试，避免在 Mac/Linux 下把开头的 '/' 砍掉！
         std::filesystem::path draggedPath = pStr;
+        if (draggedPath.is_absolute() && std::filesystem::exists(draggedPath)) {
+            return draggedPath;
+        }
+
+        // 3. 清洗路径斜杠（防兜底相对路径）
+        std::replace(pStr.begin(), pStr.end(), '\\', '/');
+        if (!pStr.empty() && pStr[0] == '/' && !draggedPath.is_absolute()) {
+            pStr = pStr.substr(1);
+        }
+        draggedPath = pStr;
 
         if (draggedPath.is_absolute()) return draggedPath;
 
-        // 3. 向上寻路找 assets
+        // 4. 向上寻路找 assets
         std::filesystem::path currentDir = std::filesystem::current_path();
         while (currentDir.has_parent_path()) {
             std::filesystem::path realAssetsDir = currentDir / "assets";
@@ -67,9 +73,9 @@ namespace Ayaya {
             currentDir = currentDir.parent_path();
         }
 
-        // 4. 项目目录兜底
+        // 5. 项目目录兜底（改为使用 Asset 目录查找）
         if (Project::GetActive()) {
-            std::filesystem::path pProj = Project::GetProjectDirectory() / draggedPath;
+            std::filesystem::path pProj = Project::GetAssetDirectory() / draggedPath;
             if (std::filesystem::exists(pProj)) return pProj;
         }
 
@@ -1542,57 +1548,6 @@ namespace Ayaya {
                     EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                 };
 
-                // ==========================================
-                // 【核心修复】：智能拖拽路径解析器
-                // ==========================================
-                // Content Browser 传过来的可能是一个相对路径（缺少 assets/ 前缀）
-                // 此函数保证无论传过来什么形式，都能精准还原为物理绝对路径！
-                auto resolvePayloadPath = [](const char* pathStr) -> std::filesystem::path {
-                    std::string pStr = pathStr;
-                    // 清洗路径斜杠
-                    std::replace(pStr.begin(), pStr.end(), '\\', '/');
-                    if (!pStr.empty() && pStr[0] == '/') pStr = pStr.substr(1);
-                    std::filesystem::path draggedPath = pStr;
-
-                    if (draggedPath.is_absolute()) return draggedPath;
-
-                    // ==========================================
-                    // 核心修复 1：向上帝视角寻找真实的 assets 物理文件夹
-                    // 无论我们在 build/ 还是 build/Debug/ 运行，
-                    // 只要一层层往外扒，一定能找到源码目录里真实的 assets！
-                    // ==========================================
-                    std::filesystem::path currentDir = std::filesystem::current_path();
-                    while (currentDir.has_parent_path()) {
-                        std::filesystem::path realAssetsDir = currentDir / "assets";
-                        if (std::filesystem::exists(realAssetsDir)) {
-                            std::filesystem::path candidate = realAssetsDir / draggedPath;
-                            // 如果在这个真实的 assets 里找到了目标文件，直接返回绝对路径！
-                            if (std::filesystem::exists(candidate)) return candidate;
-                        }
-                        if (currentDir == currentDir.parent_path()) break; // 防死循环
-                        currentDir = currentDir.parent_path();
-                    }
-
-                    // ==========================================
-                    // 核心修复 2：检查是否相对于当前项目的根目录
-                    // ==========================================
-                    if (Project::GetActive()) {
-                        std::filesystem::path pProj = Project::GetProjectDirectory() / draggedPath;
-                        if (std::filesystem::exists(pProj)) return pProj;
-                    }
-
-                    // ==========================================
-                    // 核心修复 3：VFS 挂载点兜底
-                    // ==========================================
-                    std::filesystem::path enginePath = std::filesystem::path(VFS::ResolveString("engine://")) / draggedPath;
-                    if (std::filesystem::exists(enginePath)) return enginePath;
-
-                    std::filesystem::path projectPath = std::filesystem::path(VFS::ResolveString("project://")) / draggedPath;
-                    if (std::filesystem::exists(projectPath)) return projectPath;
-
-                    // 实在找不到，只能原样返回绝对路径，让错误在日志中清晰暴露
-                    return std::filesystem::absolute(draggedPath);
-                };
 
                 // ==========================================
                 // 1. 模型资产管理
@@ -1688,7 +1643,7 @@ namespace Ayaya {
                         if (ImGui::BeginDragDropTarget()) {
                             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                                 const char* pathStr = (const char*)payload->Data;
-                                std::filesystem::path resolvedPath = resolvePayloadPath(pathStr); // 【修复】：运用智能解析器
+                                std::filesystem::path resolvedPath = ResolvePayloadPath(pathStr); // 【修复】：运用智能解析器
                                 std::string ext = resolvedPath.extension().string();
                                 
                                 if (ext == ".mat") {
@@ -1799,7 +1754,7 @@ namespace Ayaya {
                                     if (ImGui::BeginDragDropTarget()) {
                                         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                                             const char* pathStr = (const char*)payload->Data;
-                                            std::filesystem::path resolvedPath = resolvePayloadPath(pathStr);
+                                            std::filesystem::path resolvedPath = ResolvePayloadPath(pathStr);
                                             std::string ext = resolvedPath.extension().string();
 
                                             // 顺便加上 .hdr 支持

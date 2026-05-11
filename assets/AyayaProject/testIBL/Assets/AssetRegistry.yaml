@@ -38,9 +38,6 @@ AssetRegistry:
   - Handle: 16840923429999924695
     Type: 2
     VirtualPath: project://Textures/rusted_iron/albedo.png
-  - Handle: 17239599399170105797
-    Type: 2
-    VirtualPath: /Users/likirac/Desktop/Project/Learn/Ayaya/build/project:/Textures/wall/albedo.png
   - Handle: 17591400011739918656
     Type: 2
     VirtualPath: project://Textures/gold/ao.png

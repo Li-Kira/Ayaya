@@ -70,7 +70,9 @@ namespace Ayaya {
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         
-        vmaCreateImage(context->GetAllocator(), &imageInfo, nullptr, &m_Image, &m_Allocation, nullptr);
+        VmaAllocationCreateInfo allocInfo{};
+        allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        vmaCreateImage(context->GetAllocator(), &imageInfo, &allocInfo, &m_Image, &m_Allocation, nullptr);
 
         // 2. 创建 VkImageView
         VkImageViewCreateInfo viewInfo{};
