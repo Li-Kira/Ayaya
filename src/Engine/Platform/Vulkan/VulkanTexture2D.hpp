@@ -10,6 +10,7 @@ namespace Ayaya {
         VulkanTexture2D(uint32_t width, uint32_t height);
         VulkanTexture2D(const std::string& path);
         VulkanTexture2D(void* rendererID, uint32_t width, uint32_t height);
+        VulkanTexture2D(const RawTextureData& raw); // 异步加载：从 CPU 数据创建 GPU 纹理
         virtual ~VulkanTexture2D() override;
 
         virtual uint32_t GetWidth() const override { return m_Width; }

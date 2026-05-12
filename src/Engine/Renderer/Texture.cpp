@@ -49,4 +49,44 @@ namespace Ayaya {
         return nullptr;
     }
 
+    // ==========================================
+    // 4. 异步加载：后台线程读取像素数据（纯 CPU，线程安全）
+    // ==========================================
+    RawTextureData Texture2D::LoadRawDataFromDisk(const std::string& path) {
+        RawTextureData raw;
+        raw.SourcePath = path;
+
+        bool isHDR = stbi_is_hdr(path.c_str());
+        raw.IsHDR = isHDR;
+
+        stbi_set_flip_vertically_on_load(1);
+
+        int w, h, c;
+        if (isHDR)
+            raw.Pixels = stbi_loadf(path.c_str(), &w, &h, &c, STBI_rgb_alpha);
+        else
+            raw.Pixels = stbi_load(path.c_str(), &w, &h, &c, STBI_rgb_alpha);
+
+        raw.Width = w; raw.Height = h; raw.Channels = c;
+
+        if (!raw.Pixels)
+            AYAYA_CORE_ERROR("Texture2D::LoadRawDataFromDisk failed: {0}", path);
+
+        return raw;
+    }
+
+    // ==========================================
+    // 5. 异步加载：主线程 GPU 上传
+    // ==========================================
+    std::shared_ptr<Texture2D> Texture2D::CreateFromRawData(const RawTextureData& raw) {
+        switch (RendererAPI::GetAPI()) {
+            case RendererAPI::API::None:    AYAYA_CORE_ERROR("RendererAPI::None is currently not supported!"); return nullptr;
+            case RendererAPI::API::OpenGL:  return std::make_shared<OpenGLTexture2D>(raw);
+            case RendererAPI::API::Vulkan:  return std::make_shared<VulkanTexture2D>(raw);
+            case RendererAPI::API::Metal:   AYAYA_CORE_ERROR("Metal Texture2D is under construction!"); return nullptr;
+        }
+        AYAYA_CORE_ERROR("Unknown RendererAPI!");
+        return nullptr;
+    }
+
 }

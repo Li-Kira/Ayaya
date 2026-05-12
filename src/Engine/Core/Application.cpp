@@ -151,9 +151,12 @@ Hi, welcome to Ayaya engine♪
 
     void Application::Run() {
         while (m_Running) {
-            float time = (float)glfwGetTime(); 
+            float time = (float)glfwGetTime();
             Timestep timestep = time - m_LastFrameTime;
             m_LastFrameTime = time;
+
+            // 处理异步加载的 GPU 上传回调（后台线程完成 stbi_load 后在此提交纹理）
+            AssetManager::Update();
 
             // ==========================================
             // 【核心架构升级】：在所有业务与渲染管线执行前，开启 Vulkan 帧录制！

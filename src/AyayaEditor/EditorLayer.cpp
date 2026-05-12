@@ -58,6 +58,21 @@ namespace Ayaya {
 
         SetupScene();
 
+        // ==========================================
+        // 验证异步加载：找一个注册了但尚未加载到内存的纹理
+        // 预期日志：[Async] Spawning bg thread → BG: stbi_load → MAIN: GPU upload done
+        // ==========================================
+        AYAYA_CORE_INFO("=== Async Load Verification Start ===");
+        const auto& loaded = AssetManager::GetLoadedAssets();
+        for (const auto& [handle, metadata] : AssetManager::GetRegistry()) {
+            if (metadata.Type == AssetType::Texture2D && loaded.find(handle) == loaded.end()) {
+                AYAYA_CORE_INFO("Verification: RequestAsyncLoad for UNLOADED handle {0} ({1})", (uint64_t)handle, metadata.VirtualPath);
+                AssetManager::RequestAsyncLoad(handle);
+                break;
+            }
+        }
+        AYAYA_CORE_INFO("=== Async Load Verification: done ===");
+
         // 清理临时文件
         std::string tempPath = VFS::ResolveString("project://temp/temp_play_scene.ayaya");
         if (std::filesystem::exists(tempPath)) {
@@ -389,12 +404,10 @@ namespace Ayaya {
         Entity cubeEntity = m_ActiveScene->CreateEntity("Cube");
         cubeEntity.GetComponent<TransformComponent>().Scale = { 1.0f, 1.0f, 1.0f };
         cubeEntity.GetComponent<TransformComponent>().Translation = { 0.0f, 0.0f, 0.0f };
-        auto& mrc = cubeEntity.AddComponent<MeshRendererComponent>(); 
+        auto& mrc = cubeEntity.AddComponent<MeshRendererComponent>();
         mrc.ModelHandle = AssetManager::GetBuiltInCube();
+        mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
 
-        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
-            mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
-        }
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
     }
 
@@ -660,7 +673,25 @@ namespace Ayaya {
                     // 生成并自动保存起始场景
                     NewScene();
                     m_CurrentScenePath = VFS::ResolveString("project://Scenes/Default.ayaya");
+
+                    // 将引擎内置默认材质克隆到项目 Materials 目录，使项目自包含
+                    UUID builtInMat = AssetManager::GetBuiltInMaterial();
+                    std::string engineMatPath = AssetManager::GetAssetPhysicalPath(builtInMat);
+                    if (!engineMatPath.empty()) {
+                        std::string projectMatPath = VFS::ResolveString("project://Materials/DefaultPBR.mat");
+                        try {
+                            std::filesystem::copy_file(engineMatPath, projectMatPath,
+                                std::filesystem::copy_options::overwrite_existing);
+                            // 将同一个 UUID 重定向到项目本地路径，场景引用无需修改
+                            AssetManager::UpdateAssetPath(builtInMat, "project://Materials/DefaultPBR.mat");
+                        } catch (const std::exception& e) {
+                            AYAYA_CORE_WARN("Failed to clone default material: {0}", e.what());
+                        }
+                    }
+
+                    // 保存场景 + 所有材质 .mat 文件 + 资产注册表
                     SaveScene();
+                    SaveProject();
 
                     AYAYA_CORE_INFO("🚀 Project Ready: {0}", finalDir.string());
                     ImGui::CloseCurrentPopup();

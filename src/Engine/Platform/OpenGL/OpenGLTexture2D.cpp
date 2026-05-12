@@ -131,9 +131,41 @@ namespace Ayaya {
     }
 
     OpenGLTexture2D::OpenGLTexture2D(void* rendererID, uint32_t width, uint32_t height)
-        : m_RendererID((uint32_t)(uintptr_t)rendererID), m_Width(width), m_Height(height) 
+        : m_RendererID((uint32_t)(uintptr_t)rendererID), m_Width(width), m_Height(height)
     {
-        // 同样什么都不用做，只接管 ID 并在析构时释放
+    }
+
+    // 异步加载：从 CPU 端原始数据创建 GL 纹理（主线程执行）
+    OpenGLTexture2D::OpenGLTexture2D(const RawTextureData& raw)
+        : m_Path(raw.SourcePath), m_Width(raw.Width), m_Height(raw.Height) {
+        if (!raw.Pixels) return;
+
+        if (raw.IsHDR) {
+            m_InternalFormat = raw.Channels == 4 ? GL_RGBA16F : GL_RGB16F;
+            m_DataFormat = raw.Channels == 4 ? GL_RGBA : GL_RGB;
+            glGenTextures(1, &m_RendererID);
+            glBindTexture(GL_TEXTURE_2D, m_RendererID);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexImage2D(GL_TEXTURE_2D, 0, m_InternalFormat, m_Width, m_Height, 0, m_DataFormat, GL_FLOAT, raw.Pixels);
+        } else {
+            if (raw.Channels == 4)      { m_InternalFormat = GL_RGBA8; m_DataFormat = GL_RGBA; }
+            else if (raw.Channels == 3) { m_InternalFormat = GL_RGB8;  m_DataFormat = GL_RGB; }
+            else if (raw.Channels == 2) { m_InternalFormat = GL_RG8;   m_DataFormat = GL_RG; }
+            else if (raw.Channels == 1) { m_InternalFormat = GL_R8;    m_DataFormat = GL_RED; }
+            glGenTextures(1, &m_RendererID);
+            glBindTexture(GL_TEXTURE_2D, m_RendererID);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            if (raw.Channels == 1 || raw.Channels == 2) glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexImage2D(GL_TEXTURE_2D, 0, m_InternalFormat, m_Width, m_Height, 0, m_DataFormat, GL_UNSIGNED_BYTE, raw.Pixels);
+            glGenerateMipmap(GL_TEXTURE_2D);
+            if (raw.Channels == 1 || raw.Channels == 2) glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        }
     }
 
     void* OpenGLTexture2D::GetImGuiTextureID() const {

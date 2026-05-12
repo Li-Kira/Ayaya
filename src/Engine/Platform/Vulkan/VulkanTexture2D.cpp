@@ -67,6 +67,28 @@ namespace Ayaya {
         stbi_image_free(pixels);
     }
 
+    // 异步加载：从 CPU 端原始数据创建 GPU 纹理（主线程执行）
+    VulkanTexture2D::VulkanTexture2D(const RawTextureData& raw)
+        : m_Width(raw.Width), m_Height(raw.Height), m_Path(raw.SourcePath) {
+        // 确定格式
+        if (raw.IsHDR) {
+            m_Format = VK_FORMAT_R32G32B32A32_SFLOAT;
+        } else {
+            std::string lowerPath = raw.SourcePath;
+            for (auto& c : lowerPath) c = (char)std::tolower(c);
+            bool isLinearData = (lowerPath.find("normal")   != std::string::npos ||
+                                 lowerPath.find("metallic") != std::string::npos ||
+                                 lowerPath.find("roughness")!= std::string::npos ||
+                                 lowerPath.find("ao.")     != std::string::npos ||
+                                 lowerPath.find("height")  != std::string::npos ||
+                                 lowerPath.find("displace")!= std::string::npos);
+            m_Format = isLinearData ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R8G8B8A8_SRGB;
+        }
+        Invalidate();
+        uint32_t bpp = raw.IsHDR ? 16 : 4;
+        SetData(raw.Pixels, m_Width * m_Height * bpp);
+    }
+
     VulkanTexture2D::~VulkanTexture2D() {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         VkDevice device = context->GetDevice();
