@@ -223,4 +223,115 @@ namespace Ayaya {
         // 7. 过河拆桥，销毁暂存区
         vmaDestroyBuffer(context->GetAllocator(), stagingBuffer, stagingAllocation);
     }
+
+    // ==========================================
+    // 静态工厂：创建 4x4 纯黑默认 cubemap（无环境贴图时的 IBL 占位符）
+    // ==========================================
+    std::shared_ptr<VulkanTextureCube> VulkanTextureCube::CreateDefault() {
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        VmaAllocator allocator = context->GetAllocator();
+        VkDevice device = context->GetDevice();
+        uint32_t size = 4;
+
+        // 1. 分配 VkImage
+        VkImageCreateInfo imageInfo{};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+        imageInfo.extent = { size, size, 1 };
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 6;
+        imageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        VmaAllocationCreateInfo allocInfo{};
+        allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+
+        VkImage image;
+        VmaAllocation allocation;
+        vmaCreateImage(allocator, &imageInfo, &allocInfo, &image, &allocation, nullptr);
+
+        // 2. 上传纯黑像素 (4x4x6 faces × 4 bytes)
+        uint32_t totalSize = size * size * 4 * 6;
+        VkBuffer stagingBuffer;
+        VmaAllocation stagingAlloc;
+        VkBufferCreateInfo bufferInfo{};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.size = totalSize;
+        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        VmaAllocationCreateInfo stagingInfo{};
+        stagingInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
+        vmaCreateBuffer(allocator, &bufferInfo, &stagingInfo, &stagingBuffer, &stagingAlloc, nullptr);
+
+        void* data;
+        vmaMapMemory(allocator, stagingAlloc, &data);
+        memset(data, 0, totalSize);
+        vmaUnmapMemory(allocator, stagingAlloc);
+
+        VkCommandBuffer cmd = context->BeginSingleTimeCommands();
+
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.image = image;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 6;
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        VkBufferImageCopy region{};
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 6;
+        region.imageExtent = { size, size, 1 };
+        vkCmdCopyBufferToImage(cmd, stagingBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        context->EndSingleTimeCommands(cmd);
+        vmaDestroyBuffer(allocator, stagingBuffer, stagingAlloc);
+
+        // 3. 创建 VkImageView
+        VkImageViewCreateInfo viewInfo{};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = image;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+        viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = 6;
+
+        VkImageView imageView;
+        vkCreateImageView(device, &viewInfo, nullptr, &imageView);
+
+        // 4. 用私有构造函数创建对象，手动填充成员
+        auto cube = std::shared_ptr<VulkanTextureCube>(new VulkanTextureCube());
+        cube->m_Width = size;
+        cube->m_Height = size;
+        cube->m_IsWrapped = false;
+        cube->m_Image = image;
+        cube->m_Allocation = allocation;
+        cube->m_ImageView = imageView;
+        cube->CreateSampler();
+
+        return cube;
+    }
 }

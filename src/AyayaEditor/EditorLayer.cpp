@@ -23,6 +23,10 @@ namespace Ayaya {
 
     EditorLayer::EditorLayer() : Layer("EditorLayer") {
         s_Instance = this;
+        std::string docsDir = std::filesystem::path(
+            getenv("HOME") ? getenv("HOME") : getenv("USERPROFILE") ? getenv("USERPROFILE") : "."
+        ).append("Documents/AyayaProjects").string();
+        strncpy(m_NewProjectLocation, docsDir.c_str(), sizeof(m_NewProjectLocation) - 1);
     }
 
     EditorLayer& EditorLayer::Get() {
@@ -417,7 +421,7 @@ namespace Ayaya {
             
             AYAYA_CORE_INFO("Scene strictly saved to {0}", m_CurrentScenePath);
         } 
-        // 否则（这是一个新建的未保存场景），转为“另存为”逻辑
+        // 否则（这是一个新建的未保存场景），转为"另存为"逻辑
         else {
             SaveSceneAs();
         }
@@ -613,9 +617,24 @@ namespace Ayaya {
             // 4. 操作按钮
             if (ImGui::Button("Create Project", ImVec2(150, 35))) {
                 if (strlen(m_NewProjectName) > 0 && strlen(m_NewProjectLocation) > 0) {
-                    
+
+                    // 检测重名：自动添加序号后缀
+                    std::string baseName = m_NewProjectName;
+                    std::filesystem::path finalDirTry = std::filesystem::path(m_NewProjectLocation) / baseName;
+                    int suffix = 2;
+                    while (std::filesystem::exists(finalDirTry)) {
+                        baseName = std::string(m_NewProjectName) + " (" + std::to_string(suffix) + ")";
+                        finalDirTry = std::filesystem::path(m_NewProjectLocation) / baseName;
+                        suffix++;
+                    }
+                    if (baseName != std::string(m_NewProjectName)) {
+                        strncpy(m_NewProjectName, baseName.c_str(), sizeof(m_NewProjectName) - 1);
+                        AYAYA_CORE_INFO("Project name adjusted to avoid conflict: {0}", baseName);
+                    }
+                    std::filesystem::path finalDir = finalDirTry;
+
                     std::filesystem::path assetDir = finalDir / "Assets";
-                    std::filesystem::path projectFile = finalDir / (std::string(m_NewProjectName) + ".ayaproj");
+                    std::filesystem::path projectFile = finalDir / (baseName + ".ayaproj");
 
                     // 创建标准的 Unity 式物理目录
                     std::filesystem::create_directories(assetDir / "Scenes");
@@ -626,7 +645,7 @@ namespace Ayaya {
 
                     // 实例化项目单例
                     auto project = Project::New();
-                    project->GetConfig().Name = m_NewProjectName;
+                    project->GetConfig().Name = baseName;
                     project->GetConfig().AssetDirectory = "Assets";
                     project->GetConfig().StartScene = "Scenes/Default.ayaya";
                     Project::SaveActive(projectFile);
@@ -736,39 +755,43 @@ namespace Ayaya {
         EditorState state;
 
         // ==========================================
-        // 核心魔法：独立于引擎主循环的“渲染泵”
+        // 进度回调：OpenGL 在帧内渲染进度条；Vulkan 通过日志输出进度
         // ==========================================
         auto progressCallback = [&](float progress, const std::string& message) {
-            ImGuiBackend::BeginFrame();
+            if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+                ImGuiBackend::BeginFrame();
 
-            ImGuiViewport* viewport = ImGui::GetMainViewport();
-            ImGui::SetNextWindowPos(viewport->Pos);
-            ImGui::SetNextWindowSize(viewport->Size);
+                ImGuiViewport* viewport = ImGui::GetMainViewport();
+                ImGui::SetNextWindowPos(viewport->Pos);
+                ImGui::SetNextWindowSize(viewport->Size);
 
-            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.08f, 0.085f, 0.09f, 1.0f));
-            ImGui::Begin("LoadingScreen", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBringToFrontOnFocus);
+                ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.08f, 0.085f, 0.09f, 1.0f));
+                ImGui::Begin("LoadingScreen", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-            ImVec2 windowSize = ImGui::GetWindowSize();
-            float barWidth = 600.0f;
-            ImGui::SetCursorPos(ImVec2((windowSize.x - barWidth) * 0.5f, windowSize.y * 0.5f - 50.0f));
+                ImVec2 windowSize = ImGui::GetWindowSize();
+                float barWidth = 600.0f;
+                ImGui::SetCursorPos(ImVec2((windowSize.x - barWidth) * 0.5f, windowSize.y * 0.5f - 50.0f));
 
-            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : ImGui::GetIO().Fonts->Fonts[0]);
-            ImGui::TextColored(ImVec4(0.17f, 0.45f, 0.85f, 1.0f), "Loading Scene...");
-            ImGui::PopFont();
+                ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : ImGui::GetIO().Fonts->Fonts[0]);
+                ImGui::TextColored(ImVec4(0.17f, 0.45f, 0.85f, 1.0f), "Loading Scene...");
+                ImGui::PopFont();
 
-            ImGui::SetCursorPosX((windowSize.x - barWidth) * 0.5f);
-            ImGui::TextDisabled("%s", message.c_str());
+                ImGui::SetCursorPosX((windowSize.x - barWidth) * 0.5f);
+                ImGui::TextDisabled("%s", message.c_str());
 
-            ImGui::SetCursorPosX((windowSize.x - barWidth) * 0.5f);
-            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.17f, 0.45f, 0.85f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.04f, 0.04f, 0.045f, 1.0f));
-            ImGui::ProgressBar(progress, ImVec2(barWidth, 24.0f));
-            ImGui::PopStyleColor(2);
+                ImGui::SetCursorPosX((windowSize.x - barWidth) * 0.5f);
+                ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.17f, 0.45f, 0.85f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.04f, 0.04f, 0.045f, 1.0f));
+                ImGui::ProgressBar(progress, ImVec2(barWidth, 24.0f));
+                ImGui::PopStyleColor(2);
 
-            ImGui::End();
-            ImGui::PopStyleColor();
+                ImGui::End();
+                ImGui::PopStyleColor();
 
-            ImGuiBackend::EndFrameAndSwapBuffers();
+                ImGuiBackend::EndFrameAndSwapBuffers();
+            } else {
+                AYAYA_CORE_INFO("⏳ Loading scene... {0:.0f}% - {1}", progress * 100.0f, message);
+            }
         };
 
         // 通知第一帧：正在解析 YAML 文件...
@@ -1402,7 +1425,7 @@ namespace Ayaya {
     }
 
     void EditorLayer::UIRenderDebugGizmos(const glm::mat4& cameraViewMatrix, const glm::mat4& cameraProjectionMatrix) {
-        // 【修改】：不再因为没有选中物体就 return，我们需要获取它用来做“高亮区分”
+        // 【修改】：不再因为没有选中物体就 return，我们需要获取它用来做"高亮区分"
         Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();

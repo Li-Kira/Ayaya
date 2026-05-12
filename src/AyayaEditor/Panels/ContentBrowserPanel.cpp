@@ -17,12 +17,12 @@ namespace Ayaya {
             "CPackSourceConfig.cmake", "CMakeTmp", "CMakeScripts",
             "Win32", "x64", "Debug", "Release", "packages",
             "AyayaEditor.xcodeproj", "Sandbox.xcodeproj",
-            "imgui.ini", "AssetRegistry.yaml",
+            "imgui.ini", "AssetRegistry.yaml", "Temp",
         };
         static const std::unordered_set<std::string> s_ExcludeExtensions = {
             ".a", ".lib", ".dylib", ".so", ".exp", ".pdb", ".ilk",
             ".sln", ".vcxproj", ".vcxproj.filters", ".vcxproj.user",
-            ".xcconfig", ".plist",
+            ".xcconfig", ".plist", ".dll", ".exe",
         };
         const std::string name = path.filename().string();
         if (s_ExcludeNames.count(name)) return true;

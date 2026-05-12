@@ -149,6 +149,12 @@ namespace Ayaya {
                 std::shared_ptr<Shader> brdfShader = Shader::Create("IBL/brdf.vert", "IBL/brdf.frag");
                 void* brdfID = IBLBuilder::CreateBRDFLUT(brdfShader, nullptr);
                 s_DefaultBRDFLUT = Texture2D::Create(brdfID, 512, 512);
+
+                // 创建默认 IBL cubemap 占位符（无环境贴图时用作 fallback）
+                auto defaultCube = VulkanTextureCube::CreateDefault();
+                s_DefaultEnvironmentMap = defaultCube;
+                s_DefaultIrradianceMap = defaultCube;
+                s_DefaultPrefilterMap = defaultCube;
             }
         }
 
@@ -502,16 +508,22 @@ namespace Ayaya {
 
         if (envComp.Type == EnvironmentType::HDR_Equirectangular || envComp.Type == EnvironmentType::LDR_Equirectangular) {
             auto equiTex = AssetManager::GetAsset<Texture2D>(envComp.EquirectangularHandle);
-            if (!equiTex) return; // asset not ready — keep IsDirty=true, retry next frame
+            if (equiTex) {
+                std::shared_ptr<Shader> convertShader = Shader::Create("IBL/equirectangular_to_cubemap.vert", "IBL/equirectangular_to_cubemap.frag");
+                baseCubemapID = IBLBuilder::ConvertEquirectangularToCubemap(equiTex, s_SkyboxMesh, convertShader);
+                m_Data->EnvironmentCubemap = TextureCube::Create(baseCubemapID, 1024, 1024);
 
-            std::shared_ptr<Shader> convertShader = Shader::Create("IBL/equirectangular_to_cubemap.vert", "IBL/equirectangular_to_cubemap.frag");
-            baseCubemapID = IBLBuilder::ConvertEquirectangularToCubemap(equiTex, s_SkyboxMesh, convertShader);
-            m_Data->EnvironmentCubemap = TextureCube::Create(baseCubemapID, 1024, 1024);
-
-            // 将 TextureCube 的采样器传递给 IBL 烘焙函数，避免临时采样器兼容问题
-            if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-                auto vkCube = std::dynamic_pointer_cast<VulkanTextureCube>(m_Data->EnvironmentCubemap);
-                VulkanIBLBuilder::SetSourceCubemapSampler((void*)vkCube->GetSampler());
+                if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+                    auto vkCube = std::dynamic_pointer_cast<VulkanTextureCube>(m_Data->EnvironmentCubemap);
+                    VulkanIBLBuilder::SetSourceCubemapSampler((void*)vkCube->GetSampler());
+                }
+            } else {
+                // 无有效 HDR 源 — 使用默认占位 cubemap
+                m_Data->EnvironmentCubemap = s_DefaultEnvironmentMap;
+                m_Data->IrradianceMap = s_DefaultIrradianceMap;
+                m_Data->PrefilterMap = s_DefaultPrefilterMap;
+                envComp.IsDirty = false;
+                return;
             }
         }
         else if (envComp.Type == EnvironmentType::Classic_Cubemap) {

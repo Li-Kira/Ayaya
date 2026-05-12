@@ -28,8 +28,12 @@ namespace Ayaya {
         VkImageView GetImageView() const { return m_ImageView; }
         VkSampler GetSampler() const { return m_Sampler; }
 
+        // 创建纯色默认 cubemap（无环境贴图时用作 IBL 占位符）
+        static std::shared_ptr<VulkanTextureCube> CreateDefault();
+
     private:
-        void Invalidate(); 
+        VulkanTextureCube() = default; // 仅供 CreateDefault 使用
+        void Invalidate();
         void CreateFromFiles(const std::vector<std::string>& faces);
         void CreateSampler();
 

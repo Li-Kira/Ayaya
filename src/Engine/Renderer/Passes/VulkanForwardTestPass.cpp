@@ -155,15 +155,6 @@ namespace Ayaya {
         auto prefilterMap  = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap");
         auto brdfLUT       = context.GetTexture("BRDFLUT");
 
-        if (!envCubemap) {
-            cmd.EndRenderPass();
-            // 即使 envCubemap 为空，也必须注册 Forward FBO，否则 PostProcess 会拿到上一帧的僵尸画布
-            context.Set("Forward_Output", currentFBO);
-            context.Set("Final_Output", currentFBO);
-            context.Framebuffers["ForwardTest"] = currentFBO;
-            return;
-        }
-
         // 环境参数 — 对齐 OpenGL 的 u_Intensity / u_AmbientColor
         float envIntensity = context.Get<float>("EnvironmentIntensity", 1.0f);
         glm::vec3 envAmbient = context.Get<glm::vec3>("EnvironmentAmbientColor", glm::vec3(0.1f))

@@ -136,7 +136,7 @@ namespace Ayaya {
         // ==========================================
         bool m_ShowNewProjectPopup = false;
         char m_NewProjectName[256] = "MyProject";
-        char m_NewProjectLocation[256] = "C:/AyayaProjects"; 
+        char m_NewProjectLocation[256] = ""; 
         
         // 渲染弹窗的函数
         void UIRenderNewProjectPopup();

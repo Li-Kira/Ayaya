@@ -477,6 +477,36 @@ namespace Ayaya {
         AYAYA_CORE_ASSERT(result == VK_SUCCESS, "Failed to create Descriptor Pool!");
     }
 
+    // VkResult -> 可读字符串
+    static const char* VkResultStr(VkResult r) {
+        switch (r) {
+            case VK_SUCCESS: return "VK_SUCCESS";
+            case VK_NOT_READY: return "VK_NOT_READY";
+            case VK_TIMEOUT: return "VK_TIMEOUT";
+            case VK_EVENT_SET: return "VK_EVENT_SET";
+            case VK_EVENT_RESET: return "VK_EVENT_RESET";
+            case VK_INCOMPLETE: return "VK_INCOMPLETE";
+            case VK_ERROR_OUT_OF_HOST_MEMORY: return "VK_ERROR_OUT_OF_HOST_MEMORY";
+            case VK_ERROR_OUT_OF_DEVICE_MEMORY: return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
+            case VK_ERROR_INITIALIZATION_FAILED: return "VK_ERROR_INITIALIZATION_FAILED";
+            case VK_ERROR_DEVICE_LOST: return "VK_ERROR_DEVICE_LOST";
+            case VK_ERROR_MEMORY_MAP_FAILED: return "VK_ERROR_MEMORY_MAP_FAILED";
+            case VK_ERROR_LAYER_NOT_PRESENT: return "VK_ERROR_LAYER_NOT_PRESENT";
+            case VK_ERROR_EXTENSION_NOT_PRESENT: return "VK_ERROR_EXTENSION_NOT_PRESENT";
+            case VK_ERROR_FEATURE_NOT_PRESENT: return "VK_ERROR_FEATURE_NOT_PRESENT";
+            case VK_ERROR_INCOMPATIBLE_DRIVER: return "VK_ERROR_INCOMPATIBLE_DRIVER";
+            case VK_ERROR_TOO_MANY_OBJECTS: return "VK_ERROR_TOO_MANY_OBJECTS";
+            case VK_ERROR_FORMAT_NOT_SUPPORTED: return "VK_ERROR_FORMAT_NOT_SUPPORTED";
+            case VK_ERROR_FRAGMENTED_POOL: return "VK_ERROR_FRAGMENTED_POOL";
+            case VK_ERROR_UNKNOWN: return "VK_ERROR_UNKNOWN";
+            case VK_ERROR_OUT_OF_DATE_KHR: return "VK_ERROR_OUT_OF_DATE_KHR";
+            case VK_ERROR_SURFACE_LOST_KHR: return "VK_ERROR_SURFACE_LOST_KHR";
+            case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR: return "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR";
+            case VK_SUBOPTIMAL_KHR: return "VK_SUBOPTIMAL_KHR";
+            default: return "UNKNOWN";
+        }
+    }
+
     void VulkanContext::BeginFrame() {
         // ==========================================
         // 【核心防御】：完美融合 Fence 等待与安全重置
@@ -487,24 +517,40 @@ namespace Ayaya {
 
         // 如果画面过期（例如正在调整窗口大小），安全处理！
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+            AYAYA_CORE_WARN("[DBG] BeginFrame: swapchain OUT_OF_DATE, recreating...");
             RecreateSwapChain();
             // 重新请求一次画布，保证后续录制必定有一个合法的 m_ImageIndex
-            vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &m_ImageIndex);
-        } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-            AYAYA_CORE_ERROR("Failed to acquire swap chain image!");
+            result = vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &m_ImageIndex);
+        }
+        if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+            AYAYA_CORE_ERROR("[DBG] BeginFrame: vkAcquireNextImageKHR FAILED! m_CurrentFrame={0}, m_ImageIndex={1}, result={2} ({3})",
+                m_CurrentFrame, m_ImageIndex, (int)result, VkResultStr(result));
         }
 
         // 只有在这里成功拿到了画面，才可以放行围栏！
         vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame]);
-        vkResetCommandBuffer(m_CommandBuffers[m_CurrentFrame], 0);
+
+        VkResult resetResult = vkResetCommandBuffer(m_CommandBuffers[m_CurrentFrame], 0);
+        if (resetResult != VK_SUCCESS) {
+            AYAYA_CORE_ERROR("[DBG] BeginFrame: vkResetCommandBuffer FAILED! m_CurrentFrame={0}, result={1} ({2})",
+                m_CurrentFrame, (int)resetResult, VkResultStr(resetResult));
+        }
 
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        vkBeginCommandBuffer(m_CommandBuffers[m_CurrentFrame], &beginInfo);
+        VkResult beginResult = vkBeginCommandBuffer(m_CommandBuffers[m_CurrentFrame], &beginInfo);
+        if (beginResult != VK_SUCCESS) {
+            AYAYA_CORE_ERROR("[DBG] BeginFrame: vkBeginCommandBuffer FAILED! m_CurrentFrame={0}, result={1} ({2})",
+                m_CurrentFrame, (int)beginResult, VkResultStr(beginResult));
+        }
     }
 
     void VulkanContext::SwapBuffers() {
-        vkEndCommandBuffer(m_CommandBuffers[m_CurrentFrame]);
+        VkResult endResult = vkEndCommandBuffer(m_CommandBuffers[m_CurrentFrame]);
+        if (endResult != VK_SUCCESS) {
+            AYAYA_CORE_ERROR("[DBG] SwapBuffers: vkEndCommandBuffer FAILED! m_CurrentFrame={0}, result={1} ({2})",
+                m_CurrentFrame, (int)endResult, VkResultStr(endResult));
+        }
 
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -522,8 +568,10 @@ namespace Ayaya {
         submitInfo.pSignalSemaphores = signalSemaphores;
 
         // 【提交 Fence】
-        if (vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, m_InFlightFences[m_CurrentFrame]) != VK_SUCCESS) {
-            AYAYA_CORE_ERROR("Failed to submit draw command buffer!");
+        VkResult submitResult = vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, m_InFlightFences[m_CurrentFrame]);
+        if (submitResult != VK_SUCCESS) {
+            AYAYA_CORE_ERROR("[DBG] SwapBuffers: vkQueueSubmit FAILED! m_CurrentFrame={0}, m_ImageIndex={1}, result={2} ({3})",
+                m_CurrentFrame, m_ImageIndex, (int)submitResult, VkResultStr(submitResult));
         }
 
         VkPresentInfoKHR presentInfo{};
@@ -536,8 +584,13 @@ namespace Ayaya {
         presentInfo.pImageIndices = &m_ImageIndex;
 
         VkResult result = vkQueuePresentKHR(m_PresentQueue, &presentInfo);
+        if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+            AYAYA_CORE_ERROR("[DBG] SwapBuffers: vkQueuePresentKHR FAILED! m_CurrentFrame={0}, m_ImageIndex={1}, result={2} ({3})",
+                m_CurrentFrame, m_ImageIndex, (int)result, VkResultStr(result));
+        }
 
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+            AYAYA_CORE_WARN("[DBG] SwapBuffers: swapchain OUT_OF_DATE, recreating...");
             RecreateSwapChain();
         }
 
@@ -570,7 +623,12 @@ namespace Ayaya {
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
 
-        vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        VkResult submitResult = vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        if (submitResult != VK_SUCCESS) {
+            AYAYA_CORE_ERROR("[DBG] EndSingleTimeCommands: vkQueueSubmit FAILED! result={0} ({1})",
+                (int)submitResult, VkResultStr(submitResult));
+        }
+
         vkQueueWaitIdle(m_GraphicsQueue);
         vkDeviceWaitIdle(m_Device); // 确保 MoltenVK validation 层完全同步
 
@@ -591,6 +649,7 @@ namespace Ayaya {
     }
 
     void VulkanContext::RecreateSwapChain() {
+        AYAYA_CORE_WARN("[DBG] RecreateSwapChain called! m_CurrentFrame={0}", m_CurrentFrame);
         int width = 0, height = 0;
         glfwGetFramebufferSize(m_WindowHandle, &width, &height);
         while (width == 0 || height == 0) {

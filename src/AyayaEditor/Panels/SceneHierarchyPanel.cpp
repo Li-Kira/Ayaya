@@ -1377,7 +1377,7 @@ namespace Ayaya {
                             ImGui::TextDisabled("Built-in HDR");
                             ImGui::Separator();
                             if (ImGui::MenuItem("Newport Loft")) {
-                                std::filesystem::path builtinPath = VFS::ResolveString("engine://textures/skybox/hdr/newport_loft.hdr");
+                                std::filesystem::path builtinPath = VFS::ResolveString("engine://Editor/textures/skybox/hdr/newport_loft.hdr");
                                 UUID importedHandle = AssetManager::ImportAsset(builtinPath);
                                 if (importedHandle != 0) {
                                     std::vector<EnvironmentComponent> oldComps = pureOldEnvs;
