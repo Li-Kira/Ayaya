@@ -30,7 +30,11 @@ namespace Ayaya {
         // 1. 探测是否为 HDR
         bool isHDR = stbi_is_hdr(path.c_str());
         void* pixels = nullptr;
-        
+
+        // Vulkan 图像原点在左上角，需翻转以匹配 OpenGL 纹理坐标系（仅 2D 贴图）
+        // cubemap 有自己的坐标系约定，不需要翻转
+        stbi_set_flip_vertically_on_load(1);
+
         if (isHDR) {
             // 使用浮点加载，强制 4 通道保证对齐
             pixels = stbi_loadf(path.c_str(), &w, &h, &channels, STBI_rgb_alpha);

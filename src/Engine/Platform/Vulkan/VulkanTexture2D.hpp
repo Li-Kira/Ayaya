@@ -29,6 +29,9 @@ namespace Ayaya {
         virtual void Bind(uint32_t slot = 0) const override;
         virtual void Unbind() const override {}
 
+        // Vulkan 2D 贴图也使用 stbi 翻转，告知 ImGui 需要翻转 UV
+        virtual bool IsDataFlipped() const override { return true; }
+
         // 供渲染器内部获取真实句柄
         VkImageView GetImageView() const { return m_ImageView; }
         VkSampler GetSampler() const { return m_Sampler; }

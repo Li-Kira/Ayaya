@@ -10,11 +10,12 @@ layout(push_constant) uniform Constants {
 } pc;
 
 void main() {
-    v_TexCoords = a_Position; 
-    
+    v_TexCoords = a_Position;
+    v_TexCoords.y = -v_TexCoords.y; // 补偿 IBL 源 HDR 的 stbi flip
+
     // 直接使用 CPU 算好的 VP 矩阵
     vec4 pos = pc.u_ViewProjection * vec4(a_Position, 1.0);
-    
+
     // 深度强制置为 1.0 (Vulkan 远裁剪面也是 1.0)
-    gl_Position = pos.xyww; 
+    gl_Position = pos.xyww;
 }
