@@ -328,6 +328,17 @@ namespace Ayaya {
     }
 
     // =====================================================================
+    // 根据物理路径查找已注册资产的 UUID
+    // =====================================================================
+    UUID AssetManager::FindHandleForPath(const std::filesystem::path& filepath) {
+        std::string virtualPath = VFS::GetVirtualPath(filepath);
+        for (const auto& [handle, metadata] : s_Registry) {
+            if (metadata.VirtualPath == virtualPath) return handle;
+        }
+        return 0;
+    }
+
+    // =====================================================================
     // 实用工具
     // =====================================================================
     bool AssetManager::IsAssetHandleValid(UUID handle) {
@@ -350,8 +361,16 @@ namespace Ayaya {
         out << YAML::Key << "AssetRegistry" << YAML::Value << YAML::BeginSeq;
 
         int savedCount = 0;
+        int dupesSkipped = 0;
+        std::unordered_set<std::string> seenPaths;
         for (const auto& [handle, metadata] : s_Registry) {
             if (metadata.VirtualPath.empty() || metadata.Type == AssetType::None) continue;
+            // 去重：同一 VirtualPath 只保留第一个 UUID
+            if (seenPaths.count(metadata.VirtualPath)) {
+                dupesSkipped++;
+                continue;
+            }
+            seenPaths.insert(metadata.VirtualPath);
 
             out << YAML::BeginMap;
             out << YAML::Key << "Handle" << YAML::Value << (uint64_t)handle;
@@ -372,7 +391,10 @@ namespace Ayaya {
 
         fout << out.c_str();
         fout.close();
-        AYAYA_CORE_TRACE("AssetManager: Registry saved to {0} ({1} assets).", path, savedCount);
+        if (dupesSkipped > 0)
+            AYAYA_CORE_WARN("AssetManager: Registry saved to {0} ({1} assets, {2} duplicates skipped).", path, savedCount, dupesSkipped);
+        else
+            AYAYA_CORE_TRACE("AssetManager: Registry saved to {0} ({1} assets).", path, savedCount);
     }
 
     // =====================================================================
@@ -402,6 +424,8 @@ namespace Ayaya {
         // 加载新账本前彻底清空旧账本
         s_Registry.clear();
         int loadedCount = 0;
+        int dupesSkipped = 0;
+        std::unordered_map<std::string, UUID> seenPaths; // VirtualPath → UUID 去重
 
         for (auto assetNode : registryNode) {
             try {
@@ -409,6 +433,15 @@ namespace Ayaya {
                 AssetType type = (AssetType)assetNode["Type"].as<int>();
                 std::string virtualPath = assetNode["VirtualPath"].as<std::string>();
 
+                // 去重：同一 VirtualPath 只保留首次出现的 UUID
+                auto it = seenPaths.find(virtualPath);
+                if (it != seenPaths.end()) {
+                    AYAYA_CORE_WARN("AssetManager: Duplicate VirtualPath '{0}' — keeping UUID {1}, discarding {2}",
+                        virtualPath, (uint64_t)it->second, (uint64_t)handle);
+                    dupesSkipped++;
+                    continue;
+                }
+                seenPaths[virtualPath] = handle;
                 s_Registry[handle] = { type, virtualPath };
                 loadedCount++;
             }
@@ -418,7 +451,10 @@ namespace Ayaya {
             }
         }
 
-        AYAYA_CORE_INFO("AssetManager: Successfully loaded {0} assets from registry.", loadedCount);
+        if (dupesSkipped > 0)
+            AYAYA_CORE_WARN("AssetManager: Loaded {0} assets from registry ({1} duplicates removed).", loadedCount, dupesSkipped);
+        else
+            AYAYA_CORE_INFO("AssetManager: Successfully loaded {0} assets from registry.", loadedCount);
         return true;
     }
 

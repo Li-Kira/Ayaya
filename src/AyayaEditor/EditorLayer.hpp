@@ -49,10 +49,12 @@ namespace Ayaya {
 
     private:
         void SetupScene();
+        void InitDefaultProject();
         void NewScene();
         void OpenScene();
         void SaveScene();
         void SaveSceneAs();
+        void SaveProjectAs();
 
         void NewProject();
         void OpenProject();
@@ -124,9 +126,8 @@ namespace Ayaya {
         bool m_ShowStatsPanel = false;
 
         // 进度条加载系统
-        std::string m_SceneToLoad = ""; // 存放等待加载的路径
         std::string m_ProjectToLoad = "";
-        void LoadSceneWithProgress(const std::string& filepath); // 真正的加载执行器
+        void LoadProjectWithProgress(const std::string& projectFilePath);
 
         // 命令系统
         CommandHistory m_CommandHistory;

@@ -2,6 +2,7 @@
 #include "Project/Project.hpp"
 #include "Core/VFS.hpp"
 #include "Core/Log.hpp"
+#include "Asset/AssetManager.hpp"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -46,12 +47,20 @@ namespace Ayaya {
         if (ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".hdr" && ext != ".bmp")
             return nullptr;
 
-        if (m_ThumbnailCache.size() >= kMaxThumbnailCache)
-            m_ThumbnailCache.erase(m_ThumbnailCache.begin());
-
-        auto thumbnail = Texture2D::Create(path.string());
+        // 优先从资产缓存获取（场景渲染时可能已加载过）
+        UUID handle = AssetManager::FindHandleForPath(path);
+        std::shared_ptr<Texture2D> thumbnail = nullptr;
+        if (handle != 0) {
+            thumbnail = AssetManager::GetAsset<Texture2D>(handle);
+        }
+        // 缓存未命中才同步创建
+        if (!thumbnail) {
+            thumbnail = Texture2D::Create(path.string());
+        }
         if (!thumbnail) return nullptr;
 
+        if (m_ThumbnailCache.size() >= kMaxThumbnailCache)
+            m_ThumbnailCache.erase(m_ThumbnailCache.begin());
         m_ThumbnailCache[key] = thumbnail;
         return thumbnail;
     }
@@ -148,12 +157,31 @@ namespace Ayaya {
                     if (lower.find(searchStr) == std::string::npos) continue;
                 }
 
+                // ==========================================
+                // 资产管理：查 Registry → 未注册则静默导入
+                // ==========================================
+                bool isImage = false;
+                UUID assetHandle = 0;
+                if (!directoryEntry.is_directory()) {
+                    std::string ext = path.extension().string();
+                    for (auto& c : ext) c = (char)std::tolower(c);
+                    isImage = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".hdr" || ext == ".bmp");
+
+                    assetHandle = AssetManager::FindHandleForPath(path);
+                    if (assetHandle == 0 && (isImage || ext == ".obj" || ext == ".fbx" || ext == ".mat" || ext == ".lua")) {
+                        assetHandle = AssetManager::ImportAsset(path);
+                        if (isImage && assetHandle != 0) {
+                            AssetManager::RequestAsyncLoad(assetHandle);
+                        }
+                    }
+                }
+
                 ImGui::TableNextColumn();
 
                 std::shared_ptr<Texture2D> icon = m_FileIcon;
                 if (directoryEntry.is_directory()) {
                     icon = m_DirectoryIcon;
-                } else if (path.extension() == ".png" || path.extension() == ".jpg") {
+                } else if (isImage) {
                     auto thumb = GetThumbnail(path);
                     icon = thumb ? thumb : m_PngIcon;
                 }
@@ -186,10 +214,9 @@ namespace Ayaya {
                     ImGui::SetTooltip("%s", filenameString.c_str());
                 }
 
-                // 2. 绑定全区域拖拽逻辑到刚画出的这个 InvisibleButton 上
+                // 2. 拖拽源：传输资产 UUID（非路径字符串）
                 if (ImGui::BeginDragDropSource()) {
-                    std::string absPath = std::filesystem::absolute(path).string();
-                    ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", absPath.c_str(), absPath.size() + 1);
+                    ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", &assetHandle, sizeof(UUID));
                     if (icon) {
                         ImVec2 uv0 = icon->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
                         ImVec2 uv1 = icon->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);

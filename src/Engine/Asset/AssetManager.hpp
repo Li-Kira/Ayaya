@@ -83,6 +83,9 @@ namespace Ayaya {
         static UUID GetBuiltInPlane();
         static UUID GetBuiltInMaterial();
 
+        // 根据物理文件路径查找已注册的资产 UUID（未注册返回 0）
+        static UUID FindHandleForPath(const std::filesystem::path& filepath);
+
         // ==========================================
         // 实用工具接口
         // ==========================================

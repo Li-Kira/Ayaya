@@ -34,44 +34,20 @@ namespace Ayaya {
     }
 
     void EditorLayer::OnAttach() {
+        // engine:// mount 必须最先执行，后续所有资源加载都依赖它
         Project::New();
 
-        // ==========================================
-        // 启动时读取资产注册表
-        // ==========================================
         AssetManager::DeserializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
-        // 初始化并加载编辑器偏好设置
         m_PreferencesPanel.Init();
-        // ==========================================
-        // 初始化 Lua 虚拟机
-        // ==========================================
         ScriptEngine::Init();
 
-        // 【核心防御】：只在 OpenGL 模式下创建和初始化基于 GL 的 SceneRenderer
         m_SceneRenderer = std::make_shared<SceneRenderer>();
         m_SceneRenderer->Init();
         m_GameRenderer = std::make_shared<SceneRenderer>();
         m_GameRenderer->Init();
-
         m_FrameDebuggerPanel.SetContext(m_GameRenderer);
-        
 
-        SetupScene();
-
-        // ==========================================
-        // 验证异步加载：找一个注册了但尚未加载到内存的纹理
-        // 预期日志：[Async] Spawning bg thread → BG: stbi_load → MAIN: GPU upload done
-        // ==========================================
-        AYAYA_CORE_INFO("=== Async Load Verification Start ===");
-        const auto& loaded = AssetManager::GetLoadedAssets();
-        for (const auto& [handle, metadata] : AssetManager::GetRegistry()) {
-            if (metadata.Type == AssetType::Texture2D && loaded.find(handle) == loaded.end()) {
-                AYAYA_CORE_INFO("Verification: RequestAsyncLoad for UNLOADED handle {0} ({1})", (uint64_t)handle, metadata.VirtualPath);
-                AssetManager::RequestAsyncLoad(handle);
-                break;
-            }
-        }
-        AYAYA_CORE_INFO("=== Async Load Verification: done ===");
+        InitDefaultProject();
 
         // 清理临时文件
         std::string tempPath = VFS::ResolveString("project://temp/temp_play_scene.ayaya");
@@ -94,14 +70,6 @@ namespace Ayaya {
         if (!m_ProjectToLoad.empty()) {
             OpenProject(m_ProjectToLoad); // 这里会安全地触发进度条
             m_ProjectToLoad = "";         // 清空标记
-        }
-
-        // ==========================================
-        // 0.1 执行挂起的场景加载任务 (带实时进度条)
-        // ==========================================
-        if (!m_SceneToLoad.empty()) {
-            LoadSceneWithProgress(m_SceneToLoad);
-            m_SceneToLoad = ""; // 清空标记
         }
 
         // ==========================================
@@ -412,6 +380,51 @@ namespace Ayaya {
     }
 
     // =====================================================================
+    // initProject：引擎启动时的默认项目。不存在则创建，存在则加载
+    // =====================================================================
+    void EditorLayer::InitDefaultProject() {
+        std::filesystem::path initProjDir = std::filesystem::current_path() / "assets/AyayaProject/initProject";
+        std::filesystem::path initProjFile = initProjDir / "initProject.ayaproj";
+
+        if (std::filesystem::exists(initProjFile)) {
+            // 已存在 → 作为项目打开
+            OpenProject(initProjFile);
+        } else {
+            // 首次启动 → 创建项目 + 默认场景
+            std::filesystem::create_directories(initProjDir / "Assets" / "Scenes");
+            std::filesystem::create_directories(initProjDir / "Assets" / "Materials");
+            std::filesystem::create_directories(initProjDir / "Temp");
+
+            auto project = Project::New();
+            project->GetConfig().Name = "initProject";
+            project->GetConfig().AssetDirectory = "Assets";
+            project->GetConfig().StartScene = "Scenes/Default.ayaya";
+            Project::SaveActive(initProjFile);
+
+            VFS::Mount("project", initProjDir / "Assets");
+            AssetManager::Clear(); // 清除旧 project:// mount 加载的残留条目
+            AssetManager::SerializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
+
+            SetupScene();
+            m_CurrentScenePath = VFS::ResolveString("project://Scenes/Default.ayaya");
+
+            UUID builtInMat = AssetManager::GetBuiltInMaterial();
+            std::string engineMatPath = AssetManager::GetAssetPhysicalPath(builtInMat);
+            if (!engineMatPath.empty()) {
+                try {
+                    std::filesystem::copy_file(engineMatPath,
+                        VFS::ResolveString("project://Materials/DefaultPBR.mat"),
+                        std::filesystem::copy_options::overwrite_existing);
+                    AssetManager::UpdateAssetPath(builtInMat, "project://Materials/DefaultPBR.mat");
+                } catch (...) {}
+            }
+
+            SaveScene();
+            SaveProject();
+        }
+    }
+
+    // =====================================================================
     // 智能保存逻辑
     // =====================================================================
     void EditorLayer::SaveScene() {
@@ -471,6 +484,69 @@ namespace Ayaya {
         }
     }
 
+    // =====================================================================
+    // 另存为项目：选择文件夹 → 创建项目结构 → 保存当前场景+材质+注册表
+    // =====================================================================
+    void EditorLayer::SaveProjectAs() {
+        std::string parentDir = FileDialogs::OpenFolder();
+        if (parentDir.empty()) return;
+
+        std::string projectName = "AyayaProject";
+        if (!m_CurrentScenePath.empty()) {
+            size_t pos = m_CurrentScenePath.find_last_of("/\\");
+            std::string sceneName = pos != std::string::npos ? m_CurrentScenePath.substr(pos + 1) : m_CurrentScenePath;
+            size_t dot = sceneName.rfind(".ayaya");
+            if (dot != std::string::npos) projectName = sceneName.substr(0, dot);
+        }
+
+        std::filesystem::path finalDir = std::filesystem::path(parentDir) / projectName;
+        int suffix = 2;
+        while (std::filesystem::exists(finalDir)) {
+            finalDir = std::filesystem::path(parentDir) / (projectName + " (" + std::to_string(suffix) + ")");
+            suffix++;
+        }
+        if (finalDir.filename().string() != projectName)
+            projectName = finalDir.filename().string();
+
+        std::filesystem::path assetDir = finalDir / "Assets";
+        std::filesystem::path projectFile = finalDir / (projectName + ".ayaproj");
+
+        try {
+            std::filesystem::create_directories(assetDir / "Scenes");
+            std::filesystem::create_directories(assetDir / "Models");
+            std::filesystem::create_directories(assetDir / "Textures");
+            std::filesystem::create_directories(assetDir / "Materials");
+            std::filesystem::create_directories(finalDir / "Temp");
+        } catch (const std::exception& e) {
+            AYAYA_CORE_ERROR("SaveProjectAs: failed to create dirs: {0}", e.what());
+            return;
+        }
+
+        auto project = Project::New();
+        project->GetConfig().Name = projectName;
+        project->GetConfig().AssetDirectory = "Assets";
+        project->GetConfig().StartScene = "Scenes/Default.ayaya";
+        Project::SaveActive(projectFile);
+
+        VFS::Mount("project", assetDir);
+
+        UUID builtInMat = AssetManager::GetBuiltInMaterial();
+        std::string engineMatPath = AssetManager::GetAssetPhysicalPath(builtInMat);
+        if (!engineMatPath.empty()) {
+            try {
+                std::filesystem::copy_file(engineMatPath,
+                    VFS::ResolveString("project://Materials/DefaultPBR.mat"),
+                    std::filesystem::copy_options::overwrite_existing);
+                AssetManager::UpdateAssetPath(builtInMat, "project://Materials/DefaultPBR.mat");
+            } catch (...) {}
+        }
+
+        m_CurrentScenePath = VFS::ResolveString("project://Scenes/Default.ayaya");
+        SaveScene();
+        SaveProject();
+        AYAYA_CORE_INFO("Project saved as: {0}", finalDir.string());
+    }
+
     void EditorLayer::NewScene() {
         m_ActiveScene = std::make_shared<Scene>();
         m_EditorScene = m_ActiveScene;
@@ -497,10 +573,21 @@ namespace Ayaya {
     }
 
     void EditorLayer::OpenScene() {
-        std::string filepath = FileDialogs::OpenFile("ayaya"); 
-        if (!filepath.empty()) { 
-            // 【核心】：不在这里加载！只登记路径，推迟到帧开始时处理，防止 ImGui 崩溃！
-            m_SceneToLoad = filepath; 
+        std::string filepath = FileDialogs::OpenFile("ayaya");
+        if (filepath.empty()) return;
+
+        std::shared_ptr<Scene> newScene = std::make_shared<Scene>();
+        SceneSerializer serializer(newScene);
+        EditorState state;
+        if (serializer.Deserialize(filepath, state)) {
+            m_ActiveScene = newScene;
+            m_EditorScene = m_ActiveScene;
+            m_CurrentScenePath = filepath;
+            m_SceneHierarchyPanel.SetContext(m_ActiveScene);
+            m_HoveredEntity = {};
+            m_SceneHierarchyPanel.SetSelectedEntity({});
+            m_CommandHistory.Clear();
+            AYAYA_CORE_INFO("Scene loaded: {0}", filepath);
         }
     }
 
@@ -713,33 +800,11 @@ namespace Ayaya {
     }
 
     bool EditorLayer::OpenProject(const std::filesystem::path& path) {
-        // 1. 加载 .ayaproj 配置文件
-        if (Project::Load(path)) {
-            std::filesystem::path assetDir = Project::GetAssetDirectory();
-            
-            // 2. 【核心爆炸】：将 VFS 的 project 协议重定向到用户选择的文件夹！
-            VFS::Mount("project", assetDir);
-
-            // 3. 读取该项目专属的资产账本
-            std::string registryPath = VFS::ResolveString("project://AssetRegistry.yaml");
-            if (!AssetManager::DeserializeRegistry(registryPath)) {
-                // 如果是空项目没有账本，自动建一个
-                AssetManager::SerializeRegistry(registryPath);
-            }
-
-            // 4. 加载项目配置的默认场景
-            std::string startScenePath = VFS::ResolveString("project://" + Project::GetActive()->GetConfig().StartScene);
-            if (std::filesystem::exists(startScenePath)) {
-                LoadSceneWithProgress(startScenePath);
-            } else {
-                NewScene();
-            }
-
-            AYAYA_CORE_INFO("📂 Successfully opened project: {0}", Project::GetActive()->GetConfig().Name);
+        if (std::filesystem::exists(path)) {
+            LoadProjectWithProgress(path.string());
             return true;
         }
-        
-        AYAYA_CORE_ERROR("Failed to load project at {0}", path.string());
+        AYAYA_CORE_ERROR("Project file not found: {0}", path.string());
         return false;
     }
 
@@ -749,22 +814,43 @@ namespace Ayaya {
         auto projectPath = Project::GetProjectDirectory() / (Project::GetActive()->GetConfig().Name + ".ayaproj");
         Project::SaveActive(projectPath);
 
-        // 2. 保存当前场景 (.ayaya)
+        // 2. 保存前：将仍引用引擎材质的实体自动克隆到项目目录
+        auto meshView = m_ActiveScene->Reg().view<MeshRendererComponent>();
+        for (auto entityID : meshView) {
+            auto& mrc = meshView.get<MeshRendererComponent>(entityID);
+            if (mrc.MaterialHandle == 0) continue;
+            std::string physPath = AssetManager::GetAssetPhysicalPath(mrc.MaterialHandle);
+            if (!physPath.empty() && physPath.find("assets/Editor/") != std::string::npos) {
+                auto mat = AssetManager::GetAsset<Material>(mrc.MaterialHandle);
+                if (!mat) continue;
+                std::string matDir = VFS::ResolveString("project://Materials");
+                if (!std::filesystem::exists(matDir))
+                    std::filesystem::create_directories(matDir);
+                std::string baseName = mat->Name;
+                if (baseName.empty() || baseName == "Built-in Default Material" || baseName.find("(Instance)") != std::string::npos)
+                    baseName = "NewMaterial";
+                std::string finalPath = matDir + "/" + baseName + ".mat";
+                int idx = 1;
+                while (std::filesystem::exists(finalPath))
+                    finalPath = matDir + "/" + baseName + " (" + std::to_string(++idx) + ").mat";
+                mat->Name = std::filesystem::path(finalPath).stem().string();
+                MaterialSerializer::Serialize(mat, finalPath);
+                UUID newHandle = AssetManager::ImportAsset(finalPath);
+                if (newHandle != 0) mrc.MaterialHandle = newHandle;
+            }
+        }
+
+        // 3. 保存当前场景 (.ayaya)
         if (!m_CurrentScenePath.empty()) {
             SaveScene();
         }
 
-        // ==========================================
-        // 【核心修复】：保存内存中所有的材质资产
-        // ==========================================
+        // 4. 保存内存中所有的材质资产
         AYAYA_CORE_INFO("Saving all materials...");
         for (auto& [handle, assetPtr] : AssetManager::GetLoadedAssets()) {
             auto metadata = AssetManager::GetMetadata(handle);
-            
-            // 如果这个资产是材质类型
             if (metadata.Type == AssetType::Material) {
                 std::string physicalPath = AssetManager::GetAssetPhysicalPath(handle);
-                // 排除引擎内置材质，只保存项目路径下的材质
                 if (!physicalPath.empty() && physicalPath.find("assets/Editor/") == std::string::npos) {
                     auto material = std::static_pointer_cast<Material>(assetPtr);
                     MaterialSerializer::Serialize(material, physicalPath);
@@ -772,95 +858,88 @@ namespace Ayaya {
             }
         }
 
-        // 3. 最后保存资产账本 (AssetRegistry.yaml)
-        // 确保所有在保存过程中新产生的 UUID 映射都被写入
+        // 5. 最后保存资产账本
         std::string registryPath = VFS::ResolveString("project://AssetRegistry.yaml");
         AssetManager::SerializeRegistry(registryPath);
 
         AYAYA_CORE_INFO("💾 Project Saved: Config, Scene, Materials and Registry are all synced to disk.");
     }
 }
-    void EditorLayer::LoadSceneWithProgress(const std::string& filepath) {
+    void EditorLayer::LoadProjectWithProgress(const std::string& projectFilePath) {
+        // 1. 加载 .ayaproj 项目配置
+        if (!Project::Load(projectFilePath)) {
+            AYAYA_CORE_ERROR("Failed to load project: {0}", projectFilePath);
+            return;
+        }
+
+        std::filesystem::path assetDir = Project::GetAssetDirectory();
+        VFS::Mount("project", assetDir);
+
+        std::string registryPath = VFS::ResolveString("project://AssetRegistry.yaml");
+        if (!AssetManager::DeserializeRegistry(registryPath))
+            AssetManager::SerializeRegistry(registryPath);
+
+        // 2. 加载项目的起始场景
+        std::string startScenePath = VFS::ResolveString("project://" + Project::GetActive()->GetConfig().StartScene);
         std::shared_ptr<Scene> newScene = std::make_shared<Scene>();
         SceneSerializer serializer(newScene);
         EditorState state;
 
-        // ==========================================
-        // 进度回调：OpenGL 在帧内渲染进度条；Vulkan 通过日志输出进度
-        // ==========================================
         auto progressCallback = [&](float progress, const std::string& message) {
             if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
                 ImGuiBackend::BeginFrame();
-
                 ImGuiViewport* viewport = ImGui::GetMainViewport();
                 ImGui::SetNextWindowPos(viewport->Pos);
                 ImGui::SetNextWindowSize(viewport->Size);
-
                 ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.08f, 0.085f, 0.09f, 1.0f));
                 ImGui::Begin("LoadingScreen", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBringToFrontOnFocus);
-
                 ImVec2 windowSize = ImGui::GetWindowSize();
                 float barWidth = 600.0f;
                 ImGui::SetCursorPos(ImVec2((windowSize.x - barWidth) * 0.5f, windowSize.y * 0.5f - 50.0f));
-
                 ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : ImGui::GetIO().Fonts->Fonts[0]);
-                ImGui::TextColored(ImVec4(0.17f, 0.45f, 0.85f, 1.0f), "Loading Scene...");
+                ImGui::TextColored(ImVec4(0.17f, 0.45f, 0.85f, 1.0f), "Loading Project...");
                 ImGui::PopFont();
-
                 ImGui::SetCursorPosX((windowSize.x - barWidth) * 0.5f);
                 ImGui::TextDisabled("%s", message.c_str());
-
                 ImGui::SetCursorPosX((windowSize.x - barWidth) * 0.5f);
                 ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.17f, 0.45f, 0.85f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.04f, 0.04f, 0.045f, 1.0f));
                 ImGui::ProgressBar(progress, ImVec2(barWidth, 24.0f));
                 ImGui::PopStyleColor(2);
-
                 ImGui::End();
                 ImGui::PopStyleColor();
-
                 ImGuiBackend::EndFrameAndSwapBuffers();
+                // 立即交换缓冲区让进度条可见（正常帧由 Window::OnUpdate 交换）
+                GLFWwindow* window = static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow());
+                glfwSwapBuffers(window);
             } else {
-                AYAYA_CORE_INFO("⏳ Loading scene... {0:.0f}% - {1}", progress * 100.0f, message);
+                AYAYA_CORE_INFO("⏳ Loading project... {0:.0f}% - {1}", progress * 100.0f, message);
             }
         };
 
-        // 通知第一帧：正在解析 YAML 文件...
-        progressCallback(0.0f, "Parsing YAML data structure...");
+        progressCallback(0.0f, "Loading scene...");
 
-        // ==========================================
-        // 开始真正的反序列化，并将回调传进去
-        // ==========================================
-        if (serializer.Deserialize(filepath, state, progressCallback)) {
-            // 原 OpenScene()代码
-            m_ActiveScene = newScene;
-            m_EditorScene = m_ActiveScene;
-            
-            m_ShowGrid = state.ShowGrid;
-            m_EditorCamera.SetPosition(state.CameraPosition);
-            m_EditorCamera.SetDistance(state.CameraDistance);
-            m_EditorCamera.SetPitch(state.CameraPitch);
-            m_EditorCamera.SetYaw(state.CameraYaw);
-            m_EditorCamera.SetFocalPoint(state.CameraFocalPoint);
-            m_EditorCamera.UpdateCameraView();
-            
-            auto view = m_ActiveScene->Reg().view<CameraComponent>();
-            for (auto entityID : view) {
-                auto& cameraComp = view.get<CameraComponent>(entityID);
-                if (!cameraComp.FixedAspectRatio) {
-                    cameraComp.Camera.SetViewportSize((uint32_t)m_ViewportSize.x, (uint32_t)m_ViewportSize.y);
-                }
+        if (std::filesystem::exists(startScenePath)) {
+            if (serializer.Deserialize(startScenePath, state, progressCallback)) {
+                m_ActiveScene = newScene;
+                m_EditorScene = m_ActiveScene;
+                m_ShowGrid = state.ShowGrid;
+                m_EditorCamera.SetPosition(state.CameraPosition);
+                m_EditorCamera.SetDistance(state.CameraDistance);
+                m_EditorCamera.SetPitch(state.CameraPitch);
+                m_EditorCamera.SetYaw(state.CameraYaw);
+                m_EditorCamera.SetFocalPoint(state.CameraFocalPoint);
+                m_EditorCamera.UpdateCameraView();
+                m_SceneHierarchyPanel.SetContext(m_ActiveScene);
+                m_CurrentScenePath = startScenePath;
+                m_HoveredEntity = {};
+                m_SceneHierarchyPanel.SetSelectedEntity({});
+                m_CommandHistory.Clear();
+                AYAYA_CORE_INFO("Project loaded: {0}", Project::GetActive()->GetConfig().Name);
             }
-
-            m_SceneHierarchyPanel.SetContext(m_ActiveScene);
-            m_CurrentScenePath = filepath;
-            m_HoveredEntity = {};
-            m_SceneHierarchyPanel.SetSelectedEntity({});
-
-            // 【核心修复】：加载新场景成功时，彻底清空上一个场景残留的撤销历史！
-            m_CommandHistory.Clear();
-
-            AYAYA_CORE_INFO("Scene loaded successfully from {0}!", filepath);
+        } else {
+            SetupScene();
+            AYAYA_CORE_INFO("New project initialized");
         }
     }
 
@@ -919,12 +998,19 @@ namespace Ayaya {
         // --- Save / Save As (Ctrl + S / Ctrl + Shift + S) ---
         if (ImGui::IsKeyPressed(ImGuiKey_S, false) && control) {
             if (shift) {
-                AYAYA_CORE_INFO("👉 Shortcut Triggered: Save Scene As...");
-                SaveSceneAs();
+                AYAYA_CORE_INFO("👉 Shortcut Triggered: Save Project As...");
+                SaveProjectAs();
             } else {
-                AYAYA_CORE_INFO("👉 Shortcut Triggered: Save Scene");
-                // SaveScene();
-                SaveProject();
+                bool hasProjectFile = Project::GetActive() &&
+                    std::filesystem::exists(Project::GetProjectDirectory() /
+                        (Project::GetActive()->GetConfig().Name + ".ayaproj"));
+                if (hasProjectFile) {
+                    AYAYA_CORE_INFO("👉 Shortcut Triggered: Save Project");
+                    SaveProject();
+                } else {
+                    AYAYA_CORE_INFO("👉 Shortcut Triggered: Save Project As... (no .ayaproj)");
+                    SaveProjectAs();
+                }
             }
         }
 
@@ -1010,13 +1096,15 @@ namespace Ayaya {
                 if (ImGui::MenuItem("New Project", "Ctrl+N")) {
                     m_ShowNewProjectPopup = true; 
                 }
-                if (ImGui::MenuItem("Save Project", "Ctrl+S")) SaveProject();
+                if (ImGui::MenuItem("Save Project", "Ctrl+S")) {
+                    bool hasProjectFile = Project::GetActive() &&
+                        std::filesystem::exists(Project::GetProjectDirectory() /
+                            (Project::GetActive()->GetConfig().Name + ".ayaproj"));
+                    if (hasProjectFile) SaveProject();
+                    else SaveProjectAs();
+                }
+                if (ImGui::MenuItem("Save Project As...", "Ctrl+Shift+S")) SaveProjectAs();
                 if (ImGui::MenuItem("Open Project", "Ctrl+O")) OpenProject();
-
-                // if (ImGui::MenuItem("New Scene", "Ctrl+N")) NewScene();
-                // if (ImGui::MenuItem("Save Scene", "Ctrl+S")) SaveScene();
-                // if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S")) SaveSceneAs();
-                // if (ImGui::MenuItem("Load Scene", "Ctrl+O")) OpenScene();
 
                 ImGui::Separator();
                 if (ImGui::MenuItem("Exit")) Application::Get().Close(); 
