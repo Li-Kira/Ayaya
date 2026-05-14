@@ -76,6 +76,23 @@ namespace Ayaya {
         static bool DeserializeRegistry(const std::string& path);
 
         // ==========================================
+        // .meta 文件系统
+        // ==========================================
+
+        // 递归扫描项目资产目录下所有 .meta 文件，重建 s_Registry
+        static void RefreshRegistry();
+
+        // 读写单个 .meta 侧车文件
+        static bool WriteMetaFile(const std::filesystem::path& assetPhysicalPath, UUID handle, AssetType type);
+        static bool ReadMetaFile(const std::filesystem::path& metaPath, UUID& outHandle, AssetType& outType);
+
+        // 一次性迁移：读取旧 AssetRegistry.yaml，为每个条目创建 .meta 文件
+        static bool MigrateFromRegistry(const std::string& registryPath);
+
+        // 从 engine://Editor/EngineAssets.yaml 加载引擎内部资产注册表
+        static void LoadEngineAssets();
+
+        // ==========================================
         // 内置单例资产 API (全局唯一，节省显存)
         // ==========================================
         static UUID GetBuiltInCube();

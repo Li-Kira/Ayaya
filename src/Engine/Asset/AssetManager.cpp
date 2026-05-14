@@ -5,6 +5,7 @@
 #include "Renderer/Model.hpp"
 #include "Renderer/Material.hpp"
 #include "Renderer/MaterialSerializer.hpp"
+#include "Project/Project.hpp"
 #include "Core/VFS.hpp"
 #include "Core/Log.hpp"
 
@@ -44,6 +45,198 @@ namespace Ayaya {
     }
 
     // =====================================================================
+    // .meta 文件系统 — 核心原语
+    // =====================================================================
+
+    bool AssetManager::WriteMetaFile(const std::filesystem::path& assetPhysicalPath, UUID handle, AssetType type) {
+        std::filesystem::path metaPath = assetPhysicalPath.string() + ".meta";
+        try {
+            YAML::Emitter out;
+            out << YAML::BeginMap;
+            out << YAML::Key << "uuid" << YAML::Value << static_cast<uint64_t>(handle);
+            out << YAML::Key << "type" << YAML::Value << static_cast<int>(type);
+            out << YAML::EndMap;
+
+            std::ofstream fout(metaPath);
+            if (!fout.is_open()) {
+                AYAYA_CORE_ERROR("AssetManager: Failed to write .meta file: {0}", metaPath.string());
+                return false;
+            }
+            fout << out.c_str();
+            fout.close();
+            return true;
+        } catch (const std::exception& e) {
+            AYAYA_CORE_ERROR("AssetManager: Exception writing .meta file {0}: {1}", metaPath.string(), e.what());
+            return false;
+        }
+    }
+
+    bool AssetManager::ReadMetaFile(const std::filesystem::path& metaPath, UUID& outHandle, AssetType& outType) {
+        try {
+            YAML::Node data = YAML::LoadFile(metaPath.string());
+            if (!data["uuid"] || !data["type"]) {
+                AYAYA_CORE_WARN("AssetManager: Corrupted .meta file (missing uuid/type): {0}", metaPath.string());
+                return false;
+            }
+            outHandle = UUID(data["uuid"].as<uint64_t>());
+            outType = static_cast<AssetType>(data["type"].as<int>());
+            if (outType == AssetType::None) {
+                AYAYA_CORE_WARN("AssetManager: .meta file has AssetType::None, skipping: {0}", metaPath.string());
+                return false;
+            }
+            return true;
+        } catch (const YAML::ParserException& e) {
+            AYAYA_CORE_ERROR("AssetManager: Failed to parse .meta file {0}: {1}", metaPath.string(), e.what());
+            return false;
+        } catch (const std::exception& e) {
+            AYAYA_CORE_ERROR("AssetManager: Error reading .meta file {0}: {1}", metaPath.string(), e.what());
+            return false;
+        }
+    }
+
+    // =====================================================================
+    // RefreshRegistry — 递归扫描 .meta 文件重建内存注册表
+    // =====================================================================
+    void AssetManager::RefreshRegistry() {
+        s_Registry.clear();
+        auto assetDir = Project::GetAssetDirectory();
+
+        if (std::filesystem::exists(assetDir)) {
+            try {
+                for (auto& entry : std::filesystem::recursive_directory_iterator(assetDir)) {
+                    if (entry.path().extension() == ".meta") {
+                        std::string metaPath = entry.path().string();
+                        std::string sourcePath = metaPath.substr(0, metaPath.size() - 5);
+
+                        // 拦截孤儿 .meta：源文件已被删除，同步删除 .meta
+                        if (!std::filesystem::exists(sourcePath)) {
+                            AYAYA_CORE_WARN("AssetManager: Deleting orphan .meta file (source missing): {0}", metaPath);
+                            std::filesystem::remove(metaPath);
+                            continue;
+                        }
+
+                        UUID handle;
+                        AssetType type;
+                        if (!ReadMetaFile(entry.path(), handle, type))
+                            continue;
+
+                        std::string vPath = VFS::GetVirtualPath(sourcePath);
+                        s_Registry[handle] = { type, vPath };
+
+                        if (type == AssetType::Texture2D) {
+                            RequestAsyncLoad(handle);
+                        }
+                    }
+                }
+            } catch (const std::exception& e) {
+                AYAYA_CORE_ERROR("AssetManager: RefreshRegistry scan failed: {0}", e.what());
+            }
+        }
+
+        LoadEngineAssets();
+
+        AYAYA_CORE_INFO("AssetManager: RefreshRegistry complete — {0} assets registered", s_Registry.size());
+    }
+
+    // =====================================================================
+    // LoadEngineAssets — 从 EngineAssets.yaml 加载引擎内部资产
+    // =====================================================================
+    void AssetManager::LoadEngineAssets() {
+        std::string tablePath = VFS::ResolveString("engine://Editor/EngineAssets.yaml");
+        if (!std::filesystem::exists(tablePath)) {
+            AYAYA_CORE_WARN("AssetManager: EngineAssets.yaml not found at {0}", tablePath);
+            return;
+        }
+
+        try {
+            YAML::Node data = YAML::LoadFile(tablePath);
+            auto assetsNode = data["EngineAssets"];
+            if (!assetsNode || !assetsNode.IsSequence()) {
+                AYAYA_CORE_ERROR("AssetManager: EngineAssets.yaml is corrupted");
+                return;
+            }
+
+            int loadedCount = 0;
+            for (auto assetNode : assetsNode) {
+                UUID handle = assetNode["uuid"].as<uint64_t>();
+                AssetType type = static_cast<AssetType>(assetNode["type"].as<int>());
+                std::string virtualPath = assetNode["virtual_path"].as<std::string>();
+
+                // 不覆盖项目 .meta 中已注册的同路径资产
+                bool alreadyExists = false;
+                for (const auto& [h, meta] : s_Registry) {
+                    if (meta.VirtualPath == virtualPath) { alreadyExists = true; break; }
+                }
+                if (!alreadyExists) {
+                    s_Registry[handle] = { type, virtualPath };
+                    loadedCount++;
+                }
+            }
+
+            AYAYA_CORE_INFO("AssetManager: Loaded {0} engine assets from EngineAssets.yaml ({1})",
+                             loadedCount, tablePath);
+        } catch (const std::exception& e) {
+            AYAYA_CORE_ERROR("AssetManager: Failed to load EngineAssets.yaml: {0}", e.what());
+        }
+    }
+
+    // =====================================================================
+    // MigrateFromRegistry — 一次性从旧 AssetRegistry.yaml 迁移到 .meta 文件
+    // =====================================================================
+    bool AssetManager::MigrateFromRegistry(const std::string& registryPath) {
+        if (!std::filesystem::exists(registryPath)) {
+            AYAYA_CORE_INFO("AssetManager: No AssetRegistry.yaml found, skipping .meta migration.");
+            return false;
+        }
+
+        YAML::Node data;
+        try {
+            data = YAML::LoadFile(registryPath);
+        } catch (const YAML::ParserException& e) {
+            AYAYA_CORE_ERROR("AssetManager: Failed to parse AssetRegistry.yaml during migration: {0}", e.what());
+            return false;
+        }
+
+        auto registryNode = data["AssetRegistry"];
+        if (!registryNode || !registryNode.IsSequence()) {
+            AYAYA_CORE_ERROR("AssetManager: AssetRegistry.yaml is corrupted, cannot migrate.");
+            return false;
+        }
+
+        int migrated = 0;
+        int skipped = 0;
+
+        for (auto assetNode : registryNode) {
+            try {
+                UUID handle = assetNode["Handle"].as<uint64_t>();
+                AssetType type = static_cast<AssetType>(assetNode["Type"].as<int>());
+                std::string virtualPath = assetNode["VirtualPath"].as<std::string>();
+
+                // 跳过内置/引擎资产 — 它们没有物理文件，不需要 .meta
+                if (virtualPath.rfind("Primitive::", 0) == 0 ||
+                    virtualPath.rfind("engine://", 0) == 0) {
+                    skipped++;
+                    continue;
+                }
+
+                std::string physicalPath = VFS::ResolveString(virtualPath);
+                if (!std::filesystem::exists(physicalPath)) {
+                    skipped++;
+                    continue;
+                }
+
+                if (WriteMetaFile(physicalPath, handle, type))
+                    migrated++;
+            } catch (...) {
+                skipped++;
+            }
+        }
+
+        AYAYA_CORE_INFO("AssetManager: Migration complete — {0} .meta files created, {1} skipped", migrated, skipped);
+        return migrated > 0;
+    }
+
+    // =====================================================================
     // 主线程任务队列 — 后台线程完成 CPU 加载后，提交 GPU 上传回调在此执行
     // =====================================================================
 
@@ -71,15 +264,19 @@ namespace Ayaya {
     // 资产导入逻辑：利用 VFS 智能识别项目还是引擎，并分配 UUID
     // =====================================================================
     UUID AssetManager::ImportAsset(const std::filesystem::path& filepath) {
-        // 1. 调用 VFS 将物理路径反推为带有协议的虚拟路径 (如 project://assets/...)
         std::string virtualPath = VFS::GetVirtualPath(filepath);
 
-        // 2. 查重：防止同一个文件在账本中被分配多个 UUID
+        // 检查是否已经导入过（通过查找是否存在 .meta 文件）
+        if (std::filesystem::exists(filepath.string() + ".meta")) {
+            return FindHandleForPath(filepath);
+        }
+
+        // 查重：防止同一个文件在内存账本中被分配多个 UUID
         for (const auto& [handle, metadata] : s_Registry) {
             if (metadata.VirtualPath == virtualPath) return handle;
         }
 
-        // 3. 确定资产类型
+        // 确定资产类型
         AssetType type = AssetType::None;
         std::string ext = filepath.extension().string();
         if (ext == ".png" || ext == ".jpg" || ext == ".hdr") type = AssetType::Texture2D;
@@ -93,12 +290,17 @@ namespace Ayaya {
             return 0;
         }
 
-        // 4. 注册到账本
         UUID newHandle = UUID();
-        s_Registry[newHandle] = { type, virtualPath };
 
-        // 自动保存项目账本 (默认保存在 project 挂载点的根目录)
-        SerializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
+        // 写入独立的 .meta 文件（引擎资产和内置几何体不写 .meta）
+        bool isEngineAsset = (virtualPath.rfind("engine://", 0) == 0) ||
+                             (virtualPath.rfind("Primitive::", 0) == 0);
+        if (!isEngineAsset) {
+            WriteMetaFile(filepath, newHandle, type);
+        }
+
+        // 注册到内存账本
+        s_Registry[newHandle] = { type, virtualPath };
 
         AYAYA_CORE_INFO("AssetManager: Imported asset '{0}' with UUID {1}", virtualPath, (uint64_t)newHandle);
         return newHandle;
@@ -239,92 +441,49 @@ namespace Ayaya {
     // 核心修复：内置单例资产获取 (永久绑定 UUID 并自动注册)
     // =====================================================================
     UUID AssetManager::GetBuiltInCube() {
-        if (s_BuiltInCubeHandle == 0) {
-            // 1. 先去账本里找，看以前有没有给 Cube 注册过固定户口
-            for (const auto& [handle, metadata] : s_Registry) {
-                if (metadata.VirtualPath == "Primitive::Cube") {
-                    s_BuiltInCubeHandle = handle;
-                    break;
-                }
-            }
-            // 2. 如果是第一次分配，生成新 UUID 并强制写入项目账本
-            if (s_BuiltInCubeHandle == 0) {
-                s_BuiltInCubeHandle = UUID();
-                s_Registry[s_BuiltInCubeHandle] = { AssetType::Model, "Primitive::Cube" };
-                SerializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
-            }
-            // 3. 生成实体放入内存
+        static constexpr uint64_t CUBE_UUID = 16140901000000000001ull;
+        UUID handle = CUBE_UUID;
+        if (s_Assets.find(handle) == s_Assets.end()) {
             auto cube = std::make_shared<Model>(Mesh::CreateCube(1.0f));
-            AddAsset(s_BuiltInCubeHandle, cube);
+            AddAsset(handle, cube);
         }
-        return s_BuiltInCubeHandle;
+        return handle;
     }
 
     UUID AssetManager::GetBuiltInSphere() {
-        if (s_BuiltInSphereHandle == 0) {
-            for (const auto& [handle, metadata] : s_Registry) {
-                if (metadata.VirtualPath == "Primitive::Sphere") {
-                    s_BuiltInSphereHandle = handle;
-                    break;
-                }
-            }
-            if (s_BuiltInSphereHandle == 0) {
-                s_BuiltInSphereHandle = UUID();
-                s_Registry[s_BuiltInSphereHandle] = { AssetType::Model, "Primitive::Sphere" };
-                SerializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
-            }
+        static constexpr uint64_t SPHERE_UUID = 16140901000000000002ull;
+        UUID handle = SPHERE_UUID;
+        if (s_Assets.find(handle) == s_Assets.end()) {
             auto sphere = std::make_shared<Model>(Mesh::CreateSphere(0.5f, 64, 64));
-            AddAsset(s_BuiltInSphereHandle, sphere);
+            AddAsset(handle, sphere);
         }
-        return s_BuiltInSphereHandle;
+        return handle;
     }
 
     UUID AssetManager::GetBuiltInPlane() {
-        if (s_BuiltInPlaneHandle == 0) {
-            for (const auto& [handle, metadata] : s_Registry) {
-                if (metadata.VirtualPath == "Primitive::Plane") {
-                    s_BuiltInPlaneHandle = handle;
-                    break;
-                }
-            }
-            if (s_BuiltInPlaneHandle == 0) {
-                s_BuiltInPlaneHandle = UUID();
-                s_Registry[s_BuiltInPlaneHandle] = { AssetType::Model, "Primitive::Plane" };
-                SerializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
-            }
+        static constexpr uint64_t PLANE_UUID = 16140901000000000003ull;
+        UUID handle = PLANE_UUID;
+        if (s_Assets.find(handle) == s_Assets.end()) {
             auto plane = std::make_shared<Model>(Mesh::CreatePlane(1.0f, 1.0f));
-            AddAsset(s_BuiltInPlaneHandle, plane);
+            AddAsset(handle, plane);
         }
-        return s_BuiltInPlaneHandle;
+        return handle;
     }
 
     UUID AssetManager::GetBuiltInMaterial() {
-        if (s_BuiltInMaterialHandle == 0) {
-            for (const auto& [handle, metadata] : s_Registry) {
-                // 兼容带不带 Editor 的情况
-                if (metadata.VirtualPath == "engine://materials/DefaultPBR.mat" ||
-                    metadata.VirtualPath == "engine://Editor/materials/DefaultPBR.mat") {
-                    s_BuiltInMaterialHandle = handle;
-                    break;
-                }
-            }
-            if (s_BuiltInMaterialHandle == 0) {
-                s_BuiltInMaterialHandle = UUID();
-                s_Registry[s_BuiltInMaterialHandle] = { AssetType::Material, "engine://Editor/materials/DefaultPBR.mat" };
-                SerializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
-            }
-
+        static constexpr uint64_t MAT_UUID = 16140901000000000004ull;
+        UUID handle = MAT_UUID;
+        if (s_Assets.find(handle) == s_Assets.end()) {
             auto mat = std::make_shared<Material>();
             std::string defaultMatPath = VFS::ResolveString("engine://Editor/materials/DefaultPBR.mat");
-
             if (MaterialSerializer::Deserialize(mat, defaultMatPath)) {
                 mat->Name = "Built-in Default PBR";
             } else {
                 mat->Name = "Built-in Fallback Material";
             }
-            AddAsset(s_BuiltInMaterialHandle, mat);
+            AddAsset(handle, mat);
         }
-        return s_BuiltInMaterialHandle;
+        return handle;
     }
 
     // =====================================================================

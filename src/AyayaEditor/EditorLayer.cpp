@@ -37,7 +37,6 @@ namespace Ayaya {
         // engine:// mount 必须最先执行，后续所有资源加载都依赖它
         Project::New();
 
-        AssetManager::DeserializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
         m_PreferencesPanel.Init();
         ScriptEngine::Init();
 
@@ -401,9 +400,11 @@ namespace Ayaya {
             project->GetConfig().StartScene = "Scenes/Default.ayaya";
             Project::SaveActive(initProjFile);
 
+            // 重新加载以同步 m_ProjectDirectory（Project::New 设为 current_path，需要修正为 initProjDir）
+            Project::Load(initProjFile);
             VFS::Mount("project", initProjDir / "Assets");
             AssetManager::Clear(); // 清除旧 project:// mount 加载的残留条目
-            AssetManager::SerializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
+            AssetManager::RefreshRegistry();
 
             SetupScene();
             m_CurrentScenePath = VFS::ResolveString("project://Scenes/Default.ayaya");
@@ -412,10 +413,11 @@ namespace Ayaya {
             std::string engineMatPath = AssetManager::GetAssetPhysicalPath(builtInMat);
             if (!engineMatPath.empty()) {
                 try {
-                    std::filesystem::copy_file(engineMatPath,
-                        VFS::ResolveString("project://Materials/DefaultPBR.mat"),
+                    auto projectMatPath = VFS::Resolve("project://Materials/DefaultPBR.mat");
+                    std::filesystem::copy_file(engineMatPath, projectMatPath,
                         std::filesystem::copy_options::overwrite_existing);
                     AssetManager::UpdateAssetPath(builtInMat, "project://Materials/DefaultPBR.mat");
+                    AssetManager::WriteMetaFile(projectMatPath, builtInMat, AssetType::Material);
                 } catch (...) {}
             }
 
@@ -534,10 +536,11 @@ namespace Ayaya {
         std::string engineMatPath = AssetManager::GetAssetPhysicalPath(builtInMat);
         if (!engineMatPath.empty()) {
             try {
-                std::filesystem::copy_file(engineMatPath,
-                    VFS::ResolveString("project://Materials/DefaultPBR.mat"),
+                auto projectMatPath = VFS::Resolve("project://Materials/DefaultPBR.mat");
+                std::filesystem::copy_file(engineMatPath, projectMatPath,
                     std::filesystem::copy_options::overwrite_existing);
                 AssetManager::UpdateAssetPath(builtInMat, "project://Materials/DefaultPBR.mat");
+                AssetManager::WriteMetaFile(projectMatPath, builtInMat, AssetType::Material);
             } catch (...) {}
         }
 
@@ -623,15 +626,18 @@ namespace Ayaya {
         project->GetConfig().AssetDirectory = "Assets";
         project->GetConfig().StartScene = "Scenes/Default.ayaya";
         
-        // 保存项目文件（这也会记录项目的物理根目录位置）
+        // 保存项目文件
         Project::SaveActive(projectFilePath);
+
+        // 重新加载以同步 m_ProjectDirectory
+        Project::Load(projectFilePath);
 
         // 4. 【关键步骤】：动态将新项目的物理路径挂载到 project:// 虚拟协议
         VFS::Mount("project", assetDir);
 
-        // 5. 初始化该项目的 AssetRegistry.yaml
+        // 5. 初始化该项目的资产注册表
         AssetManager::Clear(); // 清空旧项目内存
-        AssetManager::SerializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
+        AssetManager::RefreshRegistry();
 
         // 6. 自动创建一个初始场景并保存到项目内
         NewScene();
@@ -750,12 +756,15 @@ namespace Ayaya {
                     project->GetConfig().StartScene = "Scenes/Default.ayaya";
                     Project::SaveActive(projectFile);
 
+                    // 重新加载以同步 m_ProjectDirectory
+                    Project::Load(projectFile);
+
                     // 动态挂载 VFS 节点
                     VFS::Mount("project", assetDir);
 
                     // 初始化资产数据库
                     AssetManager::Clear();
-                    AssetManager::SerializeRegistry(VFS::ResolveString("project://AssetRegistry.yaml"));
+                    AssetManager::RefreshRegistry();
 
                     // 生成并自动保存起始场景
                     NewScene();
@@ -769,8 +778,8 @@ namespace Ayaya {
                         try {
                             std::filesystem::copy_file(engineMatPath, projectMatPath,
                                 std::filesystem::copy_options::overwrite_existing);
-                            // 将同一个 UUID 重定向到项目本地路径，场景引用无需修改
                             AssetManager::UpdateAssetPath(builtInMat, "project://Materials/DefaultPBR.mat");
+                            AssetManager::WriteMetaFile(projectMatPath, builtInMat, AssetType::Material);
                         } catch (const std::exception& e) {
                             AYAYA_CORE_WARN("Failed to clone default material: {0}", e.what());
                         }
@@ -858,11 +867,7 @@ namespace Ayaya {
             }
         }
 
-        // 5. 最后保存资产账本
-        std::string registryPath = VFS::ResolveString("project://AssetRegistry.yaml");
-        AssetManager::SerializeRegistry(registryPath);
-
-        AYAYA_CORE_INFO("💾 Project Saved: Config, Scene, Materials and Registry are all synced to disk.");
+        AYAYA_CORE_INFO("💾 Project Saved: Config, Scene and Materials synced to disk.");
     }
 }
     void EditorLayer::LoadProjectWithProgress(const std::string& projectFilePath) {
@@ -875,9 +880,27 @@ namespace Ayaya {
         std::filesystem::path assetDir = Project::GetAssetDirectory();
         VFS::Mount("project", assetDir);
 
+        // .meta-aware loading: migrate from old AssetRegistry.yaml if needed
         std::string registryPath = VFS::ResolveString("project://AssetRegistry.yaml");
-        if (!AssetManager::DeserializeRegistry(registryPath))
-            AssetManager::SerializeRegistry(registryPath);
+        bool hasMetaFiles = false;
+        if (std::filesystem::exists(assetDir)) {
+            for (auto& entry : std::filesystem::recursive_directory_iterator(assetDir)) {
+                if (entry.is_regular_file() && entry.path().extension() == ".meta") {
+                    hasMetaFiles = true;
+                    break;
+                }
+            }
+        }
+
+        if (hasMetaFiles) {
+            AssetManager::RefreshRegistry();
+        } else if (std::filesystem::exists(registryPath)) {
+            AssetManager::DeserializeRegistry(registryPath);
+            AssetManager::MigrateFromRegistry(registryPath);
+            AssetManager::RefreshRegistry();
+        } else {
+            AssetManager::RefreshRegistry();
+        }
 
         // 2. 加载项目的起始场景
         std::string startScenePath = VFS::ResolveString("project://" + Project::GetActive()->GetConfig().StartScene);

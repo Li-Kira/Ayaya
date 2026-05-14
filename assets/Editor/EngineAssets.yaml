@@ -1,0 +1,28 @@
+# ==========================================
+# 引擎内部资产注册表
+# 定义所有引擎内置资产的 UUID 映射。
+# 由 RefreshRegistry() -> LoadEngineAssets() 读取并注入到内存注册表。
+# 项目资产使用 .meta 文件，引擎资产使用此表。
+# ==========================================
+EngineAssets:
+  # 虚拟内置几何体（无物理文件）
+  - uuid: 16140901000000000001
+    type: 4
+    virtual_path: "Primitive::Cube"
+  - uuid: 16140901000000000002
+    type: 4
+    virtual_path: "Primitive::Sphere"
+  - uuid: 16140901000000000003
+    type: 4
+    virtual_path: "Primitive::Plane"
+
+  # 物理内置资产（有物理文件在 assets/Editor/ 下）
+  - uuid: 16140901000000000004
+    type: 5
+    virtual_path: "engine://Editor/materials/DefaultPBR.mat"
+  - uuid: 16140901000000000005
+    type: 2
+    virtual_path: "engine://Editor/textures/skybox/hdr/newport_loft.hdr"
+  - uuid: 16140901000000000006
+    type: 3
+    virtual_path: "engine://Editor/textures/skybox/skybox_01/sky.cube"

@@ -41,7 +41,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [0.5, 0.5, 0.5]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 9659075389530846366
       CastShadows: false
       ReceiveShadows: false
@@ -61,7 +61,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [0.5, 0.5, 0.5]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 16442073743039791223
       CastShadows: false
       ReceiveShadows: false
@@ -81,7 +81,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [0.5, 0.5, 0.5]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 3005884377391596384
       CastShadows: false
       ReceiveShadows: false
@@ -101,7 +101,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [0.5, 0.5, 0.5]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 11279624938425836737
       CastShadows: false
       ReceiveShadows: false
@@ -131,7 +131,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 11192886240026643118
       CastShadows: false
       ReceiveShadows: false
@@ -146,7 +146,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 15570588170793532155
       CastShadows: false
       ReceiveShadows: false
@@ -161,7 +161,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 15513891328948563267
       CastShadows: false
       ReceiveShadows: false
@@ -176,7 +176,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 15334098235939286757
       CastShadows: false
       ReceiveShadows: false
@@ -191,7 +191,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 11655392602836015404
       CastShadows: false
       ReceiveShadows: false
@@ -206,7 +206,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 9776447590345297417
       CastShadows: false
       ReceiveShadows: false
@@ -221,7 +221,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 4774598168880823478
       CastShadows: false
       ReceiveShadows: false
@@ -236,7 +236,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 9751863863967610269
       CastShadows: false
       ReceiveShadows: false
@@ -251,7 +251,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 9074728918609992753
       CastShadows: false
       ReceiveShadows: false
@@ -266,7 +266,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 11470676070498667504
       CastShadows: false
       ReceiveShadows: false
@@ -281,7 +281,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 17375407065754282594
       CastShadows: false
       ReceiveShadows: false
@@ -296,7 +296,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 3916216170751513460
       CastShadows: false
       ReceiveShadows: false
@@ -311,7 +311,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 16809164650031637473
       CastShadows: false
       ReceiveShadows: false
@@ -326,7 +326,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 1242271342621414521
       CastShadows: false
       ReceiveShadows: false
@@ -341,7 +341,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 18268267314751106793
       CastShadows: false
       ReceiveShadows: false
@@ -356,7 +356,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 11438556494333491159
       CastShadows: false
       ReceiveShadows: false
@@ -371,7 +371,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 3758827731931708853
       CastShadows: false
       ReceiveShadows: false
@@ -386,7 +386,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 12768844409282125723
       CastShadows: false
       ReceiveShadows: false
@@ -401,7 +401,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 10603243434314626884
       CastShadows: false
       ReceiveShadows: false
@@ -416,7 +416,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 8949780443554118443
       CastShadows: false
       ReceiveShadows: false
@@ -431,7 +431,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 7792489325001443648
       CastShadows: false
       ReceiveShadows: false
@@ -446,7 +446,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 18111096718452946522
       CastShadows: false
       ReceiveShadows: false
@@ -461,7 +461,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 15652747001343256213
       CastShadows: false
       ReceiveShadows: false
@@ -476,7 +476,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 12639451974995010904
       CastShadows: false
       ReceiveShadows: false
@@ -491,7 +491,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 12906839877861280599
       CastShadows: false
       ReceiveShadows: false
@@ -506,7 +506,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 1537526117581164225
       CastShadows: false
       ReceiveShadows: false
@@ -521,7 +521,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 18005898747167687912
       CastShadows: false
       ReceiveShadows: false
@@ -536,7 +536,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 10244146566117701622
       CastShadows: false
       ReceiveShadows: false
@@ -551,7 +551,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 11046824793959403035
       CastShadows: false
       ReceiveShadows: false
@@ -566,7 +566,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 260997641718769325
       CastShadows: false
       ReceiveShadows: false
@@ -581,7 +581,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 10132713248484130866
       CastShadows: false
       ReceiveShadows: false
@@ -596,7 +596,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 3441905297833963583
       CastShadows: false
       ReceiveShadows: false
@@ -611,7 +611,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 9466625187967087018
       CastShadows: false
       ReceiveShadows: false
@@ -626,7 +626,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 4141634346530254801
       CastShadows: false
       ReceiveShadows: false
@@ -641,7 +641,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 12112037258623429508
       CastShadows: false
       ReceiveShadows: false
@@ -656,7 +656,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 11347769788050961266
       CastShadows: false
       ReceiveShadows: false
@@ -671,7 +671,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 32882374955185019
       CastShadows: false
       ReceiveShadows: false
@@ -686,7 +686,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 8155230852920700561
       CastShadows: false
       ReceiveShadows: false
@@ -701,7 +701,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 14784327412377873946
       CastShadows: false
       ReceiveShadows: false
@@ -716,7 +716,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 14863595217536004013
       CastShadows: false
       ReceiveShadows: false
@@ -731,7 +731,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 931582491864037099
       CastShadows: false
       ReceiveShadows: false
@@ -746,7 +746,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 13174390762528377610
       CastShadows: false
       ReceiveShadows: false
@@ -761,7 +761,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 9862006934240862041
       CastShadows: false
       ReceiveShadows: false
@@ -776,7 +776,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 5836056809576374391
       CastShadows: false
       ReceiveShadows: false
@@ -791,7 +791,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 267783267161227670
       CastShadows: false
       ReceiveShadows: false
@@ -806,7 +806,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 8884139223808413368
       CastShadows: false
       ReceiveShadows: false
@@ -821,7 +821,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 16359004744264109100
       CastShadows: false
       ReceiveShadows: false
@@ -836,7 +836,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 18325895396066453592
       CastShadows: false
       ReceiveShadows: false
@@ -851,7 +851,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [2, 2, 2]
     MeshRendererComponent:
-      ModelHandle: 2770103550591329109
+      ModelHandle: 16140901000000000002
       MaterialHandle: 10723603522089287951
       CastShadows: false
       ReceiveShadows: false
@@ -869,7 +869,7 @@ Entities:
       Type: 1
       Intensity: 0.1
       AmbientColor: [0, 0, 0]
-      EquirectangularHandle: 0
+      EquirectangularHandle: 16140901000000000005
       CubemapHandle: 0
     RelationshipComponent:
       Parent: 0

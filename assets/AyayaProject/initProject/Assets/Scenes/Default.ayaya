@@ -57,7 +57,7 @@ Entities:
       Type: 1
       Intensity: 30000
       AmbientColor: [0, 0, 0]
-      EquirectangularHandle: 1243594256104260146
+      EquirectangularHandle: 16140901000000000005
       CubemapHandle: 0
     RelationshipComponent:
       Parent: 0
@@ -70,7 +70,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
-      ModelHandle: 7641753675285674320
+      ModelHandle: 16140901000000000001
       MaterialHandle: 4429339439854575373
       CastShadows: true
       ReceiveShadows: true

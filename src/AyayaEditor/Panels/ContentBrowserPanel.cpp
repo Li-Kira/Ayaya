@@ -149,6 +149,7 @@ namespace Ayaya {
 
                 if (filenameString.empty() || filenameString[0] == '.') continue;
                 if (path.extension() == ".yaml") continue;
+                if (path.extension() == ".meta") continue;
                 if (IsBuildArtifact(path)) continue;
 
                 if (!searchStr.empty()) {
@@ -158,22 +159,21 @@ namespace Ayaya {
                 }
 
                 // ==========================================
-                // 资产管理：查 Registry → 未注册则静默导入
+                // .meta-aware: 只显示已导入的资产（在 s_Registry 中能找到的项）
                 // ==========================================
                 bool isImage = false;
                 UUID assetHandle = 0;
                 if (!directoryEntry.is_directory()) {
+                    // 检查该文件是否已在注册表中（通过查找 .meta 文件）
+                    if (!std::filesystem::exists(path.string() + ".meta")) {
+                        continue; // 未导入，屏蔽不显示
+                    }
+
                     std::string ext = path.extension().string();
                     for (auto& c : ext) c = (char)std::tolower(c);
                     isImage = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".hdr" || ext == ".bmp");
 
                     assetHandle = AssetManager::FindHandleForPath(path);
-                    if (assetHandle == 0 && (isImage || ext == ".obj" || ext == ".fbx" || ext == ".mat" || ext == ".lua")) {
-                        assetHandle = AssetManager::ImportAsset(path);
-                        if (isImage && assetHandle != 0) {
-                            AssetManager::RequestAsyncLoad(assetHandle);
-                        }
-                    }
                 }
 
                 ImGui::TableNextColumn();

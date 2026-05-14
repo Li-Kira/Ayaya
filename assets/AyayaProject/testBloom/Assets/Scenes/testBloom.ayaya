@@ -71,7 +71,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 7228356185306713137
   PointLightComponent:
     Color:
@@ -103,7 +103,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 3160826742336583479
   PointLightComponent:
     Color:
@@ -135,7 +135,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 13430207756346672096
   PointLightComponent:
     Color:
@@ -167,7 +167,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 6196501296408520344
   PointLightComponent:
     Color:
@@ -218,7 +218,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 2913938787331340890
   RelationshipComponent:
     Parent: 454681315911136007
@@ -242,7 +242,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 16307833197151254739
   RelationshipComponent:
     Parent: 454681315911136007
@@ -266,7 +266,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 2179450236811559209
   RelationshipComponent:
     Parent: 454681315911136007
@@ -290,7 +290,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 7360008680067039934
   RelationshipComponent:
     Parent: 454681315911136007
@@ -314,7 +314,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 16799987269235130194
   RelationshipComponent:
     Parent: 454681315911136007
@@ -338,7 +338,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 7663558330717396260
   RelationshipComponent:
     Parent: 454681315911136007
@@ -362,7 +362,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 12206235588240122376
   RelationshipComponent:
     Parent: 454681315911136007
@@ -386,7 +386,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 12413342663050352594
   RelationshipComponent:
     Parent: 454681315911136007
@@ -410,7 +410,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 8873859052745459179
   RelationshipComponent:
     Parent: 454681315911136007
@@ -434,7 +434,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 5438728351537768748
   RelationshipComponent:
     Parent: 454681315911136007
@@ -458,7 +458,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 11653556992882889489
   RelationshipComponent:
     Parent: 454681315911136007
@@ -482,7 +482,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 1989536105768128229
   RelationshipComponent:
     Parent: 454681315911136007
@@ -506,7 +506,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 9001608739745611732
   RelationshipComponent:
     Parent: 454681315911136007
@@ -530,7 +530,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 5750566085453862647
   RelationshipComponent:
     Parent: 454681315911136007
@@ -554,7 +554,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 17234475571309647144
   RelationshipComponent:
     Parent: 454681315911136007
@@ -578,7 +578,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 9170761096493082753
   RelationshipComponent:
     Parent: 454681315911136007
@@ -602,7 +602,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 3622840683813339887
   RelationshipComponent:
     Parent: 454681315911136007
@@ -626,7 +626,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 18146723874824769844
   RelationshipComponent:
     Parent: 454681315911136007
@@ -650,7 +650,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 9739983916604361318
   RelationshipComponent:
     Parent: 454681315911136007
@@ -674,7 +674,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 3157261267663706763
   RelationshipComponent:
     Parent: 454681315911136007
@@ -698,7 +698,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 1166357433829648732
   RelationshipComponent:
     Parent: 454681315911136007
@@ -722,7 +722,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 9506833680205807868
   RelationshipComponent:
     Parent: 454681315911136007
@@ -746,7 +746,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 17620708959061752963
   RelationshipComponent:
     Parent: 454681315911136007
@@ -770,7 +770,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 4092612989334295050
   RelationshipComponent:
     Parent: 454681315911136007
@@ -794,7 +794,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 5979066729291324008
   RelationshipComponent:
     Parent: 454681315911136007
@@ -818,7 +818,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 3100525985393925875
   RelationshipComponent:
     Parent: 454681315911136007
@@ -842,7 +842,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 4337812220680944005
   RelationshipComponent:
     Parent: 454681315911136007
@@ -866,7 +866,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 13418029421253904257
   RelationshipComponent:
     Parent: 454681315911136007
@@ -890,7 +890,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 2564520700204553130
   RelationshipComponent:
     Parent: 454681315911136007
@@ -914,7 +914,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 10472524945344084536
   RelationshipComponent:
     Parent: 454681315911136007
@@ -938,7 +938,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 13671853718844208862
   RelationshipComponent:
     Parent: 454681315911136007
@@ -962,7 +962,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 11191946422678202942
   RelationshipComponent:
     Parent: 454681315911136007
@@ -986,7 +986,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 14226807156494370153
   RelationshipComponent:
     Parent: 454681315911136007
@@ -1010,7 +1010,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 8962005181964757018
   RelationshipComponent:
     Parent: 454681315911136007
@@ -1034,7 +1034,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 17249231856524104551
   RelationshipComponent:
     Parent: 454681315911136007
@@ -1058,7 +1058,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 2752228573761483559
   RelationshipComponent:
     Parent: 454681315911136007
@@ -1082,7 +1082,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 4707286734025527677
   RelationshipComponent:
     Parent: 454681315911136007
@@ -1106,7 +1106,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 17707877469284049569
   RelationshipComponent:
     Parent: 454681315911136007
@@ -1130,7 +1130,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 10607320773906193670
   RelationshipComponent:
     Parent: 454681315911136007
@@ -1154,7 +1154,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 12867810005179646569
   RelationshipComponent:
     Parent: 454681315911136007
@@ -1178,7 +1178,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 102552745375564347
   RelationshipComponent:
     Parent: 454681315911136007
@@ -1202,7 +1202,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 16976183307543432344
   RelationshipComponent:
     Parent: 454681315911136007
@@ -1226,7 +1226,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 2276986592198111381
   RelationshipComponent:
     Parent: 454681315911136007
@@ -1250,7 +1250,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 10657599288453476440
   RelationshipComponent:
     Parent: 454681315911136007
@@ -1274,7 +1274,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 7579532593610394416
   RelationshipComponent:
     Parent: 454681315911136007
@@ -1298,7 +1298,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 62743632801309727
   RelationshipComponent:
     Parent: 454681315911136007
@@ -1322,7 +1322,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 12693975743889114544
   RelationshipComponent:
     Parent: 454681315911136007
@@ -1346,7 +1346,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 12797696483532893849
   RelationshipComponent:
     Parent: 454681315911136007
@@ -1370,7 +1370,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 18208965855248887365
+    ModelHandle: 16140901000000000002
     MaterialHandle: 4090700421238353285
   RelationshipComponent:
     Parent: 454681315911136007
@@ -1398,7 +1398,7 @@ Entities:
     - 0
     - 0
     - 0
-    EquirectangularHandle: 14090763844030406105
+    EquirectangularHandle: 16140901000000000005
     CubemapHandle: 0
   RelationshipComponent:
     Parent: 0

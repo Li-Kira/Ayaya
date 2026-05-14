@@ -64,8 +64,8 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
-      ModelHandle: 2523746688260431696
-      MaterialHandle: 16203188161052311077
+      ModelHandle: 16140901000000000001
+      MaterialHandle: 9889169934483223170
       CastShadows: false
       ReceiveShadows: false
     RelationshipComponent:
@@ -80,7 +80,7 @@ Entities:
       Scale: [1, 1, 1]
     MeshRendererComponent:
       ModelHandle: 12279238825151638930
-      MaterialHandle: 13946038664939340440
+      MaterialHandle: 1827409700130443451
       CastShadows: false
       ReceiveShadows: false
     RelationshipComponent:
@@ -98,6 +98,6 @@ Entities:
       Intensity: 30000
       AmbientColor: [0.1, 0.1, 0.1]
       EquirectangularHandle: 0
-      CubemapHandle: 9692791962244485496
+      CubemapHandle: 16140901000000000006
     RelationshipComponent:
       Parent: 0

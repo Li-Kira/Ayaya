@@ -96,7 +96,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 9851217184559765644
+    ModelHandle: 16140901000000000001
     MaterialHandle: 13667759871508313252
   Rigidbody2DComponent:
     BodyType: 0
@@ -134,7 +134,7 @@ Entities:
   MeshRendererComponent:
     CastShadows: false
     ReceiveShadows: false
-    ModelHandle: 9851217184559765644
+    ModelHandle: 16140901000000000001
     MaterialHandle: 13667759871508313252
   Rigidbody2DComponent:
     BodyType: 1
