@@ -41,7 +41,17 @@ namespace Ayaya {
     std::shared_ptr<Texture2D> ContentBrowserPanel::GetThumbnail(const std::filesystem::path& path) {
         std::string key = path.string();
         auto it = m_ThumbnailCache.find(key);
-        if (it != m_ThumbnailCache.end()) return it->second;
+
+        // 缓存命中时检查资产是否被重载过（Apply 新设置后 s_Assets 中的纹理已更新）
+        if (it != m_ThumbnailCache.end()) {
+            UUID handle = AssetManager::FindHandleForPath(path);
+            if (handle != 0) {
+                auto current = AssetManager::GetAsset<Texture2D>(handle);
+                if (current && current.get() == it->second.get())
+                    return it->second;
+            }
+            m_ThumbnailCache.erase(it);
+        }
 
         std::string ext = path.extension().string();
         for (auto& c : ext) c = (char)std::tolower(c);
@@ -51,7 +61,6 @@ namespace Ayaya {
         UUID handle = AssetManager::FindHandleForPath(path);
         if (handle == 0) return nullptr;
 
-        // 仅从异步缓存获取；若后台尚未加载完成则返回 nullptr，由 UI 层用默认图标顶替
         std::shared_ptr<Texture2D> thumbnail = AssetManager::GetAsset<Texture2D>(handle);
 
         if (thumbnail) {
