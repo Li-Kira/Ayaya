@@ -19,12 +19,16 @@ namespace Ayaya {
         m_Context = context;
         m_SelectedEntities.clear();
         m_VisibleNodes.clear();
+        m_LastSentEntities.clear();
         m_PropertiesPanel.SetContext(context);
     }
 
     void SceneHierarchyPanel::OnImGuiRender() {
-        // 属性面板委托给 PropertiesPanel
-        m_PropertiesPanel.SetSelectedEntities(m_SelectedEntities);
+        // 仅在选中实体变化时同步到属性面板（避免每帧覆盖资产检查模式）
+        if (m_LastSentEntities != m_SelectedEntities) {
+            m_PropertiesPanel.SetSelectedEntities(m_SelectedEntities);
+            m_LastSentEntities = m_SelectedEntities;
+        }
         m_PropertiesPanel.OnImGuiRender();
 
         ImGui::Begin("Scene Hierarchy");

@@ -1,2 +1,8 @@
 uuid: 3663823157078525662
 type: 2
+import_settings:
+  filter: 0
+  wrap: 0
+  srgb: false
+  mipmaps: true
+  flip_y: true

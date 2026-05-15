@@ -2,6 +2,7 @@
 
 #include "Core/UUID.hpp"
 #include "Asset.hpp"
+#include "AssetSettings.hpp"
 
 #include <memory>
 #include <unordered_map>
@@ -20,6 +21,7 @@ namespace Ayaya {
     struct AssetMetadata {
         AssetType Type = AssetType::None;
         std::string VirtualPath; // 存储跨平台的虚拟路径 (如 project://... 或 engine://...)
+        TextureImportSettings TextureSettings;
     };
 
     class AssetManager {
@@ -84,7 +86,9 @@ namespace Ayaya {
 
         // 读写单个 .meta 侧车文件
         static bool WriteMetaFile(const std::filesystem::path& assetPhysicalPath, UUID handle, AssetType type);
+        static bool WriteMetaFile(const std::filesystem::path& assetPhysicalPath, UUID handle, AssetType type, const TextureImportSettings& settings);
         static bool ReadMetaFile(const std::filesystem::path& metaPath, UUID& outHandle, AssetType& outType);
+        static bool ReadMetaFile(const std::filesystem::path& metaPath, UUID& outHandle, AssetType& outType, TextureImportSettings* outSettings);
 
         // 一次性迁移：读取旧 AssetRegistry.yaml，为每个条目创建 .meta 文件
         static bool MigrateFromRegistry(const std::string& registryPath);
@@ -94,6 +98,12 @@ namespace Ayaya {
 
         // Mark & Sweep 垃圾回收：卸载所有不在 activeHandles 中的非内置资产
         static void UnloadUnusedAssets(const std::unordered_set<UUID>& activeHandles);
+
+        // 更新资产的导入设置并覆写 .meta 文件
+        static void UpdateMetadataSettings(UUID handle, const TextureImportSettings& settings);
+
+        // 强制重新加载资产（卸载旧纹理 + 异步重新加载）
+        static void ReloadAsset(UUID handle);
 
         // ==========================================
         // 内置单例资产 API (全局唯一，节省显存)

@@ -29,6 +29,10 @@ namespace Ayaya {
 
         void SetContext(const std::shared_ptr<Scene>& context);
         void SetSelectedEntities(const std::vector<Entity>& selectedEntities);
+
+        // 切换为资产检查模式（ContentBrowser 点击文件时调用）
+        void SetSelectedAsset(UUID assetHandle) { m_SelectedAsset = assetHandle; m_SelectedEntities.clear(); }
+
         void OnImGuiRender();
 
     private:
@@ -46,10 +50,12 @@ namespace Ayaya {
         void DrawRigidbody2DComponent(Entity referenceEntity);
         void DrawBoxCollider2DComponent(Entity referenceEntity);
         void DrawAddComponentButton(Entity referenceEntity, float uiScale);
+        void DrawAssetInspector();
 
     private:
         std::shared_ptr<Scene> m_Context;
         std::vector<Entity> m_SelectedEntities;
+        UUID m_SelectedAsset = 0;
 
         // 【核心防御】：纹理垃圾桶，用于延迟析构被替换的贴图，防止 Vulkan 崩溃
         std::vector<std::shared_ptr<Texture2D>> m_TextureGarbageBin;

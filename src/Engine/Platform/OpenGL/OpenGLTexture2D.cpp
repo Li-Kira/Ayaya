@@ -1,5 +1,6 @@
 #include "ayapch.h"
 #include "OpenGLTexture2D.hpp"
+#include "Asset/AssetManager.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
@@ -66,26 +67,28 @@ namespace Ayaya {
                 m_Width = width;
                 m_Height = height;
 
-                // 与 Vulkan 一致的格式选择：颜色贴图用 sRGB，线性数据用 UNORM
-                std::string lowerPath = path;
-                for (auto& c : lowerPath) c = (char)std::tolower(c);
-                bool isLinearData = (lowerPath.find("normal")   != std::string::npos ||
-                                     lowerPath.find("metallic") != std::string::npos ||
-                                     lowerPath.find("roughness")!= std::string::npos ||
-                                     lowerPath.find("ao.")     != std::string::npos ||
-                                     lowerPath.find("height")  != std::string::npos ||
-                                     lowerPath.find("displace")!= std::string::npos);
+                // 从注册表获取导入设置（优先于文件名推断）
+                TextureImportSettings settings;
+                UUID handle = AssetManager::FindHandleForPath(path);
+                if (handle != 0) settings = AssetManager::GetMetadata(handle).TextureSettings;
 
                 m_DataFormat = GL_RGBA;
                 glGenTextures(1, &m_RendererID);
                 glBindTexture(GL_TEXTURE_2D, m_RendererID);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-                if (!isLinearData) {
-                    // 颜色贴图：先试 SRGB8_ALPHA8，失败回退 RGBA8
+                if (settings.Filter == TextureFilterMode::Linear) {
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, settings.GenerateMipmaps ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                } else {
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, settings.GenerateMipmaps ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                }
+
+                GLenum wrap = (settings.Wrap == TextureWrapMode::Clamp) ? GL_CLAMP_TO_EDGE : GL_REPEAT;
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap);
+
+                if (settings.SRGB) {
                     while (glGetError() != GL_NO_ERROR) {}
                     glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, m_Width, m_Height, 0, m_DataFormat, GL_UNSIGNED_BYTE, data);
                     if (glGetError() == GL_NO_ERROR)
@@ -99,7 +102,8 @@ namespace Ayaya {
                     glTexImage2D(GL_TEXTURE_2D, 0, m_InternalFormat, m_Width, m_Height, 0, m_DataFormat, GL_UNSIGNED_BYTE, data);
                 }
 
-                glGenerateMipmap(GL_TEXTURE_2D);
+                if (settings.GenerateMipmaps)
+                    glGenerateMipmap(GL_TEXTURE_2D);
                 stbi_image_free(data);
             } else {
                 AYAYA_CORE_ERROR("Failed to load texture at: {0}", path);
@@ -146,24 +150,28 @@ namespace Ayaya {
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
             glTexImage2D(GL_TEXTURE_2D, 0, m_InternalFormat, m_Width, m_Height, 0, m_DataFormat, GL_FLOAT, raw.Pixels);
         } else {
-            std::string lowerPath = raw.SourcePath;
-            for (auto& c : lowerPath) c = (char)std::tolower(c);
-            bool isLinearData = (lowerPath.find("normal")   != std::string::npos ||
-                                 lowerPath.find("metallic") != std::string::npos ||
-                                 lowerPath.find("roughness")!= std::string::npos ||
-                                 lowerPath.find("ao.")     != std::string::npos ||
-                                 lowerPath.find("height")  != std::string::npos ||
-                                 lowerPath.find("displace")!= std::string::npos);
+            const auto& s = raw.ImportSettings;
 
             m_DataFormat = GL_RGBA;
             glGenTextures(1, &m_RendererID);
             glBindTexture(GL_TEXTURE_2D, m_RendererID);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-            if (!isLinearData) {
+            // 过滤模式
+            if (s.Filter == TextureFilterMode::Linear) {
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, s.GenerateMipmaps ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            } else {
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, s.GenerateMipmaps ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            }
+
+            // 环绕模式
+            GLenum wrap = (s.Wrap == TextureWrapMode::Clamp) ? GL_CLAMP_TO_EDGE : GL_REPEAT;
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap);
+
+            // sRGB 格式
+            if (s.SRGB) {
                 while (glGetError() != GL_NO_ERROR) {}
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, m_Width, m_Height, 0, m_DataFormat, GL_UNSIGNED_BYTE, raw.Pixels);
                 if (glGetError() == GL_NO_ERROR)
@@ -177,7 +185,8 @@ namespace Ayaya {
                 glTexImage2D(GL_TEXTURE_2D, 0, m_InternalFormat, m_Width, m_Height, 0, m_DataFormat, GL_UNSIGNED_BYTE, raw.Pixels);
             }
 
-            glGenerateMipmap(GL_TEXTURE_2D);
+            if (s.GenerateMipmaps)
+                glGenerateMipmap(GL_TEXTURE_2D);
         }
     }
 

@@ -3,6 +3,7 @@
 #include "Core/VFS.hpp"
 #include "Core/Log.hpp"
 #include "Asset/AssetManager.hpp"
+#include "../EditorLayer.hpp"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -222,9 +223,13 @@ namespace Ayaya {
                     ImGui::EndDragDropSource();
                 }
 
-                // 双击进入目录
+                // 双击进入目录 / 单击选中资产
                 if (doubleClicked && directoryEntry.is_directory()) {
                     m_CurrentDirectory /= path.filename();
+                }
+
+                if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !directoryEntry.is_directory() && assetHandle != 0) {
+                    EditorLayer::Get().GetSceneHierarchyPanel().GetPropertiesPanel().SetSelectedAsset(assetHandle);
                 }
 
                 // 3. 手动绘制纯净图标 (居中，并放置在掩膜层上方)

@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "Asset/Asset.hpp"
+#include "Asset/AssetSettings.hpp"
 #include <stb_image.h>
 
 namespace Ayaya {
@@ -18,6 +19,7 @@ namespace Ayaya {
         int Width = 0, Height = 0, Channels = 0;
         bool IsHDR = false;
         std::string SourcePath;
+        TextureImportSettings ImportSettings;
 
         ~RawTextureData() {
             if (Pixels) { stbi_image_free(Pixels); Pixels = nullptr; }
@@ -28,7 +30,8 @@ namespace Ayaya {
         RawTextureData(RawTextureData&& other) noexcept
             : Pixels(other.Pixels), Width(other.Width), Height(other.Height)
             , Channels(other.Channels), IsHDR(other.IsHDR)
-            , SourcePath(std::move(other.SourcePath)) {
+            , SourcePath(std::move(other.SourcePath))
+            , ImportSettings(other.ImportSettings) {
             other.Pixels = nullptr;
         }
 
@@ -39,6 +42,7 @@ namespace Ayaya {
                 Width = other.Width; Height = other.Height;
                 Channels = other.Channels; IsHDR = other.IsHDR;
                 SourcePath = std::move(other.SourcePath);
+                ImportSettings = other.ImportSettings;
             }
             return *this;
         }

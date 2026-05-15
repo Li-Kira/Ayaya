@@ -46,13 +46,16 @@ namespace Ayaya {
 
     void PropertiesPanel::SetSelectedEntities(const std::vector<Entity>& selectedEntities) {
         m_SelectedEntities = selectedEntities;
+        m_SelectedAsset = 0; // 切换回实体模式
     }
 
     void PropertiesPanel::OnImGuiRender() {
         m_TextureGarbageBin.clear();
         ImGui::Begin("Properties");
 
-        if (m_SelectedEntities.empty()) {
+        if (m_SelectedAsset != 0) {
+            DrawAssetInspector();
+        } else if (m_SelectedEntities.empty()) {
             ImGui::TextDisabled("Select to view properties");
         } else {
             float uiScale = ImGui::GetIO().FontGlobalScale;
@@ -1929,6 +1932,48 @@ namespace Ayaya {
             }
             
             ImGui::EndPopup();
+        }
+    }
+
+    void PropertiesPanel::DrawAssetInspector() {
+        AssetMetadata meta = AssetManager::GetMetadata(m_SelectedAsset);
+
+        ImGui::Text("Asset: %s", meta.VirtualPath.c_str());
+        ImGui::Separator();
+
+        if (meta.Type == AssetType::Texture2D) {
+            static TextureImportSettings s_EditingSettings;
+            static UUID s_EditingHandle = 0;
+
+            if (s_EditingHandle != m_SelectedAsset) {
+                s_EditingSettings = meta.TextureSettings;
+                s_EditingHandle = m_SelectedAsset;
+            }
+
+            const char* filterTypes[] = { "Linear (Bilinear)", "Nearest (Point)" };
+            int currentFilter = (int)s_EditingSettings.Filter;
+            if (ImGui::Combo("Filter Mode", &currentFilter, filterTypes, 2)) {
+                s_EditingSettings.Filter = (TextureFilterMode)currentFilter;
+            }
+
+            const char* wrapTypes[] = { "Repeat", "Clamp" };
+            int currentWrap = (int)s_EditingSettings.Wrap;
+            if (ImGui::Combo("Wrap Mode", &currentWrap, wrapTypes, 2)) {
+                s_EditingSettings.Wrap = (TextureWrapMode)currentWrap;
+            }
+
+            ImGui::Checkbox("sRGB (Color Texture)", &s_EditingSettings.SRGB);
+            ImGui::Checkbox("Generate Mipmaps", &s_EditingSettings.GenerateMipmaps);
+            ImGui::Checkbox("Flip Y", &s_EditingSettings.FlipY);
+
+            ImGui::Spacing();
+
+            if (ImGui::Button("Apply", ImVec2(-1, 0))) {
+                AssetManager::UpdateMetadataSettings(m_SelectedAsset, s_EditingSettings);
+                AssetManager::ReloadAsset(m_SelectedAsset);
+            }
+        } else {
+            ImGui::TextDisabled("No import settings available for this asset type");
         }
     }
 

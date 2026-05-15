@@ -3,6 +3,7 @@
 #include "Core/Log.hpp"
 #include "Platform/Vulkan/VulkanContext.hpp"
 #include "Core/Application.hpp"
+#include "Asset/AssetManager.hpp"
 
 #include <stb_image.h>
 // ==========================================
@@ -41,16 +42,9 @@ namespace Ayaya {
             m_Format = VK_FORMAT_R32G32B32A32_SFLOAT; // 或者 R16G16B16A16_SFLOAT
         } else {
             pixels = stbi_load(path.c_str(), &w, &h, &channels, STBI_rgb_alpha);
-            // 只有颜色贴图用 SRGB；法线/金属度/粗糙度/AO 是数学数据，必须用线性
-            std::string lowerPath = path;
-            for (auto& c : lowerPath) c = (char)std::tolower(c);
-            bool isLinearData = (lowerPath.find("normal")   != std::string::npos ||
-                                 lowerPath.find("metallic") != std::string::npos ||
-                                 lowerPath.find("roughness")!= std::string::npos ||
-                                 lowerPath.find("ao.")     != std::string::npos ||
-                                 lowerPath.find("height")  != std::string::npos ||
-                                 lowerPath.find("displace")!= std::string::npos);
-            m_Format = isLinearData ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R8G8B8A8_SRGB;
+            UUID handle = AssetManager::FindHandleForPath(path);
+            if (handle != 0) m_ImportSettings = AssetManager::GetMetadata(handle).TextureSettings;
+            m_Format = m_ImportSettings.SRGB ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
         }
 
         if (!pixels) {
@@ -74,15 +68,8 @@ namespace Ayaya {
         if (raw.IsHDR) {
             m_Format = VK_FORMAT_R32G32B32A32_SFLOAT;
         } else {
-            std::string lowerPath = raw.SourcePath;
-            for (auto& c : lowerPath) c = (char)std::tolower(c);
-            bool isLinearData = (lowerPath.find("normal")   != std::string::npos ||
-                                 lowerPath.find("metallic") != std::string::npos ||
-                                 lowerPath.find("roughness")!= std::string::npos ||
-                                 lowerPath.find("ao.")     != std::string::npos ||
-                                 lowerPath.find("height")  != std::string::npos ||
-                                 lowerPath.find("displace")!= std::string::npos);
-            m_Format = isLinearData ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R8G8B8A8_SRGB;
+            m_ImportSettings = raw.ImportSettings;
+            m_Format = m_ImportSettings.SRGB ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
         }
         Invalidate();
         uint32_t bpp = raw.IsHDR ? 16 : 4;
@@ -158,22 +145,28 @@ namespace Ayaya {
     // 在 VulkanTexture2D.cpp 中补充采样器配置
     void VulkanTexture2D::CreateSampler() {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-        
+
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_LINEAR; // 线性过滤
-        samplerInfo.minFilter = VK_FILTER_LINEAR;
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT; // 重复平铺
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.anisotropyEnable = false;   // 开启各项异性过滤
+
+        bool linear = (m_ImportSettings.Filter == TextureFilterMode::Linear);
+        samplerInfo.magFilter = linear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+        samplerInfo.minFilter = linear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+
+        VkSamplerAddressMode addr = (m_ImportSettings.Wrap == TextureWrapMode::Clamp)
+            ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE : VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeU = addr;
+        samplerInfo.addressModeV = addr;
+        samplerInfo.addressModeW = addr;
+
+        samplerInfo.anisotropyEnable = false;
         samplerInfo.maxAnisotropy = 1.0f;
         samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
         samplerInfo.compareEnable = VK_FALSE;
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
         samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 1.0f;
+        samplerInfo.maxLod = m_ImportSettings.GenerateMipmaps ? VK_LOD_CLAMP_NONE : 0.0f;
 
         vkCreateSampler(context->GetDevice(), &samplerInfo, nullptr, &m_Sampler);
     }

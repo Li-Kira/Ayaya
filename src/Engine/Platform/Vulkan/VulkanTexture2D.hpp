@@ -1,5 +1,6 @@
 #pragma once
 #include "Renderer/Texture.hpp"
+#include "Asset/AssetSettings.hpp"
 #include <vulkan/vulkan.h>
 #include <vk_mem_alloc.h>
 
@@ -52,6 +53,7 @@ namespace Ayaya {
         VkImageView m_ImageView = VK_NULL_HANDLE;
         VkSampler m_Sampler = VK_NULL_HANDLE;
         VkFormat m_Format = VK_FORMAT_R8G8B8A8_UNORM;
+        TextureImportSettings m_ImportSettings;
 
         // 【新增】：缓存 ImGui 专用的描述符集 (使用 void* 避免污染头文件)
         mutable void* m_ImGuiDescriptorSet = nullptr;

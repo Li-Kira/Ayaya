@@ -46,6 +46,7 @@ namespace Ayaya {
         virtual void OnEvent(Event& event) override;
 
         CommandHistory& GetCommandHistory() { return m_CommandHistory; }
+        SceneHierarchyPanel& GetSceneHierarchyPanel() { return m_SceneHierarchyPanel; }
 
     private:
         void SetupScene();

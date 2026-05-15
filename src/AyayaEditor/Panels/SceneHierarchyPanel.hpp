@@ -71,6 +71,8 @@ namespace Ayaya {
         std::vector<Entity> m_EntitiesToUnparent;
         std::vector<Entity> m_EntitiesToDuplicate;
 
+        std::vector<Entity> m_LastSentEntities; // 防重复同步
+
         PropertiesPanel m_PropertiesPanel;
     };
 

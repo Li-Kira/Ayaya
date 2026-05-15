@@ -48,13 +48,43 @@ namespace Ayaya {
     // .meta 文件系统 — 核心原语
     // =====================================================================
 
+    // 辅助：序列化导入设置
+    static void SerializeTextureSettings(YAML::Emitter& out, const TextureImportSettings& settings) {
+        out << YAML::Key << "import_settings" << YAML::BeginMap;
+        out << YAML::Key << "filter" << YAML::Value << (int)settings.Filter;
+        out << YAML::Key << "wrap" << YAML::Value << (int)settings.Wrap;
+        out << YAML::Key << "srgb" << YAML::Value << settings.SRGB;
+        out << YAML::Key << "mipmaps" << YAML::Value << settings.GenerateMipmaps;
+        out << YAML::Key << "flip_y" << YAML::Value << settings.FlipY;
+        out << YAML::EndMap;
+    }
+
+    static TextureImportSettings DeserializeTextureSettings(YAML::Node node) {
+        TextureImportSettings settings;
+        if (auto s = node["import_settings"]) {
+            settings.Filter          = (TextureFilterMode)s["filter"].as<int>(0);
+            settings.Wrap            = (TextureWrapMode)s["wrap"].as<int>(0);
+            settings.SRGB            = s["srgb"].as<bool>(true);
+            settings.GenerateMipmaps = s["mipmaps"].as<bool>(true);
+            settings.FlipY           = s["flip_y"].as<bool>(true);
+        }
+        return settings;
+    }
+
     bool AssetManager::WriteMetaFile(const std::filesystem::path& assetPhysicalPath, UUID handle, AssetType type) {
+        TextureImportSettings settings;
+        if (s_Registry.count(handle)) settings = s_Registry[handle].TextureSettings;
+        return WriteMetaFile(assetPhysicalPath, handle, type, settings);
+    }
+
+    bool AssetManager::WriteMetaFile(const std::filesystem::path& assetPhysicalPath, UUID handle, AssetType type, const TextureImportSettings& settings) {
         std::filesystem::path metaPath = assetPhysicalPath.string() + ".meta";
         try {
             YAML::Emitter out;
             out << YAML::BeginMap;
             out << YAML::Key << "uuid" << YAML::Value << static_cast<uint64_t>(handle);
             out << YAML::Key << "type" << YAML::Value << static_cast<int>(type);
+            SerializeTextureSettings(out, settings);
             out << YAML::EndMap;
 
             std::ofstream fout(metaPath);
@@ -72,6 +102,10 @@ namespace Ayaya {
     }
 
     bool AssetManager::ReadMetaFile(const std::filesystem::path& metaPath, UUID& outHandle, AssetType& outType) {
+        return ReadMetaFile(metaPath, outHandle, outType, nullptr);
+    }
+
+    bool AssetManager::ReadMetaFile(const std::filesystem::path& metaPath, UUID& outHandle, AssetType& outType, TextureImportSettings* outSettings) {
         try {
             YAML::Node data = YAML::LoadFile(metaPath.string());
             if (!data["uuid"] || !data["type"]) {
@@ -84,6 +118,7 @@ namespace Ayaya {
                 AYAYA_CORE_WARN("AssetManager: .meta file has AssetType::None, skipping: {0}", metaPath.string());
                 return false;
             }
+            if (outSettings) *outSettings = DeserializeTextureSettings(data);
             return true;
         } catch (const YAML::ParserException& e) {
             AYAYA_CORE_ERROR("AssetManager: Failed to parse .meta file {0}: {1}", metaPath.string(), e.what());
@@ -117,11 +152,12 @@ namespace Ayaya {
 
                         UUID handle;
                         AssetType type;
-                        if (!ReadMetaFile(entry.path(), handle, type))
+                        TextureImportSettings texSettings;
+                        if (!ReadMetaFile(entry.path(), handle, type, &texSettings))
                             continue;
 
                         std::string vPath = VFS::GetVirtualPath(sourcePath);
-                        s_Registry[handle] = { type, vPath };
+                        s_Registry[handle] = { type, vPath, texSettings };
 
                         if (type == AssetType::Texture2D) {
                             RequestAsyncLoad(handle);
@@ -268,6 +304,45 @@ namespace Ayaya {
     }
 
     // =====================================================================
+    // UpdateMetadataSettings — 更新导入设置并覆写 .meta 文件
+    // =====================================================================
+    void AssetManager::UpdateMetadataSettings(UUID handle, const TextureImportSettings& settings) {
+        if (!s_Registry.count(handle)) return;
+        s_Registry[handle].TextureSettings = settings;
+
+        // 覆写 .meta 文件
+        std::string physicalPath = GetAssetPhysicalPath(handle);
+        if (!physicalPath.empty()) {
+            std::filesystem::path metaPath = physicalPath + ".meta";
+            try {
+                YAML::Emitter out;
+                out << YAML::BeginMap;
+                out << YAML::Key << "uuid" << YAML::Value << static_cast<uint64_t>(handle);
+                out << YAML::Key << "type" << YAML::Value << static_cast<int>(s_Registry[handle].Type);
+                SerializeTextureSettings(out, settings);
+                out << YAML::EndMap;
+
+                std::ofstream fout(metaPath);
+                fout << out.c_str();
+                fout.close();
+            } catch (...) {}
+        }
+    }
+
+    // =====================================================================
+    // ReloadAsset — 强制重载资产（卸旧 + 异步重新加载）
+    // =====================================================================
+    void AssetManager::ReloadAsset(UUID handle) {
+        // 从内存池剔除旧纹理
+        s_Assets.erase(handle);
+
+        // 重新触发异步加载
+        if (s_Registry.count(handle)) {
+            RequestAsyncLoad(handle);
+        }
+    }
+
+    // =====================================================================
     // 主线程任务队列 — 后台线程完成 CPU 加载后，提交 GPU 上传回调在此执行
     // =====================================================================
 
@@ -323,15 +398,29 @@ namespace Ayaya {
 
         UUID newHandle = UUID();
 
+        // 对于贴图资产，根据文件名推断线性数据（法线/金属度等不启用 sRGB）
+        TextureImportSettings texSettings;
+        if (type == AssetType::Texture2D) {
+            std::string lowerPath = filepath.string();
+            for (auto& c : lowerPath) c = (char)std::tolower(c);
+            bool isLinearData = (lowerPath.find("normal")   != std::string::npos ||
+                                 lowerPath.find("metallic") != std::string::npos ||
+                                 lowerPath.find("roughness")!= std::string::npos ||
+                                 lowerPath.find("ao.")     != std::string::npos ||
+                                 lowerPath.find("height")  != std::string::npos ||
+                                 lowerPath.find("displace")!= std::string::npos);
+            if (isLinearData) texSettings.SRGB = false;
+        }
+
         // 写入独立的 .meta 文件（引擎资产和内置几何体不写 .meta）
         bool isEngineAsset = (virtualPath.rfind("engine://", 0) == 0) ||
                              (virtualPath.rfind("Primitive::", 0) == 0);
         if (!isEngineAsset) {
-            WriteMetaFile(filepath, newHandle, type);
+            WriteMetaFile(filepath, newHandle, type, texSettings);
         }
 
         // 注册到内存账本
-        s_Registry[newHandle] = { type, virtualPath };
+        s_Registry[newHandle] = { type, virtualPath, texSettings };
 
         AYAYA_CORE_INFO("AssetManager: Imported asset '{0}' with UUID {1}", virtualPath, (uint64_t)newHandle);
         return newHandle;
@@ -417,16 +506,18 @@ namespace Ayaya {
         std::string physicalPath = VFS::ResolveString(metadata.VirtualPath);
         AssetType type = metadata.Type;
         auto vpath = metadata.VirtualPath;
+        TextureImportSettings texSettings = metadata.TextureSettings;
 
         AYAYA_CORE_INFO("[Async] Spawning bg thread for asset {0} ({1})", (uint64_t)handle, physicalPath);
 
         // 后台线程：执行纯 CPU 密集任务（stbi_load 读取解压、Assimp 解析顶点）
         // GPU 资源创建（VkImage、VkBuffer）通过 SubmitToMainThread 回到主线程执行
-        std::thread([handle, type, physicalPath, vpath]() {
+        std::thread([handle, type, physicalPath, vpath, texSettings]() {
             try {
                 if (type == AssetType::Texture2D) {
                     AYAYA_CORE_INFO("[Async] BG: stbi_load start for {0}", physicalPath);
                     auto raw = Texture2D::LoadRawDataFromDisk(physicalPath);
+                    raw.ImportSettings = texSettings;
                     if (raw.Pixels) {
                         AYAYA_CORE_INFO("[Async] BG: stbi_load done ({0}x{1}), queue GPU upload", raw.Width, raw.Height);
                         auto rawPtr = std::make_shared<RawTextureData>(std::move(raw));
