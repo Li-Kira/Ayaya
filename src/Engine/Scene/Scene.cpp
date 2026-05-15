@@ -387,16 +387,19 @@ namespace Ayaya {
             if (lsc.ScriptHandle) handles.insert(lsc.ScriptHandle);
         }
 
-        // 5. 递归收集材质中引用的贴图 UUID
+        // 5. 递归收集材质中引用的贴图 UUID（先拷贝再遍历，防止 insert 使迭代器失效）
         auto& registry = AssetManager::GetRegistry();
-        for (UUID matHandle : handles) {
-            auto it = registry.find(matHandle);
-            if (it != registry.end() && it->second.Type == AssetType::Material) {
-                auto mat = AssetManager::GetAsset<Material>(matHandle);
-                if (mat) {
-                    for (const auto& prop : mat->Properties) {
-                        if (prop.TextureHandle) handles.insert(prop.TextureHandle);
-                    }
+        std::vector<UUID> materialHandles;
+        for (UUID h : handles) {
+            auto it = registry.find(h);
+            if (it != registry.end() && it->second.Type == AssetType::Material)
+                materialHandles.push_back(h);
+        }
+        for (UUID matHandle : materialHandles) {
+            auto mat = AssetManager::GetAsset<Material>(matHandle);
+            if (mat) {
+                for (const auto& prop : mat->Properties) {
+                    if (prop.TextureHandle) handles.insert(prop.TextureHandle);
                 }
             }
         }

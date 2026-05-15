@@ -61,50 +61,45 @@ namespace Ayaya {
             }
         } 
         else {
-            // ==========================================
-            // 这里保留你原来那套极其完善的 8-bit LDR 读取逻辑
-            // ==========================================
-            stbi_uc* data = stbi_load(path.c_str(), &width, &height, &channels, 0);
+            stbi_uc* data = stbi_load(path.c_str(), &width, &height, &channels, 4);
             if (data) {
                 m_Width = width;
                 m_Height = height;
 
-                GLenum internalFormat = 0, dataFormat = 0;
-                if (channels == 4) { internalFormat = GL_RGBA8; dataFormat = GL_RGBA; } 
-                else if (channels == 3) { internalFormat = GL_RGB8; dataFormat = GL_RGB; } 
-                else if (channels == 2) { internalFormat = GL_RG8; dataFormat = GL_RG; } 
-                else if (channels == 1) { internalFormat = GL_R8; dataFormat = GL_RED; }
+                // 与 Vulkan 一致的格式选择：颜色贴图用 sRGB，线性数据用 UNORM
+                std::string lowerPath = path;
+                for (auto& c : lowerPath) c = (char)std::tolower(c);
+                bool isLinearData = (lowerPath.find("normal")   != std::string::npos ||
+                                     lowerPath.find("metallic") != std::string::npos ||
+                                     lowerPath.find("roughness")!= std::string::npos ||
+                                     lowerPath.find("ao.")     != std::string::npos ||
+                                     lowerPath.find("height")  != std::string::npos ||
+                                     lowerPath.find("displace")!= std::string::npos);
 
-                // 安全防范：处理不支持的通道
-                if (internalFormat == 0 || dataFormat == 0) {
-                    AYAYA_CORE_ERROR("Unsupported number of channels: {0} in texture: {1}", channels, path);
-                    stbi_image_free(data);
-                    return;
-                }
-                m_InternalFormat = internalFormat;
-                m_DataFormat = dataFormat;
-
+                m_DataFormat = GL_RGBA;
                 glGenTextures(1, &m_RendererID);
                 glBindTexture(GL_TEXTURE_2D, m_RendererID);
-
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-                // ==========================================
-                // 核心陷阱防御：取消 4 字节对齐限制！
-                // ==========================================
-                // OpenGL 默认按 4 字节读取像素。对于单通道(1字节)图像，
-                // 若宽度不是 4 的倍数，会导致内存读取错位，画面斜向扭曲！
-                // 这里强制告诉 OpenGL 按 1 字节（紧凑像素）读取。
-                if (channels == 1 || channels == 2) glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+                if (!isLinearData) {
+                    // 颜色贴图：先试 SRGB8_ALPHA8，失败回退 RGBA8
+                    while (glGetError() != GL_NO_ERROR) {}
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, m_Width, m_Height, 0, m_DataFormat, GL_UNSIGNED_BYTE, data);
+                    if (glGetError() == GL_NO_ERROR)
+                        m_InternalFormat = GL_SRGB8_ALPHA8;
+                    else {
+                        m_InternalFormat = GL_RGBA8;
+                        glTexImage2D(GL_TEXTURE_2D, 0, m_InternalFormat, m_Width, m_Height, 0, m_DataFormat, GL_UNSIGNED_BYTE, data);
+                    }
+                } else {
+                    m_InternalFormat = GL_RGBA8;
+                    glTexImage2D(GL_TEXTURE_2D, 0, m_InternalFormat, m_Width, m_Height, 0, m_DataFormat, GL_UNSIGNED_BYTE, data);
+                }
 
-                glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, m_Width, m_Height, 0, dataFormat, GL_UNSIGNED_BYTE, data);
                 glGenerateMipmap(GL_TEXTURE_2D);
-
-                if (channels == 1 || channels == 2) glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-
                 stbi_image_free(data);
             } else {
                 AYAYA_CORE_ERROR("Failed to load texture at: {0}", path);
@@ -151,20 +146,38 @@ namespace Ayaya {
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
             glTexImage2D(GL_TEXTURE_2D, 0, m_InternalFormat, m_Width, m_Height, 0, m_DataFormat, GL_FLOAT, raw.Pixels);
         } else {
-            if (raw.Channels == 4)      { m_InternalFormat = GL_RGBA8; m_DataFormat = GL_RGBA; }
-            else if (raw.Channels == 3) { m_InternalFormat = GL_RGB8;  m_DataFormat = GL_RGB; }
-            else if (raw.Channels == 2) { m_InternalFormat = GL_RG8;   m_DataFormat = GL_RG; }
-            else if (raw.Channels == 1) { m_InternalFormat = GL_R8;    m_DataFormat = GL_RED; }
+            std::string lowerPath = raw.SourcePath;
+            for (auto& c : lowerPath) c = (char)std::tolower(c);
+            bool isLinearData = (lowerPath.find("normal")   != std::string::npos ||
+                                 lowerPath.find("metallic") != std::string::npos ||
+                                 lowerPath.find("roughness")!= std::string::npos ||
+                                 lowerPath.find("ao.")     != std::string::npos ||
+                                 lowerPath.find("height")  != std::string::npos ||
+                                 lowerPath.find("displace")!= std::string::npos);
+
+            m_DataFormat = GL_RGBA;
             glGenTextures(1, &m_RendererID);
             glBindTexture(GL_TEXTURE_2D, m_RendererID);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-            if (raw.Channels == 1 || raw.Channels == 2) glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-            glTexImage2D(GL_TEXTURE_2D, 0, m_InternalFormat, m_Width, m_Height, 0, m_DataFormat, GL_UNSIGNED_BYTE, raw.Pixels);
+
+            if (!isLinearData) {
+                while (glGetError() != GL_NO_ERROR) {}
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, m_Width, m_Height, 0, m_DataFormat, GL_UNSIGNED_BYTE, raw.Pixels);
+                if (glGetError() == GL_NO_ERROR)
+                    m_InternalFormat = GL_SRGB8_ALPHA8;
+                else {
+                    m_InternalFormat = GL_RGBA8;
+                    glTexImage2D(GL_TEXTURE_2D, 0, m_InternalFormat, m_Width, m_Height, 0, m_DataFormat, GL_UNSIGNED_BYTE, raw.Pixels);
+                }
+            } else {
+                m_InternalFormat = GL_RGBA8;
+                glTexImage2D(GL_TEXTURE_2D, 0, m_InternalFormat, m_Width, m_Height, 0, m_DataFormat, GL_UNSIGNED_BYTE, raw.Pixels);
+            }
+
             glGenerateMipmap(GL_TEXTURE_2D);
-            if (raw.Channels == 1 || raw.Channels == 2) glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
         }
     }
 

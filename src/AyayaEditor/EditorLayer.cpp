@@ -875,45 +875,10 @@ namespace Ayaya {
     }
 }
     void EditorLayer::LoadProjectWithProgress(const std::string& projectFilePath) {
-        // 1. 加载 .ayaproj 项目配置
-        if (!Project::Load(projectFilePath)) {
-            AYAYA_CORE_ERROR("Failed to load project: {0}", projectFilePath);
-            return;
-        }
-
-        std::filesystem::path assetDir = Project::GetAssetDirectory();
-        VFS::Mount("project", assetDir);
-
-        // .meta-aware loading: migrate from old AssetRegistry.yaml if needed
-        std::string registryPath = VFS::ResolveString("project://AssetRegistry.yaml");
-        bool hasMetaFiles = false;
-        if (std::filesystem::exists(assetDir)) {
-            for (auto& entry : std::filesystem::recursive_directory_iterator(assetDir)) {
-                if (entry.is_regular_file() && entry.path().extension() == ".meta") {
-                    hasMetaFiles = true;
-                    break;
-                }
-            }
-        }
-
-        if (hasMetaFiles) {
-            AssetManager::RefreshRegistry();
-        } else if (std::filesystem::exists(registryPath)) {
-            AssetManager::DeserializeRegistry(registryPath);
-            AssetManager::MigrateFromRegistry(registryPath);
-            AssetManager::RefreshRegistry();
-        } else {
-            AssetManager::RefreshRegistry();
-        }
-
-        // 2. 加载项目的起始场景
-        std::string startScenePath = VFS::ResolveString("project://" + Project::GetActive()->GetConfig().StartScene);
-        std::shared_ptr<Scene> newScene = std::make_shared<Scene>();
-        SceneSerializer serializer(newScene);
-        EditorState state;
-
-        auto progressCallback = [&](float progress, const std::string& message) {
+        // 进度条渲染（OpenGL 可显示图形进度条，Vulkan 输出到控制台）
+        auto renderProgressFrame = [&](float progress, const std::string& message) {
             if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+                auto context = Application::Get().GetWindow().GetContext();
                 ImGuiBackend::BeginFrame();
                 ImGuiViewport* viewport = ImGui::GetMainViewport();
                 ImGui::SetNextWindowPos(viewport->Pos);
@@ -936,7 +901,6 @@ namespace Ayaya {
                 ImGui::End();
                 ImGui::PopStyleColor();
                 ImGuiBackend::EndFrameAndSwapBuffers();
-                // 立即交换缓冲区让进度条可见（正常帧由 Window::OnUpdate 交换）
                 GLFWwindow* window = static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow());
                 glfwSwapBuffers(window);
             } else {
@@ -944,7 +908,53 @@ namespace Ayaya {
             }
         };
 
-        progressCallback(0.0f, "Loading scene...");
+        // 阶段 1: 注册表加载 (0% – 20%)
+        renderProgressFrame(0.0f, "Loading project config...");
+
+        if (!Project::Load(projectFilePath)) {
+            AYAYA_CORE_ERROR("Failed to load project: {0}", projectFilePath);
+            return;
+        }
+
+        std::filesystem::path assetDir = Project::GetAssetDirectory();
+        VFS::Mount("project", assetDir);
+
+        // .meta-aware loading: migrate from old AssetRegistry.yaml if needed
+        std::string registryPath = VFS::ResolveString("project://AssetRegistry.yaml");
+        bool hasMetaFiles = false;
+        if (std::filesystem::exists(assetDir)) {
+            for (auto& entry : std::filesystem::recursive_directory_iterator(assetDir)) {
+                if (entry.is_regular_file() && entry.path().extension() == ".meta") {
+                    hasMetaFiles = true;
+                    break;
+                }
+            }
+        }
+
+        renderProgressFrame(0.05f, "Loading asset registry...");
+
+        if (hasMetaFiles) {
+            AssetManager::RefreshRegistry();
+        } else if (std::filesystem::exists(registryPath)) {
+            AssetManager::DeserializeRegistry(registryPath);
+            AssetManager::MigrateFromRegistry(registryPath);
+            AssetManager::RefreshRegistry();
+        } else {
+            AssetManager::RefreshRegistry();
+        }
+
+        renderProgressFrame(0.15f, "Registry loaded. Loading scene...");
+
+        // 阶段 2: 场景反序列化 (15% – 80%)
+        std::string startScenePath = VFS::ResolveString("project://" + Project::GetActive()->GetConfig().StartScene);
+        std::shared_ptr<Scene> newScene = std::make_shared<Scene>();
+        SceneSerializer serializer(newScene);
+        EditorState state;
+
+        auto progressCallback = [&](float progress, const std::string& message) {
+            float mapped = 0.15f + progress * 0.65f;
+            renderProgressFrame(mapped, message);
+        };
 
         if (std::filesystem::exists(startScenePath)) {
             if (serializer.Deserialize(startScenePath, state, progressCallback)) {
@@ -963,10 +973,12 @@ namespace Ayaya {
                 m_SceneHierarchyPanel.SetSelectedEntity({});
                 m_CommandHistory.Clear();
 
-                // 触发垃圾回收：卸载上一个场景残留的未使用资产
+                // 阶段 3: GC 与收尾 (80% – 100%)
+                renderProgressFrame(0.85f, "Cleaning up unused assets...");
                 auto activeHandles = m_ActiveScene->GetActiveAssetHandles();
                 AssetManager::UnloadUnusedAssets(activeHandles);
 
+                renderProgressFrame(1.0f, "Done!");
                 AYAYA_CORE_INFO("Project loaded: {0}", Project::GetActive()->GetConfig().Name);
             }
         } else {

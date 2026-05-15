@@ -53,8 +53,8 @@ void main() {
     vec3 finalNormal = u_UseNormalMap ? GetNormalFromMap() : normalize(v_Normal);
     g_Normal = vec4(finalNormal, 1.0);
 
-    // 【修复】：彻底解放 Albedo 和 PBR 的 Alpha，给 1.0 防止调试器隐身
-    vec3 albedo = u_UseAlbedoMap ? pow(texture(u_AlbedoMap, v_TexCoord).rgb, vec3(2.2)) : u_Albedo;
+    // GPU 硬件已做 sRGB→linear 解码，shader 不再重复 pow(2.2)
+    vec3 albedo = u_UseAlbedoMap ? texture(u_AlbedoMap, v_TexCoord).rgb : u_Albedo;
     g_Albedo = vec4(albedo, 1.0);
     
     float metallic = u_UseMetallicMap ? texture(u_MetallicMap, v_TexCoord).r : u_Metallic;
