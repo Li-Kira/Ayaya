@@ -493,17 +493,19 @@ namespace Ayaya {
     }
 
     void SceneRenderer::SetEnvironment(EnvironmentComponent& envComp) {
-        // Clear stale environment data first — prevents previous skybox from
-        // lingering when the new EnvironmentComponent fails to load its assets.
-        m_Data->EnvironmentCubemap = nullptr;
-        m_Data->IrradianceMap = nullptr;
-        m_Data->PrefilterMap = nullptr;
-
         if (envComp.Type == EnvironmentType::None) {
+            m_Data->EnvironmentCubemap = nullptr;
+            m_Data->IrradianceMap = nullptr;
+            m_Data->PrefilterMap = nullptr;
             envComp.IsDirty = false;
             return;
         }
 
+        // 先构建新纹理到局部变量，成功后再原子替换 m_Data
+        // 避免旧纹理过早销毁导致渲染 Pass 绑定已释放的 VkImageView
+        std::shared_ptr<TextureCube> newEnvCubemap;
+        std::shared_ptr<TextureCube> newIrradiance;
+        std::shared_ptr<TextureCube> newPrefilter;
         void* baseCubemapID = nullptr;
 
         if (envComp.Type == EnvironmentType::HDR_Equirectangular || envComp.Type == EnvironmentType::LDR_Equirectangular) {
@@ -511,18 +513,14 @@ namespace Ayaya {
             if (equiTex) {
                 std::shared_ptr<Shader> convertShader = Shader::Create("IBL/equirectangular_to_cubemap.vert", "IBL/equirectangular_to_cubemap.frag");
                 baseCubemapID = IBLBuilder::ConvertEquirectangularToCubemap(equiTex, s_SkyboxMesh, convertShader);
-                m_Data->EnvironmentCubemap = TextureCube::Create(baseCubemapID, 1024, 1024);
+                newEnvCubemap = TextureCube::Create(baseCubemapID, 1024, 1024);
 
                 if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-                    auto vkCube = std::dynamic_pointer_cast<VulkanTextureCube>(m_Data->EnvironmentCubemap);
+                    auto vkCube = std::dynamic_pointer_cast<VulkanTextureCube>(newEnvCubemap);
                     VulkanIBLBuilder::SetSourceCubemapSampler((void*)vkCube->GetSampler());
                 }
             } else {
-                // 无有效 HDR 源 — 使用默认占位 cubemap
-                m_Data->EnvironmentCubemap = s_DefaultEnvironmentMap;
-                m_Data->IrradianceMap = s_DefaultIrradianceMap;
-                m_Data->PrefilterMap = s_DefaultPrefilterMap;
-                envComp.IsDirty = false;
+                // HDR 尚未加载完成，保持 IsDirty=true，下一帧重试，旧纹理继续有效
                 return;
             }
         }
@@ -530,10 +528,14 @@ namespace Ayaya {
             auto cubeTex = AssetManager::GetAsset<TextureCube>(envComp.CubemapHandle);
             if (!cubeTex) return; // asset not ready — keep IsDirty=true, retry next frame
 
-            baseCubemapID = (void*)(uintptr_t)cubeTex->GetRendererID();
-            m_Data->EnvironmentCubemap = cubeTex;
+            newEnvCubemap = cubeTex;
 
-            if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+            if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+                auto vkCube = std::dynamic_pointer_cast<VulkanTextureCube>(cubeTex);
+                baseCubemapID = (void*)vkCube->GetImageView();  // 完整 64 位 VkImageView
+                VulkanIBLBuilder::SetSourceCubemapSampler((void*)vkCube->GetSampler());
+            } else {
+                baseCubemapID = (void*)(uintptr_t)cubeTex->GetRendererID();
                 uint32_t glTextureID = (uint32_t)(uintptr_t)baseCubemapID;
                 glBindTexture(GL_TEXTURE_CUBE_MAP, glTextureID);
                 glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
@@ -545,11 +547,16 @@ namespace Ayaya {
         if (baseCubemapID != nullptr) {
             std::shared_ptr<Shader> irradianceShader = Shader::Create("IBL/cubemap.vert", "IBL/irradiance_convolution.frag");
             void* irrID = IBLBuilder::CreateIrradianceMap(baseCubemapID, s_SkyboxMesh, irradianceShader);
-            m_Data->IrradianceMap = TextureCube::Create(irrID, 32, 32);
+            newIrradiance = TextureCube::Create(irrID, 32, 32);
 
             std::shared_ptr<Shader> prefilterShader = Shader::Create("IBL/cubemap.vert", "IBL/prefilter.frag");
             void* preID = IBLBuilder::CreatePrefilterMap(baseCubemapID, s_SkyboxMesh, prefilterShader);
-            m_Data->PrefilterMap = TextureCube::Create(preID, 128, 128);
+            newPrefilter = TextureCube::Create(preID, 128, 128);
+
+            // 新纹理全部构建成功，原子替换
+            m_Data->EnvironmentCubemap = newEnvCubemap;
+            m_Data->IrradianceMap = newIrradiance;
+            m_Data->PrefilterMap = newPrefilter;
 
             envComp.IsDirty = false;
         }

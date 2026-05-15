@@ -353,4 +353,54 @@ namespace Ayaya {
 
         // ... 在这里执行你原本的相机抓取和 RenderScene 逻辑 ...
     }
+
+    std::unordered_set<UUID> Scene::GetActiveAssetHandles() const {
+        std::unordered_set<UUID> handles;
+
+        // 1. MeshRendererComponent → ModelHandle + MaterialHandle
+        auto meshView = m_Registry.view<MeshRendererComponent>();
+        for (auto e : meshView) {
+            auto& mrc = meshView.get<MeshRendererComponent>(e);
+            if (mrc.ModelHandle)    handles.insert(mrc.ModelHandle);
+            if (mrc.MaterialHandle) handles.insert(mrc.MaterialHandle);
+        }
+
+        // 2. SpriteRendererComponent → TextureHandle
+        auto spriteView = m_Registry.view<SpriteRendererComponent>();
+        for (auto e : spriteView) {
+            auto& src = spriteView.get<SpriteRendererComponent>(e);
+            if (src.TextureHandle) handles.insert(src.TextureHandle);
+        }
+
+        // 3. EnvironmentComponent → EquirectangularHandle + CubemapHandle
+        auto envView = m_Registry.view<EnvironmentComponent>();
+        for (auto e : envView) {
+            auto& env = envView.get<EnvironmentComponent>(e);
+            if (env.EquirectangularHandle) handles.insert(env.EquirectangularHandle);
+            if (env.CubemapHandle)        handles.insert(env.CubemapHandle);
+        }
+
+        // 4. LuaScriptComponent → ScriptHandle
+        auto scriptView = m_Registry.view<LuaScriptComponent>();
+        for (auto e : scriptView) {
+            auto& lsc = scriptView.get<LuaScriptComponent>(e);
+            if (lsc.ScriptHandle) handles.insert(lsc.ScriptHandle);
+        }
+
+        // 5. 递归收集材质中引用的贴图 UUID
+        auto& registry = AssetManager::GetRegistry();
+        for (UUID matHandle : handles) {
+            auto it = registry.find(matHandle);
+            if (it != registry.end() && it->second.Type == AssetType::Material) {
+                auto mat = AssetManager::GetAsset<Material>(matHandle);
+                if (mat) {
+                    for (const auto& prop : mat->Properties) {
+                        if (prop.TextureHandle) handles.insert(prop.TextureHandle);
+                    }
+                }
+            }
+        }
+
+        return handles;
+    }
 }

@@ -47,21 +47,17 @@ namespace Ayaya {
         if (ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".hdr" && ext != ".bmp")
             return nullptr;
 
-        // 优先从资产缓存获取（场景渲染时可能已加载过）
         UUID handle = AssetManager::FindHandleForPath(path);
-        std::shared_ptr<Texture2D> thumbnail = nullptr;
-        if (handle != 0) {
-            thumbnail = AssetManager::GetAsset<Texture2D>(handle);
-        }
-        // 缓存未命中才同步创建
-        if (!thumbnail) {
-            thumbnail = Texture2D::Create(path.string());
-        }
-        if (!thumbnail) return nullptr;
+        if (handle == 0) return nullptr;
 
-        if (m_ThumbnailCache.size() >= kMaxThumbnailCache)
-            m_ThumbnailCache.erase(m_ThumbnailCache.begin());
-        m_ThumbnailCache[key] = thumbnail;
+        // 仅从异步缓存获取；若后台尚未加载完成则返回 nullptr，由 UI 层用默认图标顶替
+        std::shared_ptr<Texture2D> thumbnail = AssetManager::GetAsset<Texture2D>(handle);
+
+        if (thumbnail) {
+            if (m_ThumbnailCache.size() >= kMaxThumbnailCache)
+                m_ThumbnailCache.erase(m_ThumbnailCache.begin());
+            m_ThumbnailCache[key] = thumbnail;
+        }
         return thumbnail;
     }
 

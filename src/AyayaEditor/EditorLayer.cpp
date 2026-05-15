@@ -590,6 +590,10 @@ namespace Ayaya {
             m_HoveredEntity = {};
             m_SceneHierarchyPanel.SetSelectedEntity({});
             m_CommandHistory.Clear();
+
+            auto activeHandles = m_ActiveScene->GetActiveAssetHandles();
+            AssetManager::UnloadUnusedAssets(activeHandles);
+
             AYAYA_CORE_INFO("Scene loaded: {0}", filepath);
         }
     }
@@ -958,6 +962,11 @@ namespace Ayaya {
                 m_HoveredEntity = {};
                 m_SceneHierarchyPanel.SetSelectedEntity({});
                 m_CommandHistory.Clear();
+
+                // 触发垃圾回收：卸载上一个场景残留的未使用资产
+                auto activeHandles = m_ActiveScene->GetActiveAssetHandles();
+                AssetManager::UnloadUnusedAssets(activeHandles);
+
                 AYAYA_CORE_INFO("Project loaded: {0}", Project::GetActive()->GetConfig().Name);
             }
         } else {

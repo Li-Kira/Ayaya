@@ -57,6 +57,9 @@ namespace Ayaya {
         // 我们需要一个专供游戏运行时的 Update (不包含编辑器相机逻辑)
         void OnUpdateRuntime(Timestep ts);
 
+        // 收集当前场景中所有实体引用的资产 UUID（用于 GC Mark 阶段）
+        std::unordered_set<UUID> GetActiveAssetHandles() const;
+
     private:
         entt::registry m_Registry; 
         std::vector<entt::entity> m_RootEntities; 

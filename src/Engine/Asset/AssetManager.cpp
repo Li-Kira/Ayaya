@@ -237,6 +237,37 @@ namespace Ayaya {
     }
 
     // =====================================================================
+    // UnloadUnusedAssets — Mark & Sweep 垃圾回收的 Sweep 阶段
+    // =====================================================================
+    void AssetManager::UnloadUnusedAssets(const std::unordered_set<UUID>& activeHandles) {
+        // 保护所有引擎资产（与 EngineAssets.yaml 保持一致）
+        static const std::unordered_set<uint64_t> kBuiltInHandles = {
+            16140901000000000001ull, // Cube
+            16140901000000000002ull, // Sphere
+            16140901000000000003ull, // Plane
+            16140901000000000004ull, // DefaultPBR.mat
+            16140901000000000005ull, // HDR skybox
+            16140901000000000006ull, // Sky cubemap
+        };
+
+        std::vector<UUID> toErase;
+        for (const auto& [handle, asset] : s_Assets) {
+            if (kBuiltInHandles.count(handle)) continue;
+            if (activeHandles.find(handle) == activeHandles.end()) {
+                toErase.push_back(handle);
+            }
+        }
+
+        for (UUID handle : toErase) {
+            s_Assets.erase(handle);
+            AYAYA_CORE_INFO("GC: Unloaded unused asset {0}", (uint64_t)handle);
+        }
+
+        if (!toErase.empty())
+            AYAYA_CORE_INFO("GC: Sweep complete — {0} assets freed", toErase.size());
+    }
+
+    // =====================================================================
     // 主线程任务队列 — 后台线程完成 CPU 加载后，提交 GPU 上传回调在此执行
     // =====================================================================
 

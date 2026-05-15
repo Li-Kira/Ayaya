@@ -92,6 +92,9 @@ namespace Ayaya {
         // 从 engine://Editor/EngineAssets.yaml 加载引擎内部资产注册表
         static void LoadEngineAssets();
 
+        // Mark & Sweep 垃圾回收：卸载所有不在 activeHandles 中的非内置资产
+        static void UnloadUnusedAssets(const std::unordered_set<UUID>& activeHandles);
+
         // ==========================================
         // 内置单例资产 API (全局唯一，节省显存)
         // ==========================================
