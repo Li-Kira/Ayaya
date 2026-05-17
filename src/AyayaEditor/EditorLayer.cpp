@@ -1,5 +1,6 @@
 #include "EditorLayer.hpp"
 #include "Renderer/Mesh.hpp"
+#include "Renderer/AssetPreviewer.hpp"
 #include "Events/MouseEvent.hpp"
 #include "Scripting/ScriptEngine.hpp"
 #include "Engine/Core/EditorCommands.hpp"
@@ -44,6 +45,8 @@ namespace Ayaya {
         m_SceneRenderer->Init();
         m_GameRenderer = std::make_shared<SceneRenderer>();
         m_GameRenderer->Init();
+
+        AssetPreviewer::Init();
         m_FrameDebuggerPanel.SetContext(m_GameRenderer);
 
         InitDefaultProject();
@@ -56,6 +59,7 @@ namespace Ayaya {
     }
 
     void EditorLayer::OnDetach() {
+        AssetPreviewer::Shutdown();
         // 在 Layer 被剥离（程序退出）时，立刻释放渲染器实例，
         // 确保 VMA 的离线画布 (Framebuffer) 赶在 Vulkan 销毁前被安全释放！
         m_SceneRenderer.reset();

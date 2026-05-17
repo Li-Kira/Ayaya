@@ -59,6 +59,7 @@ namespace Ayaya {
         bool DepthFuncLEqual = false;  // 用于天空盒等深度必须为 1.0 的渲染
         bool PolygonModeLine = false;  // 快速线框模式开关
         float LineWidth = 1.0f;        // 线宽配置
+        bool NoTextureDescriptors = false; // 跳过 Set 1 (纹理) 描述符集的创建
     };
 
     // ==========================================

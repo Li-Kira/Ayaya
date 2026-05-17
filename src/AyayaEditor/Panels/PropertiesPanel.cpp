@@ -5,6 +5,7 @@
 #include "Engine/Core/EditorCommands.hpp"
 #include "Asset/AssetManager.hpp"
 #include "Renderer/MaterialSerializer.hpp"
+#include "Renderer/AssetPreviewer.hpp"
 #include "Core/VFS.hpp"
 #include "Project/Project.hpp"
 #include "Core/Application.hpp"
@@ -1972,6 +1973,46 @@ namespace Ayaya {
                 AssetManager::UpdateMetadataSettings(m_SelectedAsset, s_EditingSettings);
                 AssetManager::ReloadAsset(m_SelectedAsset);
             }
+        } else if (meta.Type == AssetType::Model) {
+            float uiScale = ImGui::GetIO().FontGlobalScale;
+            ImVec2 previewSize(256.0f * uiScale, 256.0f * uiScale);
+
+            static glm::vec2 s_PreviewRotation(0.3f, -0.6f);
+            static UUID s_LastPreviewAsset = 0;
+            if (s_LastPreviewAsset != m_SelectedAsset) {
+                s_PreviewRotation = glm::vec2(0.3f, -0.6f);
+                s_LastPreviewAsset = m_SelectedAsset;
+            }
+
+            ImGui::Text("Preview");
+            ImGui::Separator();
+
+            auto previewTex = AssetPreviewer::RenderRealtimePreview(m_SelectedAsset, s_PreviewRotation, 256);
+            if (previewTex) {
+                // FBO textures: OpenGL Y-axis is flipped (bottom-left origin),
+                // Vulkan's projection correction already accounts for this.
+                bool isVulkan = RendererAPI::GetAPI() == RendererAPI::API::Vulkan;
+                ImVec2 uv0 = isVulkan ? ImVec2(0, 0) : ImVec2(0, 1);
+                ImVec2 uv1 = isVulkan ? ImVec2(1, 1) : ImVec2(1, 0);
+
+                ImGui::ImageButton("##ModelPreview", (ImTextureID)previewTex->GetImGuiTextureID(),
+                    previewSize, uv0, uv1);
+
+                if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                    ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left);
+                    s_PreviewRotation.x += delta.y * 0.01f;
+                    s_PreviewRotation.y -= delta.x * 0.01f;  // negate: drag right → model rotates right
+                    ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
+                }
+            } else {
+                ImVec2 cursor = ImGui::GetCursorPos();
+                ImGui::Dummy(previewSize);
+                ImGui::SetCursorPos(cursor);
+                ImGui::TextDisabled("Loading...");
+            }
+
+            ImGui::Spacing();
+            ImGui::TextDisabled("Model import settings coming soon");
         } else {
             ImGui::TextDisabled("No import settings available for this asset type");
         }

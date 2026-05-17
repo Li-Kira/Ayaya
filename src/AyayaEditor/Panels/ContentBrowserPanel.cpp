@@ -3,6 +3,7 @@
 #include "Core/VFS.hpp"
 #include "Core/Log.hpp"
 #include "Asset/AssetManager.hpp"
+#include "Renderer/AssetPreviewer.hpp"
 #include "../EditorLayer.hpp"
 
 #include <imgui.h>
@@ -42,33 +43,56 @@ namespace Ayaya {
         std::string key = path.string();
         auto it = m_ThumbnailCache.find(key);
 
-        // 缓存命中时检查资产是否被重载过（Apply 新设置后 s_Assets 中的纹理已更新）
         if (it != m_ThumbnailCache.end()) {
             UUID handle = AssetManager::FindHandleForPath(path);
             if (handle != 0) {
-                auto current = AssetManager::GetAsset<Texture2D>(handle);
-                if (current && current.get() == it->second.get())
+                AssetMetadata meta = AssetManager::GetMetadata(handle);
+                if (meta.Type == AssetType::Texture2D) {
+                    // Texture: check if source asset was reloaded (e.g. Apply import settings)
+                    auto current = AssetManager::GetAsset<Texture2D>(handle);
+                    if (current && current.get() == it->second.get())
+                        return it->second;
+                } else if (meta.Type == AssetType::Model) {
+                    // Model thumbnail is independently generated, safe to reuse
                     return it->second;
+                }
             }
             m_ThumbnailCache.erase(it);
         }
 
-        std::string ext = path.extension().string();
-        for (auto& c : ext) c = (char)std::tolower(c);
-        if (ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".hdr" && ext != ".bmp")
-            return nullptr;
-
         UUID handle = AssetManager::FindHandleForPath(path);
         if (handle == 0) return nullptr;
 
-        std::shared_ptr<Texture2D> thumbnail = AssetManager::GetAsset<Texture2D>(handle);
+        AssetMetadata meta = AssetManager::GetMetadata(handle);
 
-        if (thumbnail) {
-            if (m_ThumbnailCache.size() >= kMaxThumbnailCache)
-                m_ThumbnailCache.erase(m_ThumbnailCache.begin());
-            m_ThumbnailCache[key] = thumbnail;
+        // Image assets: return the texture directly
+        std::string ext = path.extension().string();
+        for (auto& c : ext) c = (char)std::tolower(c);
+        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".hdr" || ext == ".bmp") {
+            std::shared_ptr<Texture2D> thumbnail = AssetManager::GetAsset<Texture2D>(handle);
+            if (thumbnail) {
+                if (m_ThumbnailCache.size() >= kMaxThumbnailCache)
+                    m_ThumbnailCache.erase(m_ThumbnailCache.begin());
+                m_ThumbnailCache[key] = thumbnail;
+            }
+            return thumbnail;
         }
-        return thumbnail;
+
+        // Model assets: generate thumbnail on first encounter, cache for reuse
+        if (meta.Type == AssetType::Model) {
+            auto thumbnail = AssetPreviewer::GenerateThumbnail(handle);
+            if (thumbnail) {
+                if (m_ThumbnailCache.size() >= kMaxThumbnailCache)
+                    m_ThumbnailCache.erase(m_ThumbnailCache.begin());
+                m_ThumbnailCache[key] = thumbnail;
+                return thumbnail;
+            }
+            // model not loaded yet — show file icon placeholder, retry next frame
+            return m_FileIcon;
+        }
+
+        AYAYA_CORE_WARN("CB: Unknown/unhandled asset type={0} for {1}", (int)meta.Type, path.string());
+        return nullptr;
     }
 
     ContentBrowserPanel::ContentBrowserPanel() {
@@ -168,6 +192,7 @@ namespace Ayaya {
                 // .meta-aware: 只显示已导入的资产（在 s_Registry 中能找到的项）
                 // ==========================================
                 bool isImage = false;
+                bool isModel = false;
                 UUID assetHandle = 0;
                 if (!directoryEntry.is_directory()) {
                     // 检查该文件是否已在注册表中（通过查找 .meta 文件）
@@ -178,6 +203,7 @@ namespace Ayaya {
                     std::string ext = path.extension().string();
                     for (auto& c : ext) c = (char)std::tolower(c);
                     isImage = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".hdr" || ext == ".bmp");
+                    isModel = (ext == ".obj" || ext == ".fbx" || ext == ".gltf" || ext == ".glb");
 
                     assetHandle = AssetManager::FindHandleForPath(path);
                 }
@@ -187,9 +213,9 @@ namespace Ayaya {
                 std::shared_ptr<Texture2D> icon = m_FileIcon;
                 if (directoryEntry.is_directory()) {
                     icon = m_DirectoryIcon;
-                } else if (isImage) {
+                } else if (isImage || isModel) {
                     auto thumb = GetThumbnail(path);
-                    icon = thumb ? thumb : m_PngIcon;
+                    icon = thumb ? thumb : m_FileIcon;
                 }
 
                 ImGui::PushID(filenameString.c_str());

@@ -193,6 +193,9 @@ namespace Ayaya {
         // ==========================================
         // 7. Descriptor Set Layouts (描述符集图纸)
         // ==========================================
+        bool noTextures = spec.NoTextureDescriptors;
+        uint32_t setCount = noTextures ? 1 : 2;
+
         std::vector<VkDescriptorSetLayoutBinding> set0Bindings;
         for (uint32_t i = 0; i < 2; i++) {
             VkDescriptorSetLayoutBinding uboBind{};
@@ -208,20 +211,22 @@ namespace Ayaya {
         set0Info.pBindings = set0Bindings.data();
         vkCreateDescriptorSetLayout(device, &set0Info, nullptr, &m_DescriptorSetLayouts[0]);
 
-        std::vector<VkDescriptorSetLayoutBinding> set1Bindings;
-        for (uint32_t i = 0; i < 12; i++) {
-            VkDescriptorSetLayoutBinding samplerBind{};
-            samplerBind.binding = i;
-            samplerBind.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            samplerBind.descriptorCount = 1;
-            samplerBind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-            set1Bindings.push_back(samplerBind);
+        if (!noTextures) {
+            std::vector<VkDescriptorSetLayoutBinding> set1Bindings;
+            for (uint32_t i = 0; i < 12; i++) {
+                VkDescriptorSetLayoutBinding samplerBind{};
+                samplerBind.binding = i;
+                samplerBind.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                samplerBind.descriptorCount = 1;
+                samplerBind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+                set1Bindings.push_back(samplerBind);
+            }
+            VkDescriptorSetLayoutCreateInfo set1Info{};
+            set1Info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+            set1Info.bindingCount = (uint32_t)set1Bindings.size();
+            set1Info.pBindings = set1Bindings.data();
+            vkCreateDescriptorSetLayout(device, &set1Info, nullptr, &m_DescriptorSetLayouts[1]);
         }
-        VkDescriptorSetLayoutCreateInfo set1Info{};
-        set1Info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        set1Info.bindingCount = (uint32_t)set1Bindings.size();
-        set1Info.pBindings = set1Bindings.data();
-        vkCreateDescriptorSetLayout(device, &set1Info, nullptr, &m_DescriptorSetLayouts[1]);
 
         // ==========================================
         // 8. 管线布局 (Push Constants & Descriptor Sets)
@@ -229,11 +234,11 @@ namespace Ayaya {
         VkPushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
         pushConstantRange.offset = 0;
-        pushConstantRange.size = 256; 
+        pushConstantRange.size = 256;
 
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 2; 
+        pipelineLayoutInfo.setLayoutCount = setCount;
         pipelineLayoutInfo.pSetLayouts = m_DescriptorSetLayouts.data();
         pipelineLayoutInfo.pushConstantRangeCount = 1;
         pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
@@ -272,19 +277,29 @@ namespace Ayaya {
         // ==========================================
         // 10. 创建管线专属 Descriptor Pool
         // ==========================================
-        VkDescriptorPoolSize poolSizes[] = {
-            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 20 },
-            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 40000 }
-        };
-
-        VkDescriptorPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.poolSizeCount = 2;
-        poolInfo.pPoolSizes = poolSizes;
-        poolInfo.maxSets = 3010; 
-
-        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_PipelineDescriptorPool) != VK_SUCCESS) {
-            AYAYA_CORE_ERROR("Failed to create custom Descriptor Pool for Pipeline!");
+        if (noTextures) {
+            VkDescriptorPoolSize poolSizes[] = {
+                { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 20 },
+            };
+            VkDescriptorPoolCreateInfo poolInfo{};
+            poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+            poolInfo.poolSizeCount = 1;
+            poolInfo.pPoolSizes = poolSizes;
+            poolInfo.maxSets = 10;
+            if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_PipelineDescriptorPool) != VK_SUCCESS)
+                AYAYA_CORE_ERROR("Failed to create Descriptor Pool (no-textures) for Pipeline!");
+        } else {
+            VkDescriptorPoolSize poolSizes[] = {
+                { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 20 },
+                { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 40000 }
+            };
+            VkDescriptorPoolCreateInfo poolInfo{};
+            poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+            poolInfo.poolSizeCount = 2;
+            poolInfo.pPoolSizes = poolSizes;
+            poolInfo.maxSets = 3010;
+            if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_PipelineDescriptorPool) != VK_SUCCESS)
+                AYAYA_CORE_ERROR("Failed to create custom Descriptor Pool for Pipeline!");
         }
 
         // ==========================================
@@ -323,19 +338,19 @@ namespace Ayaya {
         }
 
         // ==========================================
-        // 12. 分配 100 个 Set 1 (纹理) 作为环形缓冲
+        // 12. 分配 Set 1 (纹理) 作为环形缓冲 (仅当管线使用纹理时)
         // ==========================================
-        std::vector<VkDescriptorSetLayout> layouts3000(3000, m_DescriptorSetLayouts[1]); // 修改这里
-        m_TextureDescriptorSets.resize(3000); // 修改这里
-        
-        VkDescriptorSetAllocateInfo allocInfo1{};
-        allocInfo1.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo1.descriptorPool = m_PipelineDescriptorPool;
-        allocInfo1.descriptorSetCount = 3000;
-        allocInfo1.pSetLayouts = layouts3000.data();
-        // 【核心修改】：加上结果检查！
-        VkResult result = vkAllocateDescriptorSets(device, &allocInfo1, m_TextureDescriptorSets.data());
-        AYAYA_CORE_ASSERT(result == VK_SUCCESS, "Failed to allocate 3000 texture descriptor sets! Descriptor Pool exhausted.");
+        if (!noTextures) {
+            std::vector<VkDescriptorSetLayout> layouts3000(3000, m_DescriptorSetLayouts[1]);
+            m_TextureDescriptorSets.resize(3000);
+            VkDescriptorSetAllocateInfo allocInfo1{};
+            allocInfo1.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocInfo1.descriptorPool = m_PipelineDescriptorPool;
+            allocInfo1.descriptorSetCount = 3000;
+            allocInfo1.pSetLayouts = layouts3000.data();
+            VkResult result = vkAllocateDescriptorSets(device, &allocInfo1, m_TextureDescriptorSets.data());
+            AYAYA_CORE_ASSERT(result == VK_SUCCESS, "Failed to allocate 3000 texture descriptor sets! Descriptor Pool exhausted.");
+        }
     }
 
     VulkanPipeline::~VulkanPipeline() {

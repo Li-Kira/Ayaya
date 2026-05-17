@@ -35,6 +35,7 @@ namespace Ayaya {
         virtual bool IsDataFlipped() const override { return true; }
 
         // 供渲染器内部获取真实句柄
+        VkImage GetImage() const { return m_Image; }
         VkImageView GetImageView() const { return m_ImageView; }
         VkSampler GetSampler() const { return m_Sampler; }
 
