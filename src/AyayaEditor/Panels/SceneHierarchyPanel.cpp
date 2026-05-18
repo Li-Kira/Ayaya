@@ -24,10 +24,11 @@ namespace Ayaya {
     }
 
     void SceneHierarchyPanel::OnImGuiRender() {
-        // 仅在选中实体变化时同步到属性面板（避免每帧覆盖资产检查模式）
-        if (m_LastSentEntities != m_SelectedEntities) {
+        // 同步选中实体到属性面板：selection 变化 或 用户重新点击了已选中的实体
+        if (m_SelectionDirty || m_LastSentEntities != m_SelectedEntities) {
             m_PropertiesPanel.SetSelectedEntities(m_SelectedEntities);
             m_LastSentEntities = m_SelectedEntities;
+            m_SelectionDirty = false;
         }
         m_PropertiesPanel.OnImGuiRender();
 

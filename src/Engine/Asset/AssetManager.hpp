@@ -22,6 +22,7 @@ namespace Ayaya {
         AssetType Type = AssetType::None;
         std::string VirtualPath; // 存储跨平台的虚拟路径 (如 project://... 或 engine://...)
         TextureImportSettings TextureSettings;
+        ModelImportSettings   ModelSettings;
     };
 
     class AssetManager {
@@ -88,7 +89,7 @@ namespace Ayaya {
         static bool WriteMetaFile(const std::filesystem::path& assetPhysicalPath, UUID handle, AssetType type);
         static bool WriteMetaFile(const std::filesystem::path& assetPhysicalPath, UUID handle, AssetType type, const TextureImportSettings& settings);
         static bool ReadMetaFile(const std::filesystem::path& metaPath, UUID& outHandle, AssetType& outType);
-        static bool ReadMetaFile(const std::filesystem::path& metaPath, UUID& outHandle, AssetType& outType, TextureImportSettings* outSettings);
+        static bool ReadMetaFile(const std::filesystem::path& metaPath, UUID& outHandle, AssetType& outType, TextureImportSettings* outSettings, ModelImportSettings* outModelSettings = nullptr);
 
         // 一次性迁移：读取旧 AssetRegistry.yaml，为每个条目创建 .meta 文件
         static bool MigrateFromRegistry(const std::string& registryPath);
@@ -101,6 +102,7 @@ namespace Ayaya {
 
         // 更新资产的导入设置并覆写 .meta 文件
         static void UpdateMetadataSettings(UUID handle, const TextureImportSettings& settings);
+        static void UpdateMetadataSettings(UUID handle, const ModelImportSettings& settings);
 
         // 强制重新加载资产（卸载旧纹理 + 异步重新加载）
         static void ReloadAsset(UUID handle);
@@ -141,6 +143,8 @@ namespace Ayaya {
     private:
         // 内部专用：真正执行硬盘读取的函数，返回擦除了类型的 void 指针
         static std::shared_ptr<void> LoadAssetFromFile(UUID handle);
+        // 覆写 .meta 文件，将当前注册表中的元数据刷新到磁盘
+        static void RewriteMetaFile(UUID handle);
 
     private:
         // 【核心黑科技】：使用 void 擦除类型！完美接纳所有实体类，无需它们继承任何基类！

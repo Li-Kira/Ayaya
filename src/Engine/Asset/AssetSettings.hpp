@@ -14,4 +14,17 @@ namespace Ayaya {
         bool FlipY          = true;
     };
 
+    enum class NormalMode   { Import = 0, Calculate = 1, None = 2 };
+    enum class TangentMode  { Import = 0, Calculate = 1, None = 2 };
+
+    struct ModelImportSettings {
+        float GlobalScale      = 1.0f;
+        NormalMode Normals     = NormalMode::Import;
+        TangentMode Tangents   = TangentMode::Import;
+        bool ImportMaterials   = true;
+        bool WeldVertices      = false;
+        bool MeshCompression   = false;
+        bool SwapYZ            = false;
+    };
+
 }

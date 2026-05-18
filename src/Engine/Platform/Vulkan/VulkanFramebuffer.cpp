@@ -95,10 +95,11 @@ namespace Ayaya {
             imageInfo.extent = { m_Specification.Width, m_Specification.Height, 1 };
             imageInfo.mipLevels = 1;
             imageInfo.arrayLayers = 1;
-            imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+            imageInfo.samples = static_cast<VkSampleCountFlagBits>(m_Specification.Samples);
             imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-            // 声明这个图像将作为颜色附件，并且能被当作纹理采样！
-            imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+            // 该图像可作为颜色附件、被纹理采样、作为传输源/目标 (用于 MSAA resolve)
+            imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+                            | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
             VmaAllocationCreateInfo allocInfo{};
             allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
@@ -130,7 +131,7 @@ namespace Ayaya {
             // Using UNDEFINED here skips the cache flush and causes magenta flickering on M1/M2.
             VkAttachmentDescription desc{};
             desc.format = vkFormat;
-            desc.samples = VK_SAMPLE_COUNT_1_BIT;
+            desc.samples = static_cast<VkSampleCountFlagBits>(m_Specification.Samples);
             desc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
             desc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
             desc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -158,7 +159,7 @@ namespace Ayaya {
             imageInfo.extent = { m_Specification.Width, m_Specification.Height, 1 };
             imageInfo.mipLevels = 1;
             imageInfo.arrayLayers = 1;
-            imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+            imageInfo.samples = static_cast<VkSampleCountFlagBits>(m_Specification.Samples);
             imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
             imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 
@@ -182,7 +183,7 @@ namespace Ayaya {
 
             VkAttachmentDescription depthDesc{};
             depthDesc.format = depthFormat;
-            depthDesc.samples = VK_SAMPLE_COUNT_1_BIT;
+            depthDesc.samples = static_cast<VkSampleCountFlagBits>(m_Specification.Samples);
             depthDesc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
             depthDesc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
             depthDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;

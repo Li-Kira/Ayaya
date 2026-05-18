@@ -31,7 +31,8 @@ namespace Ayaya {
 
         // Shared resources
         static std::shared_ptr<Shader>      s_PreviewShader;
-        static std::shared_ptr<Framebuffer> s_PreviewFBO;
+        static std::shared_ptr<Framebuffer> s_PreviewFBO;       // resolve / readback target (non-MSAA)
+        static std::shared_ptr<Framebuffer> s_PreviewFBO_MSAA;  // MSAA render target
         static std::shared_ptr<Texture2D>   s_RealtimeWrapper;
 
         // Vulkan-only resources

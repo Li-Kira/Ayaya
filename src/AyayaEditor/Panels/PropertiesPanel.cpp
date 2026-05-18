@@ -6,6 +6,7 @@
 #include "Asset/AssetManager.hpp"
 #include "Renderer/MaterialSerializer.hpp"
 #include "Renderer/AssetPreviewer.hpp"
+#include "Renderer/Model.hpp"
 #include "Core/VFS.hpp"
 #include "Project/Project.hpp"
 #include "Core/Application.hpp"
@@ -46,6 +47,7 @@ namespace Ayaya {
     }
 
     void PropertiesPanel::SetSelectedEntities(const std::vector<Entity>& selectedEntities) {
+        if (m_Locked) return;
         m_SelectedEntities = selectedEntities;
         m_SelectedAsset = 0; // 切换回实体模式
     }
@@ -54,21 +56,69 @@ namespace Ayaya {
         m_TextureGarbageBin.clear();
         ImGui::Begin("Properties");
 
+        // ==========================================
+        // UE5-style Inspector Toolbar
+        // ==========================================
+        {
+            float uiScale = ImGui::GetIO().FontGlobalScale;
+            float btnSz = ImGui::GetFrameHeight();
+            float toolbarH = btnSz + 4.0f * uiScale;
+
+            ImVec2 cursor = ImGui::GetCursorPos();
+            ImVec2 toolbarMin = ImGui::GetCursorScreenPos();
+            ImVec2 toolbarMax(toolbarMin.x + ImGui::GetContentRegionAvail().x, toolbarMin.y + toolbarH);
+
+            // Background
+            ImGui::GetWindowDrawList()->AddRectFilled(
+                toolbarMin, toolbarMax, IM_COL32(28, 28, 32, 255), 4.0f * uiScale);
+
+            // --- Left: inspection target ---
+            ImGui::SetCursorPos(ImVec2(cursor.x + 6.0f * uiScale, cursor.y + 2.0f * uiScale));
+            if (m_SelectedAsset != 0) {
+                AssetMetadata meta = AssetManager::GetMetadata(m_SelectedAsset);
+                std::string displayName = meta.VirtualPath;
+                auto pos = displayName.find_last_of("/\\");
+                if (pos != std::string::npos) displayName = displayName.substr(pos + 1);
+
+                ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), ICON_FA_FILE " %s", displayName.c_str());
+            } else if (!m_SelectedEntities.empty()) {
+                if (m_SelectedEntities.size() == 1) {
+                    auto& tag = m_SelectedEntities[0].GetComponent<TagComponent>();
+                    const char* icon = ICON_FA_CUBE;
+                    if (m_SelectedEntities[0].HasComponent<CameraComponent>())       icon = ICON_FA_VIDEO;
+                    else if (m_SelectedEntities[0].HasComponent<DirectionalLightComponent>()) icon = ICON_FA_SUN;
+                    else if (m_SelectedEntities[0].HasComponent<PointLightComponent>())      icon = ICON_FA_LIGHTBULB;
+                    ImGui::TextColored(ImVec4(0.7f, 0.8f, 1.0f, 1.0f), "%s %s", icon, tag.Tag.c_str());
+                } else {
+                    ImGui::TextColored(ImVec4(0.7f, 0.8f, 1.0f, 1.0f), ICON_FA_CUBES " %zu Entities",
+                        m_SelectedEntities.size());
+                }
+            } else {
+                ImGui::TextDisabled(ICON_FA_SEARCH " No selection");
+            }
+
+            // --- Right: lock ---
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x - btnSz + cursor.x);
+            ImGui::SetCursorPosY(cursor.y + 2.0f * uiScale);
+            if (ImGui::Button(m_Locked ? ICON_FA_LOCK : ICON_FA_UNLOCK, ImVec2(btnSz, btnSz))) {
+                m_Locked = !m_Locked;
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(m_Locked ? "Inspector locked — click to unlock" : "Inspector unlocked — click to lock");
+
+            // Advance cursor past toolbar
+            ImGui::SetCursorPos(ImVec2(cursor.x, cursor.y + toolbarH + 4.0f * uiScale));
+            ImGui::Separator();
+        }
+
         if (m_SelectedAsset != 0) {
             DrawAssetInspector();
         } else if (m_SelectedEntities.empty()) {
-            ImGui::TextDisabled("Select to view properties");
+            ImGui::Spacing();
+            ImGui::TextDisabled("Select an Entity or Asset to inspect");
         } else {
             float uiScale = ImGui::GetIO().FontGlobalScale;
             Entity referenceEntity = m_SelectedEntities[0];
-
-            if (m_SelectedEntities.size() > 1) {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
-                ImGui::Text("Batch Editing %zu Entities", m_SelectedEntities.size());
-                ImGui::PopStyleColor();
-                ImGui::Separator();
-                ImGui::Spacing();
-            }
 
             DrawTagComponent(referenceEntity, uiScale);
             DrawTransformComponent(referenceEntity);
@@ -215,7 +265,7 @@ namespace Ayaya {
                 // 1. 绘制 Position
                 // ------------------------------------------
                 glm::vec3 translation = refTransform.Translation;
-                if (UI::DrawVec3Control("Position", translation, 0.0f, 100.0f, &activated, &deactivated)) {
+                if (UI::DrawVec3Control("Position", translation, 0.0f, 80.0f, &activated, &deactivated)) {
                     for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Translation = translation;
                 }
                 
@@ -236,7 +286,7 @@ namespace Ayaya {
                 // ------------------------------------------
                 activated = false; deactivated = false;
                 glm::vec3 rotation = glm::degrees(refTransform.Rotation);
-                if (UI::DrawVec3Control("Rotation", rotation, 0.0f, 100.0f, &activated, &deactivated)) {
+                if (UI::DrawVec3Control("Rotation", rotation, 0.0f, 80.0f, &activated, &deactivated)) {
                     for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Rotation = glm::radians(rotation);
                 }
                 
@@ -257,7 +307,7 @@ namespace Ayaya {
                 // ------------------------------------------
                 activated = false; deactivated = false;
                 glm::vec3 scale = refTransform.Scale;
-                if (UI::DrawVec3Control("Scale", scale, 1.0f, 100.0f, &activated, &deactivated)) {
+                if (UI::DrawVec3Control("Scale", scale, 1.0f, 80.0f, &activated, &deactivated)) {
                     for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Scale = scale;
                 }
                 
@@ -1951,31 +2001,173 @@ namespace Ayaya {
                 s_EditingHandle = m_SelectedAsset;
             }
 
+            float uiScale = ImGui::GetIO().FontGlobalScale;
+            float labelW = ImGui::CalcTextSize("Filter Mode").x + 16.0f * uiScale;
+            float valueW = std::max(50.0f, ImGui::GetContentRegionAvail().x - labelW - 8.0f * uiScale);
+
             const char* filterTypes[] = { "Linear (Bilinear)", "Nearest (Point)" };
             int currentFilter = (int)s_EditingSettings.Filter;
-            if (ImGui::Combo("Filter Mode", &currentFilter, filterTypes, 2)) {
+            ImGui::Text("Filter Mode"); ImGui::SameLine(labelW);
+            ImGui::SetNextItemWidth(valueW);
+            if (ImGui::Combo("##FilterMode", &currentFilter, filterTypes, 2))
                 s_EditingSettings.Filter = (TextureFilterMode)currentFilter;
-            }
 
             const char* wrapTypes[] = { "Repeat", "Clamp" };
             int currentWrap = (int)s_EditingSettings.Wrap;
-            if (ImGui::Combo("Wrap Mode", &currentWrap, wrapTypes, 2)) {
+            ImGui::Text("Wrap Mode"); ImGui::SameLine(labelW);
+            ImGui::SetNextItemWidth(valueW);
+            if (ImGui::Combo("##WrapMode", &currentWrap, wrapTypes, 2))
                 s_EditingSettings.Wrap = (TextureWrapMode)currentWrap;
-            }
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
 
             ImGui::Checkbox("sRGB (Color Texture)", &s_EditingSettings.SRGB);
             ImGui::Checkbox("Generate Mipmaps", &s_EditingSettings.GenerateMipmaps);
             ImGui::Checkbox("Flip Y", &s_EditingSettings.FlipY);
 
             ImGui::Spacing();
-
             if (ImGui::Button("Apply", ImVec2(-1, 0))) {
                 AssetManager::UpdateMetadataSettings(m_SelectedAsset, s_EditingSettings);
                 AssetManager::ReloadAsset(m_SelectedAsset);
             }
         } else if (meta.Type == AssetType::Model) {
             float uiScale = ImGui::GetIO().FontGlobalScale;
-            ImVec2 previewSize(256.0f * uiScale, 256.0f * uiScale);
+            auto model = AssetManager::GetAsset<Model>(m_SelectedAsset);
+
+            // ==========================================
+            // Editing state — snapshot settings on first frame
+            // ==========================================
+            static ModelImportSettings s_EditingModelSettings;
+            static UUID s_EditingModelHandle = 0;
+            if (s_EditingModelHandle != m_SelectedAsset) {
+                s_EditingModelSettings = meta.ModelSettings;
+                s_EditingModelHandle = m_SelectedAsset;
+            }
+
+            // ==========================================
+            // ▼ Mesh Info
+            // ==========================================
+            if (ImGui::CollapsingHeader("Mesh Info", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (model) {
+                    uint32_t meshCount = (uint32_t)model->GetMeshes().size();
+                    uint32_t totalVerts = 0, totalTris = 0;
+                    glm::vec3 bbMin( FLT_MAX), bbMax(-FLT_MAX);
+                    for (auto& m : model->GetMeshes()) {
+                        totalVerts += m->GetVertexCount();
+                        totalTris  += m->GetIndexCount() / 3;
+                        const AABB& box = m->GetAABB();
+                        bbMin = glm::min(bbMin, box.Min);
+                        bbMax = glm::max(bbMax, box.Max);
+                    }
+                    glm::vec3 bbSize = bbMax - bbMin;
+
+                    // Dynamic label width from the longest label text
+                    float labelW = ImGui::CalcTextSize("Bounding Box").x + 12.0f * uiScale;
+                    float maxValX = ImGui::GetWindowContentRegionMax().x - 4.0f * uiScale;
+
+                    auto Row = [&](const char* label, const char* val) {
+                        ImGui::Text("%s", label);
+                        ImGui::SameLine(labelW);
+                        ImGui::PushTextWrapPos(maxValX);
+                        ImGui::TextColored(ImVec4(0.7f,0.7f,0.8f,1.0f), "%s", val);
+                        ImGui::PopTextWrapPos();
+                    };
+
+                    Row("Submeshes",  std::to_string(meshCount).c_str());
+                    Row("Vertices",   std::to_string(totalVerts).c_str());
+                    Row("Triangles",  std::to_string(totalTris).c_str());
+
+                    ImGui::Spacing();
+                    bool bbOpen = ImGui::TreeNodeEx("Bounding Box", ImGuiTreeNodeFlags_DefaultOpen);
+                    ImGui::SameLine();
+                    ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "(local)");
+                    if (bbOpen) {
+                        Row("Min",  fmt::format("{:.2f}, {:.2f}, {:.2f}", bbMin.x, bbMin.y, bbMin.z).c_str());
+                        Row("Max",  fmt::format("{:.2f}, {:.2f}, {:.2f}", bbMax.x, bbMax.y, bbMax.z).c_str());
+                        Row("Size", fmt::format("{:.2f}, {:.2f}, {:.2f}", bbSize.x, bbSize.y, bbSize.z).c_str());
+                        ImGui::TreePop();
+                    }
+
+                    if (meshCount > 1) {
+                        ImGui::Spacing();
+                        bool smOpen = ImGui::TreeNode("Submesh Details");
+                        if (smOpen) {
+                            float maxX = ImGui::GetWindowContentRegionMax().x - 4.0f * uiScale;
+                            ImGui::PushTextWrapPos(maxX);
+                            uint32_t idx = 0;
+                            for (auto& m : model->GetMeshes()) {
+                                ImGui::BulletText("#%u  %u verts  %u tris",
+                                    idx, m->GetVertexCount(), m->GetIndexCount() / 3);
+                                idx++;
+                            }
+                            ImGui::PopTextWrapPos();
+                            ImGui::TreePop();
+                        }
+                    }
+                } else {
+                    ImGui::TextDisabled("Model not loaded");
+                }
+            }
+
+            // ==========================================
+            // ▼ Import Settings
+            // ==========================================
+            ImGui::Spacing();
+            if (ImGui::CollapsingHeader("Import Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+                float labelW = ImGui::CalcTextSize("Global Scale").x + 16.0f * uiScale;
+                float valueW = std::max(60.0f, ImGui::GetContentRegionAvail().x - labelW - 8.0f * uiScale);
+
+                // Global Scale
+                ImGui::Text("Global Scale"); ImGui::SameLine(labelW);
+                ImGui::SetNextItemWidth(valueW);
+                ImGui::DragFloat("##GlobalScale", &s_EditingModelSettings.GlobalScale, 0.01f, 0.01f, 100.0f, "%.3f");
+
+                // Normals
+                ImGui::Text("Normals"); ImGui::SameLine(labelW);
+                ImGui::SetNextItemWidth(valueW);
+                const char* normalItems[] = { "Import", "Calculate", "None" };
+                int curNormal = (int)s_EditingModelSettings.Normals;
+                ImGui::Combo("##Normals", &curNormal, normalItems, 3);
+                s_EditingModelSettings.Normals = (NormalMode)curNormal;
+
+                // Tangents
+                ImGui::Text("Tangents"); ImGui::SameLine(labelW);
+                ImGui::SetNextItemWidth(valueW);
+                const char* tangentItems[] = { "Import", "Calculate", "None" };
+                int curTangent = (int)s_EditingModelSettings.Tangents;
+                ImGui::Combo("##Tangents", &curTangent, tangentItems, 3);
+                s_EditingModelSettings.Tangents = (TangentMode)curTangent;
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                // Toggles (full width)
+                ImGui::Checkbox("Import Materials",   &s_EditingModelSettings.ImportMaterials);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Import material slots from the source file");
+                ImGui::Checkbox("Weld Vertices",      &s_EditingModelSettings.WeldVertices);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Merge vertices within threshold to reduce count");
+                ImGui::Checkbox("Mesh Compression",   &s_EditingModelSettings.MeshCompression);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Enable GPU-friendly vertex cache optimization");
+                ImGui::Checkbox("Swap Y/Z",           &s_EditingModelSettings.SwapYZ);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Convert between coordinate systems (e.g. Z-up to Y-up)");
+
+                ImGui::Spacing();
+                if (ImGui::Button("Apply", ImVec2(-1, 0))) {
+                    AssetManager::UpdateMetadataSettings(m_SelectedAsset, s_EditingModelSettings);
+                }
+            }
+
+            // ==========================================
+            // ▼ Preview
+            // ==========================================
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            float availWidth = ImGui::GetContentRegionAvail().x;
+            ImVec2 previewSize(availWidth, availWidth);
 
             static glm::vec2 s_PreviewRotation(0.3f, -0.6f);
             static UUID s_LastPreviewAsset = 0;
@@ -1984,13 +2176,8 @@ namespace Ayaya {
                 s_LastPreviewAsset = m_SelectedAsset;
             }
 
-            ImGui::Text("Preview");
-            ImGui::Separator();
-
             auto previewTex = AssetPreviewer::RenderRealtimePreview(m_SelectedAsset, s_PreviewRotation, 256);
             if (previewTex) {
-                // FBO textures: OpenGL Y-axis is flipped (bottom-left origin),
-                // Vulkan's projection correction already accounts for this.
                 bool isVulkan = RendererAPI::GetAPI() == RendererAPI::API::Vulkan;
                 ImVec2 uv0 = isVulkan ? ImVec2(0, 0) : ImVec2(0, 1);
                 ImVec2 uv1 = isVulkan ? ImVec2(1, 1) : ImVec2(1, 0);
@@ -2001,7 +2188,7 @@ namespace Ayaya {
                 if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
                     ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left);
                     s_PreviewRotation.x += delta.y * 0.01f;
-                    s_PreviewRotation.y -= delta.x * 0.01f;  // negate: drag right → model rotates right
+                    s_PreviewRotation.y -= delta.x * 0.01f;
                     ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
                 }
             } else {
@@ -2010,9 +2197,6 @@ namespace Ayaya {
                 ImGui::SetCursorPos(cursor);
                 ImGui::TextDisabled("Loading...");
             }
-
-            ImGui::Spacing();
-            ImGui::TextDisabled("Model import settings coming soon");
         } else {
             ImGui::TextDisabled("No import settings available for this asset type");
         }

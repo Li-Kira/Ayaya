@@ -261,8 +261,10 @@ namespace Ayaya {
         VkPipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-        pipelineInfo.pMultisampleState = &multisampling; 
+        multisampling.rasterizationSamples = vulkanFBO
+            ? static_cast<VkSampleCountFlagBits>(vulkanFBO->GetSpecification().Samples)
+            : VK_SAMPLE_COUNT_1_BIT;
+        pipelineInfo.pMultisampleState = &multisampling;
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;

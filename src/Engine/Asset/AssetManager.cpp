@@ -59,6 +59,32 @@ namespace Ayaya {
         out << YAML::EndMap;
     }
 
+    static void SerializeModelSettings(YAML::Emitter& out, const ModelImportSettings& settings) {
+        out << YAML::Key << "model_settings" << YAML::BeginMap;
+        out << YAML::Key << "global_scale" << YAML::Value << settings.GlobalScale;
+        out << YAML::Key << "normals" << YAML::Value << (int)settings.Normals;
+        out << YAML::Key << "tangents" << YAML::Value << (int)settings.Tangents;
+        out << YAML::Key << "import_materials" << YAML::Value << settings.ImportMaterials;
+        out << YAML::Key << "weld_vertices" << YAML::Value << settings.WeldVertices;
+        out << YAML::Key << "mesh_compression" << YAML::Value << settings.MeshCompression;
+        out << YAML::Key << "swap_yz" << YAML::Value << settings.SwapYZ;
+        out << YAML::EndMap;
+    }
+
+    static ModelImportSettings DeserializeModelSettings(YAML::Node node) {
+        ModelImportSettings settings;
+        if (auto s = node["model_settings"]) {
+            settings.GlobalScale      = s["global_scale"].as<float>(1.0f);
+            settings.Normals          = (NormalMode)s["normals"].as<int>(0);
+            settings.Tangents         = (TangentMode)s["tangents"].as<int>(0);
+            settings.ImportMaterials  = s["import_materials"].as<bool>(true);
+            settings.WeldVertices     = s["weld_vertices"].as<bool>(false);
+            settings.MeshCompression  = s["mesh_compression"].as<bool>(false);
+            settings.SwapYZ           = s["swap_yz"].as<bool>(false);
+        }
+        return settings;
+    }
+
     static TextureImportSettings DeserializeTextureSettings(YAML::Node node) {
         TextureImportSettings settings;
         if (auto s = node["import_settings"]) {
@@ -85,6 +111,8 @@ namespace Ayaya {
             out << YAML::Key << "uuid" << YAML::Value << static_cast<uint64_t>(handle);
             out << YAML::Key << "type" << YAML::Value << static_cast<int>(type);
             SerializeTextureSettings(out, settings);
+            if (type == AssetType::Model && s_Registry.count(handle))
+                SerializeModelSettings(out, s_Registry[handle].ModelSettings);
             out << YAML::EndMap;
 
             std::ofstream fout(metaPath);
@@ -102,10 +130,10 @@ namespace Ayaya {
     }
 
     bool AssetManager::ReadMetaFile(const std::filesystem::path& metaPath, UUID& outHandle, AssetType& outType) {
-        return ReadMetaFile(metaPath, outHandle, outType, nullptr);
+        return ReadMetaFile(metaPath, outHandle, outType, nullptr, nullptr);
     }
 
-    bool AssetManager::ReadMetaFile(const std::filesystem::path& metaPath, UUID& outHandle, AssetType& outType, TextureImportSettings* outSettings) {
+    bool AssetManager::ReadMetaFile(const std::filesystem::path& metaPath, UUID& outHandle, AssetType& outType, TextureImportSettings* outSettings, ModelImportSettings* outModelSettings) {
         try {
             YAML::Node data = YAML::LoadFile(metaPath.string());
             if (!data["uuid"] || !data["type"]) {
@@ -119,6 +147,7 @@ namespace Ayaya {
                 return false;
             }
             if (outSettings) *outSettings = DeserializeTextureSettings(data);
+            if (outModelSettings) *outModelSettings = DeserializeModelSettings(data);
             return true;
         } catch (const YAML::ParserException& e) {
             AYAYA_CORE_ERROR("AssetManager: Failed to parse .meta file {0}: {1}", metaPath.string(), e.what());
@@ -132,10 +161,39 @@ namespace Ayaya {
     // =====================================================================
     // RefreshRegistry — 递归扫描 .meta 文件重建内存注册表
     // =====================================================================
+    // 判断文件扩展名是否支持导入
+    static bool IsSupportedAssetFile(const std::filesystem::path& path) {
+        std::string ext = path.extension().string();
+        return ext == ".png"  || ext == ".jpg" || ext == ".jpeg" ||
+               ext == ".bmp"  || ext == ".hdr" ||
+               ext == ".obj"  || ext == ".fbx" || ext == ".gltf" || ext == ".glb" ||
+               ext == ".mat"  || ext == ".lua" || ext == ".cube";
+    }
+
     void AssetManager::RefreshRegistry() {
         s_Registry.clear();
         auto assetDir = Project::GetAssetDirectory();
 
+        // === 自动发现：为没有 .meta 的资产文件自动生成 .meta ===
+        if (std::filesystem::exists(assetDir)) {
+            try {
+                for (auto& entry : std::filesystem::recursive_directory_iterator(assetDir)) {
+                    if (entry.is_directory()) continue;
+                    if (entry.path().extension() == ".meta") continue;
+                    if (!IsSupportedAssetFile(entry.path())) continue;
+
+                    // 跳过已有 .meta 的文件
+                    if (std::filesystem::exists(entry.path().string() + ".meta")) continue;
+
+                    AYAYA_CORE_INFO("AssetManager: Auto-discovered asset without .meta, importing: {0}", entry.path().string());
+                    ImportAsset(entry.path());
+                }
+            } catch (const std::exception& e) {
+                AYAYA_CORE_ERROR("AssetManager: Auto-discovery scan failed: {0}", e.what());
+            }
+        }
+
+        // === 扫描 .meta 文件重建注册表 ===
         if (std::filesystem::exists(assetDir)) {
             try {
                 for (auto& entry : std::filesystem::recursive_directory_iterator(assetDir)) {
@@ -153,11 +211,12 @@ namespace Ayaya {
                         UUID handle;
                         AssetType type;
                         TextureImportSettings texSettings;
-                        if (!ReadMetaFile(entry.path(), handle, type, &texSettings))
+                        ModelImportSettings modelSettings;
+                        if (!ReadMetaFile(entry.path(), handle, type, &texSettings, &modelSettings))
                             continue;
 
                         std::string vPath = VFS::GetVirtualPath(sourcePath);
-                        s_Registry[handle] = { type, vPath, texSettings };
+                        s_Registry[handle] = { type, vPath, texSettings, modelSettings };
 
                         if (type == AssetType::Texture2D) {
                             RequestAsyncLoad(handle);
@@ -303,30 +362,41 @@ namespace Ayaya {
             AYAYA_CORE_INFO("GC: Sweep complete — {0} assets freed", toErase.size());
     }
 
+    void AssetManager::RewriteMetaFile(UUID handle) {
+        auto& meta = s_Registry[handle];
+        std::string physicalPath = VFS::ResolveString(meta.VirtualPath);
+        if (physicalPath.empty()) return;
+        std::filesystem::path metaPath = physicalPath + ".meta";
+        try {
+            YAML::Emitter out;
+            out << YAML::BeginMap;
+            out << YAML::Key << "uuid" << YAML::Value << static_cast<uint64_t>(handle);
+            out << YAML::Key << "type" << YAML::Value << static_cast<int>(meta.Type);
+            if (meta.Type == AssetType::Texture2D)
+                SerializeTextureSettings(out, meta.TextureSettings);
+            if (meta.Type == AssetType::Model)
+                SerializeModelSettings(out, meta.ModelSettings);
+            out << YAML::EndMap;
+
+            std::ofstream fout(metaPath);
+            fout << out.c_str();
+            fout.close();
+        } catch (...) {}
+    }
+
     // =====================================================================
-    // UpdateMetadataSettings — 更新导入设置并覆写 .meta 文件
+    // UpdateMetadataSettings — 更新纹理/模型导入设置并覆写 .meta 文件
     // =====================================================================
     void AssetManager::UpdateMetadataSettings(UUID handle, const TextureImportSettings& settings) {
         if (!s_Registry.count(handle)) return;
         s_Registry[handle].TextureSettings = settings;
+        RewriteMetaFile(handle);
+    }
 
-        // 覆写 .meta 文件
-        std::string physicalPath = GetAssetPhysicalPath(handle);
-        if (!physicalPath.empty()) {
-            std::filesystem::path metaPath = physicalPath + ".meta";
-            try {
-                YAML::Emitter out;
-                out << YAML::BeginMap;
-                out << YAML::Key << "uuid" << YAML::Value << static_cast<uint64_t>(handle);
-                out << YAML::Key << "type" << YAML::Value << static_cast<int>(s_Registry[handle].Type);
-                SerializeTextureSettings(out, settings);
-                out << YAML::EndMap;
-
-                std::ofstream fout(metaPath);
-                fout << out.c_str();
-                fout.close();
-            } catch (...) {}
-        }
+    void AssetManager::UpdateMetadataSettings(UUID handle, const ModelImportSettings& settings) {
+        if (!s_Registry.count(handle)) return;
+        s_Registry[handle].ModelSettings = settings;
+        RewriteMetaFile(handle);
     }
 
     // =====================================================================
@@ -385,8 +455,8 @@ namespace Ayaya {
         // 确定资产类型
         AssetType type = AssetType::None;
         std::string ext = filepath.extension().string();
-        if (ext == ".png" || ext == ".jpg" || ext == ".hdr") type = AssetType::Texture2D;
-        else if (ext == ".obj" || ext == ".fbx")             type = AssetType::Model;
+        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".hdr" || ext == ".bmp") type = AssetType::Texture2D;
+        else if (ext == ".obj" || ext == ".fbx" || ext == ".gltf" || ext == ".glb") type = AssetType::Model;
         else if (ext == ".mat")                              type = AssetType::Material;
         else if (ext == ".lua")                              type = AssetType::LuaScript;
         else if (ext == ".cube")                             type = AssetType::TextureCube;

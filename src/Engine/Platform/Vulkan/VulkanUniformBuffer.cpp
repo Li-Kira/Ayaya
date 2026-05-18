@@ -55,10 +55,16 @@ namespace Ayaya {
 
     void VulkanUniformBuffer::SetData(const void* data, uint32_t size, uint32_t offset) {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-        
+
         // 核心逻辑：获取当前正在录制的帧索引 (0 或 1)
         uint32_t frameIndex = context->GetCurrentFrameIndex() % m_FramesInFlight;
         // 只写到当前帧对应的内存地址，绝不干扰 GPU 正在读的另一帧！
         memcpy((uint8_t*)m_AllocInfos[frameIndex].pMappedData + offset, data, size);
+    }
+
+    void VulkanUniformBuffer::SetDataAllFrames(const void* data, uint32_t size, uint32_t offset) {
+        for (uint32_t i = 0; i < m_FramesInFlight; i++) {
+            memcpy((uint8_t*)m_AllocInfos[i].pMappedData + offset, data, size);
+        }
     }
 }

@@ -21,6 +21,7 @@
 #include "Platform/Vulkan/VulkanContext.hpp"
 #include "Platform/Vulkan/VulkanBuffer.hpp"
 #include "Platform/Vulkan/VulkanPipeline.hpp"
+#include "Platform/Vulkan/VulkanUniformBuffer.hpp"
 
 namespace Ayaya {
 
@@ -29,6 +30,7 @@ namespace Ayaya {
     // ---- Shared statics ----
     std::shared_ptr<Shader>      AssetPreviewer::s_PreviewShader;
     std::shared_ptr<Framebuffer> AssetPreviewer::s_PreviewFBO;
+    std::shared_ptr<Framebuffer> AssetPreviewer::s_PreviewFBO_MSAA;
     std::shared_ptr<Texture2D>   AssetPreviewer::s_RealtimeWrapper;
     std::shared_ptr<Pipeline>      AssetPreviewer::s_PreviewPipeline;
     std::shared_ptr<UniformBuffer> AssetPreviewer::s_CameraUBO;
@@ -118,32 +120,27 @@ namespace Ayaya {
     // ==== OpenGL render path ====
 
     void AssetPreviewer::RenderModel_OpenGL(const std::shared_ptr<Model>& model) {
-        GLuint fboID = (GLuint)(uintptr_t)AssetPreviewer::s_PreviewFBO->GetRendererID();
+        GLuint fboMSAA  = (GLuint)(uintptr_t)AssetPreviewer::s_PreviewFBO_MSAA->GetRendererID();
+        GLuint fboResolve = (GLuint)(uintptr_t)AssetPreviewer::s_PreviewFBO->GetRendererID();
 
         GLint prevFBO = 0, prevVP[4];
         glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prevFBO);
         glGetIntegerv(GL_VIEWPORT, prevVP);
         GLboolean prevDepth = glIsEnabled(GL_DEPTH_TEST);
-        GLboolean prevCull  = glIsEnabled(GL_CULL_FACE);
 
-        glBindFramebuffer(GL_FRAMEBUFFER, fboID);
+        // Render to MSAA FBO
+        glBindFramebuffer(GL_FRAMEBUFFER, fboMSAA);
         glViewport(0, 0, kPreviewSize, kPreviewSize);
-        glClearColor(0.05f, 0.05f, 0.06f, 1.0f);
+        glClearColor(0.11f, 0.11f, 0.12f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
-        glEnable(GL_CULL_FACE);
 
         AssetPreviewer::s_PreviewShader->Bind();
 
         glm::mat4 viewProj = AssetPreviewer::s_ProjMatrix * AssetPreviewer::s_ViewMatrix;
         AssetPreviewer::s_PreviewShader->SetMat4("u_ViewProjection", viewProj);
         AssetPreviewer::s_PreviewShader->SetFloat3("u_CameraPos", AssetPreviewer::s_CameraPos);
-
-        glm::vec3 lightDir = glm::normalize(glm::vec3(0.5f, 1.0f, 0.8f));
-        AssetPreviewer::s_PreviewShader->SetFloat3("u_LightDir", lightDir);
-        AssetPreviewer::s_PreviewShader->SetFloat3("u_LightColor", glm::vec3(1.0f, 0.98f, 0.95f));
-        AssetPreviewer::s_PreviewShader->SetFloat3("u_Ambient", glm::vec3(0.15f, 0.15f, 0.17f));
-        AssetPreviewer::s_PreviewShader->SetFloat3("u_Albedo", glm::vec3(0.8f, 0.8f, 0.8f));
+        AssetPreviewer::s_PreviewShader->SetFloat3("u_Albedo", glm::vec3(0.6f, 0.6f, 0.6f));
 
         glm::vec3 center = ComputeModelCenter(model);
         glm::mat4 centering = glm::translate(glm::mat4(1.0f), -center);
@@ -159,10 +156,17 @@ namespace Ayaya {
         }
 
         glBindVertexArray(0);
+
+        // MSAA resolve: blit from MSAA FBO to resolve FBO
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, fboMSAA);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fboResolve);
+        glBlitFramebuffer(0, 0, kPreviewSize, kPreviewSize,
+                          0, 0, kPreviewSize, kPreviewSize,
+                          GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
         glBindFramebuffer(GL_FRAMEBUFFER, prevFBO);
         glViewport(prevVP[0], prevVP[1], prevVP[2], prevVP[3]);
         if (!prevDepth) glDisable(GL_DEPTH_TEST);
-        if (!prevCull)  glDisable(GL_CULL_FACE);
     }
 
     // ==== Vulkan render path ====
@@ -182,7 +186,7 @@ namespace Ayaya {
         PreviewPushConstants push;
         glm::vec3 center = ComputeModelCenter(model);
         push.ModelMatrix = glm::translate(glm::mat4(1.0f), -center);
-        push.Albedo      = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
+        push.Albedo      = glm::vec4(0.6f, 0.6f, 0.6f, 1.0f);
         push.LightDir    = glm::vec4(glm::normalize(glm::vec3(0.5f, 1.0f, 0.8f)), 0.0f);
         push.LightColor  = glm::vec4(1.0f, 0.98f, 0.95f, 1.0f);
         push.Ambient     = glm::vec4(0.15f, 0.15f, 0.17f, 1.0f);
@@ -191,8 +195,8 @@ namespace Ayaya {
         if (!cmd) return;
 
         cmd->Begin();
-        cmd->BeginRenderPass(AssetPreviewer::s_PreviewFBO, true,
-                             glm::vec4(0.05f, 0.05f, 0.06f, 1.0f));
+        cmd->BeginRenderPass(AssetPreviewer::s_PreviewFBO_MSAA, true,
+                             glm::vec4(0.11f, 0.11f, 0.12f, 1.0f));
         cmd->BindPipeline(AssetPreviewer::s_PreviewPipeline);
 
         for (auto& mesh : model->GetMeshes()) {
@@ -202,6 +206,67 @@ namespace Ayaya {
         }
 
         cmd->EndRenderPass();
+
+        // MSAA resolve → non-MSAA FBO for display sampling
+        {
+            auto vkMSAA = std::dynamic_pointer_cast<VulkanFramebuffer>(s_PreviewFBO_MSAA);
+            auto vkResolve = std::dynamic_pointer_cast<VulkanFramebuffer>(s_PreviewFBO);
+            if (vkMSAA && vkResolve) {
+                VkCommandBuffer cb = vkCtx->GetCurrentCommandBuffer();
+                VkImage srcImage = vkMSAA->GetColorAttachmentImage(0);
+                VkImage dstImage = vkResolve->GetColorAttachmentImage(0);
+
+                VkImageMemoryBarrier barriers[2]{};
+                barriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                barriers[0].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                barriers[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                barriers[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                barriers[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                barriers[0].image = srcImage;
+                barriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                barriers[0].subresourceRange.levelCount = 1;
+                barriers[0].subresourceRange.layerCount = 1;
+
+                barriers[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                barriers[1].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                barriers[1].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                barriers[1].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                barriers[1].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                barriers[1].image = dstImage;
+                barriers[1].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                barriers[1].subresourceRange.levelCount = 1;
+                barriers[1].subresourceRange.layerCount = 1;
+
+                vkCmdPipelineBarrier(cb,
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    0, 0, nullptr, 0, nullptr, 2, barriers);
+
+                VkImageResolve resolveRegion{};
+                resolveRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                resolveRegion.srcSubresource.layerCount = 1;
+                resolveRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                resolveRegion.dstSubresource.layerCount = 1;
+                resolveRegion.extent = { kPreviewSize, kPreviewSize, 1 };
+                vkCmdResolveImage(cb, srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                  dstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                  1, &resolveRegion);
+
+                barriers[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                barriers[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                barriers[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                barriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+                barriers[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                barriers[1].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                barriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                barriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+                vkCmdPipelineBarrier(cb,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    0, 0, nullptr, 0, nullptr, 2, barriers);
+            }
+        }
+
         cmd->End();
     }
 
@@ -360,11 +425,15 @@ namespace Ayaya {
         AYAYA_CORE_INFO("AssetPreviewer: Shader loaded, name='{}'", s_PreviewShader ? s_PreviewShader->GetName() : "NULL");
 
         FramebufferSpecification spec;
-        spec.Samples = 1;
+        spec.Samples = 1;  // resolve target: non-MSAA
         spec.Width  = kPreviewSize;
         spec.Height = kPreviewSize;
         spec.Attachments = { FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::Depth };
         s_PreviewFBO = Framebuffer::Create(spec);
+
+        // MSAA render target
+        spec.Samples = 4;
+        s_PreviewFBO_MSAA = Framebuffer::Create(spec);
 
         if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
             // Camera UBO for Vulkan (matches set=0 binding=0 in shader)
@@ -373,7 +442,7 @@ namespace Ayaya {
             // Pipeline for Vulkan preview rendering
             PipelineSpecification pipeSpec;
             pipeSpec.Shader = s_PreviewShader;
-            pipeSpec.TargetFramebuffer = s_PreviewFBO;
+            pipeSpec.TargetFramebuffer = s_PreviewFBO_MSAA; // use MSAA render pass
             // Vertex layout must match mesh's 4-attribute format (44 bytes/vertex)
             // even though the shader only uses position + normal.
             pipeSpec.Layout = {
@@ -385,7 +454,7 @@ namespace Ayaya {
             pipeSpec.DepthTest = true;
             pipeSpec.DepthWrite = true;
             pipeSpec.Blend = false;
-            pipeSpec.BackfaceCulling = CullMode::Back;
+            pipeSpec.BackfaceCulling = CullMode::None; // 双面渲染，避免模型绕序不一致导致漏面
             pipeSpec.NoTextureDescriptors = true; // preview shader has no textures
             s_PreviewPipeline = Pipeline::Create(pipeSpec);
         }
@@ -399,6 +468,7 @@ namespace Ayaya {
         s_RealtimeWrapper.reset();
         s_PreviewPipeline.reset();
         s_CameraUBO.reset();
+        s_PreviewFBO_MSAA.reset();
         s_PreviewFBO.reset();
         s_PreviewShader.reset();
         s_LastModelHandle = 0;
@@ -428,17 +498,21 @@ namespace Ayaya {
                 Application::Get().GetWindow().GetContext());
             if (!vkFBO || !vkPipeline || !vkCtx) return nullptr;
 
-            // Update camera UBO
+            // Update camera UBO — write to ALL frames to ensure correctness
+            // regardless of which frame's descriptor set gets bound below.
             PreviewCameraUBO camData;
             camData.ViewProjection = s_ProjMatrix * s_ViewMatrix;
             camData.CameraPosition = s_CameraPos;
-            s_CameraUBO->SetData(&camData, sizeof(PreviewCameraUBO));
+            if (auto vkUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(s_CameraUBO))
+                vkUBO->SetDataAllFrames(&camData, sizeof(PreviewCameraUBO));
+            else
+                s_CameraUBO->SetData(&camData, sizeof(PreviewCameraUBO));
 
             // Push constants
             PreviewPushConstants push;
             glm::vec3 center = ComputeModelCenter(model);
             push.ModelMatrix = glm::translate(glm::mat4(1.0f), -center);
-            push.Albedo      = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
+            push.Albedo      = glm::vec4(0.6f, 0.6f, 0.6f, 1.0f);
             push.LightDir    = glm::vec4(glm::normalize(glm::vec3(0.5f, 1.0f, 0.8f)), 0.0f);
             push.LightColor  = glm::vec4(1.0f, 0.98f, 0.95f, 1.0f);
             push.Ambient     = glm::vec4(0.15f, 0.15f, 0.17f, 1.0f);
@@ -461,15 +535,19 @@ namespace Ayaya {
 
             VkCommandBuffer cmd = vkCtx->BeginSingleTimeCommands();
 
+            auto vkFBO_MSAA = std::dynamic_pointer_cast<VulkanFramebuffer>(s_PreviewFBO_MSAA);
+            if (!vkFBO_MSAA) return nullptr;
+
             // === Render pass ===
             {
+
                 VkRenderPassBeginInfo rp{};
                 rp.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-                rp.renderPass = vkFBO->GetVulkanRenderPass();
-                rp.framebuffer = vkFBO->GetVulkanFramebuffer();
+                rp.renderPass = vkFBO_MSAA->GetVulkanRenderPass();
+                rp.framebuffer = vkFBO_MSAA->GetVulkanFramebuffer();
                 rp.renderArea.extent = { kPreviewSize, kPreviewSize };
                 VkClearValue cv[2];
-                cv[0].color = {{ 0.05f, 0.05f, 0.06f, 1.0f }};
+                cv[0].color = {{ 0.11f, 0.11f, 0.12f, 1.0f }};
                 cv[1].depthStencil = { 1.0f, 0 };
                 rp.clearValueCount = 2;
                 rp.pClearValues = cv;
@@ -515,25 +593,72 @@ namespace Ayaya {
                 vkCmdEndRenderPass(cmd);
             }
 
-            // === Image layout transition + copy to staging ===
+            // === MSAA resolve: s_PreviewFBO_MSAA → s_PreviewFBO ===
             {
-                VkImageMemoryBarrier b{};
-                b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-                b.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-                b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                b.image = vkFBO->GetColorAttachmentImage(0);
-                b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                b.subresourceRange.levelCount = 1;
-                b.subresourceRange.layerCount = 1;
-                b.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-                b.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                VkImage srcImage = vkFBO_MSAA->GetColorAttachmentImage(0);
+                VkImage dstImage = vkFBO->GetColorAttachmentImage(0);
+
+                VkImageMemoryBarrier preBarriers[2]{};
+                preBarriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                preBarriers[0].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                preBarriers[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                preBarriers[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                preBarriers[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                preBarriers[0].image = srcImage;
+                preBarriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                preBarriers[0].subresourceRange.levelCount = 1;
+                preBarriers[0].subresourceRange.layerCount = 1;
+
+                preBarriers[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                preBarriers[1].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                preBarriers[1].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                preBarriers[1].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                preBarriers[1].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                preBarriers[1].image = dstImage;
+                preBarriers[1].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                preBarriers[1].subresourceRange.levelCount = 1;
+                preBarriers[1].subresourceRange.layerCount = 1;
+
                 vkCmdPipelineBarrier(cmd,
-                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    0, 0, nullptr, 0, nullptr, 1, &b);
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    0, 0, nullptr, 0, nullptr, 2, preBarriers);
+
+                VkImageResolve resolveRegion{};
+                resolveRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                resolveRegion.srcSubresource.layerCount = 1;
+                resolveRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                resolveRegion.dstSubresource.layerCount = 1;
+                resolveRegion.extent = { kPreviewSize, kPreviewSize, 1 };
+                vkCmdResolveImage(cmd, srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                  dstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                  1, &resolveRegion);
+
+                // Transition resolve target to TRANSFER_SRC for the copy-to-buffer below
+                VkImageMemoryBarrier postBarrier{};
+                postBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                postBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                postBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                postBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                postBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                postBarrier.image = dstImage;
+                postBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                postBarrier.subresourceRange.levelCount = 1;
+                postBarrier.subresourceRange.layerCount = 1;
+
+                // Transition MSAA source back to SHADER_READ_ONLY
+                preBarriers[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                preBarriers[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                preBarriers[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                preBarriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                // preBarriers[1] is replaced by postBarrier below
+                VkImageMemoryBarrier postBarriers[2] = { preBarriers[0], postBarrier };
+
+                vkCmdPipelineBarrier(cmd,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    0, 0, nullptr, 0, nullptr, 2, postBarriers);
             }
+
+            // === Copy resolved image to staging buffer (image already in TRANSFER_SRC from resolve step) ===
             {
                 VkBufferImageCopy region{};
                 region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -571,6 +696,9 @@ namespace Ayaya {
             auto tex = Texture2D::Create(kPreviewSize, kPreviewSize);
             if (tex && mapped)
                 tex->SetData(mapped, dataSize);
+            // FBO was rendered with flipped viewport — data is already correctly oriented
+            if (auto vkTex = std::dynamic_pointer_cast<VulkanTexture2D>(tex))
+                vkTex->SetDataFlipped(false);
             vmaUnmapMemory(allocator, stagingAlloc);
             vmaDestroyBuffer(allocator, stagingBuf, stagingAlloc);
             return tex;

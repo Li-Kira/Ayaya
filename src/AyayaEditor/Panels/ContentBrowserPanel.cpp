@@ -263,8 +263,10 @@ namespace Ayaya {
                     m_CurrentDirectory /= path.filename();
                 }
 
-                if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !directoryEntry.is_directory() && assetHandle != 0) {
-                    EditorLayer::Get().GetSceneHierarchyPanel().GetPropertiesPanel().SetSelectedAsset(assetHandle);
+                if (hovered && ImGui::IsMouseReleased(ImGuiMouseButton_Left) && !directoryEntry.is_directory() && assetHandle != 0) {
+                    if (!ImGui::IsMouseDragPastThreshold(ImGuiMouseButton_Left)) {
+                        EditorLayer::Get().GetSceneHierarchyPanel().GetPropertiesPanel().SetSelectedAsset(assetHandle);
+                    }
                 }
 
                 // 3. 手动绘制纯净图标 (居中，并放置在掩膜层上方)

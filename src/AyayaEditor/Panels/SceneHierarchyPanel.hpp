@@ -38,6 +38,7 @@ namespace Ayaya {
         void SetSelectedEntity(Entity entity) {
             m_SelectedEntities.clear();
             if (entity) m_SelectedEntities.push_back(entity);
+            m_SelectionDirty = true;
         }
 
         void ToggleEntitySelection(Entity entity) {
@@ -47,9 +48,10 @@ namespace Ayaya {
             } else {
                 m_SelectedEntities.push_back(entity);
             }
+            m_SelectionDirty = true;
         }
 
-        void ClearSelection() { m_SelectedEntities.clear(); }
+        void ClearSelection() { m_SelectedEntities.clear(); m_SelectionDirty = true; }
         bool IsEntitySelected(Entity entity) const {
             return std::find(m_SelectedEntities.begin(), m_SelectedEntities.end(), entity) != m_SelectedEntities.end();
         }
@@ -72,6 +74,7 @@ namespace Ayaya {
         std::vector<Entity> m_EntitiesToDuplicate;
 
         std::vector<Entity> m_LastSentEntities; // 防重复同步
+        bool m_SelectionDirty = false; // 强制同步标记：用户点击实体时置 true，解决选中同一实体不刷新的问题
 
         PropertiesPanel m_PropertiesPanel;
     };

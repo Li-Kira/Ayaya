@@ -32,7 +32,9 @@ namespace Ayaya {
         virtual void Unbind() const override {}
 
         // Vulkan 2D 贴图也使用 stbi 翻转，告知 ImGui 需要翻转 UV
-        virtual bool IsDataFlipped() const override { return true; }
+        // FBO readback textures set this to false — data is already correctly oriented
+        virtual bool IsDataFlipped() const override { return m_DataFlipped; }
+        void SetDataFlipped(bool flipped) { m_DataFlipped = flipped; }
 
         // 供渲染器内部获取真实句柄
         VkImage GetImage() const { return m_Image; }
@@ -48,6 +50,7 @@ namespace Ayaya {
         uint32_t m_Height = 0;
         std::string m_Path;
         bool m_IsWrapped = false;
+        bool m_DataFlipped = true; // default true for disk-loaded (stb-flipped) textures
 
         VkImage m_Image = VK_NULL_HANDLE;
         VmaAllocation m_Allocation = VK_NULL_HANDLE;

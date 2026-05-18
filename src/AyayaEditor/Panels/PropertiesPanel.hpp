@@ -31,7 +31,13 @@ namespace Ayaya {
         void SetSelectedEntities(const std::vector<Entity>& selectedEntities);
 
         // 切换为资产检查模式（ContentBrowser 点击文件时调用）
-        void SetSelectedAsset(UUID assetHandle) { m_SelectedAsset = assetHandle; m_SelectedEntities.clear(); }
+        void SetSelectedAsset(UUID assetHandle) {
+            if (m_Locked) return;
+            m_SelectedAsset = assetHandle; m_SelectedEntities.clear();
+        }
+
+        // Inspector padlock
+        bool IsLocked() const { return m_Locked; }
 
         void OnImGuiRender();
 
@@ -56,6 +62,7 @@ namespace Ayaya {
         std::shared_ptr<Scene> m_Context;
         std::vector<Entity> m_SelectedEntities;
         UUID m_SelectedAsset = 0;
+        bool m_Locked = false;
 
         // 【核心防御】：纹理垃圾桶，用于延迟析构被替换的贴图，防止 Vulkan 崩溃
         std::vector<std::shared_ptr<Texture2D>> m_TextureGarbageBin;

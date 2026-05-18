@@ -14,9 +14,9 @@ namespace Ayaya {
             bool valueChanged = false;
             bool activated = false;
             bool deactivated = false;
-            
+
             ImGuiIO& io = ImGui::GetIO();
-            auto boldFont = io.Fonts->Fonts.Size > 1 ? io.Fonts->Fonts[1] : io.Fonts->Fonts[0]; 
+            auto boldFont = io.Fonts->Fonts.Size > 1 ? io.Fonts->Fonts[1] : io.Fonts->Fonts[0];
 
             ImGui::PushID(label.c_str());
             ImGui::Columns(2);
@@ -24,11 +24,14 @@ namespace Ayaya {
             ImGui::Text("%s", label.c_str());
             ImGui::NextColumn();
 
-            ImGui::PushMultiItemsWidths(3, ImGui::CalcItemWidth());
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ 0, 0 });
-
+            float colW = ImGui::GetContentRegionAvail().x;
             float lineHeight = ImGui::GetFrameHeight();
             ImVec2 buttonSize = { lineHeight + 0.5f, lineHeight };
+            // Drag inputs get the column width minus the 3 X/Y/Z buttons
+            float dragTotalW = colW - 3.0f * buttonSize.x;
+            if (dragTotalW < 90.0f) dragTotalW = 90.0f; // minimum for 3 usable drags
+            ImGui::PushMultiItemsWidths(3, dragTotalW);
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ 0, 0 });
 
             // ==========================================
             // X 轴
