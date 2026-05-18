@@ -2182,9 +2182,15 @@ namespace Ayaya {
                 ImVec2 uv0 = isVulkan ? ImVec2(0, 0) : ImVec2(0, 1);
                 ImVec2 uv1 = isVulkan ? ImVec2(1, 1) : ImVec2(1, 0);
 
-                ImGui::ImageButton("##ModelPreview", (ImTextureID)previewTex->GetImGuiTextureID(),
+                ImGui::Image((ImTextureID)previewTex->GetImGuiTextureID(),
                     previewSize, uv0, uv1);
 
+                // InvisibleButton overlay for robust drag-to-rotate interaction.
+                // ImageButton's IsItemActive() can lose tracking when the cursor
+                // leaves the item rect, so we separate display from interaction.
+                ImVec2 imgPos = ImGui::GetItemRectMin();
+                ImGui::SetCursorScreenPos(imgPos);
+                ImGui::InvisibleButton("##ModelPreviewDrag", previewSize, ImGuiButtonFlags_MouseButtonLeft);
                 if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
                     ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left);
                     s_PreviewRotation.x += delta.y * 0.01f;

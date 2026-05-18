@@ -22,13 +22,17 @@ namespace Ayaya {
         // ==========================================
         // 【核心修改】：现在需要传入 frameIndex 来获取对应帧的相机描述符集 (Set 0)
         // ==========================================
-        VkDescriptorSet GetVulkanDescriptorSet(uint32_t setIndex, uint32_t frameIndex = 0) const { 
+        VkDescriptorSet GetVulkanDescriptorSet(uint32_t setIndex, uint32_t frameIndex = 0) const {
             if (setIndex == 0) {
                 // 增加安全取模，防止 frameIndex 超过 m_GlobalDescriptorSets 的大小
                 size_t size = m_GlobalDescriptorSets.size();
                 return size > 0 ? m_GlobalDescriptorSets[frameIndex % size] : VK_NULL_HANDLE;
             }
-            return VK_NULL_HANDLE; 
+            return VK_NULL_HANDLE;
+        }
+
+        VkDescriptorSetLayout GetDescriptorSetLayout(uint32_t setIndex) const {
+            return setIndex < m_DescriptorSetLayouts.size() ? m_DescriptorSetLayouts[setIndex] : VK_NULL_HANDLE;
         }
 
         // 注册 UBO，需指定是哪一帧的 Buffer

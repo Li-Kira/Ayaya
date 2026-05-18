@@ -40,6 +40,17 @@ namespace Ayaya {
     glm::mat4 AssetPreviewer::s_ProjMatrix = glm::mat4(1.0f);
     glm::vec3 AssetPreviewer::s_CameraPos = glm::vec3(0.0f, 0.0f, 5.0f);
 
+    // ---- Dedicated thumbnail Vulkan resources (isolated from frame loop) ----
+    struct ThumbnailVkResources {
+        VkDescriptorPool pool = VK_NULL_HANDLE;
+        VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+        VkBuffer uboBuffer = VK_NULL_HANDLE;
+        VmaAllocation uboAllocation = VK_NULL_HANDLE;
+        void* mappedData = nullptr;
+        bool initialized = false;
+    };
+    static ThumbnailVkResources s_ThumbnailVk;
+
     // ---- Push constant layout (must match shader, max 128 bytes) ----
     struct PreviewPushConstants {
         glm::mat4 ModelMatrix;  // offset 0,  size 64
@@ -457,6 +468,68 @@ namespace Ayaya {
             pipeSpec.BackfaceCulling = CullMode::None; // 双面渲染，避免模型绕序不一致导致漏面
             pipeSpec.NoTextureDescriptors = true; // preview shader has no textures
             s_PreviewPipeline = Pipeline::Create(pipeSpec);
+
+            // Create dedicated thumbnail UBO + descriptor set (isolated from frame loop)
+            {
+                auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+                    Application::Get().GetWindow().GetContext());
+                VmaAllocator allocator = vkCtx->GetAllocator();
+                VkDevice device = vkCtx->GetDevice();
+
+                VkBufferCreateInfo bufInfo{};
+                bufInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+                bufInfo.size = sizeof(PreviewCameraUBO);
+                bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+
+                VmaAllocationCreateInfo vmaInfo{};
+                vmaInfo.usage = VMA_MEMORY_USAGE_AUTO;
+                vmaInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT
+                              | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+                vmaInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+                VmaAllocationInfo allocResult{};
+                vmaCreateBuffer(allocator, &bufInfo, &vmaInfo,
+                                &s_ThumbnailVk.uboBuffer, &s_ThumbnailVk.uboAllocation, &allocResult);
+                s_ThumbnailVk.mappedData = allocResult.pMappedData;
+
+                VkDescriptorPoolSize poolSize{};
+                poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                poolSize.descriptorCount = 1;
+
+                VkDescriptorPoolCreateInfo poolInfo{};
+                poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+                poolInfo.poolSizeCount = 1;
+                poolInfo.pPoolSizes = &poolSize;
+                poolInfo.maxSets = 1;
+                vkCreateDescriptorPool(device, &poolInfo, nullptr, &s_ThumbnailVk.pool);
+
+                auto vkPipeline = std::dynamic_pointer_cast<VulkanPipeline>(s_PreviewPipeline);
+                VkDescriptorSetLayout layout = vkPipeline->GetDescriptorSetLayout(0);
+
+                VkDescriptorSetAllocateInfo setInfo{};
+                setInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+                setInfo.descriptorPool = s_ThumbnailVk.pool;
+                setInfo.descriptorSetCount = 1;
+                setInfo.pSetLayouts = &layout;
+                vkAllocateDescriptorSets(device, &setInfo, &s_ThumbnailVk.descriptorSet);
+
+                VkDescriptorBufferInfo bufferInfo{};
+                bufferInfo.buffer = s_ThumbnailVk.uboBuffer;
+                bufferInfo.offset = 0;
+                bufferInfo.range = sizeof(PreviewCameraUBO);
+
+                VkWriteDescriptorSet write{};
+                write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                write.dstSet = s_ThumbnailVk.descriptorSet;
+                write.dstBinding = 0;
+                write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                write.descriptorCount = 1;
+                write.pBufferInfo = &bufferInfo;
+                vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+
+                s_ThumbnailVk.initialized = true;
+                AYAYA_CORE_INFO("AssetPreviewer: Thumbnail Vulkan resources created");
+            }
         }
 
         AYAYA_CORE_INFO("AssetPreviewer: Ready ({0}), {1}x{1}",
@@ -465,6 +538,19 @@ namespace Ayaya {
     }
 
     void AssetPreviewer::Shutdown() {
+        // Destroy dedicated thumbnail Vulkan resources
+        if (s_ThumbnailVk.initialized) {
+            auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+                Application::Get().GetWindow().GetContext());
+            if (vkCtx) {
+                VkDevice device = vkCtx->GetDevice();
+                VmaAllocator allocator = vkCtx->GetAllocator();
+                if (s_ThumbnailVk.pool) vkDestroyDescriptorPool(device, s_ThumbnailVk.pool, nullptr);
+                if (s_ThumbnailVk.uboBuffer) vmaDestroyBuffer(allocator, s_ThumbnailVk.uboBuffer, s_ThumbnailVk.uboAllocation);
+            }
+            s_ThumbnailVk = {};
+        }
+
         s_RealtimeWrapper.reset();
         s_PreviewPipeline.reset();
         s_CameraUBO.reset();
@@ -498,15 +584,11 @@ namespace Ayaya {
                 Application::Get().GetWindow().GetContext());
             if (!vkFBO || !vkPipeline || !vkCtx) return nullptr;
 
-            // Update camera UBO — write to ALL frames to ensure correctness
-            // regardless of which frame's descriptor set gets bound below.
+            // Write camera data to dedicated thumbnail UBO (isolated from frame loop)
             PreviewCameraUBO camData;
             camData.ViewProjection = s_ProjMatrix * s_ViewMatrix;
             camData.CameraPosition = s_CameraPos;
-            if (auto vkUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(s_CameraUBO))
-                vkUBO->SetDataAllFrames(&camData, sizeof(PreviewCameraUBO));
-            else
-                s_CameraUBO->SetData(&camData, sizeof(PreviewCameraUBO));
+            memcpy(s_ThumbnailVk.mappedData, &camData, sizeof(PreviewCameraUBO));
 
             // Push constants
             PreviewPushConstants push;
@@ -565,11 +647,10 @@ namespace Ayaya {
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                   vkPipeline->GetVulkanPipeline());
 
-                uint32_t frameIdx = vkCtx->GetCurrentFrameIndex() % 3;
-                VkDescriptorSet set0 = vkPipeline->GetVulkanDescriptorSet(0, frameIdx);
-                if (set0 != VK_NULL_HANDLE)
-                    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        vkPipeline->GetVulkanPipelineLayout(), 0, 1, &set0, 0, nullptr);
+                // Bind dedicated thumbnail descriptor set (isolated from frame loop)
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    vkPipeline->GetVulkanPipelineLayout(), 0, 1,
+                    &s_ThumbnailVk.descriptorSet, 0, nullptr);
 
                 for (auto& mesh : model->GetMeshes()) {
                     if (mesh->GetIndexCount() == 0) continue;
