@@ -114,7 +114,6 @@ Hi, welcome to Ayaya engine♪
     }
 
     Application::~Application() {
-        // SceneRenderer 先销毁然后才是 Renderer 否则会抛出异常
         SceneRenderer::Shutdown();
         Renderer::Shutdown();
         AssetManager::Shutdown();

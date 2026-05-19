@@ -19,6 +19,7 @@
 
 // 管线 Passes
 #include "Renderer/Passes/ShadowPass.hpp"
+#include "Renderer/Passes/UIPass.hpp"
 #include "Renderer/Passes/GBufferPass.hpp"
 #include "Renderer/Passes/LightingPass.hpp"
 #include "Renderer/Passes/PostProcessPass.hpp"
@@ -176,6 +177,7 @@ namespace Ayaya {
             m_Pipeline.AddPass(std::make_shared<BloomPass>());
             m_Pipeline.AddPass(std::make_shared<PostProcessPass>());
             m_Pipeline.AddPass(std::make_shared<FXAAPass>());
+            m_Pipeline.AddPass(std::make_shared<UIPass>());
             m_Pipeline.Init();
 
             // 拦截裸露的 OpenGL 调用！
@@ -191,11 +193,13 @@ namespace Ayaya {
             m_Pipeline.AddPass(std::make_shared<VulkanForwardTestPass>());
             m_Pipeline.AddPass(std::make_shared<VulkanPostProcessPass>());
             // m_Pipeline.AddPass(std::make_shared<VulkanFXAAPass>());
+            m_Pipeline.AddPass(std::make_shared<UIPass>());
             m_Pipeline.Init();
         }
     }
 
     void SceneRenderer::Shutdown() {
+        UIPass::Shutdown();
         // s_CameraUniformBuffer.reset();
         // s_LightUniformBuffer.reset();
         s_SkyboxMesh.reset();
@@ -338,6 +342,7 @@ namespace Ayaya {
         m_RenderContext.Set("ClearColor", clearColor);
         m_RenderContext.Set("ShowSkybox", showSkybox);
         m_RenderContext.Set("ShowGrid", showGrid);
+
         m_RenderContext.Set("HoveredEntity", hoveredEntity);
         m_RenderContext.Set("EnvironmentIntensity", m_Data->EnvironmentIntensity);
         m_RenderContext.Set("EnvironmentAmbientColor", m_Data->EnvironmentAmbientColor);

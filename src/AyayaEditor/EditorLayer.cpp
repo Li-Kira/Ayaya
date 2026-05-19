@@ -59,9 +59,10 @@ namespace Ayaya {
     }
 
     void EditorLayer::OnDetach() {
+        // AssetPreviewer 必须在 VulkanContext 销毁前释放其 VMA 资源。
+        // EditorLayer 属于 m_LayerStack，在 Application 成员中先于 m_Window 析构，
+        // 因此这里的 Shutdown 调用时序是正确的。
         AssetPreviewer::Shutdown();
-        // 在 Layer 被剥离（程序退出）时，立刻释放渲染器实例，
-        // 确保 VMA 的离线画布 (Framebuffer) 赶在 Vulkan 销毁前被安全释放！
         m_SceneRenderer.reset();
         m_GameRenderer.reset();
     }

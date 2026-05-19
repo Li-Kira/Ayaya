@@ -232,4 +232,75 @@ namespace Ayaya {
         LuaScriptComponent(UUID scriptHandle) : ScriptHandle(scriptHandle) {}
     };
 
+    // ==========================================
+    // UI 组件 (ECS-based UI System)
+    // ==========================================
+
+    // 替代 3D Transform，专用于 2D 屏幕空间的变换与布局
+    struct RectTransformComponent {
+        glm::vec2 AnchorMin{ 0.5f, 0.5f };
+        glm::vec2 AnchorMax{ 0.5f, 0.5f };
+        glm::vec2 Pivot{ 0.5f, 0.5f };
+        glm::vec2 Position{ 0.0f, 0.0f };
+        glm::vec2 Size{ 100.0f, 100.0f };
+        float Rotation = 0.0f;
+        glm::vec2 Scale{ 1.0f, 1.0f };
+
+        // 运行时由 UILayoutSystem 计算的缓存值
+        glm::vec2 CalculatedSize{ 0.0f, 0.0f };    // Anchor 拉伸后实际像素尺寸
+        glm::mat4 HierarchyTransform{ 1.0f };       // 传给子节点的累积矩阵
+        glm::mat4 RenderTransform{ 1.0f };          // 提交 GPU 渲染 Quad 的矩阵
+        glm::vec2 ScreenMin{ 0.0f, 0.0f };         // 射线检测包围盒
+        glm::vec2 ScreenMax{ 0.0f, 0.0f };
+        bool LayoutDirty = true;
+
+        RectTransformComponent() = default;
+        RectTransformComponent(const RectTransformComponent&) = default;
+    };
+
+    // 画布属性 — 挂载在 UI 树的根节点
+    struct CanvasComponent {
+        enum class RenderMode { ScreenSpaceOverlay, ScreenSpaceCamera, WorldSpace };
+        RenderMode Mode = RenderMode::ScreenSpaceOverlay;
+        int SortOrder = 0;
+
+        CanvasComponent() = default;
+        CanvasComponent(const CanvasComponent&) = default;
+    };
+
+    // UI 图片渲染
+    struct UIImageComponent {
+        glm::vec4 Color{ 1.0f, 1.0f, 1.0f, 1.0f };
+        UUID TextureHandle = 0;
+
+        UIImageComponent() = default;
+        UIImageComponent(const UIImageComponent&) = default;
+    };
+
+    // UI 文本渲染
+    struct UITextComponent {
+        std::string Text;
+        UUID FontHandle = 0;
+        glm::vec4 Color{ 1.0f, 1.0f, 1.0f, 1.0f };
+        float FontSize = 16.0f;
+
+        UITextComponent() = default;
+        UITextComponent(const UITextComponent&) = default;
+    };
+
+    // UI 按钮交互
+    struct UIButtonComponent {
+        enum class State { Normal, Hover, Pressed, Disabled };
+        State CurrentState = State::Normal;
+
+        glm::vec4 NormalColor{ 1.0f, 1.0f, 1.0f, 1.0f };
+        glm::vec4 HoverColor{ 0.8f, 0.8f, 0.8f, 1.0f };
+        glm::vec4 PressedColor{ 0.6f, 0.6f, 0.6f, 1.0f };
+
+        std::string OnClickCallback;
+
+        UIButtonComponent() = default;
+        UIButtonComponent(const UIButtonComponent&) = default;
+    };
+
 }

@@ -124,6 +124,53 @@ namespace Ayaya {
                     SetSelectedEntity(ppvEntity);
                 }
 
+                if (ImGui::BeginMenu("UI")) {
+                    // Helper: find or create the default Canvas (fills screen)
+                    auto getOrCreateCanvas = [&]() -> Entity {
+                        auto view = m_Context->Reg().view<CanvasComponent>();
+                        if (view.begin() != view.end())
+                            return { *view.begin(), m_Context.get() };
+                        Entity canvas = m_Context->CreateEntity("Canvas");
+                        auto& rt = canvas.AddComponent<RectTransformComponent>();
+                        rt.AnchorMin = { 0.0f, 0.0f };
+                        rt.AnchorMax = { 1.0f, 1.0f };
+                        rt.Size = { 0.0f, 0.0f };
+                        canvas.AddComponent<CanvasComponent>();
+                        return canvas;
+                    };
+
+                    if (ImGui::MenuItem("Canvas")) {
+                        Entity entity = getOrCreateCanvas();
+                        SetSelectedEntity(entity);
+                    }
+                    if (ImGui::MenuItem("UI Image")) {
+                        Entity entity = m_Context->CreateEntity("Image");
+                        auto& rt = entity.AddComponent<RectTransformComponent>();
+                        rt.Size = { 128.0f, 128.0f };
+                        entity.AddComponent<UIImageComponent>();
+                        entity.SetParent(getOrCreateCanvas());
+                        SetSelectedEntity(entity);
+                    }
+                    if (ImGui::MenuItem("UI Text")) {
+                        Entity entity = m_Context->CreateEntity("Text");
+                        auto& rt = entity.AddComponent<RectTransformComponent>();
+                        rt.Size = { 256.0f, 32.0f };
+                        entity.AddComponent<UITextComponent>();
+                        entity.SetParent(getOrCreateCanvas());
+                        SetSelectedEntity(entity);
+                    }
+                    if (ImGui::MenuItem("UI Button")) {
+                        Entity entity = m_Context->CreateEntity("Button");
+                        auto& rt = entity.AddComponent<RectTransformComponent>();
+                        rt.Size = { 160.0f, 48.0f };
+                        entity.AddComponent<UIImageComponent>();
+                        entity.AddComponent<UIButtonComponent>();
+                        entity.SetParent(getOrCreateCanvas());
+                        SetSelectedEntity(entity);
+                    }
+                    ImGui::EndMenu();
+                }
+
                 ImGui::EndPopup();
             }
 

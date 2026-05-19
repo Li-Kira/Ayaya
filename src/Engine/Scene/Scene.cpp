@@ -3,6 +3,7 @@
 #include "Entity.hpp"
 #include "Components.hpp"
 #include "Renderer/MaterialSerializer.hpp"
+#include "UILayoutSystem.hpp"
 #include "Asset/AssetManager.hpp"
 
 #include <box2d/b2_world.h>
@@ -317,7 +318,12 @@ namespace Ayaya {
     void Scene::OnUpdateRuntime(Timestep ts) {
 
         // ==========================================
-        // 1. 执行 Lua 逻辑
+        // 1. UI 布局计算
+        // ==========================================
+        UILayoutSystem::Update(*this);
+
+        // ==========================================
+        // 2. 执行 Lua 逻辑
         // ==========================================
         m_Registry.view<LuaScriptComponent>().each([=](auto entityID, auto& lsc) {
             ScriptEngine::OnUpdateEntity({ entityID, this }, ts);

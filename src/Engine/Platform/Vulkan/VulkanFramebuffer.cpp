@@ -67,6 +67,8 @@ namespace Ayaya {
 
         if (m_Framebuffer) { vkDestroyFramebuffer(device, m_Framebuffer, nullptr); m_Framebuffer = VK_NULL_HANDLE; }
         if (m_RenderPass) { vkDestroyRenderPass(device, m_RenderPass, nullptr); m_RenderPass = VK_NULL_HANDLE; }
+        if (m_LoadFramebuffer) { vkDestroyFramebuffer(device, m_LoadFramebuffer, nullptr); m_LoadFramebuffer = VK_NULL_HANDLE; }
+        if (m_LoadRenderPass) { vkDestroyRenderPass(device, m_LoadRenderPass, nullptr); m_LoadRenderPass = VK_NULL_HANDLE; }
         if (m_Sampler) { vkDestroySampler(device, m_Sampler, nullptr); m_Sampler = VK_NULL_HANDLE; }
     }
 
@@ -132,7 +134,11 @@ namespace Ayaya {
             VkAttachmentDescription desc{};
             desc.format = vkFormat;
             desc.samples = static_cast<VkSampleCountFlagBits>(m_Specification.Samples);
-            desc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            switch (m_ColorAttachmentSpecs[i].LoadOp) {
+                case AttachmentLoadOp::Load:     desc.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;     break;
+                case AttachmentLoadOp::DontCare: desc.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE; break;
+                default:                         desc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;    break;
+            }
             desc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
             desc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
             desc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -327,7 +333,82 @@ namespace Ayaya {
     }
 
     void* VulkanFramebuffer::GetDepthAttachmentRendererID() const {
-        return nullptr; // 如果你想让深度图也能在 UI 面板显示，这里同样需要为其注册 ImGui_ImplVulkan_AddTexture
+        return nullptr;
+    }
+
+    VkRenderPass VulkanFramebuffer::EnsureLoadRenderPass() {
+        if (m_LoadRenderPass) return m_LoadRenderPass;
+        if (!m_RenderPass || m_ColorImages.empty()) return VK_NULL_HANDLE;
+
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        VkDevice device = context->GetDevice();
+
+        VkAttachmentDescription desc{};
+        desc.format        = AyayaFormatToVulkanFormat(m_ColorAttachmentSpecs[0].TextureFormat);
+        desc.samples       = static_cast<VkSampleCountFlagBits>(m_Specification.Samples);
+        desc.loadOp        = VK_ATTACHMENT_LOAD_OP_LOAD;
+        desc.storeOp       = VK_ATTACHMENT_STORE_OP_STORE;
+        desc.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        desc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        desc.initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        desc.finalLayout   = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkAttachmentReference ref{};
+        ref.attachment = 0;
+        ref.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        VkSubpassDescription subpass{};
+        subpass.pipelineBindPoint    = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments    = &ref;
+
+        std::array<VkSubpassDependency, 2> deps{};
+        deps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+        deps[0].dstSubpass = 0;
+        deps[0].srcStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        deps[0].dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        deps[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        deps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        deps[0].dependencyFlags = 0;
+
+        deps[1].srcSubpass = 0;
+        deps[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+        deps[1].srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        deps[1].dstStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        deps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        deps[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        deps[1].dependencyFlags = 0;
+
+        VkRenderPassCreateInfo rpInfo{};
+        rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        rpInfo.attachmentCount = 1;
+        rpInfo.pAttachments    = &desc;
+        rpInfo.subpassCount    = 1;
+        rpInfo.pSubpasses      = &subpass;
+        rpInfo.dependencyCount = static_cast<uint32_t>(deps.size());
+        rpInfo.pDependencies   = deps.data();
+        vkCreateRenderPass(device, &rpInfo, nullptr, &m_LoadRenderPass);
+        return m_LoadRenderPass;
+    }
+
+    VkFramebuffer VulkanFramebuffer::EnsureLoadFramebuffer() {
+        if (m_LoadFramebuffer) return m_LoadFramebuffer;
+        VkRenderPass rp = EnsureLoadRenderPass();
+        if (!rp || m_ColorImageViews.empty()) return VK_NULL_HANDLE;
+
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        VkDevice device = context->GetDevice();
+
+        VkFramebufferCreateInfo fbInfo{};
+        fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        fbInfo.renderPass = rp;
+        fbInfo.attachmentCount = 1;
+        fbInfo.pAttachments    = &m_ColorImageViews[0];
+        fbInfo.width  = m_Specification.Width;
+        fbInfo.height = m_Specification.Height;
+        fbInfo.layers = 1;
+        vkCreateFramebuffer(device, &fbInfo, nullptr, &m_LoadFramebuffer);
+        return m_LoadFramebuffer;
     }
 
 }

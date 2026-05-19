@@ -85,7 +85,11 @@ namespace Ayaya {
                 if (m_SelectedEntities.size() == 1) {
                     auto& tag = m_SelectedEntities[0].GetComponent<TagComponent>();
                     const char* icon = ICON_FA_CUBE;
-                    if (m_SelectedEntities[0].HasComponent<CameraComponent>())       icon = ICON_FA_VIDEO;
+                    if (m_SelectedEntities[0].HasComponent<CanvasComponent>())       icon = ICON_FA_DESKTOP;
+                    else if (m_SelectedEntities[0].HasComponent<UIImageComponent>()) icon = ICON_FA_IMAGE;
+                    else if (m_SelectedEntities[0].HasComponent<UITextComponent>())  icon = ICON_FA_FONT;
+                    else if (m_SelectedEntities[0].HasComponent<UIButtonComponent>())icon = ICON_FA_HAND_POINTER;
+                    else if (m_SelectedEntities[0].HasComponent<CameraComponent>())       icon = ICON_FA_VIDEO;
                     else if (m_SelectedEntities[0].HasComponent<DirectionalLightComponent>()) icon = ICON_FA_SUN;
                     else if (m_SelectedEntities[0].HasComponent<PointLightComponent>())      icon = ICON_FA_LIGHTBULB;
                     ImGui::TextColored(ImVec4(0.7f, 0.8f, 1.0f, 1.0f), "%s %s", icon, tag.Tag.c_str());
@@ -132,6 +136,11 @@ namespace Ayaya {
             DrawLuaScriptComponent(referenceEntity);
             DrawRigidbody2DComponent(referenceEntity);
             DrawBoxCollider2DComponent(referenceEntity);
+            DrawCanvasComponent(referenceEntity);
+            DrawRectTransformComponent(referenceEntity, uiScale);
+            DrawUIImageComponent(referenceEntity, uiScale);
+            DrawUITextComponent(referenceEntity);
+            DrawUIButtonComponent(referenceEntity);
 
             DrawAddComponentButton(referenceEntity, uiScale);
         }
@@ -1842,6 +1851,176 @@ namespace Ayaya {
         }
     }
 
+    void PropertiesPanel::DrawCanvasComponent(Entity referenceEntity) {
+        bool allHave = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<CanvasComponent>()) { allHave = false; break; }
+        if (!allHave) return;
+
+        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.75f, 0.75f, 1.0f));
+        bool opened = ImGui::TreeNodeEx((void*)typeid(CanvasComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_DESKTOP " Canvas");
+        ImGui::PopStyleColor();
+        ImGui::PopFont();
+
+        bool removeComponent = false;
+        if (ImGui::BeginPopupContextItem()) {
+            if (ImGui::MenuItem("Remove Component")) removeComponent = true;
+            ImGui::EndPopup();
+        }
+
+        if (opened) {
+            auto& ref = referenceEntity.GetComponent<CanvasComponent>();
+            const char* modes[] = { "Screen Overlay", "Screen Camera", "World Space" };
+            int cur = (int)ref.Mode;
+            if (ImGui::Combo("Render Mode", &cur, modes, 3))
+                ref.Mode = (CanvasComponent::RenderMode)cur;
+            ImGui::DragInt("Sort Order", &ref.SortOrder, 0.1f, -100, 100);
+            ImGui::TreePop();
+        }
+        if (removeComponent) {
+            for (auto e : m_SelectedEntities) e.RemoveComponent<CanvasComponent>();
+        }
+    }
+
+    void PropertiesPanel::DrawRectTransformComponent(Entity referenceEntity, float uiScale) {
+        bool allHave = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<RectTransformComponent>()) { allHave = false; break; }
+        if (!allHave) return;
+
+        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.7f, 0.9f, 1.0f));
+        bool opened = ImGui::TreeNodeEx((void*)typeid(RectTransformComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_OBJECT_GROUP " Rect Transform");
+        ImGui::PopStyleColor();
+        ImGui::PopFont();
+
+        bool removeComponent = false;
+        if (ImGui::BeginPopupContextItem()) {
+            if (ImGui::MenuItem("Remove Component")) removeComponent = true;
+            ImGui::EndPopup();
+        }
+
+        if (opened) {
+            auto& ref = referenceEntity.GetComponent<RectTransformComponent>();
+            // 窄面板下 DragFloat2 太宽，改用自带标签的控件，避免列布局遮挡
+            float fullW = ImGui::GetContentRegionAvail().x;
+
+            ImGui::SetNextItemWidth(fullW);
+            ImGui::DragFloat2("Anchor Min", glm::value_ptr(ref.AnchorMin), 0.01f, 0.0f, 1.0f);
+            ImGui::SetNextItemWidth(fullW);
+            ImGui::DragFloat2("Anchor Max", glm::value_ptr(ref.AnchorMax), 0.01f, 0.0f, 1.0f);
+            ImGui::SetNextItemWidth(fullW);
+            ImGui::DragFloat2("Pivot", glm::value_ptr(ref.Pivot), 0.01f, 0.0f, 1.0f);
+            ImGui::SetNextItemWidth(fullW);
+            ImGui::DragFloat2("Position", glm::value_ptr(ref.Position), 0.5f);
+            ImGui::SetNextItemWidth(fullW);
+            ImGui::DragFloat2("Size##RT", glm::value_ptr(ref.Size), 0.5f, 0.0f, 10000.0f);
+            ImGui::SetNextItemWidth(fullW);
+            ImGui::DragFloat("Rotation", &ref.Rotation, 0.5f);
+            ImGui::SetNextItemWidth(fullW);
+            ImGui::DragFloat2("Scale##RT", glm::value_ptr(ref.Scale), 0.01f, 0.01f, 100.0f);
+            ImGui::TreePop();
+        }
+        if (removeComponent) {
+            for (auto e : m_SelectedEntities) e.RemoveComponent<RectTransformComponent>();
+        }
+    }
+
+    void PropertiesPanel::DrawUIImageComponent(Entity referenceEntity, float uiScale) {
+        bool allHave = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<UIImageComponent>()) { allHave = false; break; }
+        if (!allHave) return;
+
+        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.3f, 0.8f, 1.0f));
+        bool opened = ImGui::TreeNodeEx((void*)typeid(UIImageComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_IMAGE " UI Image");
+        ImGui::PopStyleColor();
+        ImGui::PopFont();
+
+        bool removeComponent = false;
+        if (ImGui::BeginPopupContextItem()) {
+            if (ImGui::MenuItem("Remove Component")) removeComponent = true;
+            ImGui::EndPopup();
+        }
+
+        if (opened) {
+            auto& ref = referenceEntity.GetComponent<UIImageComponent>();
+            ImGui::ColorEdit4("Color", glm::value_ptr(ref.Color));
+            ImGui::Text("Texture Handle: %llu", (uint64_t)ref.TextureHandle);
+            ImGui::TreePop();
+        }
+        if (removeComponent) {
+            for (auto e : m_SelectedEntities) e.RemoveComponent<UIImageComponent>();
+        }
+    }
+
+    void PropertiesPanel::DrawUITextComponent(Entity referenceEntity) {
+        bool allHave = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<UITextComponent>()) { allHave = false; break; }
+        if (!allHave) return;
+
+        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.6f, 0.2f, 1.0f));
+        bool opened = ImGui::TreeNodeEx((void*)typeid(UITextComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_FONT " UI Text");
+        ImGui::PopStyleColor();
+        ImGui::PopFont();
+
+        bool removeComponent = false;
+        if (ImGui::BeginPopupContextItem()) {
+            if (ImGui::MenuItem("Remove Component")) removeComponent = true;
+            ImGui::EndPopup();
+        }
+
+        if (opened) {
+            auto& ref = referenceEntity.GetComponent<UITextComponent>();
+            char buf[256];
+            strncpy(buf, ref.Text.c_str(), sizeof(buf)-1); buf[sizeof(buf)-1] = 0;
+            if (ImGui::InputText("Text", buf, sizeof(buf)))
+                ref.Text = buf;
+            ImGui::ColorEdit4("Color", glm::value_ptr(ref.Color));
+            ImGui::DragFloat("Font Size", &ref.FontSize, 0.5f, 6.0f, 256.0f);
+            ImGui::TreePop();
+        }
+        if (removeComponent) {
+            for (auto e : m_SelectedEntities) e.RemoveComponent<UITextComponent>();
+        }
+    }
+
+    void PropertiesPanel::DrawUIButtonComponent(Entity referenceEntity) {
+        bool allHave = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<UIButtonComponent>()) { allHave = false; break; }
+        if (!allHave) return;
+
+        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
+        bool opened = ImGui::TreeNodeEx((void*)typeid(UIButtonComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_HAND_POINTER " UI Button");
+        ImGui::PopStyleColor();
+        ImGui::PopFont();
+
+        bool removeComponent = false;
+        if (ImGui::BeginPopupContextItem()) {
+            if (ImGui::MenuItem("Remove Component")) removeComponent = true;
+            ImGui::EndPopup();
+        }
+
+        if (opened) {
+            auto& ref = referenceEntity.GetComponent<UIButtonComponent>();
+            const char* states[] = { "Normal", "Hover", "Pressed", "Disabled" };
+            int cur = (int)ref.CurrentState;
+            ImGui::Combo("State", &cur, states, 4);
+            ImGui::ColorEdit4("Normal Color", glm::value_ptr(ref.NormalColor));
+            ImGui::ColorEdit4("Hover Color", glm::value_ptr(ref.HoverColor));
+            ImGui::ColorEdit4("Pressed Color", glm::value_ptr(ref.PressedColor));
+            char buf[128];
+            strncpy(buf, ref.OnClickCallback.c_str(), sizeof(buf)-1); buf[sizeof(buf)-1] = 0;
+            if (ImGui::InputText("OnClick", buf, sizeof(buf)))
+                ref.OnClickCallback = buf;
+            ImGui::TreePop();
+        }
+        if (removeComponent) {
+            for (auto e : m_SelectedEntities) e.RemoveComponent<UIButtonComponent>();
+        }
+    }
+
     void PropertiesPanel::DrawAddComponentButton(Entity referenceEntity, float uiScale) {
         // ==========================================
         // “添加组件” 按钮 (基于第一个实体判定，给所有实体添加)
@@ -1981,7 +2160,42 @@ namespace Ayaya {
                     ImGui::CloseCurrentPopup();
                 }
             }
-            
+
+            ImGui::Separator();
+            ImGui::TextDisabled("UI Components");
+            if (!referenceEntity.HasComponent<CanvasComponent>()) {
+                if (ImGui::MenuItem("Canvas")) {
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<CanvasComponent>()) e.AddComponent<CanvasComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!referenceEntity.HasComponent<RectTransformComponent>()) {
+                if (ImGui::MenuItem("Rect Transform")) {
+                    for (auto e : m_SelectedEntities) {
+                        if (!e.HasComponent<RectTransformComponent>()) e.AddComponent<RectTransformComponent>();
+                    }
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!referenceEntity.HasComponent<UIImageComponent>()) {
+                if (ImGui::MenuItem("UI Image")) {
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<UIImageComponent>()) e.AddComponent<UIImageComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!referenceEntity.HasComponent<UITextComponent>()) {
+                if (ImGui::MenuItem("UI Text")) {
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<UITextComponent>()) e.AddComponent<UITextComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!referenceEntity.HasComponent<UIButtonComponent>()) {
+                if (ImGui::MenuItem("UI Button")) {
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<UIButtonComponent>()) e.AddComponent<UIButtonComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
             ImGui::EndPopup();
         }
     }

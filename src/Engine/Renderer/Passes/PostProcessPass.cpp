@@ -128,7 +128,7 @@ namespace Ayaya {
         if (context.RecordAndCheckDrawCall("Post Process Pass", "Tone Mapping & Combine", "PostProcess Shader", 1)) {
             cmd.DrawArrays(m_EmptyVAO, 3);
         }
-        
+
         cmd.EndRenderPass();
 
         // ==========================================

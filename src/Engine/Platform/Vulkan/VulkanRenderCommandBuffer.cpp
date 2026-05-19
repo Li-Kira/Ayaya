@@ -33,16 +33,14 @@ namespace Ayaya {
         renderPassInfo.renderArea.extent = { vulkanFBO->GetSpecification().Width, vulkanFBO->GetSpecification().Height };
 
         std::vector<VkClearValue> clearValues;
-        if (clear) {
-            for (auto format : vulkanFBO->GetSpecification().Attachments.Attachments) {
-                VkClearValue clearVal{};
-                if (format.TextureFormat == FramebufferTextureFormat::DEPTH24STENCIL8 || format.TextureFormat == FramebufferTextureFormat::Depth) {
-                    clearVal.depthStencil = {1.0f, 0};
-                } else {
-                    clearVal.color = {{clearColor.r, clearColor.g, clearColor.b, clearColor.a}};
-                }
-                clearValues.push_back(clearVal);
+        for (auto format : vulkanFBO->GetSpecification().Attachments.Attachments) {
+            VkClearValue clearVal{};
+            if (format.TextureFormat == FramebufferTextureFormat::DEPTH24STENCIL8 || format.TextureFormat == FramebufferTextureFormat::Depth) {
+                clearVal.depthStencil = {1.0f, 0};
+            } else {
+                clearVal.color = {{clearColor.r, clearColor.g, clearColor.b, clearColor.a}};
             }
+            clearValues.push_back(clearVal);
         }
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
         renderPassInfo.pClearValues = clearValues.data();

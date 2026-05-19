@@ -26,6 +26,10 @@ namespace Ayaya {
         inline VkRenderPass GetVulkanRenderPass() const { return m_RenderPass; }
         inline VkFramebuffer GetVulkanFramebuffer() const { return m_Framebuffer; }
 
+        // 创建并返回 LOAD_OP_LOAD 版本的 RenderPass + Framebuffer（UI 叠加用）
+        VkRenderPass  EnsureLoadRenderPass();
+        VkFramebuffer EnsureLoadFramebuffer();
+
         // ==========================================\
         // 【核心对齐】：专供 VulkanRenderCommandBuffer 使用的获取器
         // ==========================================
@@ -61,6 +65,8 @@ namespace Ayaya {
 
         VkFramebuffer m_Framebuffer = VK_NULL_HANDLE;
         VkRenderPass m_RenderPass = VK_NULL_HANDLE;
+        VkFramebuffer m_LoadFramebuffer = VK_NULL_HANDLE;
+        VkRenderPass m_LoadRenderPass = VK_NULL_HANDLE;
         VkSampler m_Sampler = VK_NULL_HANDLE; // 全局采样器
     };
 

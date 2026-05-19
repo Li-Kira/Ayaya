@@ -55,6 +55,11 @@ namespace Ayaya {
         void DrawLuaScriptComponent(Entity referenceEntity);
         void DrawRigidbody2DComponent(Entity referenceEntity);
         void DrawBoxCollider2DComponent(Entity referenceEntity);
+        void DrawCanvasComponent(Entity referenceEntity);
+        void DrawRectTransformComponent(Entity referenceEntity, float uiScale);
+        void DrawUIImageComponent(Entity referenceEntity, float uiScale);
+        void DrawUITextComponent(Entity referenceEntity);
+        void DrawUIButtonComponent(Entity referenceEntity);
         void DrawAddComponentButton(Entity referenceEntity, float uiScale);
         void DrawAssetInspector();
 

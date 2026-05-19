@@ -24,11 +24,13 @@ namespace Ayaya {
         Depth = DEPTH24STENCIL8
     };
 
+    enum class AttachmentLoadOp { Clear, Load, DontCare };
+
     struct FramebufferTextureSpecification {
         FramebufferTextureSpecification() = default;
         FramebufferTextureSpecification(FramebufferTextureFormat format) : TextureFormat(format) {}
         FramebufferTextureFormat TextureFormat = FramebufferTextureFormat::None;
-        // 未来可以在这里扩展纹理包裹方式 (Wrap) 和过滤方式 (Filter)
+        AttachmentLoadOp LoadOp = AttachmentLoadOp::Clear;
     };
 
     // ==========================================

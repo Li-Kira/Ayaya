@@ -246,10 +246,64 @@ namespace Ayaya {
         // ==========================================
         if (entity.HasComponent<LuaScriptComponent>()) {
             out << YAML::Key << "LuaScriptComponent";
-            out << YAML::BeginMap; 
+            out << YAML::BeginMap;
             auto& lsc = entity.GetComponent<LuaScriptComponent>();
             out << YAML::Key << "ScriptHandle" << YAML::Value << (uint64_t)lsc.ScriptHandle;
-            out << YAML::EndMap; 
+            out << YAML::EndMap;
+        }
+
+        if (entity.HasComponent<RectTransformComponent>()) {
+            out << YAML::Key << "RectTransformComponent";
+            out << YAML::BeginMap;
+            auto& rt = entity.GetComponent<RectTransformComponent>();
+            out << YAML::Key << "AnchorMin" << YAML::Value << rt.AnchorMin;
+            out << YAML::Key << "AnchorMax" << YAML::Value << rt.AnchorMax;
+            out << YAML::Key << "Pivot"     << YAML::Value << rt.Pivot;
+            out << YAML::Key << "Position"  << YAML::Value << rt.Position;
+            out << YAML::Key << "Size"      << YAML::Value << rt.Size;
+            out << YAML::Key << "Rotation"  << YAML::Value << rt.Rotation;
+            out << YAML::Key << "Scale"     << YAML::Value << rt.Scale;
+            out << YAML::EndMap;
+        }
+
+        if (entity.HasComponent<CanvasComponent>()) {
+            out << YAML::Key << "CanvasComponent";
+            out << YAML::BeginMap;
+            auto& cc = entity.GetComponent<CanvasComponent>();
+            out << YAML::Key << "Mode"      << YAML::Value << (int)cc.Mode;
+            out << YAML::Key << "SortOrder" << YAML::Value << cc.SortOrder;
+            out << YAML::EndMap;
+        }
+
+        if (entity.HasComponent<UIImageComponent>()) {
+            out << YAML::Key << "UIImageComponent";
+            out << YAML::BeginMap;
+            auto& img = entity.GetComponent<UIImageComponent>();
+            out << YAML::Key << "Color"         << YAML::Value << img.Color;
+            out << YAML::Key << "TextureHandle" << YAML::Value << (uint64_t)img.TextureHandle;
+            out << YAML::EndMap;
+        }
+
+        if (entity.HasComponent<UITextComponent>()) {
+            out << YAML::Key << "UITextComponent";
+            out << YAML::BeginMap;
+            auto& txt = entity.GetComponent<UITextComponent>();
+            out << YAML::Key << "Text"      << YAML::Value << txt.Text;
+            out << YAML::Key << "FontHandle"<< YAML::Value << (uint64_t)txt.FontHandle;
+            out << YAML::Key << "Color"     << YAML::Value << txt.Color;
+            out << YAML::Key << "FontSize"  << YAML::Value << txt.FontSize;
+            out << YAML::EndMap;
+        }
+
+        if (entity.HasComponent<UIButtonComponent>()) {
+            out << YAML::Key << "UIButtonComponent";
+            out << YAML::BeginMap;
+            auto& btn = entity.GetComponent<UIButtonComponent>();
+            out << YAML::Key << "NormalColor"    << YAML::Value << btn.NormalColor;
+            out << YAML::Key << "HoverColor"     << YAML::Value << btn.HoverColor;
+            out << YAML::Key << "PressedColor"   << YAML::Value << btn.PressedColor;
+            out << YAML::Key << "OnClickCallback"<< YAML::Value << btn.OnClickCallback;
+            out << YAML::EndMap;
         }
 
         if (entity.HasComponent<RelationshipComponent>()) {
@@ -516,7 +570,51 @@ namespace Ayaya {
                 }
             }
 
-            currentEntityIndex++; 
+            auto rectTransform = entity["RectTransformComponent"];
+            if (rectTransform) {
+                auto& rt = deserializedEntity.AddComponent<RectTransformComponent>();
+                if (rectTransform["AnchorMin"]) rt.AnchorMin = rectTransform["AnchorMin"].as<glm::vec2>();
+                if (rectTransform["AnchorMax"]) rt.AnchorMax = rectTransform["AnchorMax"].as<glm::vec2>();
+                if (rectTransform["Pivot"])     rt.Pivot     = rectTransform["Pivot"].as<glm::vec2>();
+                if (rectTransform["Position"])  rt.Position  = rectTransform["Position"].as<glm::vec2>();
+                if (rectTransform["Size"])      rt.Size      = rectTransform["Size"].as<glm::vec2>();
+                if (rectTransform["Rotation"])  rt.Rotation  = rectTransform["Rotation"].as<float>();
+                if (rectTransform["Scale"])     rt.Scale     = rectTransform["Scale"].as<glm::vec2>();
+            }
+
+            auto canvasComponent = entity["CanvasComponent"];
+            if (canvasComponent) {
+                auto& cc = deserializedEntity.AddComponent<CanvasComponent>();
+                if (canvasComponent["Mode"])      cc.Mode      = (CanvasComponent::RenderMode)canvasComponent["Mode"].as<int>();
+                if (canvasComponent["SortOrder"]) cc.SortOrder = canvasComponent["SortOrder"].as<int>();
+            }
+
+            auto uiImage = entity["UIImageComponent"];
+            if (uiImage) {
+                auto& img = deserializedEntity.AddComponent<UIImageComponent>();
+                if (uiImage["Color"])         img.Color         = uiImage["Color"].as<glm::vec4>();
+                if (uiImage["TextureHandle"]) img.TextureHandle = uiImage["TextureHandle"].as<uint64_t>();
+            }
+
+            auto uiText = entity["UITextComponent"];
+            if (uiText) {
+                auto& txt = deserializedEntity.AddComponent<UITextComponent>();
+                if (uiText["Text"])      txt.Text      = uiText["Text"].as<std::string>();
+                if (uiText["FontHandle"]) txt.FontHandle = uiText["FontHandle"].as<uint64_t>();
+                if (uiText["Color"])     txt.Color     = uiText["Color"].as<glm::vec4>();
+                if (uiText["FontSize"])  txt.FontSize  = uiText["FontSize"].as<float>();
+            }
+
+            auto uiButton = entity["UIButtonComponent"];
+            if (uiButton) {
+                auto& btn = deserializedEntity.AddComponent<UIButtonComponent>();
+                if (uiButton["NormalColor"])     btn.NormalColor     = uiButton["NormalColor"].as<glm::vec4>();
+                if (uiButton["HoverColor"])      btn.HoverColor      = uiButton["HoverColor"].as<glm::vec4>();
+                if (uiButton["PressedColor"])    btn.PressedColor    = uiButton["PressedColor"].as<glm::vec4>();
+                if (uiButton["OnClickCallback"]) btn.OnClickCallback = uiButton["OnClickCallback"].as<std::string>();
+            }
+
+            currentEntityIndex++;
         }
 
         if (progressCallback) progressCallback(1.0f, "Resolving Relationships...");
