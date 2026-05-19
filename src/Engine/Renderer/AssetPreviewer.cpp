@@ -494,7 +494,7 @@ namespace Ayaya {
 
                 VkDescriptorPoolSize poolSize{};
                 poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                poolSize.descriptorCount = 1;
+                poolSize.descriptorCount = 2; // Set 0 has 2 UBO bindings (0=Camera, 1=unused)
 
                 VkDescriptorPoolCreateInfo poolInfo{};
                 poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
