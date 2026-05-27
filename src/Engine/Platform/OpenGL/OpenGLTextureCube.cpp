@@ -46,7 +46,7 @@ namespace Ayaya {
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
-        stbi_set_flip_vertically_on_load(true); 
+        stbi_set_flip_vertically_on_load(true);
     }
 
     OpenGLTextureCube::OpenGLTextureCube(void* rendererID, int width, int height)

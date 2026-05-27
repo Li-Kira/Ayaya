@@ -10,7 +10,6 @@ namespace Ayaya {
     OpenGLTexture2D::OpenGLTexture2D(const std::string& path)
         : m_Path(path) {
         int width, height, channels;
-        // 翻转 Y 轴，因为 OpenGL 的坐标系原点在左下角
         stbi_set_flip_vertically_on_load(1);
 
         // ==========================================

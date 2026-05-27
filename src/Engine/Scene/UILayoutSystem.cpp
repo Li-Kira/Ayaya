@@ -35,11 +35,25 @@ namespace Ayaya {
         renderOffset = glm::scale(renderOffset, glm::vec3(rt.CalculatedSize, 1.0f));
         rt.RenderTransform = rt.HierarchyTransform * renderOffset;
 
-        // 6. AABB
-        glm::vec3 wp = glm::vec3(rt.HierarchyTransform[3]);
-        glm::vec2 wpos(wp.x, wp.y);
-        rt.ScreenMin = wpos - rt.Pivot * rt.CalculatedSize * rt.Scale;
-        rt.ScreenMax = rt.ScreenMin + rt.CalculatedSize * rt.Scale;
+        // 6. 精准 AABB — 将 Quad 四角通过 RenderTransform 投影后取 min/max
+        glm::vec4 corners[4] = {
+            rt.RenderTransform * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f),
+            rt.RenderTransform * glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),
+            rt.RenderTransform * glm::vec4(0.0f, 1.0f, 0.0f, 1.0f),
+            rt.RenderTransform * glm::vec4(1.0f, 1.0f, 0.0f, 1.0f),
+        };
+
+        float minX = corners[0].x, maxX = corners[0].x;
+        float minY = corners[0].y, maxY = corners[0].y;
+        for (int i = 1; i < 4; ++i) {
+            minX = std::min(minX, corners[i].x);
+            maxX = std::max(maxX, corners[i].x);
+            minY = std::min(minY, corners[i].y);
+            maxY = std::max(maxY, corners[i].y);
+        }
+
+        rt.ScreenMin = glm::vec2(minX, minY);
+        rt.ScreenMax = glm::vec2(maxX, maxY);
         rt.LayoutDirty = false;
     }
 

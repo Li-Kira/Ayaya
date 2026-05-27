@@ -35,23 +35,22 @@ namespace Ayaya {
 
     VulkanTexture2D::VulkanTexture2D(const std::string& path) : m_Path(path) {
         int w, h, channels;
-        
-        // 1. 探测是否为 HDR
+
+        // 1. 先读取导入设置（FlipY 等），再决定是否翻转
+        UUID handle = AssetManager::FindHandleForPath(path);
+        if (handle != 0) m_ImportSettings = AssetManager::GetMetadata(handle).TextureSettings;
+
         bool isHDR = stbi_is_hdr(path.c_str());
         void* pixels = nullptr;
 
-        // Vulkan 图像原点在左上角，需翻转以匹配 OpenGL 纹理坐标系（仅 2D 贴图）
-        // cubemap 有自己的坐标系约定，不需要翻转
-        stbi_set_flip_vertically_on_load(1);
+        stbi_set_flip_vertically_on_load(m_ImportSettings.FlipY ? 1 : 0);
+        m_DataFlipped = m_ImportSettings.FlipY;
 
         if (isHDR) {
-            // 使用浮点加载，强制 4 通道保证对齐
             pixels = stbi_loadf(path.c_str(), &w, &h, &channels, STBI_rgb_alpha);
-            m_Format = VK_FORMAT_R32G32B32A32_SFLOAT; // 或者 R16G16B16A16_SFLOAT
+            m_Format = VK_FORMAT_R32G32B32A32_SFLOAT;
         } else {
             pixels = stbi_load(path.c_str(), &w, &h, &channels, STBI_rgb_alpha);
-            UUID handle = AssetManager::FindHandleForPath(path);
-            if (handle != 0) m_ImportSettings = AssetManager::GetMetadata(handle).TextureSettings;
             m_Format = m_ImportSettings.SRGB ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
         }
 
@@ -72,11 +71,12 @@ namespace Ayaya {
     // 异步加载：从 CPU 端原始数据创建 GPU 纹理（主线程执行）
     VulkanTexture2D::VulkanTexture2D(const RawTextureData& raw)
         : m_Width(raw.Width), m_Height(raw.Height), m_Path(raw.SourcePath) {
-        // 确定格式
+        m_ImportSettings = raw.ImportSettings;
+        m_DataFlipped = raw.ImportSettings.FlipY;
+
         if (raw.IsHDR) {
             m_Format = VK_FORMAT_R32G32B32A32_SFLOAT;
         } else {
-            m_ImportSettings = raw.ImportSettings;
             m_Format = m_ImportSettings.SRGB ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
         }
         Invalidate();

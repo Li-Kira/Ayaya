@@ -14,10 +14,10 @@ vec2 SampleSphericalMap(vec3 v) {
     return uv;
 }
 
-void main() {       
+void main() {
     vec2 uv = SampleSphericalMap(normalize(v_LocalPos));
     vec3 color = texture(u_EquirectangularMap, uv).rgb;
-    
+
     // 直接输出 HDR 颜色，不要在这里做 ToneMapping
     FragColor = vec4(color, 1.0);
 }

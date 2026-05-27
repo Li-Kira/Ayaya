@@ -101,18 +101,21 @@ namespace Ayaya {
         uint32_t vertexCount = (uint32_t)(s_Data.QuadVertexBufferPtr - s_Data.QuadVertexBufferBase);
         uint32_t dataSize = vertexCount * sizeof(UIVertex);
 
-        // CPU 预乘 ortho → NDC（Vulkan 不做 push constant）
         float orthoW = (float)m_ViewportWidth;
         float orthoH = (float)m_ViewportHeight;
-        glm::mat4 ortho = glm::ortho(0.0f, orthoW, orthoH, 0.0f, -1.0f, 1.0f);
 
-        std::vector<UIVertex> ndcVerts(s_Data.QuadVertexBufferBase, s_Data.QuadVertexBufferPtr);
-        for (auto& v : ndcVerts) {
-            glm::vec4 ndc = ortho * glm::vec4(v.px, v.py, v.pz, 1.0f);
-            v.px = ndc.x; v.py = ndc.y; v.pz = ndc.z;
+        if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+            // Vulkan NDC: Y 轴向下 (-1=顶, 1=底)，bottom=0, top=H
+            glm::mat4 ortho = glm::ortho(0.0f, orthoW, 0.0f, orthoH, -1.0f, 1.0f);
+            cmd.PushConstantData(m_UIPipeline, &ortho, sizeof(glm::mat4));
+        } else {
+            // OpenGL NDC: Y 轴向上 (-1=底, 1=顶)，bottom=H, top=0
+            glm::mat4 ortho = glm::ortho(0.0f, orthoW, orthoH, 0.0f, -1.0f, 1.0f);
+            s_Data.UIShader->Bind();
+            s_Data.UIShader->SetMat4("u_ViewProjection", ortho);
         }
 
-        auto vb = VertexBuffer::Create((float*)ndcVerts.data(), dataSize);
+        auto vb = VertexBuffer::Create((float*)s_Data.QuadVertexBufferBase, dataSize);
         vb->SetLayout({
             { ShaderDataType::Float3, "a_Position"  },
             { ShaderDataType::Float4, "a_Color"     },
@@ -182,6 +185,9 @@ namespace Ayaya {
             s_Data.ActiveTexture = texture;
         }
 
+        bool dataFlipped = texture && texture->IsDataFlipped();
+        bool flipV = bindless && dataFlipped;
+
         float texIndex = 0.0f;
         if (bindless) {
             texIndex = (float)(texture ? texture->GetBindlessIndex() : s_Data.WhiteTexture->GetBindlessIndex());
@@ -196,7 +202,8 @@ namespace Ayaya {
             s_Data.QuadVertexBufferPtr->px = pos.x; s_Data.QuadVertexBufferPtr->py = pos.y; s_Data.QuadVertexBufferPtr->pz = 0.0f;
             s_Data.QuadVertexBufferPtr->cr = color.r; s_Data.QuadVertexBufferPtr->cg = color.g;
             s_Data.QuadVertexBufferPtr->cb = color.b; s_Data.QuadVertexBufferPtr->ca = color.a;
-            s_Data.QuadVertexBufferPtr->tu = tc[j].x; s_Data.QuadVertexBufferPtr->tv = tc[j].y;
+            s_Data.QuadVertexBufferPtr->tu = tc[j].x;
+            s_Data.QuadVertexBufferPtr->tv = flipV ? (1.0f - tc[j].y) : tc[j].y;
             s_Data.QuadVertexBufferPtr->TexIndex = texIndex;
             s_Data.QuadVertexBufferPtr++;
         }
@@ -272,9 +279,6 @@ namespace Ayaya {
                         std::shared_ptr<Texture2D> tex;
                         if (img.TextureHandle != 0) {
                             tex = AssetManager::GetAsset<Texture2D>(img.TextureHandle);
-                            // 异步加载保护：GPU 资源未就绪时降级为白图
-                            // Vulkan: Bindless 索引为 0 表示尚未注册到全局纹理数组
-                            // OpenGL: RendererID 为 0 表示 GL 纹理名尚未生成
                             bool gpuReady = (RendererAPI::GetAPI() == RendererAPI::API::Vulkan)
                                 ? (tex && tex->GetBindlessIndex() != 0)
                                 : (tex && tex->GetRendererID() != 0);

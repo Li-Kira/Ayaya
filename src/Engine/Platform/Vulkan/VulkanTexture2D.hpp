@@ -52,7 +52,7 @@ namespace Ayaya {
         uint32_t m_Height = 0;
         std::string m_Path;
         bool m_IsWrapped = false;
-        bool m_DataFlipped = true; // default true for disk-loaded (stb-flipped) textures
+        bool m_DataFlipped = true;
 
         VkImage m_Image = VK_NULL_HANDLE;
         VmaAllocation m_Allocation = VK_NULL_HANDLE;

@@ -400,15 +400,18 @@ namespace Ayaya {
     }
 
     // =====================================================================
-    // ReloadAsset — 强制重载资产（卸旧 + 异步重新加载）
+    // ReloadAsset — 强制同步重载资产（Apply 按钮专用，确保设置即时生效）
     // =====================================================================
     void AssetManager::ReloadAsset(UUID handle) {
-        // 从内存池剔除旧纹理
         s_Assets.erase(handle);
 
-        // 重新触发异步加载
+        {
+            std::lock_guard<std::mutex> lock(s_LoadingMutex);
+            s_LoadingAssets.erase(handle);
+        }
+
         if (s_Registry.count(handle)) {
-            RequestAsyncLoad(handle);
+            LoadAssetFromFile(handle);
         }
     }
 

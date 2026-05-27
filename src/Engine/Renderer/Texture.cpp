@@ -1,8 +1,9 @@
 #include "ayapch.h"
 #include "Texture.hpp"
-#include "Renderer/Renderer.hpp" 
+#include "Renderer/Renderer.hpp"
 #include "Platform/OpenGL/OpenGLTexture2D.hpp"
-#include "Platform/Vulkan/VulkanTexture2D.hpp" 
+#include "Platform/Vulkan/VulkanTexture2D.hpp"
+#include "Asset/AssetManager.hpp" 
 #include "Core/Log.hpp"
 
 namespace Ayaya {
@@ -56,10 +57,14 @@ namespace Ayaya {
         RawTextureData raw;
         raw.SourcePath = path;
 
+        // 读取 .meta 导入设置，用 FlipY 控制 stb 翻转
+        UUID handle = AssetManager::FindHandleForPath(path);
+        if (handle != 0) raw.ImportSettings = AssetManager::GetMetadata(handle).TextureSettings;
+
         bool isHDR = stbi_is_hdr(path.c_str());
         raw.IsHDR = isHDR;
 
-        stbi_set_flip_vertically_on_load(1);
+        stbi_set_flip_vertically_on_load(raw.ImportSettings.FlipY ? 1 : 0);
 
         int w, h, c;
         if (isHDR)

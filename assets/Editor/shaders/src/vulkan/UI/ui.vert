@@ -9,9 +9,13 @@ layout(location = 0) out vec4 v_Color;
 layout(location = 1) out vec2 v_TexCoord;
 layout(location = 2) out flat int v_TexIndex;
 
+layout(push_constant) uniform PushConstants {
+    mat4 u_ViewProjection;
+} pc;
+
 void main() {
     v_Color    = a_Color;
     v_TexCoord = a_TexCoord;
     v_TexIndex = int(a_TexIndex);
-    gl_Position = vec4(a_Position, 1.0); // CPU pre-transformed to NDC
+    gl_Position = pc.u_ViewProjection * vec4(a_Position, 1.0);
 }

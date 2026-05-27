@@ -250,6 +250,7 @@ namespace Ayaya {
                 if (ImGui::BeginDragDropSource()) {
                     ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", &assetHandle, sizeof(UUID));
                     if (icon) {
+                        bool vk = (RendererAPI::GetAPI() == RendererAPI::API::Vulkan);
                         ImVec2 uv0 = icon->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
                         ImVec2 uv1 = icon->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
                         ImGui::Image((ImTextureID)icon->GetImGuiTextureID(), { 32.0f * scale, 32.0f * scale }, uv0, uv1);
@@ -273,8 +274,9 @@ namespace Ayaya {
                 float imageOffsetX = (cellSize - thumbSize) * 0.5f;
                 ImGui::SetCursorPos(ImVec2(cursorPos.x + imageOffsetX, cursorPos.y + 4.0f * scale));
                 if (icon) {
-                    ImVec2 uv0 = icon->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
-                    ImVec2 uv1 = icon->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
+                    bool flip = icon->IsDataFlipped();
+                    ImVec2 uv0 = flip ? ImVec2(0, 1) : ImVec2(0, 0);
+                    ImVec2 uv1 = flip ? ImVec2(1, 0) : ImVec2(1, 1);
                     // 彻底舍弃自带边框的 ImageButton，直接渲染原生的 Image
                     ImGui::Image((ImTextureID)icon->GetImGuiTextureID(), { thumbSize, thumbSize }, uv0, uv1);
                 }
