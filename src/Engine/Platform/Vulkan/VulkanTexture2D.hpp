@@ -17,8 +17,7 @@ namespace Ayaya {
         virtual uint32_t GetWidth() const override { return m_Width; }
         virtual uint32_t GetHeight() const override { return m_Height; }
 
-        // Vulkan 实际上不需要传统的 RendererID
-        virtual uint32_t GetRendererID() const override { return 0; }
+        virtual uint32_t GetRendererID() const override { return m_BindlessIndex; }
 
         // ==========================================
         // 【核心修改 2】：覆盖实现，由 Vulkan 层去处理底层翻译
@@ -35,6 +34,9 @@ namespace Ayaya {
         // FBO readback textures set this to false — data is already correctly oriented
         virtual bool IsDataFlipped() const override { return m_DataFlipped; }
         void SetDataFlipped(bool flipped) { m_DataFlipped = flipped; }
+
+        virtual uint32_t GetBindlessIndex() const override { return m_BindlessIndex; }
+        virtual void SetBindlessIndex(uint32_t index) override { m_BindlessIndex = index; }
 
         // 供渲染器内部获取真实句柄
         VkImage GetImage() const { return m_Image; }
@@ -58,6 +60,7 @@ namespace Ayaya {
         VkSampler m_Sampler = VK_NULL_HANDLE;
         VkFormat m_Format = VK_FORMAT_R8G8B8A8_UNORM;
         TextureImportSettings m_ImportSettings;
+        uint32_t m_BindlessIndex = 0;
 
         // 【新增】：缓存 ImGui 专用的描述符集 (使用 void* 避免污染头文件)
         mutable void* m_ImGuiDescriptorSet = nullptr;

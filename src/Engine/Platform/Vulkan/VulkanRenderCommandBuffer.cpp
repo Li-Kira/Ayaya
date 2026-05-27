@@ -74,7 +74,7 @@ namespace Ayaya {
    void VulkanRenderCommandBuffer::BindPipeline(const std::shared_ptr<Pipeline>& pipeline) {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         auto vulkanPipeline = std::dynamic_pointer_cast<VulkanPipeline>(pipeline);
-        
+
         if (vulkanPipeline && vulkanPipeline->GetVulkanPipeline() != VK_NULL_HANDLE) {
             VkCommandBuffer cmdBuffer = context->GetCurrentCommandBuffer();
             vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanPipeline->GetVulkanPipeline());
@@ -84,6 +84,14 @@ namespace Ayaya {
             VkDescriptorSet set0 = vulkanPipeline->GetVulkanDescriptorSet(0, frameIndex);
             if (set0 != VK_NULL_HANDLE) {
                 vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanPipeline->GetVulkanPipelineLayout(), 0, 1, &set0, 0, nullptr);
+            }
+
+            // Bindless 纹理管线：绑定全局纹理数组
+            if (vulkanPipeline->GetSpecification().UseBindlessTextures) {
+                VkDescriptorSet bindlessSet = context->GetBindlessSet();
+                uint32_t texSet = vulkanPipeline->GetTextureSetIndex();
+                vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    vulkanPipeline->GetVulkanPipelineLayout(), texSet, 1, &bindlessSet, 0, nullptr);
             }
 
             // 【核心】：切换管线时，清空之前记的小本本，并记住新管线
@@ -161,15 +169,21 @@ namespace Ayaya {
     // 核心冲刷器：Draw 之前的终极发车！
     // ==========================================
     void VulkanRenderCommandBuffer::FlushDescriptorSets() {
-        // 【核心防御 1】：如果没绑管线、没贴图、或者贴图压根没换过，直接返回！
-        // 显卡会继续沿用上一次绑定的 Descriptor Set，既安全又省性能！
-        if (!m_BoundPipeline || m_PendingImageInfos.empty() || !m_DescriptorSetDirty) return;
+        // Bindless 管线不需要 per-draw descriptor set 更新
+        if (!m_BoundPipeline || m_BoundPipeline->GetSpecification().UseBindlessTextures) return;
+
+        // 没贴图或者贴图压根没换过，直接返回！
+        if (m_PendingImageInfos.empty() || !m_DescriptorSetDirty) return;
 
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         VkDevice device = context->GetDevice();
 
         VkDescriptorSet newSet = m_BoundPipeline->GetNextTextureDescriptorSet();
-        AYAYA_CORE_ASSERT(newSet != VK_NULL_HANDLE, "Failed to get Descriptor Set!");
+        if (newSet == VK_NULL_HANDLE) {
+            AYAYA_CORE_ERROR("FlushDescriptorSets: newSet is VK_NULL_HANDLE, skipping draw");
+            m_DescriptorSetDirty = false;
+            return;
+        }
 
         std::vector<VkWriteDescriptorSet> writes;
         writes.reserve(m_PendingImageInfos.size());
@@ -188,7 +202,9 @@ namespace Ayaya {
         }
 
         vkUpdateDescriptorSets(device, writes.size(), writes.data(), 0, nullptr);
-        vkCmdBindDescriptorSets(context->GetCurrentCommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_BoundPipeline->GetVulkanPipelineLayout(), 1, 1, &newSet, 0, nullptr);
+        // 动态判断纹理集索引：普通管线 Set1=纹理(有UBO Set0)，UI管线 Set0=纹理(无UBO)
+        uint32_t texSet = (m_BoundPipeline->GetDescriptorSetLayoutCount() == 1) ? 0 : 1;
+        vkCmdBindDescriptorSets(context->GetCurrentCommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_BoundPipeline->GetVulkanPipelineLayout(), texSet, 1, &newSet, 0, nullptr);
 
         // ==========================================
         // 【终极修复】：打扫战场

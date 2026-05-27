@@ -21,6 +21,8 @@ namespace Ayaya {
             vkDeviceWaitIdle(m_Device);
         }
         
+        m_BindlessManager.Shutdown(m_Device);
+
         if (m_DescriptorPool != VK_NULL_HANDLE) {
             vkDestroyDescriptorPool(m_Device, m_DescriptorPool, nullptr);
             AYAYA_CORE_INFO("Vulkan Descriptor Pool destroyed.");
@@ -117,6 +119,27 @@ namespace Ayaya {
         CreateSyncObjects();
         AllocateCommandBuffers();
         CreateDescriptorPool();
+
+        VkPhysicalDeviceDescriptorIndexingProperties indexingProps{};
+        indexingProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES;
+
+        VkPhysicalDeviceProperties2 props2{};
+        props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        props2.pNext = &indexingProps;
+        vkGetPhysicalDeviceProperties2(m_PhysicalDevice, &props2);
+
+        uint32_t maxBindless = std::min({
+            indexingProps.maxPerStageDescriptorUpdateAfterBindSamplers,
+            indexingProps.maxDescriptorSetUpdateAfterBindSamplers,
+            100000u
+        });
+
+        AYAYA_CORE_INFO("GPU max update-after-bind samplers: perStage={0}, perSet={1}",
+            indexingProps.maxPerStageDescriptorUpdateAfterBindSamplers,
+            indexingProps.maxDescriptorSetUpdateAfterBindSamplers);
+        AYAYA_CORE_INFO("Bindless texture array capacity: {0}", maxBindless);
+
+        m_BindlessManager.Init(m_Device, maxBindless);
     }
 
     void VulkanContext::CreateSurface() {
@@ -189,6 +212,15 @@ namespace Ayaya {
         }
 
         VkPhysicalDeviceFeatures deviceFeatures{};
+
+        VkPhysicalDeviceVulkan12Features vk12Features{};
+        vk12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+        vk12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+        vk12Features.descriptorBindingPartiallyBound = VK_TRUE;
+        vk12Features.descriptorBindingVariableDescriptorCount = VK_TRUE;
+        vk12Features.runtimeDescriptorArray = VK_TRUE;
+        vk12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+
         std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 #ifdef __APPLE__
         deviceExtensions.push_back("VK_KHR_portability_subset");
@@ -196,6 +228,7 @@ namespace Ayaya {
 
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        createInfo.pNext = &vk12Features;
         createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
         createInfo.pEnabledFeatures = &deviceFeatures;

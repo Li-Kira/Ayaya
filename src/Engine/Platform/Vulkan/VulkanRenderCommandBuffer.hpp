@@ -72,11 +72,12 @@ namespace Ayaya {
         // 管线屏障
         virtual void InsertExecutionBarrier() override;
 
+        virtual void FlushDescriptorSets() override;
+
     private:
         std::shared_ptr<VulkanPipeline> m_BoundPipeline;
         std::unordered_map<uint32_t, VkDescriptorImageInfo> m_PendingImageInfos;
 
-        void FlushDescriptorSets();
         bool m_DescriptorSetDirty = false;
     };
 

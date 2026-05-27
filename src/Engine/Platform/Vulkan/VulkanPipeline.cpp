@@ -194,38 +194,48 @@ namespace Ayaya {
         // 7. Descriptor Set Layouts (描述符集图纸)
         // ==========================================
         bool noTextures = spec.NoTextureDescriptors;
-        uint32_t setCount = noTextures ? 1 : 2;
+        bool noGlobalUBOs = spec.NoGlobalUBOs;
+        uint32_t setCount = noGlobalUBOs ? 1 : (noTextures ? 1 : 2);
 
-        std::vector<VkDescriptorSetLayoutBinding> set0Bindings;
-        for (uint32_t i = 0; i < 2; i++) {
-            VkDescriptorSetLayoutBinding uboBind{};
-            uboBind.binding = i;
-            uboBind.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            uboBind.descriptorCount = 1;
-            uboBind.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-            set0Bindings.push_back(uboBind);
+        if (!noGlobalUBOs) {
+            std::vector<VkDescriptorSetLayoutBinding> set0Bindings;
+            for (uint32_t i = 0; i < 2; i++) {
+                VkDescriptorSetLayoutBinding uboBind{};
+                uboBind.binding = i;
+                uboBind.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                uboBind.descriptorCount = 1;
+                uboBind.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+                set0Bindings.push_back(uboBind);
+            }
+            VkDescriptorSetLayoutCreateInfo set0Info{};
+            set0Info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+            set0Info.bindingCount = (uint32_t)set0Bindings.size();
+            set0Info.pBindings = set0Bindings.data();
+            vkCreateDescriptorSetLayout(device, &set0Info, nullptr, &m_DescriptorSetLayouts[0]);
         }
-        VkDescriptorSetLayoutCreateInfo set0Info{};
-        set0Info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        set0Info.bindingCount = (uint32_t)set0Bindings.size();
-        set0Info.pBindings = set0Bindings.data();
-        vkCreateDescriptorSetLayout(device, &set0Info, nullptr, &m_DescriptorSetLayouts[0]);
 
         if (!noTextures) {
-            std::vector<VkDescriptorSetLayoutBinding> set1Bindings;
-            for (uint32_t i = 0; i < 12; i++) {
-                VkDescriptorSetLayoutBinding samplerBind{};
-                samplerBind.binding = i;
-                samplerBind.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-                samplerBind.descriptorCount = 1;
-                samplerBind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-                set1Bindings.push_back(samplerBind);
+            uint32_t texSlot = noGlobalUBOs ? 0 : 1;
+            m_TextureSetIndex = texSlot;
+
+            if (spec.UseBindlessTextures) {
+                m_DescriptorSetLayouts[texSlot] = context->GetBindlessLayout();
+            } else {
+                std::vector<VkDescriptorSetLayoutBinding> set1Bindings;
+                for (uint32_t i = 0; i < 12; i++) {
+                    VkDescriptorSetLayoutBinding samplerBind{};
+                    samplerBind.binding = i;
+                    samplerBind.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                    samplerBind.descriptorCount = 1;
+                    samplerBind.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+                    set1Bindings.push_back(samplerBind);
+                }
+                VkDescriptorSetLayoutCreateInfo set1Info{};
+                set1Info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+                set1Info.bindingCount = (uint32_t)set1Bindings.size();
+                set1Info.pBindings = set1Bindings.data();
+                vkCreateDescriptorSetLayout(device, &set1Info, nullptr, &m_DescriptorSetLayouts[texSlot]);
             }
-            VkDescriptorSetLayoutCreateInfo set1Info{};
-            set1Info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-            set1Info.bindingCount = (uint32_t)set1Bindings.size();
-            set1Info.pBindings = set1Bindings.data();
-            vkCreateDescriptorSetLayout(device, &set1Info, nullptr, &m_DescriptorSetLayouts[1]);
         }
 
         // ==========================================
@@ -279,7 +289,22 @@ namespace Ayaya {
         // ==========================================
         // 10. 创建管线专属 Descriptor Pool
         // ==========================================
-        if (noTextures) {
+        if (noGlobalUBOs && spec.UseBindlessTextures) {
+            // UI 管线 (Bindless)：纹理走全局 Bindless 数组，不需要本地纹理池
+            m_PipelineDescriptorPool = VK_NULL_HANDLE;
+        } else if (noGlobalUBOs) {
+            // UI 管线：只有纹理 Sampler，无 UBO
+            VkDescriptorPoolSize poolSizes[] = {
+                { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 600 }
+            };
+            VkDescriptorPoolCreateInfo poolInfo{};
+            poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+            poolInfo.poolSizeCount = 1;
+            poolInfo.pPoolSizes = poolSizes;
+            poolInfo.maxSets = 64;
+            if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_PipelineDescriptorPool) != VK_SUCCESS)
+                AYAYA_CORE_ERROR("VulkanPipeline: Failed to create UI Descriptor Pool!");
+        } else if (noTextures) {
             VkDescriptorPoolSize poolSizes[] = {
                 { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 20 },
             };
@@ -305,53 +330,63 @@ namespace Ayaya {
         }
 
         // ==========================================
-        // 11. 【核心升级】：为每一帧独立分配与写入 Set 0
+        // 11. 分配与写入 Set 0 (Global UBOs) — NoGlobalUBOs 时跳过
         // ==========================================
-        m_GlobalDescriptorSets.resize(framesInFlight);
-        std::vector<VkDescriptorSetLayout> layouts0(framesInFlight, m_DescriptorSetLayouts[0]);
-        
-        VkDescriptorSetAllocateInfo allocInfo0{};
-        allocInfo0.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo0.descriptorPool = m_PipelineDescriptorPool;
-        allocInfo0.descriptorSetCount = framesInFlight;
-        allocInfo0.pSetLayouts = layouts0.data();
-        vkAllocateDescriptorSets(device, &allocInfo0, m_GlobalDescriptorSets.data());
+        if (!noGlobalUBOs) {
+            m_GlobalDescriptorSets.resize(framesInFlight);
+            std::vector<VkDescriptorSetLayout> layouts0(framesInFlight, m_DescriptorSetLayouts[0]);
 
-        // 将每一帧对应的 UBO 缓冲区写入各自的描述符集中
-        for (uint32_t i = 0; i < framesInFlight; i++) {
-            std::vector<VkWriteDescriptorSet> descriptorWrites;
-            for (auto& pair : s_GlobalUBOs) {
-                uint32_t binding = pair.first;
-                VkDescriptorBufferInfo& bufferInfo = pair.second[i]; // 取第 i 帧的显存信息
-
-                VkWriteDescriptorSet write{};
-                write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                write.dstSet = m_GlobalDescriptorSets[i];
-                write.dstBinding = binding;
-                write.dstArrayElement = 0;
-                write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                write.descriptorCount = 1;
-                write.pBufferInfo = &bufferInfo;
-                descriptorWrites.push_back(write);
+            VkDescriptorSetAllocateInfo allocInfo0{};
+            allocInfo0.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocInfo0.descriptorPool = m_PipelineDescriptorPool;
+            allocInfo0.descriptorSetCount = framesInFlight;
+            allocInfo0.pSetLayouts = layouts0.data();
+            VkResult set0Result = vkAllocateDescriptorSets(device, &allocInfo0, m_GlobalDescriptorSets.data());
+            if (set0Result != VK_SUCCESS) {
+                AYAYA_CORE_ERROR("VulkanPipeline: Failed to allocate Set 0 descriptor sets! Result={0}", (int)set0Result);
+                m_GlobalDescriptorSets.clear();
             }
-            if (!descriptorWrites.empty()) {
-                vkUpdateDescriptorSets(device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
+
+            for (uint32_t i = 0; i < framesInFlight; i++) {
+                std::vector<VkWriteDescriptorSet> descriptorWrites;
+                for (auto& pair : s_GlobalUBOs) {
+                    uint32_t binding = pair.first;
+                    VkDescriptorBufferInfo& bufferInfo = pair.second[i];
+
+                    VkWriteDescriptorSet write{};
+                    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                    write.dstSet = m_GlobalDescriptorSets[i];
+                    write.dstBinding = binding;
+                    write.dstArrayElement = 0;
+                    write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                    write.descriptorCount = 1;
+                    write.pBufferInfo = &bufferInfo;
+                    descriptorWrites.push_back(write);
+                }
+                if (!descriptorWrites.empty()) {
+                    vkUpdateDescriptorSets(device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
+                }
             }
         }
 
         // ==========================================
-        // 12. 分配 Set 1 (纹理) 作为环形缓冲 (仅当管线使用纹理时)
+        // 12. 分配 Set 1 (纹理) 作为环形缓冲 — Bindless 跳过
         // ==========================================
-        if (!noTextures) {
-            std::vector<VkDescriptorSetLayout> layouts3000(3000, m_DescriptorSetLayouts[1]);
-            m_TextureDescriptorSets.resize(3000);
+        if (!noTextures && !spec.UseBindlessTextures) {
+            uint32_t texSetCount = noGlobalUBOs ? 48u : 3000u;
+            uint32_t texSlot = noGlobalUBOs ? 0u : 1u;
+            std::vector<VkDescriptorSetLayout> layouts(texSetCount, m_DescriptorSetLayouts[texSlot]);
+            m_TextureDescriptorSets.resize(texSetCount);
             VkDescriptorSetAllocateInfo allocInfo1{};
             allocInfo1.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
             allocInfo1.descriptorPool = m_PipelineDescriptorPool;
-            allocInfo1.descriptorSetCount = 3000;
-            allocInfo1.pSetLayouts = layouts3000.data();
+            allocInfo1.descriptorSetCount = texSetCount;
+            allocInfo1.pSetLayouts = layouts.data();
             VkResult result = vkAllocateDescriptorSets(device, &allocInfo1, m_TextureDescriptorSets.data());
-            AYAYA_CORE_ASSERT(result == VK_SUCCESS, "Failed to allocate 3000 texture descriptor sets! Descriptor Pool exhausted.");
+            if (result != VK_SUCCESS) {
+                AYAYA_CORE_ERROR("VulkanPipeline: Failed to allocate {0} texture descriptor sets! Result={1}", texSetCount, (int)result);
+                m_TextureDescriptorSets.clear();
+            }
         }
     }
 
@@ -361,8 +396,11 @@ namespace Ayaya {
             VkDevice device = context->GetDevice();
             if (m_Pipeline) vkDestroyPipeline(device, m_Pipeline, nullptr);
             if (m_PipelineLayout) vkDestroyPipelineLayout(device, m_PipelineLayout, nullptr);
-            if (m_DescriptorSetLayouts[0]) vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayouts[0], nullptr);
-            if (m_DescriptorSetLayouts[1]) vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayouts[1], nullptr);
+            // 不销毁全局 Bindless Layout (由 VulkanContext 管理)
+            if (!m_Specification.UseBindlessTextures) {
+                if (m_DescriptorSetLayouts[0]) vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayouts[0], nullptr);
+                if (m_DescriptorSetLayouts[1]) vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayouts[1], nullptr);
+            }
             if (m_PipelineDescriptorPool) vkDestroyDescriptorPool(device, m_PipelineDescriptorPool, nullptr);
         }
     }

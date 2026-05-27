@@ -29,6 +29,7 @@ namespace Ayaya {
         // 创建并返回 LOAD_OP_LOAD 版本的 RenderPass + Framebuffer（UI 叠加用）
         VkRenderPass  EnsureLoadRenderPass();
         VkFramebuffer EnsureLoadFramebuffer();
+        void InvalidateLoadResources();
 
         // ==========================================\
         // 【核心对齐】：专供 VulkanRenderCommandBuffer 使用的获取器

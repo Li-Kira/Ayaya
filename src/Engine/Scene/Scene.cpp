@@ -4,6 +4,7 @@
 #include "Components.hpp"
 #include "Renderer/MaterialSerializer.hpp"
 #include "UILayoutSystem.hpp"
+#include "Core/Application.hpp"
 #include "Asset/AssetManager.hpp"
 
 #include <box2d/b2_world.h>
@@ -320,7 +321,9 @@ namespace Ayaya {
         // ==========================================
         // 1. UI 布局计算
         // ==========================================
-        UILayoutSystem::Update(*this);
+        UILayoutSystem::Update(*this,
+            (uint32_t)Application::Get().GetWindow().GetWidth(),
+            (uint32_t)Application::Get().GetWindow().GetHeight());
 
         // ==========================================
         // 2. 执行 Lua 逻辑

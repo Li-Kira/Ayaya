@@ -75,6 +75,7 @@ namespace Ayaya {
         void HandleMousePicking(const glm::mat4& cameraViewMatrix, const glm::mat4& cameraProjectionMatrix);
         void HandleGizmo(const glm::mat4& cameraViewMatrix, const glm::mat4& cameraProjectionMatrix);
         void UIRenderDebugGizmos(const glm::mat4& cameraViewMatrix, const glm::mat4& cameraProjectionMatrix);
+        void UIRenderDebugUIGizmos(ImVec2 viewportScreenMin, ImVec2 vpSize, float dpiScale);
 
         // ==========================================
         // 新增：游玩模式相关的函数
@@ -121,6 +122,7 @@ namespace Ayaya {
         bool m_ShowPreferencesWindow = false; // 控制偏好设置窗口的开关
         bool m_ShowCameraGizmos = true;
         bool m_ShowLightGizmos = true;
+        bool m_ShowUIGizmos = true;
 
         // 统计
         SceneRenderer::Statistics m_GameStats;

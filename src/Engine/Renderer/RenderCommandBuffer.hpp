@@ -86,6 +86,9 @@ namespace Ayaya {
 
         // 插入全局执行屏障，用于隔离前后两个具有依赖关系的 Pass
         virtual void InsertExecutionBarrier() = 0;
+
+        // Flush 延迟的 descriptor set 写入 (Vulkan 专用, OpenGL 空实现)
+        virtual void FlushDescriptorSets() = 0;
     };
 
 }

@@ -50,18 +50,20 @@ namespace Ayaya {
 
         ProcessLayout(rt, pMin, pMax, pMatrix);
 
-        // 子节点在父节点 LOCAL 空间布局 (0, 0) → CalculatedSize
+        // 子节点在父节点 QUAD 实际边界内布局
         if (e.HasComponent<RelationshipComponent>()) {
+            glm::vec2 childMin = -rt.Pivot * rt.CalculatedSize;
+            glm::vec2 childMax = (glm::vec2(1.0f) - rt.Pivot) * rt.CalculatedSize;
             for (auto child : e.GetComponent<RelationshipComponent>().Children)
-                RecurseLayout(scene, child, {0.0f, 0.0f}, rt.CalculatedSize, rt.HierarchyTransform);
+                RecurseLayout(scene, child, childMin, childMax, rt.HierarchyTransform);
         }
     }
 
-    void UILayoutSystem::Update(Scene& scene) {
+    void UILayoutSystem::Update(Scene& scene, uint32_t viewportWidth, uint32_t viewportHeight) {
         auto view = scene.Reg().view<CanvasComponent, RectTransformComponent>();
         for (auto entity : view) {
-            float w = (float)Application::Get().GetWindow().GetWidth();
-            float h = (float)Application::Get().GetWindow().GetHeight();
+            float w = (float)viewportWidth;
+            float h = (float)viewportHeight;
             RecurseLayout(&scene, entity, {0.0f, 0.0f}, {w, h}, glm::mat4(1.0f));
         }
     }

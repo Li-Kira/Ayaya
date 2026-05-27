@@ -391,6 +391,14 @@ namespace Ayaya {
         return m_LoadRenderPass;
     }
 
+    void VulkanFramebuffer::InvalidateLoadResources() {
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        if (!context) return;
+        VkDevice device = context->GetDevice();
+        if (m_LoadFramebuffer) { vkDestroyFramebuffer(device, m_LoadFramebuffer, nullptr); m_LoadFramebuffer = VK_NULL_HANDLE; }
+        if (m_LoadRenderPass)  { vkDestroyRenderPass(device, m_LoadRenderPass, nullptr); m_LoadRenderPass = VK_NULL_HANDLE; }
+    }
+
     VkFramebuffer VulkanFramebuffer::EnsureLoadFramebuffer() {
         if (m_LoadFramebuffer) return m_LoadFramebuffer;
         VkRenderPass rp = EnsureLoadRenderPass();

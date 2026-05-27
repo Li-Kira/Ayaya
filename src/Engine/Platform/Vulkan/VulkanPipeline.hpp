@@ -35,6 +35,17 @@ namespace Ayaya {
             return setIndex < m_DescriptorSetLayouts.size() ? m_DescriptorSetLayouts[setIndex] : VK_NULL_HANDLE;
         }
 
+        uint32_t GetTextureSetIndex() const { return m_TextureSetIndex; }
+
+        // 返回 layout 中描述符集数量，用于动态判断纹理在 Set 0 还是 Set 1
+        uint32_t GetDescriptorSetLayoutCount() const {
+            uint32_t count = 0;
+            for (auto& layout : m_DescriptorSetLayouts) {
+                if (layout != VK_NULL_HANDLE) count++;
+            }
+            return count;
+        }
+
         // 注册 UBO，需指定是哪一帧的 Buffer
         static void SetGlobalUniformBuffer(uint32_t binding, uint32_t frameIndex, VkBuffer buffer, uint32_t size);
 
@@ -42,10 +53,9 @@ namespace Ayaya {
         // 环形缓冲，每次索要都给一个全新的描述符集！(Set 1)
         // ==========================================
         VkDescriptorSet GetNextTextureDescriptorSet() {
-            AYAYA_CORE_ASSERT(!m_TextureDescriptorSets.empty(), "Texture Descriptor Sets array is empty!");
+            if (m_TextureDescriptorSets.empty()) return VK_NULL_HANDLE;
             uint32_t index = m_CurrentTextureSetIndex;
             m_CurrentTextureSetIndex = (m_CurrentTextureSetIndex + 1) % m_TextureDescriptorSets.size();
-            AYAYA_CORE_ASSERT(m_TextureDescriptorSets[index] != VK_NULL_HANDLE, "Descriptor Set is NULL!");
             return m_TextureDescriptorSets[index];
         }
 
@@ -63,10 +73,11 @@ namespace Ayaya {
         // 【核心修改】：Set 0 变为数组，为每一帧保存一份专属的描述符
         std::vector<VkDescriptorSet> m_GlobalDescriptorSets; 
 
-        // 专属池与环形缓冲 (Set 1)
+        // 专属池与环形缓冲
         VkDescriptorPool m_PipelineDescriptorPool = VK_NULL_HANDLE;
         std::vector<VkDescriptorSet> m_TextureDescriptorSets;
         uint32_t m_CurrentTextureSetIndex = 0;
+        uint32_t m_TextureSetIndex = 1;
     };
 
 }

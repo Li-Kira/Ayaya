@@ -60,5 +60,6 @@ namespace Ayaya {
         virtual void DrawTriangleStrip(uint32_t vertexCount) override;
 
         virtual void InsertExecutionBarrier() override {}
+        virtual void FlushDescriptorSets() override {}
     };
 }

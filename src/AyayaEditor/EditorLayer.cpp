@@ -1236,13 +1236,23 @@ namespace Ayaya {
         if (m_SceneRenderer) {
             void* textureID = m_SceneRenderer->GetFinalColorAttachmentRendererID();
             if (textureID) {
-                ImGui::Image(textureID, ImVec2{ m_ViewportSize.x, m_ViewportSize.y }, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
-                
+                ImVec2 vpSize{ m_ViewportSize.x, m_ViewportSize.y };
+                ImGui::Image(textureID, vpSize, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+
+                // UI overlay — 独立 UI FBO 叠加在 3D 场景之上
+                ImVec2 uiOverlayPos = ImGui::GetItemRectMin();
+                void* uiTexID = m_SceneRenderer->GetBlackboardTextureID("UI");
+                if (uiTexID) {
+                    ImGui::SetCursorScreenPos(uiOverlayPos);
+                    ImGui::Image(uiTexID, vpSize, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+                }
+                if (m_ShowUIGizmos) UIRenderDebugUIGizmos(uiOverlayPos, vpSize,
+                    ImGui::GetIO().DisplayFramebufferScale.x);
+
                 HandleMousePicking(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
                 HandleGizmo(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
                 UIRenderDebugGizmos(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
             } else {
-                // 占位提示，等待我们的 Vulkan 离线画布就绪
                 ImGui::Text("Viewport is initializing...");
             }
         }
@@ -1264,9 +1274,19 @@ namespace Ayaya {
         if (m_GameRenderer) {
             void* textureID = m_GameRenderer->GetFinalColorAttachmentRendererID();
             if (textureID) {
-                ImGui::Image(textureID, ImVec2{ m_GameViewportSize.x, m_GameViewportSize.y }, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+                ImVec2 vpSize{ m_GameViewportSize.x, m_GameViewportSize.y };
+                ImGui::Image(textureID, vpSize, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+
+                // 在画图前先记录屏幕坐标，供 UI Gizmo 使用
+                ImVec2 gameVpScreenMin = ImGui::GetCursorScreenPos();
+                void* uiTexID = m_GameRenderer->GetBlackboardTextureID("UI");
+                if (uiTexID) {
+                    ImGui::SetCursorPos(cursorStartPos);
+                    ImGui::Image(uiTexID, vpSize, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+                }
+                if (m_ShowUIGizmos) UIRenderDebugUIGizmos(gameVpScreenMin, vpSize,
+                    ImGui::GetIO().DisplayFramebufferScale.x);
             } else {
-                // 占位提示，等待我们的 Vulkan 离线画布就绪
                 ImGui::Text("Game is initializing...");
             }
         }
@@ -1709,6 +1729,40 @@ namespace Ayaya {
                     }
                 }
             }
+        }
+    }
+
+    void EditorLayer::UIRenderDebugUIGizmos(ImVec2 viewportScreenMin, ImVec2 vpSize, float dpiScale) {
+        if (!m_ShowUIGizmos || !m_ActiveScene) return;
+
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        float invScale = 1.0f / dpiScale;
+        auto view = m_ActiveScene->Reg().view<RectTransformComponent>();
+        for (auto entity : view) {
+            auto& rt = view.get<RectTransformComponent>(entity);
+
+            // ScreenMin/Max 是物理像素, 需除以 dpiScale 转为 ImGui 逻辑坐标
+            ImVec2 minPos = ImVec2(viewportScreenMin.x + rt.ScreenMin.x * invScale,
+                                   viewportScreenMin.y + rt.ScreenMin.y * invScale);
+            ImVec2 maxPos = ImVec2(viewportScreenMin.x + rt.ScreenMax.x * invScale,
+                                   viewportScreenMin.y + rt.ScreenMax.y * invScale);
+
+            // 红色包围盒
+            drawList->AddRect(minPos, maxPos, IM_COL32(255, 0, 0, 255), 0.0f, 0, 2.0f);
+
+            // 蓝色 Pivot 轴心点 (从 HierarchyTransform 第 4 列提取世界坐标)
+            glm::vec3 pivotWorld = glm::vec3(rt.HierarchyTransform[3]);
+            ImVec2 pivotPos = ImVec2(viewportScreenMin.x + pivotWorld.x * invScale,
+                                     viewportScreenMin.y + pivotWorld.y * invScale);
+            drawList->AddCircleFilled(pivotPos, 4.0f, IM_COL32(0, 200, 255, 255));
+
+            // 黄色十字标出元素原点
+            drawList->AddLine(ImVec2(pivotPos.x - 6, pivotPos.y),
+                              ImVec2(pivotPos.x + 6, pivotPos.y),
+                              IM_COL32(255, 255, 0, 200), 1.5f);
+            drawList->AddLine(ImVec2(pivotPos.x, pivotPos.y - 6),
+                              ImVec2(pivotPos.x, pivotPos.y + 6),
+                              IM_COL32(255, 255, 0, 200), 1.5f);
         }
     }
 

@@ -400,7 +400,13 @@ namespace Ayaya {
                 
                 if (refSrc.TextureHandle != 0 && AssetManager::IsAssetHandleValid(refSrc.TextureHandle)) {
                     auto tex = AssetManager::GetAsset<Texture2D>(refSrc.TextureHandle);
-                    ImGui::Image((ImTextureID)(intptr_t)tex->GetRendererID(), textureSlotSize, {0, 1}, {1, 0});
+                    if (tex && tex->GetImGuiTextureID() != nullptr) {
+                        ImVec2 uv0 = tex->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
+                        ImVec2 uv1 = tex->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
+                        ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), textureSlotSize, uv0, uv1);
+                    } else {
+                        ImGui::Button("Loading...", textureSlotSize);
+                    }
                 } else {
                     ImGui::Button("Empty", textureSlotSize);
                 }
@@ -1332,9 +1338,13 @@ namespace Ayaya {
                                     }
 
                                     if (tex) {
-                                        ImVec2 uv0 = tex->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
-                                        ImVec2 uv1 = tex->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
-                                        ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), textureSlotSize, uv0, uv1);
+                                        if (tex->GetImGuiTextureID() != nullptr && (uint64_t)tex->GetImGuiTextureID() != 0) {
+                                            ImVec2 uv0 = tex->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
+                                            ImVec2 uv1 = tex->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
+                                            ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), textureSlotSize, uv0, uv1);
+                                        } else {
+                                            ImGui::Button("Loading...", textureSlotSize);
+                                        }
                                     } else {
                                         ImGui::Button("Null", textureSlotSize);
                                     }
@@ -1944,8 +1954,68 @@ namespace Ayaya {
 
         if (opened) {
             auto& ref = referenceEntity.GetComponent<UIImageComponent>();
+            auto getName = [&]() -> std::string {
+                return m_SelectedEntities.size() == 1 ? referenceEntity.GetComponent<TagComponent>().Tag : std::to_string(m_SelectedEntities.size()) + " entities";
+            };
+
             ImGui::ColorEdit4("Color", glm::value_ptr(ref.Color));
-            ImGui::Text("Texture Handle: %llu", (uint64_t)ref.TextureHandle);
+
+            ImGui::Spacing();
+            ImGui::Text("Texture");
+
+            ImVec2 textureSlotSize = { 64.0f * uiScale, 64.0f * uiScale };
+
+            if (ref.TextureHandle != 0 && AssetManager::IsAssetHandleValid(ref.TextureHandle)) {
+                auto tex = AssetManager::GetAsset<Texture2D>(ref.TextureHandle);
+                if (tex && tex->GetImGuiTextureID() != nullptr) {
+                    ImVec2 uv0 = tex->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
+                    ImVec2 uv1 = tex->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
+                    ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), textureSlotSize, uv0, uv1);
+                } else {
+                    ImGui::Button("Loading...", textureSlotSize);
+                }
+            } else {
+                ImGui::Button("Empty", textureSlotSize);
+            }
+
+            // 拖放贴图
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    UUID droppedHandle = *(const UUID*)payload->Data;
+                    auto meta = AssetManager::GetMetadata(droppedHandle);
+                    if (droppedHandle != 0 && meta.Type == AssetType::Texture2D) {
+                        if (!meta.VirtualPath.empty())
+                            AssetManager::ImportAsset(VFS::ResolveString(meta.VirtualPath));
+                        std::vector<UIImageComponent> oldComps;
+                        for (auto e : m_SelectedEntities) oldComps.push_back(e.GetComponent<UIImageComponent>());
+                        for (auto e : m_SelectedEntities)
+                            e.GetComponent<UIImageComponent>().TextureHandle = droppedHandle;
+                        auto macroCmd = std::make_shared<MacroCommand>("Assign UI Image Texture to " + getName());
+                        for (size_t i = 0; i < m_SelectedEntities.size(); ++i)
+                            macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<UIImageComponent>>(
+                                m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<UIImageComponent>()));
+                        EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            // 移除贴图
+            if (ref.TextureHandle != 0) {
+                ImGui::SameLine();
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textureSlotSize.y * 0.5f - 10.0f * uiScale);
+                if (ImGui::Button("Remove")) {
+                    std::vector<UIImageComponent> oldComps;
+                    for (auto e : m_SelectedEntities) oldComps.push_back(e.GetComponent<UIImageComponent>());
+                    for (auto e : m_SelectedEntities) e.GetComponent<UIImageComponent>().TextureHandle = 0;
+                    auto macroCmd = std::make_shared<MacroCommand>("Remove UI Image Texture from " + getName());
+                    for (size_t i = 0; i < m_SelectedEntities.size(); ++i)
+                        macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<UIImageComponent>>(
+                            m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<UIImageComponent>()));
+                    EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
+                }
+            }
+
             ImGui::TreePop();
         }
         if (removeComponent) {

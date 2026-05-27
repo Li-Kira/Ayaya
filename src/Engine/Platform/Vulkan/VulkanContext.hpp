@@ -1,5 +1,6 @@
 #pragma once
 #include "Renderer/GraphicsContext.hpp"
+#include "VulkanBindlessManager.hpp"
 #include <vulkan/vulkan.h>
 #include <vk_mem_alloc.h>
 #include <optional>
@@ -48,6 +49,8 @@ namespace Ayaya {
         virtual void BeginFrame() override;
         inline VkFramebuffer GetCurrentFramebuffer() const { return m_SwapChainFramebuffers[m_ImageIndex]; }
         inline VkExtent2D GetSwapChainExtent() const { return m_SwapChainExtent; }
+        inline VkFormat GetSwapChainImageFormat() const { return m_SwapChainImageFormat; }
+        inline VkImageView GetCurrentSwapChainImageView() const { return m_SwapChainImageViews[m_ImageIndex]; }
         inline VkCommandBuffer GetCurrentCommandBuffer() const { return m_CommandBuffers[m_CurrentFrame]; }
 
         VkCommandBuffer BeginSingleTimeCommands();
@@ -59,6 +62,10 @@ namespace Ayaya {
         VkFormat FindDepthFormat();
 
         inline uint32_t GetCurrentFrameIndex() const { return m_CurrentFrame; }
+
+        inline VulkanBindlessManager& GetBindlessManager() { return m_BindlessManager; }
+        inline VkDescriptorSetLayout GetBindlessLayout() const { return m_BindlessManager.GetLayout(); }
+        inline VkDescriptorSet GetBindlessSet() const { return m_BindlessManager.GetSet(); }
         
     private:
         GLFWwindow* m_WindowHandle;
@@ -97,6 +104,8 @@ namespace Ayaya {
         uint32_t m_CurrentFrame = 0;
         uint32_t m_ImageIndex = 0;
         uint32_t m_GraphicsQueueFamily = 0;
+
+        VulkanBindlessManager m_BindlessManager;
 
         void CreateSurface();
         void PickPhysicalDevice();

@@ -1,0 +1,76 @@
+Scene: Untitled
+EditorState:
+  ShowGrid: true
+  ShowSkybox: true
+  CameraPosition: [-5.1704745, 3.7611105, 7.6889687]
+  CameraDistance: 10
+  CameraPitch: -0.3855956
+  CameraYaw: -0.5919982
+  CameraFocalPoint: [0, 0, 0]
+Entities:
+  - Entity: 955350559127786412
+    TagComponent:
+      Tag: Main Camera
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 5]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    CameraComponent:
+      Primary: true
+      FixedAspectRatio: false
+      EV100: 14.5
+      ClearFlag: 0
+      BackgroundColor: [0.016, 0.016, 0.02, 1]
+      Camera:
+        ProjectionType: 0
+        PerspectiveFOV: 0.7853982
+        PerspectiveNear: 0.01
+        PerspectiveFar: 1000
+        OrthographicSize: 5
+        OrthographicNear: -1
+        OrthographicFar: 1000
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 9146408660368255167
+    TagComponent:
+      Tag: Canvas
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    RectTransformComponent:
+      AnchorMin: [0.5, 0.5]
+      AnchorMax: [0.5, 0.5]
+      Pivot: [0.5, 0.5]
+      Position: [0, 0]
+      Size: [100, 100]
+      Rotation: 0
+      Scale: [1, 1]
+    CanvasComponent:
+      Mode: 0
+      SortOrder: 0
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 1267798018143488366
+    TagComponent:
+      Tag: Image
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    RectTransformComponent:
+      AnchorMin: [0.5, 0.5]
+      AnchorMax: [0.5, 0.5]
+      Pivot: [0.5, 0.5]
+      Position: [0, 0]
+      Size: [128, 128]
+      Rotation: 0
+      Scale: [1, 1]
+    UIImageComponent:
+      Color: [1, 1, 1, 1]
+      TextureHandle: 639220978417225722
+    RelationshipComponent:
+      Parent: 9146408660368255167

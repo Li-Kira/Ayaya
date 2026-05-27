@@ -23,6 +23,14 @@ namespace Ayaya {
         : m_Width(width), m_Height(height), m_IsWrapped(true) {
         m_ImageView = (VkImageView)rendererID;
         CreateSampler();
+
+        if (m_ImageView != VK_NULL_HANDLE && m_Sampler != VK_NULL_HANDLE) {
+            auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+            m_BindlessIndex = context->GetBindlessManager().AllocateIndex();
+            if (m_BindlessIndex != 0) {
+                context->GetBindlessManager().UpdateBinding(context->GetDevice(), m_BindlessIndex, m_ImageView, m_Sampler);
+            }
+        }
     }
 
     VulkanTexture2D::VulkanTexture2D(const std::string& path) : m_Path(path) {
@@ -80,6 +88,10 @@ namespace Ayaya {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         VkDevice device = context->GetDevice();
         vkDeviceWaitIdle(device);
+
+        if (m_BindlessIndex != 0) {
+            context->GetBindlessManager().FreeIndex(m_BindlessIndex);
+        }
 
         if (m_ImGuiDescriptorSet) {
             if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().BackendRendererUserData != nullptr) {
@@ -268,6 +280,14 @@ namespace Ayaya {
 
         // 5. 过河拆桥：数据已经到了显卡里的 Image 中，干掉暂存缓冲区
         vmaDestroyBuffer(allocator, stagingBuffer, stagingAllocation);
+
+        // 6. 注册到全局 Bindless 纹理数组
+        if (m_BindlessIndex == 0 && m_ImageView != VK_NULL_HANDLE && m_Sampler != VK_NULL_HANDLE) {
+            m_BindlessIndex = context->GetBindlessManager().AllocateIndex();
+            if (m_BindlessIndex != 0) {
+                context->GetBindlessManager().UpdateBinding(context->GetDevice(), m_BindlessIndex, m_ImageView, m_Sampler);
+            }
+        }
 
         AYAYA_CORE_INFO("VulkanTexture2D: Pixel data securely uploaded & Layout transitioned for {0}", m_Path.empty() ? "Generated Texture" : m_Path);
     }
