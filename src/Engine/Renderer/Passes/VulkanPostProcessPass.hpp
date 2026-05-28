@@ -1,5 +1,6 @@
 #pragma once
 #include "Renderer/RenderPipeline.hpp"
+#include "Renderer/RenderGraph.hpp"
 #include "Renderer/Shader.hpp"
 #include "Renderer/Framebuffer.hpp"
 #include "Renderer/VertexArray.hpp"
@@ -8,7 +9,6 @@
 
 namespace Ayaya {
 
-    // 必须和 vulkan_postprocess.frag 保持严格的内存对齐
     struct alignas(16) PostProcessPushConstants {
         float Exposure;
         int ToneMappingType;
@@ -23,14 +23,16 @@ namespace Ayaya {
         virtual ~VulkanPostProcessPass() override = default;
 
         virtual void OnAttach() override;
-        virtual void OnResize(uint32_t width, uint32_t height) override;
         virtual void Execute(RenderContext& context, RenderCommandBuffer& cmd) override;
 
+        // 声明该 Pass 对 RenderGraph 的资源依赖
+        static void DeclareResources(RGBuilder& builder, uint32_t width, uint32_t height);
+
     private:
-        std::vector<std::shared_ptr<Framebuffer>> m_PostProcessFBOs;
         std::shared_ptr<Shader> m_PostProcessShader;
         std::shared_ptr<Pipeline> m_Pipeline;
-        std::shared_ptr<VertexArray> m_EmptyVAO; 
+        PipelineSpecification m_PipeSpec;
+        std::shared_ptr<VertexArray> m_EmptyVAO;
     };
 
 }

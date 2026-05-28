@@ -248,10 +248,15 @@ namespace Ayaya {
     }
 
     void VulkanRenderCommandBuffer::DrawArrays(uint32_t vertexCount) {
-        if (!m_BoundPipeline) return;
+        if (!m_BoundPipeline) { AYAYA_CORE_WARN("[DrawArrays] no bound pipeline!"); return; }
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         VkCommandBuffer cmd = context->GetCurrentCommandBuffer();
         uint32_t frameIndex = context->GetCurrentFrameIndex() % 3;
+
+        bool isUI = m_BoundPipeline->GetSpecification().UseBindlessTextures;
+        if (isUI) AYAYA_CORE_WARN("[DrawArrays] UI pipe={} vtxCnt={} set0={}",
+            (void*)m_BoundPipeline->GetVulkanPipeline(), vertexCount,
+            (void*)m_BoundPipeline->GetVulkanDescriptorSet(0, frameIndex));
 
         // 必须重新绑定 Set 0，确保 UBO 数据对应当前帧
         VkDescriptorSet cameraSet = m_BoundPipeline->GetVulkanDescriptorSet(0, frameIndex);
@@ -367,6 +372,108 @@ namespace Ayaya {
             0, nullptr,
             0, nullptr
         );
+    }
+
+    // ==========================================
+    // RHI 隔离层：引擎通用 ImageLayout → Vulkan VkImageLayout
+    // ==========================================
+    static VkImageLayout ToVkImageLayout(ImageLayout layout) {
+        switch (layout) {
+            case ImageLayout::Undefined:                     return VK_IMAGE_LAYOUT_UNDEFINED;
+            case ImageLayout::ColorAttachmentOptimal:        return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            case ImageLayout::DepthStencilAttachmentOptimal: return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            case ImageLayout::ShaderReadOnlyOptimal:         return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            case ImageLayout::TransferSrcOptimal:            return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            case ImageLayout::TransferDstOptimal:            return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            case ImageLayout::PresentSrc:                    return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            default: AYAYA_CORE_ASSERT(false, "Unknown ImageLayout!"); return VK_IMAGE_LAYOUT_UNDEFINED;
+        }
+    }
+
+    // ==========================================
+    // 精准 Image Layout 转换屏障 (替代全局 Barrier)
+    // ==========================================
+    void VulkanRenderCommandBuffer::TransitionImageLayout(const std::shared_ptr<Framebuffer>& fbo,
+                                                         uint32_t attachmentIndex,
+                                                         ImageLayout oldLayout,
+                                                         ImageLayout newLayout) {
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        VkCommandBuffer cmdBuffer = context->GetCurrentCommandBuffer();
+
+        auto vulkanFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(fbo);
+        if (!vulkanFBO) return;
+
+        VkImage image = vulkanFBO->GetColorAttachmentImage(attachmentIndex);
+        if (image == VK_NULL_HANDLE) return;
+
+        VkImageLayout vkOld = ToVkImageLayout(oldLayout);
+        VkImageLayout vkNew = ToVkImageLayout(newLayout);
+
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = vkOld;
+        barrier.newLayout = vkNew;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = image;
+
+        if (vkNew == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
+            vkNew == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL) {
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        } else {
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        }
+
+        barrier.subresourceRange.baseMipLevel   = 0;
+        barrier.subresourceRange.levelCount     = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount     = 1;
+
+        VkPipelineStageFlags sourceStage, destinationStage;
+
+        if (vkOld == VK_IMAGE_LAYOUT_UNDEFINED &&
+            vkNew == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            sourceStage      = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        }
+        else if (vkOld == VK_IMAGE_LAYOUT_UNDEFINED &&
+                 vkNew == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            sourceStage      = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        else if (vkOld == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+                 vkNew == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+            barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            sourceStage      = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        else if (vkOld == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+                 vkNew == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            sourceStage      = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        }
+        else if (vkOld == VK_IMAGE_LAYOUT_UNDEFINED &&
+                 vkNew == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            sourceStage      = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        }
+        else {
+            AYAYA_CORE_ERROR("TransitionImageLayout: Unsupported transition {0} -> {1}",
+                (int)oldLayout, (int)newLayout);
+            return;
+        }
+
+        vkCmdPipelineBarrier(cmdBuffer, sourceStage, destinationStage,
+            0, 0, nullptr, 0, nullptr, 1, &barrier);
     }
 
 }

@@ -10,7 +10,20 @@
 
 namespace Ayaya {
     class Mesh;
-    class TextureCube; // 【新增】：前向声明 TextureCube
+    class TextureCube;
+
+    // ==========================================
+    // 跨平台图像布局抽象 (RHI 隔离层)
+    // ==========================================
+    enum class ImageLayout {
+        Undefined = 0,
+        ColorAttachmentOptimal,
+        DepthStencilAttachmentOptimal,
+        ShaderReadOnlyOptimal,
+        TransferSrcOptimal,
+        TransferDstOptimal,
+        PresentSrc
+    };
 
     class RenderCommandBuffer {
     public:
@@ -86,6 +99,12 @@ namespace Ayaya {
 
         // 插入全局执行屏障，用于隔离前后两个具有依赖关系的 Pass
         virtual void InsertExecutionBarrier() = 0;
+
+        // 精确的 Image Layout 转换屏障 (替代全局 Barrier)
+        virtual void TransitionImageLayout(const std::shared_ptr<Framebuffer>& fbo,
+                                           uint32_t attachmentIndex,
+                                           ImageLayout oldLayout,
+                                           ImageLayout newLayout) = 0;
 
         // Flush 延迟的 descriptor set 写入 (Vulkan 专用, OpenGL 空实现)
         virtual void FlushDescriptorSets() = 0;

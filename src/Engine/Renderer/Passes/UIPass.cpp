@@ -22,30 +22,29 @@ namespace Ayaya {
 
     void UIPass::OnAttach() {
         Init();
-        if (m_UIPipeline) return; // already created
+        if (m_UIPipeline) return;
 
-        FramebufferSpecification spec;
-        spec.Width  = 1280;
-        spec.Height = 720;
-        spec.Attachments = { FramebufferTextureFormat::RGBA8 };
-        m_UIFBO = Framebuffer::Create(spec);
-
-        PipelineSpecification pipeSpec;
-        pipeSpec.Shader = s_Data.UIShader;
-        pipeSpec.TargetFramebuffer = m_UIFBO;
-        pipeSpec.Layout = {
+        m_PipeSpec.Shader = s_Data.UIShader;
+        m_PipeSpec.Layout = {
             { ShaderDataType::Float3, "a_Position"  },
             { ShaderDataType::Float4, "a_Color"     },
             { ShaderDataType::Float2, "a_TexCoord"  },
             { ShaderDataType::Float,  "a_TexIndex"  },
         };
-        pipeSpec.DepthTest = false;
-        pipeSpec.DepthWrite = false;
-        pipeSpec.Blend = true;
-        pipeSpec.BackfaceCulling = CullMode::None;
-        pipeSpec.NoGlobalUBOs = true;
-        pipeSpec.UseBindlessTextures = (RendererAPI::GetAPI() == RendererAPI::API::Vulkan);
-        m_UIPipeline = Pipeline::Create(pipeSpec);
+        m_PipeSpec.DepthTest = false;
+        m_PipeSpec.DepthWrite = false;
+        m_PipeSpec.Blend = true;
+        m_PipeSpec.BackfaceCulling = CullMode::None;
+        m_PipeSpec.NoGlobalUBOs = true;
+        m_PipeSpec.UseBindlessTextures = (RendererAPI::GetAPI() == RendererAPI::API::Vulkan);
+    }
+
+    void UIPass::DeclareResources(RGBuilder& builder, uint32_t width, uint32_t height) {
+        FramebufferSpecification spec;
+        spec.Width  = width;
+        spec.Height = height;
+        spec.Attachments = { FramebufferTextureFormat::RGBA8 };
+        builder.WriteTexture("UI_Output", spec);
     }
 
     void UIPass::Shutdown() {
@@ -96,7 +95,7 @@ namespace Ayaya {
     }
 
     void UIPass::Flush(RenderCommandBuffer& cmd) {
-        if (s_Data.QuadIndexCount == 0 || !m_UIFBO) return;
+        if (s_Data.QuadIndexCount == 0) return;
 
         uint32_t vertexCount = (uint32_t)(s_Data.QuadVertexBufferPtr - s_Data.QuadVertexBufferBase);
         uint32_t dataSize = vertexCount * sizeof(UIVertex);
@@ -104,13 +103,12 @@ namespace Ayaya {
         float orthoW = (float)m_ViewportWidth;
         float orthoH = (float)m_ViewportHeight;
 
+        // 双端统一: BeginRenderPass 的负高度 Viewport 已处理 Y 轴差异
+        glm::mat4 ortho = glm::ortho(0.0f, orthoW, orthoH, 0.0f, -1.0f, 1.0f);
+
         if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-            // Vulkan NDC: Y 轴向下 (-1=顶, 1=底)，bottom=0, top=H
-            glm::mat4 ortho = glm::ortho(0.0f, orthoW, 0.0f, orthoH, -1.0f, 1.0f);
             cmd.PushConstantData(m_UIPipeline, &ortho, sizeof(glm::mat4));
         } else {
-            // OpenGL NDC: Y 轴向上 (-1=底, 1=顶)，bottom=H, top=0
-            glm::mat4 ortho = glm::ortho(0.0f, orthoW, orthoH, 0.0f, -1.0f, 1.0f);
             s_Data.UIShader->Bind();
             s_Data.UIShader->SetMat4("u_ViewProjection", ortho);
         }
@@ -215,7 +213,6 @@ namespace Ayaya {
         auto* scene = context.ActiveScene.get();
         if (!scene) return;
 
-        // 清理 3 帧前的回收队列（GPU 已执行完毕，安全释放）
         uint32_t frameIndex = 0;
         if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
             auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
@@ -233,33 +230,15 @@ namespace Ayaya {
 
         UILayoutSystem::Update(*scene, width, height);
 
-        if (!m_UIFBO || m_UIFBO->GetSpecification().Width != width || m_UIFBO->GetSpecification().Height != height) {
-            FramebufferSpecification spec;
-            spec.Width  = width;
-            spec.Height = height;
-            spec.Attachments = { FramebufferTextureFormat::RGBA8 };
-            m_UIFBO = Framebuffer::Create(spec);
+        auto uiFBO = context.GetFramebuffer("UI_Output");
+        if (!uiFBO) { AYAYA_CORE_WARN("[UIPass] UI_Output FBO not found!"); return; }
 
-            PipelineSpecification pipeSpec;
-            pipeSpec.Shader = s_Data.UIShader;
-            pipeSpec.TargetFramebuffer = m_UIFBO;
-            pipeSpec.Layout = {
-                { ShaderDataType::Float3, "a_Position"  },
-                { ShaderDataType::Float4, "a_Color"     },
-                { ShaderDataType::Float2, "a_TexCoord"  },
-                { ShaderDataType::Float,  "a_TexIndex"  },
-            };
-            pipeSpec.DepthTest = false;
-            pipeSpec.DepthWrite = false;
-            pipeSpec.Blend = true;
-            pipeSpec.BackfaceCulling = CullMode::None;
-            pipeSpec.NoGlobalUBOs = true;
-            pipeSpec.UseBindlessTextures = (RendererAPI::GetAPI() == RendererAPI::API::Vulkan);
-            m_UIPipeline = Pipeline::Create(pipeSpec);
+        if (!m_UIPipeline) {
+            m_PipeSpec.TargetFramebuffer = uiFBO;
+            m_UIPipeline = Pipeline::Create(m_PipeSpec);
         }
 
-        // 提前开启 RenderPass + 绑定管线，保证循环内 Flush 处于合法 GPU 状态
-        cmd.BeginRenderPass(m_UIFBO, true, glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
+        cmd.BeginRenderPass(uiFBO, true, glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
         cmd.BindPipeline(m_UIPipeline);
 
         StartBatch();
@@ -295,7 +274,7 @@ namespace Ayaya {
         if (s_Data.QuadIndexCount > 0) Flush(cmd);
         cmd.EndRenderPass();
 
-        context.Framebuffers["UI"] = m_UIFBO;
+        context.Framebuffers["UI"] = context.GetFramebuffer("UI_Output");
     }
 
 }

@@ -38,6 +38,8 @@
 #include "Platform/Vulkan/VulkanContext.hpp"
 #include "Platform/Vulkan/VulkanIBLBuilder.hpp"
 #include "Platform/Vulkan/VulkanTextureCube.hpp"
+#include "Platform/Vulkan/VulkanPipeline.hpp"
+#include "Platform/Vulkan/VulkanUniformBuffer.hpp"
 
 // 3. 第三方库
 #include <glad/glad.h>
@@ -168,7 +170,7 @@ namespace Ayaya {
         // if (!s_LightUniformBuffer) s_LightUniformBuffer = UniformBuffer::Create(sizeof(struct_LightData), 1);
 
         // ==========================================
-        // 【核心防御 2】：隔离管线和裸露的 OpenGL 查询函数
+        // 管线初始化 (OpenGL 线性管线 / Vulkan RenderGraph)
         // ==========================================
         if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
             m_Pipeline.AddPass(std::make_shared<ShadowPass>());
@@ -180,21 +182,20 @@ namespace Ayaya {
             m_Pipeline.AddPass(std::make_shared<UIPass>());
             m_Pipeline.Init();
 
-            // 拦截裸露的 OpenGL 调用！
             if (m_Data->EmptyVAO == 0) glGenVertexArrays(1, &m_Data->EmptyVAO);
             glGenQueries(1, &m_Data->GPUTimeQuery);
         }
         else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-            AYAYA_CORE_INFO("Vulkan Pipeline: Deferred Rendering Mode");
-            // m_Pipeline.AddPass(std::make_shared<VulkanShadowPass>());
-            // m_Pipeline.AddPass(std::make_shared<VulkanGBufferPass>());
-            // m_Pipeline.AddPass(std::make_shared<VulkanLightingPass>());
-            // m_Pipeline.AddPass(std::make_shared<VulkanBloomPass>());
-            m_Pipeline.AddPass(std::make_shared<VulkanForwardTestPass>());
-            m_Pipeline.AddPass(std::make_shared<VulkanPostProcessPass>());
-            // m_Pipeline.AddPass(std::make_shared<VulkanFXAAPass>());
-            m_Pipeline.AddPass(std::make_shared<UIPass>());
-            m_Pipeline.Init();
+            AYAYA_CORE_INFO("Vulkan Pipeline: RenderGraph Mode");
+
+            // 创建 Pass 实例并仅初始化 Shader/Pipeline (Resource 由 Graph 管理)
+            m_ForwardPass     = std::make_shared<VulkanForwardTestPass>();
+            m_PostProcessPass = std::make_shared<VulkanPostProcessPass>();
+            m_UIPass          = std::make_shared<UIPass>();
+
+            m_ForwardPass->OnAttach();
+            m_PostProcessPass->OnAttach();
+            m_UIPass->OnAttach();
         }
     }
 
@@ -216,9 +217,12 @@ namespace Ayaya {
     }
 
     void SceneRenderer::OnWindowResize(uint32_t width, uint32_t height) {
+        if (width == m_Data->ViewportWidth && height == m_Data->ViewportHeight) return;
         m_Data->ViewportWidth = width;
         m_Data->ViewportHeight = height;
-        m_Pipeline.OnResize(width, height);
+        m_ViewportDirty = true;
+        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL)
+            m_Pipeline.OnResize(width, height);
     }
     
     void SceneRenderer::BeginScene(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, const glm::vec3& cameraPosition) {
@@ -385,11 +389,71 @@ namespace Ayaya {
         m_RenderContext.Set("EnableFXAA", enableFXAA);
 
         std::shared_ptr<RenderCommandBuffer> cmd = RenderCommandBuffer::Create();
-        
+
         if (cmd) {
             cmd->Begin();
-            // 将黑板和指令记录器一并传给管线
-            m_Pipeline.Execute(m_RenderContext, *cmd);
+
+            if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+                uint32_t vpW = m_Data->ViewportWidth;
+                uint32_t vpH = m_Data->ViewportHeight;
+
+                // 仅在首帧或视口变化时重建图 (避免每帧 CPU 拓扑排序开销)
+                if (m_ViewportDirty) {
+                    m_RenderGraph.Clear();
+
+                    m_RenderGraph.AddPass("ForwardPass",
+                        [&](RGBuilder& b) { VulkanForwardTestPass::DeclareResources(b, vpW, vpH); },
+                        [&](RenderContext& ctx, RenderCommandBuffer& c) {
+                            if (m_ForwardPass) m_ForwardPass->Execute(ctx, c);
+                        });
+
+                    m_RenderGraph.AddPass("PostProcessPass",
+                        [&](RGBuilder& b) { VulkanPostProcessPass::DeclareResources(b, vpW, vpH); },
+                        [&](RenderContext& ctx, RenderCommandBuffer& c) {
+                            if (m_PostProcessPass) m_PostProcessPass->Execute(ctx, c);
+                        });
+
+                    m_RenderGraph.AddPass("UIPass",
+                        [&](RGBuilder& b) { UIPass::DeclareResources(b, vpW, vpH); },
+                        [&](RenderContext& ctx, RenderCommandBuffer& c) {
+                            if (m_UIPass) m_UIPass->Execute(ctx, c);
+                        });
+
+                    m_RenderGraph.Compile();
+                    m_ViewportDirty = false;
+                }
+
+                // 延迟释放：递减 3 帧安全期，到期清空
+                for (auto& release : m_DeferredReleases) release.FramesRemaining--;
+                m_DeferredReleases.erase(
+                    std::remove_if(m_DeferredReleases.begin(), m_DeferredReleases.end(),
+                        [](auto& r) { return r.FramesRemaining <= 0; }),
+                    m_DeferredReleases.end());
+
+                // 重新注册当前渲染器的 UBO (s_GlobalUBOs 是静态变量, 多实例覆盖)
+                VulkanPipeline::ClearGlobalUBOs();
+                auto camUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_CameraUniformBuffer);
+                auto lightUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_LightUniformBuffer);
+                if (camUBO) {
+                    for (uint32_t i = 0; i < 3; i++)
+                        VulkanPipeline::SetGlobalUniformBuffer(0, i, camUBO->GetBuffer(i), sizeof(struct_CameraData));
+                }
+                if (lightUBO) {
+                    for (uint32_t i = 0; i < 3; i++)
+                        VulkanPipeline::SetGlobalUniformBuffer(1, i, lightUBO->GetBuffer(i), sizeof(struct_LightData));
+                }
+
+                uint32_t frameIdx = 0;
+                if (auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext()))
+                    frameIdx = vkCtx->GetCurrentFrameIndex();
+                m_RenderContext.Set("CurrentFrameIndex", frameIdx);
+
+                m_RenderGraph.Execute(m_RenderContext, *cmd);
+            } else {
+                // OpenGL 线性管线 (保持兼容)
+                m_Pipeline.Execute(m_RenderContext, *cmd);
+            }
+
             cmd->End();
         } else {
             AYAYA_CORE_ERROR("Failed to create RenderCommandBuffer in RenderScene!");
@@ -414,40 +478,22 @@ namespace Ayaya {
     }
 
     void* SceneRenderer::GetFinalColorAttachmentRendererID() {
-        // 1. 优先寻找 FXAA 输出
-        if (m_RenderContext.Framebuffers.find("FXAA") != m_RenderContext.Framebuffers.end()) {
-            auto fbo = m_RenderContext.Framebuffers["FXAA"];
-            if (fbo) return fbo->GetColorAttachmentRendererID(0);
-        }
-        // 2. PostProcess 输出
-        if (m_RenderContext.Framebuffers.find("PostProcess") != m_RenderContext.Framebuffers.end()) {
-            auto fbo = m_RenderContext.Framebuffers["PostProcess"];
-            if (fbo) return fbo->GetColorAttachmentRendererID(0);
-        }
-        // 3. 向前兼容：前向渲染产物
-        if (m_RenderContext.Framebuffers.find("ForwardTest") != m_RenderContext.Framebuffers.end()) {
-            auto fbo = m_RenderContext.Framebuffers["ForwardTest"];
-            if (fbo) return fbo->GetColorAttachmentRendererID(0);
-        }
-
+        auto tryFBO = [&](const char* key) -> void* {
+            auto it = m_RenderContext.Framebuffers.find(key);
+            if (it != m_RenderContext.Framebuffers.end() && it->second)
+                return it->second->GetColorAttachmentRendererID(0);
+            return nullptr;
+        };
+        if (void* id = tryFBO("FXAA"))         return id;
+        if (void* id = tryFBO("PostProcess"))   return id;
+        if (void* id = tryFBO("FinalOutput"))   return id;
+        if (void* id = tryFBO("ForwardTest"))   return id;
+        if (void* id = tryFBO("SceneColor"))    return id;
         return nullptr;
     }
 
     void* SceneRenderer::GetPostProcessFBORendererID() {
-        if (m_RenderContext.Framebuffers.find("FXAA") != m_RenderContext.Framebuffers.end()) {
-            auto fbo = m_RenderContext.Framebuffers["FXAA"];
-            if (fbo) return fbo->GetColorAttachmentRendererID(0);
-        }
-        if (m_RenderContext.Framebuffers.find("PostProcess") != m_RenderContext.Framebuffers.end()) {
-            auto fbo = m_RenderContext.Framebuffers["PostProcess"];
-            if (fbo) return fbo->GetColorAttachmentRendererID(0);
-        }
-        if (m_RenderContext.Framebuffers.find("ForwardTest") != m_RenderContext.Framebuffers.end()) {
-            auto fbo = m_RenderContext.Framebuffers["ForwardTest"];
-            if (fbo) return fbo->GetColorAttachmentRendererID(0);
-        }
-
-        return nullptr;
+        return GetFinalColorAttachmentRendererID();
     }
 
     void* SceneRenderer::GetBlackboardTextureID(std::string_view key) {
@@ -558,7 +604,15 @@ namespace Ayaya {
             void* preID = IBLBuilder::CreatePrefilterMap(baseCubemapID, s_SkyboxMesh, prefilterShader);
             newPrefilter = TextureCube::Create(preID, 128, 128);
 
-            // 新纹理全部构建成功，原子替换
+            // 旧纹理放入 3 帧安全期垃圾桶，避免 GPU 仍在读取时被销毁
+            if (m_Data->EnvironmentCubemap) {
+                DeferredRelease release;
+                release.TextureCubes.push_back(m_Data->EnvironmentCubemap);
+                release.TextureCubes.push_back(m_Data->IrradianceMap);
+                release.TextureCubes.push_back(m_Data->PrefilterMap);
+                m_DeferredReleases.push_back(std::move(release));
+            }
+
             m_Data->EnvironmentCubemap = newEnvCubemap;
             m_Data->IrradianceMap = newIrradiance;
             m_Data->PrefilterMap = newPrefilter;

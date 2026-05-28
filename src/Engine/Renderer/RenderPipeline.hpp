@@ -96,6 +96,12 @@ namespace Ayaya {
             if (it != Textures.end()) return it->second;
             return nullptr;
         }
+
+        std::shared_ptr<Framebuffer> GetFramebuffer(std::string_view key) {
+            auto it = Framebuffers.find(key);
+            if (it != Framebuffers.end()) return it->second;
+            return nullptr;
+        }
     };
 
     class RenderPass {

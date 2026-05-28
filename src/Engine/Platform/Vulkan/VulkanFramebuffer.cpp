@@ -142,8 +142,9 @@ namespace Ayaya {
             desc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
             desc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
             desc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            // MoltenVK TBDR: SHADER_READ 确保 tile cache 正确刷新，避免 M1/M2 品红闪烁
             desc.initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            desc.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            desc.finalLayout   = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             attachmentDescs.push_back(desc);
 
             VkAttachmentReference ref{};
@@ -195,7 +196,7 @@ namespace Ayaya {
             depthDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
             depthDesc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
             depthDesc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            depthDesc.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL; // <--- 支持将深度图传给下一个管线做 Shadow/SSAO
+            depthDesc.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
             attachmentDescs.push_back(depthDesc);
 
             depthRef.attachment = (uint32_t)colorRefs.size();

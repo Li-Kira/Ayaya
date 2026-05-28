@@ -71,6 +71,10 @@ namespace Ayaya {
 
         // 管线屏障
         virtual void InsertExecutionBarrier() override;
+        virtual void TransitionImageLayout(const std::shared_ptr<Framebuffer>& fbo,
+                                           uint32_t attachmentIndex,
+                                           ImageLayout oldLayout,
+                                           ImageLayout newLayout) override;
 
         virtual void FlushDescriptorSets() override;
 

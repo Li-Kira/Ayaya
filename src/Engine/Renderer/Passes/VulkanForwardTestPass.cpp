@@ -28,67 +28,58 @@ namespace Ayaya {
         m_DefaultMaterial = std::make_shared<Material>();
         m_DefaultMaterial->Name = "Forward Default Material";
 
-        FramebufferSpecification fboSpec;
-        fboSpec.Samples = 1;
-        fboSpec.Width = 1280;
-        fboSpec.Height = 720;
-        fboSpec.Attachments = { FramebufferTextureFormat::RGBA16F, FramebufferTextureFormat::Depth };
-
-        m_ForwardFBOs.resize(3);
-        for (int i = 0; i < 3; i++) m_ForwardFBOs[i] = Framebuffer::Create(fboSpec);
-
-        PipelineSpecification pipeSpec;
-        pipeSpec.Shader = m_ForwardShader;
-        pipeSpec.TargetFramebuffer = m_ForwardFBOs[0];
-        pipeSpec.Layout = {
+        m_ForwardPipeSpec.Shader = m_ForwardShader;
+        m_ForwardPipeSpec.Layout = {
             { ShaderDataType::Float3, "a_Position" },
             { ShaderDataType::Float3, "a_Normal" },
             { ShaderDataType::Float2, "a_TexCoord" },
             { ShaderDataType::Float3, "a_Tangent" }
         };
-        pipeSpec.DepthTest = true;
-        pipeSpec.DepthWrite = true;
-        pipeSpec.Blend = false;
-        pipeSpec.BackfaceCulling = CullMode::None;
-        m_ForwardPipeline = Pipeline::Create(pipeSpec);
+        m_ForwardPipeSpec.DepthTest = true;
+        m_ForwardPipeSpec.DepthWrite = true;
+        m_ForwardPipeSpec.Blend = false;
+        m_ForwardPipeSpec.BackfaceCulling = CullMode::None;
 
         m_SkyboxShader = Shader::Create("Skybox/skybox.vert", "Skybox/skybox.frag");
-        PipelineSpecification skyboxPipeSpec;
-        skyboxPipeSpec.Shader = m_SkyboxShader;
-        skyboxPipeSpec.TargetFramebuffer = m_ForwardFBOs[0];
-        skyboxPipeSpec.Layout = pipeSpec.Layout;
-        skyboxPipeSpec.DepthTest = true;
-        skyboxPipeSpec.DepthWrite = false;
-        skyboxPipeSpec.DepthOperator = DepthCompareOperator::LEqual;
-        skyboxPipeSpec.BackfaceCulling = CullMode::None;
-        m_SkyboxPipeline = Pipeline::Create(skyboxPipeSpec);
-
-        // Selection FBO (选中描边)
-        FramebufferSpecification selSpec;
-        selSpec.Samples = 1;
-        selSpec.Width = 1280; selSpec.Height = 720;
-        selSpec.Attachments = { FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::Depth };
-        m_SelectionFBO = Framebuffer::Create(selSpec);
+        m_SkyboxPipeSpec.Shader = m_SkyboxShader;
+        m_SkyboxPipeSpec.Layout = m_ForwardPipeSpec.Layout;
+        m_SkyboxPipeSpec.DepthTest = true;
+        m_SkyboxPipeSpec.DepthWrite = false;
+        m_SkyboxPipeSpec.DepthOperator = DepthCompareOperator::LEqual;
+        m_SkyboxPipeSpec.BackfaceCulling = CullMode::None;
 
         m_OutlineShader = Shader::Create("UI/outline.vert", "UI/outline.frag");
-        PipelineSpecification outlineSpec;
-        outlineSpec.Shader = m_OutlineShader;
-        outlineSpec.TargetFramebuffer = m_SelectionFBO;
-        outlineSpec.Layout = {
-            { ShaderDataType::Float3, "a_Position" },
-            { ShaderDataType::Float3, "a_Normal" },
-            { ShaderDataType::Float2, "a_TexCoord" },
-            { ShaderDataType::Float3, "a_Tangent" }
-        };
-        outlineSpec.DepthTest = false;
-        outlineSpec.DepthWrite = true;
-        outlineSpec.Blend = false;
-        outlineSpec.BackfaceCulling = CullMode::None;
-        m_OutlinePipeline = Pipeline::Create(outlineSpec);
+        m_OutlinePipeSpec.Shader = m_OutlineShader;
+        m_OutlinePipeSpec.Layout = m_ForwardPipeSpec.Layout;
+        m_OutlinePipeSpec.DepthTest = false;
+        m_OutlinePipeSpec.DepthWrite = true;
+        m_OutlinePipeSpec.Blend = false;
+        m_OutlinePipeSpec.BackfaceCulling = CullMode::None;
+
+        m_SpriteShader = Shader::Create("2D/sprite.vert", "2D/sprite.frag");
+        m_SpritePipeSpec.Shader = m_SpriteShader;
+        m_SpritePipeSpec.Layout = {}; // shader 用 gl_VertexIndex 程序化生成顶点
+        m_SpritePipeSpec.DepthTest = true;
+        m_SpritePipeSpec.DepthWrite = false;
+        m_SpritePipeSpec.Blend = true;
+        m_SpritePipeSpec.BlendMode = BlendModeType::Alpha;
+        m_SpritePipeSpec.BackfaceCulling = CullMode::None;
     }
 
-    void VulkanForwardTestPass::OnResize(uint32_t width, uint32_t height) {
-        for (auto& fbo : m_ForwardFBOs) fbo->Resize(width, height);
+    void VulkanForwardTestPass::DeclareResources(RGBuilder& builder, uint32_t width, uint32_t height) {
+        FramebufferSpecification fboSpec;
+        fboSpec.Width  = width;
+        fboSpec.Height = height;
+        fboSpec.Samples = 1;
+        fboSpec.Attachments = { FramebufferTextureFormat::RGBA16F, FramebufferTextureFormat::Depth };
+        builder.WriteTexture("SceneColor", fboSpec);
+
+        FramebufferSpecification selSpec;
+        selSpec.Width  = width;
+        selSpec.Height = height;
+        selSpec.Samples = 1;
+        selSpec.Attachments = { FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::Depth };
+        builder.WriteTexture("Selection", selSpec);
     }
 
     void VulkanForwardTestPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
@@ -96,11 +87,29 @@ namespace Ayaya {
         uint32_t height = context.Get<uint32_t>("ViewportHeight");
         if (width == 0 || height == 0) return;
 
-        auto vulkanContext = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-        uint32_t frameIndex = vulkanContext->GetCurrentFrameIndex() % m_ForwardFBOs.size();
-        auto currentFBO = m_ForwardFBOs[frameIndex];
-        if (currentFBO->GetSpecification().Width != width || currentFBO->GetSpecification().Height != height) {
-            OnResize(width, height);
+        // 从 Graph 管理的 Context 黑板获取 FBO (替代原来的 m_ForwardFBOs[m_FrameIndex])
+        auto sceneColorFBO = context.GetFramebuffer("SceneColor");
+        auto selectionFBO  = context.GetFramebuffer("Selection");
+        if (!sceneColorFBO) {
+            AYAYA_CORE_ERROR("VulkanForwardTestPass: SceneColor FBO not found in context!");
+            return;
+        }
+
+        // 懒加载：拿到 Graph 分配的真 FBO 后才创建管线
+        if (!m_ForwardPipeline) {
+            m_ForwardPipeSpec.TargetFramebuffer = sceneColorFBO;
+            m_ForwardPipeline = Pipeline::Create(m_ForwardPipeSpec);
+
+            m_SkyboxPipeSpec.TargetFramebuffer = sceneColorFBO;
+            m_SkyboxPipeline = Pipeline::Create(m_SkyboxPipeSpec);
+        }
+        if (!m_OutlinePipeline && selectionFBO) {
+            m_OutlinePipeSpec.TargetFramebuffer = selectionFBO;
+            m_OutlinePipeline = Pipeline::Create(m_OutlinePipeSpec);
+        }
+        if (!m_SpritePipeline) {
+            m_SpritePipeSpec.TargetFramebuffer = sceneColorFBO;
+            m_SpritePipeline = Pipeline::Create(m_SpritePipeSpec);
         }
 
         m_OpaqueDrawList.clear();
@@ -122,7 +131,6 @@ namespace Ayaya {
                 if (cameraFrustum.IsBoxVisible(mesh->GetAABB(), transform)) { isVisible = true; break; }
             }
             if (!isVisible) continue;
-
             auto material = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
             auto targetMaterial = material ? material : m_DefaultMaterial;
 
@@ -143,11 +151,9 @@ namespace Ayaya {
             return a.MeshAsset.get() < b.MeshAsset.get();
         });
 
-        cmd.BeginRenderPass(currentFBO, true, glm::vec4(0.12f, 0.12f, 0.14f, 1.0f));
+        cmd.BeginRenderPass(sceneColorFBO, true, glm::vec4(0.12f, 0.12f, 0.14f, 1.0f));
 
         std::shared_ptr<Pipeline> currentPipeline = nullptr;
-
-        // 【提取安全占位图】：提取黑板上 100% 绝对安全的白图
         auto whiteTex = context.GetTexture("WhiteTexture");
 
         auto envCubemap    = context.Get<std::shared_ptr<TextureCube>>("EnvironmentCubemap");
@@ -155,12 +161,9 @@ namespace Ayaya {
         auto prefilterMap  = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap");
         auto brdfLUT       = context.GetTexture("BRDFLUT");
 
-        // 环境参数 — 对齐 OpenGL 的 u_Intensity / u_AmbientColor
         float envIntensity = context.Get<float>("EnvironmentIntensity", 1.0f);
-        glm::vec3 envAmbient = context.Get<glm::vec3>("EnvironmentAmbientColor", glm::vec3(0.1f))
-                             * envIntensity;
+        glm::vec3 envAmbient = context.Get<glm::vec3>("EnvironmentAmbientColor", glm::vec3(0.1f)) * envIntensity;
 
-        // 【安全降级策略】
         std::shared_ptr<TextureCube> safeIrradiance = irradianceMap ? irradianceMap : envCubemap;
         std::shared_ptr<TextureCube> safePrefilter  = prefilterMap  ? prefilterMap  : envCubemap;
         std::shared_ptr<Texture2D>   safeBRDF       = brdfLUT       ? brdfLUT       : whiteTex;
@@ -172,9 +175,6 @@ namespace Ayaya {
                 context.Stats.ShaderBinds++;
             }
 
-            // ==========================================
-            // 【硬核安全发车规则】：每次画物体，强行填满所有槽位！
-            // ==========================================
             cmd.BindTexture2D(currentPipeline,   "u_AlbedoMap",     0, whiteTex);
             cmd.BindTextureCube(currentPipeline, "u_IrradianceMap", 1, safeIrradiance);
             cmd.BindTextureCube(currentPipeline, "u_PrefilterMap",  2, safePrefilter);
@@ -186,129 +186,147 @@ namespace Ayaya {
 
             ForwardPushConstants constants{};
             constants.Transform = drawCmd.Transform;
-            constants.Albedo = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-            constants.UseAlbedoMap = 0;
+            constants.Albedo = glm::vec4(1.0f);
             constants.Metallic = 0.0f;
             constants.Roughness = 0.5f;
             constants.AO = 1.0f;
-            constants.UseMetallicMap = 0;
-            constants.UseRoughnessMap = 0;
-            constants.UseAOMap = 0;
-            constants.UseNormalMap = 0;
             constants.EnvironmentIntensity = envIntensity;
-            constants._pad0 = 0.0f;
-            constants._pad1 = 0.0f;
-            constants._pad2 = 0.0f;
             constants.EnvironmentAmbientColor = glm::vec4(envAmbient, 1.0f);
 
             if (drawCmd.MaterialAsset) {
                 for (const auto& prop : drawCmd.MaterialAsset->Properties) {
-                    if (prop.Type == MaterialPropertyType::Vec3 && prop.UniformName == "u_Albedo") {
+                    if (prop.Type == MaterialPropertyType::Vec3 && prop.UniformName == "u_Albedo")
                         constants.Albedo = glm::vec4(prop.Vec3Value, 1.0f);
-                    }
-                    else if (prop.Type == MaterialPropertyType::Float && prop.UniformName == "u_Metallic") {
+                    else if (prop.Type == MaterialPropertyType::Float && prop.UniformName == "u_Metallic")
                         constants.Metallic = prop.FloatValue;
-                    }
-                    else if (prop.Type == MaterialPropertyType::Float && prop.UniformName == "u_Roughness") {
+                    else if (prop.Type == MaterialPropertyType::Float && prop.UniformName == "u_Roughness")
                         constants.Roughness = prop.FloatValue;
-                    }
-                    else if (prop.Type == MaterialPropertyType::Float && prop.UniformName == "u_AO") {
+                    else if (prop.Type == MaterialPropertyType::Float && prop.UniformName == "u_AO")
                         constants.AO = prop.FloatValue;
-                    }
                     else if (prop.Type == MaterialPropertyType::Texture2D) {
-                        bool hasValidTex = (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) || (prop.RuntimeTexture != nullptr);
-                        if (!hasValidTex) continue;
+                        bool valid = (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) || prop.RuntimeTexture;
+                        if (!valid) continue;
                         auto tex = prop.RuntimeTexture ? prop.RuntimeTexture : AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
                         if (!tex) continue;
 
-                        if (prop.UniformName == "u_AlbedoMap") {
-                            cmd.BindTexture2D(currentPipeline, "u_AlbedoMap", 0, tex);
-                            constants.UseAlbedoMap = 1;
-                        } else if (prop.UniformName == "u_MetallicMap") {
-                            cmd.BindTexture2D(currentPipeline, "u_MetallicMap", 4, tex);
-                            constants.UseMetallicMap = 1;
-                        } else if (prop.UniformName == "u_RoughnessMap") {
-                            cmd.BindTexture2D(currentPipeline, "u_RoughnessMap", 5, tex);
-                            constants.UseRoughnessMap = 1;
-                        } else if (prop.UniformName == "u_AOMap") {
-                            cmd.BindTexture2D(currentPipeline, "u_AOMap", 6, tex);
-                            constants.UseAOMap = 1;
-                        } else if (prop.UniformName == "u_NormalMap") {
-                            cmd.BindTexture2D(currentPipeline, "u_NormalMap", 7, tex);
-                            constants.UseNormalMap = 1;
-                        }
+                        if (prop.UniformName == "u_AlbedoMap")
+                            { cmd.BindTexture2D(currentPipeline, "u_AlbedoMap", 0, tex); constants.UseAlbedoMap = 1; }
+                        else if (prop.UniformName == "u_MetallicMap")
+                            { cmd.BindTexture2D(currentPipeline, "u_MetallicMap", 4, tex); constants.UseMetallicMap = 1; }
+                        else if (prop.UniformName == "u_RoughnessMap")
+                            { cmd.BindTexture2D(currentPipeline, "u_RoughnessMap", 5, tex); constants.UseRoughnessMap = 1; }
+                        else if (prop.UniformName == "u_AOMap")
+                            { cmd.BindTexture2D(currentPipeline, "u_AOMap", 6, tex); constants.UseAOMap = 1; }
+                        else if (prop.UniformName == "u_NormalMap")
+                            { cmd.BindTexture2D(currentPipeline, "u_NormalMap", 7, tex); constants.UseNormalMap = 1; }
                     }
                 }
             }
 
             cmd.PushConstantData(currentPipeline, &constants, sizeof(ForwardPushConstants));
-
             std::string tag = drawCmd.TargetEntity.GetComponent<TagComponent>().Tag;
             uint32_t tris = drawCmd.MeshAsset->GetIndexCount() / 3;
-            if (context.RecordAndCheckDrawCall("Forward Test Pass", tag, "Forward Shader", tris)) {
+            if (context.RecordAndCheckDrawCall("Forward Test Pass", tag, "Forward Shader", tris))
                 cmd.DrawIndexed(drawCmd.MeshAsset, drawCmd.MeshAsset->GetIndexCount());
+        }
+
+        // ==========================================
+        // 2D Sprite 渲染 (Painter's Algorithm: 远→近)
+        // ==========================================
+        {
+            struct SpriteDrawCmd {
+                glm::mat4 Transform;
+                SpriteRendererComponent SpriteComp;
+                float Distance;
+            };
+            std::vector<SpriteDrawCmd> spriteList;
+            auto spriteGroup = context.ActiveScene->Reg().view<TransformComponent, SpriteRendererComponent>();
+            int rawSpriteCount = 0;
+            for (auto entityID : spriteGroup) {
+                rawSpriteCount++;
+                Entity entity{ entityID, context.ActiveScene.get() };
+                if (!entity.IsActiveInHierarchy()) continue;
+                auto [transformComp, spriteComp] = spriteGroup.get<TransformComponent, SpriteRendererComponent>(entityID);
+                glm::mat4 transform = entity.GetWorldTransform();
+                float dist = glm::length(context.CameraPosition - glm::vec3(transform[3]));
+                spriteList.push_back({transform, spriteComp, dist});
+            }
+            std::sort(spriteList.begin(), spriteList.end(),
+                [](const SpriteDrawCmd& a, const SpriteDrawCmd& b) { return a.Distance > b.Distance; });
+
+            AYAYA_CORE_WARN("[Sprite] raw={} active={} spritePipe={}",
+                rawSpriteCount, (int)spriteList.size(), (void*)m_SpritePipeline.get());
+
+            if (!spriteList.empty()) {
+                cmd.BindPipeline(m_SpritePipeline);
+                context.Stats.ShaderBinds++;
+                int drawIdx = 0;
+                for (auto& cmd2 : spriteList) {
+                    drawIdx++;
+                    // 字段顺序必须与 shader push_constant 对齐
+                    struct { glm::mat4 Transform; glm::vec4 Color; float ExposureInv; int UseTexture; } spritePC;
+                    spritePC.Transform = cmd2.Transform;
+                    spritePC.Color = cmd2.SpriteComp.Color;
+                    spritePC.ExposureInv = 1.0f / context.Get<float>("PhysicalExposure", 1.0f);
+
+                    if (cmd2.SpriteComp.TextureHandle != 0 && AssetManager::IsAssetHandleValid(cmd2.SpriteComp.TextureHandle)) {
+                        auto tex = AssetManager::GetAsset<Texture2D>(cmd2.SpriteComp.TextureHandle);
+                        if (tex) { cmd.BindTexture2D(m_SpritePipeline, "u_Texture", 0, tex); spritePC.UseTexture = 1; }
+                        else     { cmd.BindTexture2D(m_SpritePipeline, "u_Texture", 0, whiteTex); spritePC.UseTexture = 0; }
+                    } else {
+                        cmd.BindTexture2D(m_SpritePipeline, "u_Texture", 0, whiteTex);
+                        spritePC.UseTexture = 0;
+                    }
+                    cmd.PushConstantData(m_SpritePipeline, &spritePC, sizeof(spritePC));
+                    if (drawIdx == 1) AYAYA_CORE_WARN("[Sprite] draw#{0} useTex={1} color=({2:.2f},{3:.2f},{4:.2f},{5:.2f})",
+                        drawIdx, spritePC.UseTexture, spritePC.Color.r, spritePC.Color.g, spritePC.Color.b, spritePC.Color.a);
+                    if (context.RecordAndCheckDrawCall("Forward Pass", "Sprite", "Sprite Shader", 2))
+                        cmd.DrawTriangleStrip(4);
+                }
             }
         }
 
         bool showSkybox = context.Get<bool>("ShowSkybox");
         auto skyboxMesh = context.Get<std::shared_ptr<Mesh>>("SkyboxMesh");
-
         if (showSkybox && skyboxMesh && envCubemap) {
             cmd.BindPipeline(m_SkyboxPipeline);
-
-            SkyboxPushConstants skyboxConstants;
-            glm::mat4 viewNoTranslation = glm::mat4(glm::mat3(context.ViewMatrix));
-            skyboxConstants.ViewProjection = context.ProjectionMatrix * viewNoTranslation;
-            skyboxConstants.Intensity = context.Get<float>("EnvironmentIntensity", 1.0f);
-
-            cmd.PushConstantData(m_SkyboxPipeline, &skyboxConstants, sizeof(SkyboxPushConstants));
+            SkyboxPushConstants skyConst;
+            skyConst.ViewProjection = context.ProjectionMatrix * glm::mat4(glm::mat3(context.ViewMatrix));
+            skyConst.Intensity = context.Get<float>("EnvironmentIntensity", 1.0f);
+            cmd.PushConstantData(m_SkyboxPipeline, &skyConst, sizeof(SkyboxPushConstants));
             cmd.BindTextureCube(m_SkyboxPipeline, "u_Skybox", 0, envCubemap);
-
-            if (context.RecordAndCheckDrawCall("Forward Pass", "Skybox", "Skybox Shader", skyboxMesh->GetIndexCount() / 3)) {
+            if (context.RecordAndCheckDrawCall("Forward Pass", "Skybox", "Skybox Shader", skyboxMesh->GetIndexCount() / 3))
                 cmd.DrawIndexed(skyboxMesh, skyboxMesh->GetIndexCount());
-            }
         }
 
         cmd.EndRenderPass();
+        context.Framebuffers["ForwardTest"] = sceneColorFBO;
 
-        // Selection FBO — 始终写入，确保取消选中时清除旧数据
-        if (m_SelectionFBO->GetSpecification().Width != width || m_SelectionFBO->GetSpecification().Height != height) {
-            m_SelectionFBO->Resize(width, height);
-        }
-        cmd.BeginRenderPass(m_SelectionFBO, true, glm::vec4(0.0f));
-
-        Entity hoveredEntity = context.Get<Entity>("HoveredEntity", Entity{});
-        if (hoveredEntity && hoveredEntity.HasComponent<MeshRendererComponent>()) {
-            auto& meshComp = hoveredEntity.GetComponent<MeshRendererComponent>();
-            auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
-            if (model) {
-                cmd.BindPipeline(m_OutlinePipeline);
-                context.Stats.ShaderBinds++;
-                glm::mat4 transform = hoveredEntity.GetWorldTransform();
-                for (auto& mesh : model->GetMeshes()) {
-                    auto aabb = mesh->GetAABB();
-                    glm::vec3 center = (aabb.Max + aabb.Min) * 0.5f;
-                    float scaleFactor = 1.05f;
-                    glm::mat4 offsetMat = glm::translate(glm::mat4(1.0f), center);
-                    glm::mat4 scaleMat = glm::scale(glm::mat4(1.0f), glm::vec3(scaleFactor));
-                    glm::mat4 negOffsetMat = glm::translate(glm::mat4(1.0f), -center);
-                    glm::mat4 outlineTransform = transform * offsetMat * scaleMat * negOffsetMat;
-
+        // Selection FBO
+        if (selectionFBO) {
+            cmd.BeginRenderPass(selectionFBO, true, glm::vec4(0.0f));
+            Entity hoveredEntity = context.Get<Entity>("HoveredEntity", Entity{});
+            if (hoveredEntity && hoveredEntity.HasComponent<MeshRendererComponent>()) {
+                auto& meshComp = hoveredEntity.GetComponent<MeshRendererComponent>();
+                auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
+                if (model) {
+                    cmd.BindPipeline(m_OutlinePipeline);
+                    context.Stats.ShaderBinds++;
+                    glm::mat4 transform = hoveredEntity.GetWorldTransform();
                     struct { glm::mat4 Transform; alignas(16) glm::vec3 Color; } outlinePC;
-                    outlinePC.Transform = outlineTransform;
+                    outlinePC.Transform = transform;
                     outlinePC.Color = glm::vec3(1.0f, 0.5f, 0.0f);
-                    cmd.PushConstantData(m_OutlinePipeline, &outlinePC, sizeof(outlinePC));
-
-                    cmd.DrawIndexed(mesh, mesh->GetIndexCount());
+                    for (auto& mesh : model->GetMeshes()) {
+                        cmd.PushConstantData(m_OutlinePipeline, &outlinePC, sizeof(outlinePC));
+                        cmd.DrawIndexed(mesh, mesh->GetIndexCount());
+                    }
                 }
             }
+            cmd.EndRenderPass();
+            context.Framebuffers["Selection"] = selectionFBO;
         }
-        cmd.EndRenderPass();
-        context.Framebuffers["Selection"] = m_SelectionFBO;
 
-        cmd.InsertExecutionBarrier(); // flush TBDR tile writes before PostProcess reads this FBO
-        context.Set("Forward_Output", currentFBO);
-        context.Set("Final_Output", currentFBO);
-        context.Framebuffers["ForwardTest"] = currentFBO;
+        // RenderGraph 自动插入 Barrier，不再需要手动全局屏障
     }
+
 }

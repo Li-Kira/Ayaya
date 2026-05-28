@@ -5,11 +5,13 @@
 #include "Renderer/Framebuffer.hpp"
 #include "Renderer/UniformBuffer.hpp"
 #include "Renderer/RenderPipeline.hpp"
+#include "Renderer/RenderGraph.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 
 namespace Ayaya {
 
+    class RenderPass;
     struct SceneRendererData;
 
     class SceneRenderer {
@@ -19,7 +21,7 @@ namespace Ayaya {
         ~SceneRenderer();
 
         void Init();
-        static void Shutdown(); // 【新增】：全局图形资源清理器
+        static void Shutdown();
         void OnWindowResize(uint32_t width, uint32_t height);
         void SetMSAASamples(uint32_t samples);
         void* GetFinalColorAttachmentRendererID();
@@ -35,16 +37,15 @@ namespace Ayaya {
 
         void SetExposure(float exposure) { m_Exposure = exposure; }
 
-        // 获取黑板上的中间阶段贴图 ID (用于帧调试器)
         void* GetBlackboardTextureID(std::string_view key);
 
         struct Statistics {
             uint32_t DrawCalls = 0;
-            uint32_t ShaderBinds = 0;   // SetPass Calls
+            uint32_t ShaderBinds = 0;
             uint32_t VertexCount = 0;
-            uint32_t TriangleCount = 0; // Tris
-            float CPUTime = 0.0f; // C++ 准备指令的时间
-            float GPUTime = 0.0f; // 显卡真实渲染的时间
+            uint32_t TriangleCount = 0;
+            float CPUTime = 0.0f;
+            float GPUTime = 0.0f;
         };
         void ResetStats();
         Statistics GetStats();
@@ -52,15 +53,31 @@ namespace Ayaya {
         void SetDebugStepLimit(int limit) { m_RenderContext.DebugStepLimit = limit; }
         const RenderContext& GetRenderContext() const { return m_RenderContext; }
     private:
-        // 每个 Renderer 实例独有的数据指针！
         std::unique_ptr<SceneRendererData> m_Data;
 
-        // 【核心修复】：去掉 static！让每个实例拥有独立的 UBO，互不干扰
         std::shared_ptr<UniformBuffer> m_CameraUniformBuffer;
         std::shared_ptr<UniformBuffer> m_LightUniformBuffer;
 
-        RenderPipeline m_Pipeline; 
-        RenderContext  m_RenderContext; // 持有一份上下文
+        // OpenGL 线性管线 (保持兼容)
+        RenderPipeline m_Pipeline;
+
+        // Vulkan RenderGraph (声明式 DAG + 自动 Barrier)
+        RenderGraph m_RenderGraph;
+        bool m_ViewportDirty = true;   // 首帧/Resize 时触发图重建
+
+        // Pass 实例 — 由 Graph 调度，管线只持有 Shader/Pipeline
+        std::shared_ptr<RenderPass> m_ForwardPass;
+        std::shared_ptr<RenderPass> m_PostProcessPass;
+        std::shared_ptr<RenderPass> m_UIPass;
+
+        // GPU 资源延迟释放 (3 帧安全期)
+        struct DeferredRelease {
+            std::vector<std::shared_ptr<TextureCube>> TextureCubes;
+            int FramesRemaining = 3;
+        };
+        std::vector<DeferredRelease> m_DeferredReleases;
+
+        RenderContext  m_RenderContext;
 
         float m_Exposure = 1.0f;
     };

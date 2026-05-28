@@ -60,6 +60,8 @@ namespace Ayaya {
         virtual void DrawTriangleStrip(uint32_t vertexCount) override;
 
         virtual void InsertExecutionBarrier() override {}
+        virtual void TransitionImageLayout(const std::shared_ptr<Framebuffer>&,
+                                           uint32_t, ImageLayout, ImageLayout) override {}
         virtual void FlushDescriptorSets() override {}
     };
 }

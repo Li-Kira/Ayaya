@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Renderer/RenderPipeline.hpp"
+#include "Renderer/RenderGraph.hpp"
 #include "Renderer/Buffer.hpp"
 #include "Renderer/Shader.hpp"
 #include "Renderer/Texture.hpp"
@@ -55,6 +56,8 @@ namespace Ayaya {
         virtual void OnResize(uint32_t width, uint32_t height) override {}
         virtual void Execute(RenderContext& context, RenderCommandBuffer& cmd) override;
 
+        static void DeclareResources(RGBuilder& builder, uint32_t width, uint32_t height);
+
         void StartBatch();
         void Flush(RenderCommandBuffer& cmd);
         void NextBatch(RenderCommandBuffer& cmd);
@@ -67,12 +70,11 @@ namespace Ayaya {
     private:
         bool m_Initialized = false;
         std::shared_ptr<Pipeline> m_UIPipeline;
-        std::shared_ptr<Framebuffer> m_UIFBO;
+        PipelineSpecification m_PipeSpec;
 
         uint32_t m_ViewportWidth = 1280;
         uint32_t m_ViewportHeight = 720;
 
-        // Triple-buffer GC: per-instance, 防止同一帧内多个 renderer 互相踩踏
         std::vector<std::shared_ptr<VertexBuffer>> m_VBGCTrash[3];
         std::vector<std::shared_ptr<VertexArray>>  m_VAGCTrash[3];
     };

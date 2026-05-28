@@ -48,6 +48,7 @@ namespace Ayaya {
 
         // 注册 UBO，需指定是哪一帧的 Buffer
         static void SetGlobalUniformBuffer(uint32_t binding, uint32_t frameIndex, VkBuffer buffer, uint32_t size);
+        static void ClearGlobalUBOs() { s_GlobalUBOs.clear(); }
 
         // ==========================================
         // 环形缓冲，每次索要都给一个全新的描述符集！(Set 1)
