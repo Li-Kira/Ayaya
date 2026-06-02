@@ -13,79 +13,95 @@ namespace Ayaya {
     void VulkanShadowPass::OnAttach() {
         m_ShadowShader = Shader::Create("Shadow/shadow_map.vert", "Shadow/shadow_map.frag");
 
+        m_PipeSpec.Shader = m_ShadowShader;
+        m_PipeSpec.Layout = {
+            { ShaderDataType::Float3, "a_Position" },
+            { ShaderDataType::Float3, "a_Normal"   },
+            { ShaderDataType::Float2, "a_TexCoord" },
+            { ShaderDataType::Float3, "a_Tangent"  },
+        };
+        m_PipeSpec.DepthTest = true;
+        m_PipeSpec.DepthWrite = true;
+        m_PipeSpec.BackfaceCulling = CullMode::Back;
+    }
+
+    void VulkanShadowPass::DeclareResources(RGBuilder& builder) {
         FramebufferSpecification spec;
-        spec.Width = 2048;
+        spec.Width  = 2048;
         spec.Height = 2048;
         spec.Samples = 1;
         spec.Attachments = { FramebufferTextureFormat::Depth };
-        m_ShadowMapFBO = Framebuffer::Create(spec);
-
-        PipelineSpecification pipeSpec;
-        pipeSpec.Shader = m_ShadowShader;
-        pipeSpec.TargetFramebuffer = m_ShadowMapFBO;
-        pipeSpec.Layout = {
-            { ShaderDataType::Float3, "a_Position" }
-        };
-        pipeSpec.DepthTest = true;
-        pipeSpec.DepthWrite = true;
-        pipeSpec.BackfaceCulling = CullMode::Back;
-
-        m_Pipeline = Pipeline::Create(pipeSpec);
+        builder.WriteTexture("ShadowMap", spec);
     }
 
     void VulkanShadowPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
+        auto shadowFBO = context.GetFramebuffer("ShadowMap");
+        if (!shadowFBO) return;
+
+        if (!m_Pipeline) {
+            m_PipeSpec.TargetFramebuffer = shadowFBO;
+            m_Pipeline = Pipeline::Create(m_PipeSpec);
+        }
+
         auto lightView = context.ActiveScene->Reg().view<TransformComponent, DirectionalLightComponent>();
-        if (lightView.begin() == lightView.end()) {
-            context.Set("ShadowMap_Output", std::shared_ptr<Framebuffer>(nullptr));
-            return;
+        bool hasLight = lightView.begin() != lightView.end();
+
+        glm::mat4 lightSpaceMatrix(1.0f);
+
+        if (hasLight) {
+            glm::vec3 lightDir(0.0f);
+            for (auto entityID : lightView) {
+                auto& tc = lightView.get<TransformComponent>(entityID);
+                lightDir = glm::normalize(glm::vec3(tc.GetTransform() * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
+                break;
+            }
+            glm::vec3 lightPos = -lightDir * 20.0f;
+            glm::mat4 lightProjection = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, 1.0f, 50.0f);
+            // GLM ortho produces [-1,1] depth; Vulkan clips to [0,w]; correct to [0,1]
+            glm::mat4 depthCorrection = glm::mat4(1.0f);
+            depthCorrection[2][2] = 0.5f;
+            depthCorrection[3][2] = 0.5f;
+            lightProjection = depthCorrection * lightProjection;
+            glm::mat4 lightViewMatrix = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            lightSpaceMatrix = lightProjection * lightViewMatrix;
         }
 
-        glm::vec3 lightDir = glm::vec3(0.0f);
-        for (auto entityID : lightView) {
-            auto& tc = lightView.get<TransformComponent>(entityID);
-            lightDir = glm::normalize(glm::vec3(tc.GetTransform() * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
-            break;
-        }
+        static_assert(sizeof(VulkanShadowPushConstants) == 128, "Shadow push constant size mismatch");
 
-        glm::vec3 lightPos = -lightDir * 20.0f;
-        glm::mat4 lightProjection = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, 1.0f, 50.0f);
-        glm::mat4 lightViewMatrix = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 lightSpaceMatrix = lightProjection * lightViewMatrix;
+        // 始终执行 clear，避免 ForwardPass 读到未初始化的 ShadowMap
+        cmd.BeginRenderPass(shadowFBO, true, glm::vec4(1.0f));
 
-        cmd.BeginRenderPass(m_ShadowMapFBO, true, glm::vec4(1.0f));
-        cmd.BindPipeline(m_Pipeline);
-        context.Stats.ShaderBinds++;
+        if (hasLight) {
+            cmd.BindPipeline(m_Pipeline);
+            context.Stats.ShaderBinds++;
 
-        auto meshView = context.ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
-        for (auto entityID : meshView) {
-            Entity entity{ entityID, context.ActiveScene.get() };
-            if (!entity.IsActiveInHierarchy()) continue;
+            auto meshView = context.ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
+            for (auto entityID : meshView) {
+                Entity entity{ entityID, context.ActiveScene.get() };
+                if (!entity.IsActiveInHierarchy()) continue;
+                auto& meshComp = entity.GetComponent<MeshRendererComponent>();
+                auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
+                if (!model || !meshComp.CastShadows) continue;
 
-            auto& meshComp = entity.GetComponent<MeshRendererComponent>();
-            auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
-            if (!model || !meshComp.CastShadows) continue;
+                VulkanShadowPushConstants constants{};
+                constants.LightSpaceMatrix = lightSpaceMatrix;
+                constants.Transform = entity.GetWorldTransform();
+                cmd.PushConstantData(m_Pipeline, &constants, sizeof(VulkanShadowPushConstants));
 
-            VulkanShadowPushConstants constants{};
-            constants.LightSpaceMatrix = lightSpaceMatrix;
-            constants.Transform = entity.GetWorldTransform();
-            cmd.PushConstantData(m_Pipeline, &constants, sizeof(VulkanShadowPushConstants));
-
-            for (auto& mesh : model->GetMeshes()) {
-                std::string tag = entity.GetComponent<TagComponent>().Tag;
-                uint32_t tris = mesh->GetIndexCount() / 3;
-
-                if (context.RecordAndCheckDrawCall("Shadow Pass", tag, "Shadow Map", tris)) {
-                    cmd.DrawIndexed(mesh, mesh->GetIndexCount());
+                for (auto& mesh : model->GetMeshes()) {
+                    std::string tag = entity.GetComponent<TagComponent>().Tag;
+                    uint32_t tris = mesh->GetIndexCount() / 3;
+                    if (context.RecordAndCheckDrawCall("Shadow Pass", tag, "Shadow Map", tris))
+                        cmd.DrawIndexed(mesh, mesh->GetIndexCount());
                 }
             }
+
         }
 
         cmd.EndRenderPass();
-        cmd.InsertExecutionBarrier(); // flush tile writes before LightingPass reads ShadowMap
 
-        context.Set("ShadowMap_Output", m_ShadowMapFBO);
-        context.Framebuffers["ShadowMap"] = m_ShadowMapFBO;
         context.Set("LightSpaceMatrix", lightSpaceMatrix);
+        context.Set("ShadowMap_Output", shadowFBO);
     }
 
 }

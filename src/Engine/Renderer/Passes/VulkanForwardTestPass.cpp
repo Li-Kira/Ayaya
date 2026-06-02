@@ -38,7 +38,7 @@ namespace Ayaya {
         m_ForwardPipeSpec.DepthTest = true;
         m_ForwardPipeSpec.DepthWrite = true;
         m_ForwardPipeSpec.Blend = false;
-        m_ForwardPipeSpec.BackfaceCulling = CullMode::None;
+        m_ForwardPipeSpec.BackfaceCulling = CullMode::Back;
 
         m_SkyboxShader = Shader::Create("Skybox/skybox.vert", "Skybox/skybox.frag");
         m_SkyboxPipeSpec.Shader = m_SkyboxShader;
@@ -47,14 +47,6 @@ namespace Ayaya {
         m_SkyboxPipeSpec.DepthWrite = false;
         m_SkyboxPipeSpec.DepthOperator = DepthCompareOperator::LEqual;
         m_SkyboxPipeSpec.BackfaceCulling = CullMode::None;
-
-        m_OutlineShader = Shader::Create("UI/outline.vert", "UI/outline.frag");
-        m_OutlinePipeSpec.Shader = m_OutlineShader;
-        m_OutlinePipeSpec.Layout = m_ForwardPipeSpec.Layout;
-        m_OutlinePipeSpec.DepthTest = false;
-        m_OutlinePipeSpec.DepthWrite = true;
-        m_OutlinePipeSpec.Blend = false;
-        m_OutlinePipeSpec.BackfaceCulling = CullMode::None;
 
         m_SpriteShader = Shader::Create("2D/sprite.vert", "2D/sprite.frag");
         m_SpritePipeSpec.Shader = m_SpriteShader;
@@ -73,13 +65,7 @@ namespace Ayaya {
         fboSpec.Samples = 1;
         fboSpec.Attachments = { FramebufferTextureFormat::RGBA16F, FramebufferTextureFormat::Depth };
         builder.WriteTexture("SceneColor", fboSpec);
-
-        FramebufferSpecification selSpec;
-        selSpec.Width  = width;
-        selSpec.Height = height;
-        selSpec.Samples = 1;
-        selSpec.Attachments = { FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::Depth };
-        builder.WriteTexture("Selection", selSpec);
+        builder.ReadTexture("ShadowMap");
     }
 
     void VulkanForwardTestPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
@@ -89,23 +75,16 @@ namespace Ayaya {
 
         // 从 Graph 管理的 Context 黑板获取 FBO (替代原来的 m_ForwardFBOs[m_FrameIndex])
         auto sceneColorFBO = context.GetFramebuffer("SceneColor");
-        auto selectionFBO  = context.GetFramebuffer("Selection");
         if (!sceneColorFBO) {
             AYAYA_CORE_ERROR("VulkanForwardTestPass: SceneColor FBO not found in context!");
             return;
         }
 
-        // 懒加载：拿到 Graph 分配的真 FBO 后才创建管线
         if (!m_ForwardPipeline) {
             m_ForwardPipeSpec.TargetFramebuffer = sceneColorFBO;
             m_ForwardPipeline = Pipeline::Create(m_ForwardPipeSpec);
-
             m_SkyboxPipeSpec.TargetFramebuffer = sceneColorFBO;
             m_SkyboxPipeline = Pipeline::Create(m_SkyboxPipeSpec);
-        }
-        if (!m_OutlinePipeline && selectionFBO) {
-            m_OutlinePipeSpec.TargetFramebuffer = selectionFBO;
-            m_OutlinePipeline = Pipeline::Create(m_OutlinePipeSpec);
         }
         if (!m_SpritePipeline) {
             m_SpritePipeSpec.TargetFramebuffer = sceneColorFBO;
@@ -168,6 +147,10 @@ namespace Ayaya {
         std::shared_ptr<TextureCube> safePrefilter  = prefilterMap  ? prefilterMap  : envCubemap;
         std::shared_ptr<Texture2D>   safeBRDF       = brdfLUT       ? brdfLUT       : whiteTex;
 
+        auto shadowFBO = context.GetFramebuffer("ShadowMap");
+        glm::mat4 lightSpaceMatrix = context.Get<glm::mat4>("LightSpaceMatrix", glm::mat4(1.0f));
+        bool hasShadows = shadowFBO != nullptr;
+
         for (const auto& drawCmd : m_OpaqueDrawList) {
             if (currentPipeline != drawCmd.PipelineAsset) {
                 currentPipeline = drawCmd.PipelineAsset;
@@ -183,17 +166,27 @@ namespace Ayaya {
             cmd.BindTexture2D(currentPipeline,   "u_RoughnessMap",  5, whiteTex);
             cmd.BindTexture2D(currentPipeline,   "u_AOMap",         6, whiteTex);
             cmd.BindTexture2D(currentPipeline,   "u_NormalMap",     7, whiteTex);
+            if (hasShadows)
+                cmd.BindTexture2D(currentPipeline, "u_ShadowMap", 8, shadowFBO, 0, true);
+            else
+                cmd.BindTexture2D(currentPipeline, "u_ShadowMap", 8, whiteTex);
+
+            bool debugRed = context.Get<bool>("DebugRed", false);
 
             ForwardPushConstants constants{};
             constants.Transform = drawCmd.Transform;
-            constants.Albedo = glm::vec4(1.0f);
-            constants.Metallic = 0.0f;
-            constants.Roughness = 0.5f;
-            constants.AO = 1.0f;
-            constants.EnvironmentIntensity = envIntensity;
-            constants.EnvironmentAmbientColor = glm::vec4(envAmbient, 1.0f);
+            constants.Albedo   = debugRed ? glm::vec4(1,0,0,1) : glm::vec4(1.0f);
+            constants.Metallic = debugRed ? 0.0f : 0.0f;
+            constants.Roughness= debugRed ? 0.5f : 0.5f;
+            constants.AO       = debugRed ? 1.0f : 1.0f;
+            constants.EnvironmentIntensity = debugRed ? 0.0f : envIntensity;
+            constants.EnvironmentAmbientColor = debugRed ? glm::vec4(0,0,0,0) : glm::vec4(envAmbient, 1.0f);
+            constants.LightSpaceMatrix = debugRed ? glm::mat4(1.0f) : lightSpaceMatrix;
+            bool receiveShadows = hasShadows && drawCmd.TargetEntity.HasComponent<MeshRendererComponent>()
+                && drawCmd.TargetEntity.GetComponent<MeshRendererComponent>().ReceiveShadows;
+            constants.EnableShadows = (debugRed || !receiveShadows) ? 0 : 1;
 
-            if (drawCmd.MaterialAsset) {
+            if (!debugRed && drawCmd.MaterialAsset) {
                 for (const auto& prop : drawCmd.MaterialAsset->Properties) {
                     if (prop.Type == MaterialPropertyType::Vec3 && prop.UniformName == "u_Albedo")
                         constants.Albedo = glm::vec4(prop.Vec3Value, 1.0f);
@@ -241,9 +234,7 @@ namespace Ayaya {
             };
             std::vector<SpriteDrawCmd> spriteList;
             auto spriteGroup = context.ActiveScene->Reg().view<TransformComponent, SpriteRendererComponent>();
-            int rawSpriteCount = 0;
             for (auto entityID : spriteGroup) {
-                rawSpriteCount++;
                 Entity entity{ entityID, context.ActiveScene.get() };
                 if (!entity.IsActiveInHierarchy()) continue;
                 auto [transformComp, spriteComp] = spriteGroup.get<TransformComponent, SpriteRendererComponent>(entityID);
@@ -254,15 +245,13 @@ namespace Ayaya {
             std::sort(spriteList.begin(), spriteList.end(),
                 [](const SpriteDrawCmd& a, const SpriteDrawCmd& b) { return a.Distance > b.Distance; });
 
-            AYAYA_CORE_WARN("[Sprite] raw={} active={} spritePipe={}",
-                rawSpriteCount, (int)spriteList.size(), (void*)m_SpritePipeline.get());
+            // AYAYA_CORE_WARN("[Sprite] raw={} active={} spritePipe={}",
+            //     rawSpriteCount, (int)spriteList.size(), (void*)m_SpritePipeline.get());
 
             if (!spriteList.empty()) {
                 cmd.BindPipeline(m_SpritePipeline);
                 context.Stats.ShaderBinds++;
-                int drawIdx = 0;
                 for (auto& cmd2 : spriteList) {
-                    drawIdx++;
                     // 字段顺序必须与 shader push_constant 对齐
                     struct { glm::mat4 Transform; glm::vec4 Color; float ExposureInv; int UseTexture; } spritePC;
                     spritePC.Transform = cmd2.Transform;
@@ -278,8 +267,6 @@ namespace Ayaya {
                         spritePC.UseTexture = 0;
                     }
                     cmd.PushConstantData(m_SpritePipeline, &spritePC, sizeof(spritePC));
-                    if (drawIdx == 1) AYAYA_CORE_WARN("[Sprite] draw#{0} useTex={1} color=({2:.2f},{3:.2f},{4:.2f},{5:.2f})",
-                        drawIdx, spritePC.UseTexture, spritePC.Color.r, spritePC.Color.g, spritePC.Color.b, spritePC.Color.a);
                     if (context.RecordAndCheckDrawCall("Forward Pass", "Sprite", "Sprite Shader", 2))
                         cmd.DrawTriangleStrip(4);
                 }
@@ -301,32 +288,6 @@ namespace Ayaya {
 
         cmd.EndRenderPass();
         context.Framebuffers["ForwardTest"] = sceneColorFBO;
-
-        // Selection FBO
-        if (selectionFBO) {
-            cmd.BeginRenderPass(selectionFBO, true, glm::vec4(0.0f));
-            Entity hoveredEntity = context.Get<Entity>("HoveredEntity", Entity{});
-            if (hoveredEntity && hoveredEntity.HasComponent<MeshRendererComponent>()) {
-                auto& meshComp = hoveredEntity.GetComponent<MeshRendererComponent>();
-                auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
-                if (model) {
-                    cmd.BindPipeline(m_OutlinePipeline);
-                    context.Stats.ShaderBinds++;
-                    glm::mat4 transform = hoveredEntity.GetWorldTransform();
-                    struct { glm::mat4 Transform; alignas(16) glm::vec3 Color; } outlinePC;
-                    outlinePC.Transform = transform;
-                    outlinePC.Color = glm::vec3(1.0f, 0.5f, 0.0f);
-                    for (auto& mesh : model->GetMeshes()) {
-                        cmd.PushConstantData(m_OutlinePipeline, &outlinePC, sizeof(outlinePC));
-                        cmd.DrawIndexed(mesh, mesh->GetIndexCount());
-                    }
-                }
-            }
-            cmd.EndRenderPass();
-            context.Framebuffers["Selection"] = selectionFBO;
-        }
-
-        // RenderGraph 自动插入 Barrier，不再需要手动全局屏障
     }
 
 }

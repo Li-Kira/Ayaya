@@ -43,9 +43,11 @@ namespace Ayaya {
         // 【新增】：暴漏原生 VkImage 供 IBLBuilder 物理拷贝使用
         // ==========================================
         inline VkImage GetColorAttachmentImage(uint32_t index) const {
+            if (index >= m_ColorImages.size()) return VK_NULL_HANDLE;
             return m_ColorImages[index];
         }
-        
+        inline VkImage GetDepthAttachmentImage() const { return m_DepthImage; }
+
         inline VkImageView GetDepthAttachmentImageView() const { return m_DepthImageView; }
         inline VkSampler GetSampler() const { return m_Sampler; }
 

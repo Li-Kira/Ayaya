@@ -390,6 +390,26 @@ namespace Ayaya {
         }
     }
 
+    void VulkanPipeline::RefreshDescriptorSets(VkDevice device) {
+        if (m_GlobalDescriptorSets.empty() || s_GlobalUBOs.empty()) return;
+
+        for (uint32_t i = 0; i < (uint32_t)m_GlobalDescriptorSets.size(); i++) {
+            std::vector<VkWriteDescriptorSet> writes;
+            for (auto& [binding, buffers] : s_GlobalUBOs) {
+                VkWriteDescriptorSet write{};
+                write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                write.dstSet = m_GlobalDescriptorSets[i];
+                write.dstBinding = binding;
+                write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                write.descriptorCount = 1;
+                write.pBufferInfo = &buffers[i];
+                writes.push_back(write);
+            }
+            if (!writes.empty())
+                vkUpdateDescriptorSets(device, (uint32_t)writes.size(), writes.data(), 0, nullptr);
+        }
+    }
+
     VulkanPipeline::~VulkanPipeline() {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         if (context) {

@@ -32,6 +32,8 @@ namespace Ayaya {
         float EnvironmentIntensity;
         float _pad0, _pad1, _pad2;
         glm::vec4 EnvironmentAmbientColor;
+        glm::mat4 LightSpaceMatrix;
+        int EnableShadows;
     };
 
     class VulkanForwardTestPass : public RenderPass {
@@ -54,10 +56,6 @@ namespace Ayaya {
         std::shared_ptr<Shader> m_SkyboxShader;
         std::shared_ptr<Pipeline> m_SkyboxPipeline;
         PipelineSpecification m_SkyboxPipeSpec;
-
-        std::shared_ptr<Shader> m_OutlineShader;
-        std::shared_ptr<Pipeline> m_OutlinePipeline;
-        PipelineSpecification m_OutlinePipeSpec;
 
         std::shared_ptr<Shader> m_SpriteShader;
         std::shared_ptr<Pipeline> m_SpritePipeline;

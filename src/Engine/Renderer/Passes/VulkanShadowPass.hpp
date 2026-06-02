@@ -1,5 +1,6 @@
 #pragma once
 #include "Renderer/RenderPipeline.hpp"
+#include "Renderer/RenderGraph.hpp"
 #include "Renderer/Shader.hpp"
 #include "Renderer/Framebuffer.hpp"
 #include "Renderer/RenderCommandBuffer.hpp"
@@ -20,10 +21,12 @@ namespace Ayaya {
         virtual void OnAttach() override;
         virtual void Execute(RenderContext& context, RenderCommandBuffer& cmd) override;
 
+        static void DeclareResources(RGBuilder& builder);
+
     private:
         std::shared_ptr<Shader> m_ShadowShader;
-        std::shared_ptr<Framebuffer> m_ShadowMapFBO;
         std::shared_ptr<Pipeline> m_Pipeline;
+        PipelineSpecification m_PipeSpec;
     };
 
 }

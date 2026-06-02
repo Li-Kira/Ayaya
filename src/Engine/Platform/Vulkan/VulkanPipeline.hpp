@@ -50,6 +50,9 @@ namespace Ayaya {
         static void SetGlobalUniformBuffer(uint32_t binding, uint32_t frameIndex, VkBuffer buffer, uint32_t size);
         static void ClearGlobalUBOs() { s_GlobalUBOs.clear(); }
 
+        // 重新写入 UBO 描述符集 (多实例 s_GlobalUBOs 竞争修复)
+        void RefreshDescriptorSets(VkDevice device);
+
         // ==========================================
         // 环形缓冲，每次索要都给一个全新的描述符集！(Set 1)
         // ==========================================

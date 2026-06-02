@@ -28,22 +28,18 @@ void main() {
         hdrColor += bloomColor * pc.BloomIntensity;
     }
 
-    // 1. 物理曝光缩放 — 对齐 OpenGL，HDR 物理值需要曝光才能正确显示
     hdrColor *= pc.Exposure;
 
     vec3 mapped = vec3(0.0);
-    // 2. 色调映射
     if (pc.ToneMappingType == 0) {
         mapped = vec3(1.0) - exp(-hdrColor);
     } else {
         mapped = ACESFilm(hdrColor);
     }
 
-    // 3. 伽马校正 — swapchain 为 UNORM 格式，无硬件 sRGB 转换，shader 必须手动做
     mapped = pow(mapped, vec3(1.0 / 2.2));
     vec3 finalColor = mapped;
 
-    // 4. 选中描边 (黑色fallback时maskCenter=0，不触发)
     float maskCenter = texture(u_SelectionTexture, v_TexCoord).r;
     vec2 offset = pc.TexelSize * 2.0;
     float maskN  = texture(u_SelectionTexture, v_TexCoord + vec2( 0.0,      offset.y)).r;

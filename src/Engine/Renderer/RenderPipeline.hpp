@@ -43,9 +43,9 @@ namespace Ayaya {
         glm::mat4 ProjectionMatrix;
         glm::vec3 CameraPosition;
 
-        std::unordered_map<std::string_view, std::shared_ptr<Texture2D>> Textures;
-        std::unordered_map<std::string_view, std::shared_ptr<Framebuffer>> Framebuffers;
-        std::unordered_map<std::string_view, std::any> Settings;
+        std::unordered_map<std::string, std::shared_ptr<Texture2D>> Textures;
+        std::unordered_map<std::string, std::shared_ptr<Framebuffer>> Framebuffers;
+        std::unordered_map<std::string, std::any> Settings;
 
         // 【新增】：存储每个 Pass 的独立体检报告
         std::unordered_map<std::string, PassProfileData> PassProfiles;
@@ -80,25 +80,25 @@ namespace Ayaya {
         }
 
         template<typename T>
-        void Set(std::string_view key, const T& value) { Settings[key] = value; }
-        
+        void Set(std::string_view key, const T& value) { Settings[std::string(key)] = value; }
+
         template<typename T>
         T Get(std::string_view key, T defaultValue = T()) {
-            auto it = Settings.find(key);
+            auto it = Settings.find(std::string(key));
             if (it != Settings.end()) return std::any_cast<T>(it->second);
             return defaultValue;
         }
 
-        void SetTexture(std::string_view key, const std::shared_ptr<Texture2D>& tex) { Textures[key] = tex; }
-        
+        void SetTexture(std::string_view key, const std::shared_ptr<Texture2D>& tex) { Textures[std::string(key)] = tex; }
+
         std::shared_ptr<Texture2D> GetTexture(std::string_view key) {
-            auto it = Textures.find(key);
+            auto it = Textures.find(std::string(key));
             if (it != Textures.end()) return it->second;
             return nullptr;
         }
 
         std::shared_ptr<Framebuffer> GetFramebuffer(std::string_view key) {
-            auto it = Framebuffers.find(key);
+            auto it = Framebuffers.find(std::string(key));
             if (it != Framebuffers.end()) return it->second;
             return nullptr;
         }

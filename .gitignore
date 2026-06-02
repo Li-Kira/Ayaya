@@ -1,5 +1,6 @@
 .DS_Store
 build/
+build_xcode/
 documents/
 .vscode/
 CLAUDE.md

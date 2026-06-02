@@ -66,7 +66,9 @@ namespace Ayaya {
         bool m_ViewportDirty = true;   // 首帧/Resize 时触发图重建
 
         // Pass 实例 — 由 Graph 调度，管线只持有 Shader/Pipeline
+        std::shared_ptr<RenderPass> m_ShadowPass;
         std::shared_ptr<RenderPass> m_ForwardPass;
+        std::shared_ptr<RenderPass> m_OutlinePass;
         std::shared_ptr<RenderPass> m_PostProcessPass;
         std::shared_ptr<RenderPass> m_UIPass;
 

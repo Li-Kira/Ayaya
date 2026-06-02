@@ -95,6 +95,9 @@ namespace Ayaya {
             }
 
             // 【核心】：切换管线时，清空之前记的小本本，并记住新管线
+            if (m_BoundPipeline.get() != vulkanPipeline.get()) {
+                m_PendingImageInfos.clear();
+            }
             m_BoundPipeline = vulkanPipeline;
             m_PendingImageInfos.clear();
             m_DescriptorSetDirty = false;
@@ -172,8 +175,8 @@ namespace Ayaya {
         // Bindless 管线不需要 per-draw descriptor set 更新
         if (!m_BoundPipeline || m_BoundPipeline->GetSpecification().UseBindlessTextures) return;
 
-        // 没贴图或者贴图压根没换过，直接返回！
-        if (m_PendingImageInfos.empty() || !m_DescriptorSetDirty) return;
+        // 环形缓冲每帧返回新 Set，必须写入，不能因为有缓存就跳过
+        if (m_PendingImageInfos.empty()) return;
 
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         VkDevice device = context->GetDevice();
@@ -202,7 +205,6 @@ namespace Ayaya {
         }
 
         vkUpdateDescriptorSets(device, writes.size(), writes.data(), 0, nullptr);
-        // 动态判断纹理集索引：普通管线 Set1=纹理(有UBO Set0)，UI管线 Set0=纹理(无UBO)
         uint32_t texSet = (m_BoundPipeline->GetDescriptorSetLayoutCount() == 1) ? 0 : 1;
         vkCmdBindDescriptorSets(context->GetCurrentCommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_BoundPipeline->GetVulkanPipelineLayout(), texSet, 1, &newSet, 0, nullptr);
 
@@ -248,15 +250,10 @@ namespace Ayaya {
     }
 
     void VulkanRenderCommandBuffer::DrawArrays(uint32_t vertexCount) {
-        if (!m_BoundPipeline) { AYAYA_CORE_WARN("[DrawArrays] no bound pipeline!"); return; }
+        if (!m_BoundPipeline) return;
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         VkCommandBuffer cmd = context->GetCurrentCommandBuffer();
         uint32_t frameIndex = context->GetCurrentFrameIndex() % 3;
-
-        bool isUI = m_BoundPipeline->GetSpecification().UseBindlessTextures;
-        if (isUI) AYAYA_CORE_WARN("[DrawArrays] UI pipe={} vtxCnt={} set0={}",
-            (void*)m_BoundPipeline->GetVulkanPipeline(), vertexCount,
-            (void*)m_BoundPipeline->GetVulkanDescriptorSet(0, frameIndex));
 
         // 必须重新绑定 Set 0，确保 UBO 数据对应当前帧
         VkDescriptorSet cameraSet = m_BoundPipeline->GetVulkanDescriptorSet(0, frameIndex);
@@ -404,6 +401,12 @@ namespace Ayaya {
         if (!vulkanFBO) return;
 
         VkImage image = vulkanFBO->GetColorAttachmentImage(attachmentIndex);
+        // depth-only FBO (e.g. ShadowMap) — barrier the depth attachment instead
+        bool isDepth = false;
+        if (image == VK_NULL_HANDLE) {
+            image = vulkanFBO->GetDepthAttachmentImage();
+            isDepth = true;
+        }
         if (image == VK_NULL_HANDLE) return;
 
         VkImageLayout vkOld = ToVkImageLayout(oldLayout);
@@ -417,7 +420,8 @@ namespace Ayaya {
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = image;
 
-        if (vkNew == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
+        if (isDepth ||
+            vkNew == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
             vkNew == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL) {
             barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         } else {

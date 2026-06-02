@@ -26,6 +26,8 @@ layout(push_constant) uniform TransformData {
     float _pad1;                   // offset 120
     float _pad2;                   // offset 124
     vec4 EnvironmentAmbientColor;  // offset 128
+    mat4 LightSpaceMatrix;         // offset 144
+    int EnableShadows;             // offset 208
 } u_Push;
 
 layout(location = 0) out vec3 v_WorldPos;

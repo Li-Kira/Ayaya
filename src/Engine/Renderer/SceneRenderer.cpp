@@ -30,6 +30,7 @@
 #include "Renderer/Passes/VulkanLightingPass.hpp"
 #include "Renderer/Passes/VulkanPostProcessPass.hpp"
 #include "Renderer/Passes/VulkanForwardTestPass.hpp"
+#include "Renderer/Passes/VulkanOutlinePass.hpp"
 #include "Renderer/Passes/VulkanShadowPass.hpp"
 #include "Renderer/Passes/VulkanBloomPass.hpp"
 #include "Renderer/Passes/VulkanFXAAPass.hpp"
@@ -189,11 +190,15 @@ namespace Ayaya {
             AYAYA_CORE_INFO("Vulkan Pipeline: RenderGraph Mode");
 
             // 创建 Pass 实例并仅初始化 Shader/Pipeline (Resource 由 Graph 管理)
+            m_ShadowPass      = std::make_shared<VulkanShadowPass>();
             m_ForwardPass     = std::make_shared<VulkanForwardTestPass>();
+            m_OutlinePass     = std::make_shared<VulkanOutlinePass>();
             m_PostProcessPass = std::make_shared<VulkanPostProcessPass>();
             m_UIPass          = std::make_shared<UIPass>();
 
+            m_ShadowPass->OnAttach();
             m_ForwardPass->OnAttach();
+            m_OutlinePass->OnAttach();
             m_PostProcessPass->OnAttach();
             m_UIPass->OnAttach();
         }
@@ -221,6 +226,12 @@ namespace Ayaya {
         m_Data->ViewportWidth = width;
         m_Data->ViewportHeight = height;
         m_ViewportDirty = true;
+
+        // 等待 GPU 完成所有飞行中的帧，确保旧 FBO 不再被引用
+        if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+            auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+            if (vkCtx) vkDeviceWaitIdle(vkCtx->GetDevice());
+        }
         if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL)
             m_Pipeline.OnResize(width, height);
     }
@@ -347,6 +358,11 @@ namespace Ayaya {
         m_RenderContext.Set("ShowSkybox", showSkybox);
         m_RenderContext.Set("ShowGrid", showGrid);
 
+        // 【排查黑色像素 - 步骤1】：DebugRed — 纯红材质 + 跳过IBL + 跳过贴图
+        // 取消注释以启用。纯红画面无黑色像素 → IBL/贴图问题
+        // 纯红画面有黑色像素 → PBR基础数学或UBO数据问题
+        // m_RenderContext.Set("DebugRed", true);
+
         m_RenderContext.Set("HoveredEntity", hoveredEntity);
         m_RenderContext.Set("EnvironmentIntensity", m_Data->EnvironmentIntensity);
         m_RenderContext.Set("EnvironmentAmbientColor", m_Data->EnvironmentAmbientColor);
@@ -397,56 +413,32 @@ namespace Ayaya {
                 uint32_t vpW = m_Data->ViewportWidth;
                 uint32_t vpH = m_Data->ViewportHeight;
 
-                // 仅在首帧或视口变化时重建图 (避免每帧 CPU 拓扑排序开销)
                 if (m_ViewportDirty) {
                     m_RenderGraph.Clear();
-
+                    m_RenderGraph.AddPass("ShadowPass",
+                        [&](RGBuilder& b) { VulkanShadowPass::DeclareResources(b); },
+                        [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_ShadowPass) m_ShadowPass->Execute(ctx, c); });
                     m_RenderGraph.AddPass("ForwardPass",
                         [&](RGBuilder& b) { VulkanForwardTestPass::DeclareResources(b, vpW, vpH); },
-                        [&](RenderContext& ctx, RenderCommandBuffer& c) {
-                            if (m_ForwardPass) m_ForwardPass->Execute(ctx, c);
-                        });
-
+                        [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_ForwardPass) m_ForwardPass->Execute(ctx, c); });
+                    m_RenderGraph.AddPass("OutlinePass",
+                        [&](RGBuilder& b) { VulkanOutlinePass::DeclareResources(b, vpW, vpH); },
+                        [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_OutlinePass) m_OutlinePass->Execute(ctx, c); });
                     m_RenderGraph.AddPass("PostProcessPass",
                         [&](RGBuilder& b) { VulkanPostProcessPass::DeclareResources(b, vpW, vpH); },
-                        [&](RenderContext& ctx, RenderCommandBuffer& c) {
-                            if (m_PostProcessPass) m_PostProcessPass->Execute(ctx, c);
-                        });
-
+                        [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_PostProcessPass) m_PostProcessPass->Execute(ctx, c); });
                     m_RenderGraph.AddPass("UIPass",
                         [&](RGBuilder& b) { UIPass::DeclareResources(b, vpW, vpH); },
-                        [&](RenderContext& ctx, RenderCommandBuffer& c) {
-                            if (m_UIPass) m_UIPass->Execute(ctx, c);
-                        });
-
+                        [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_UIPass) m_UIPass->Execute(ctx, c); });
                     m_RenderGraph.Compile();
                     m_ViewportDirty = false;
                 }
 
-                // 延迟释放：递减 3 帧安全期，到期清空
-                for (auto& release : m_DeferredReleases) release.FramesRemaining--;
-                m_DeferredReleases.erase(
-                    std::remove_if(m_DeferredReleases.begin(), m_DeferredReleases.end(),
-                        [](auto& r) { return r.FramesRemaining <= 0; }),
-                    m_DeferredReleases.end());
-
-                // 重新注册当前渲染器的 UBO (s_GlobalUBOs 是静态变量, 多实例覆盖)
                 VulkanPipeline::ClearGlobalUBOs();
                 auto camUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_CameraUniformBuffer);
                 auto lightUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_LightUniformBuffer);
-                if (camUBO) {
-                    for (uint32_t i = 0; i < 3; i++)
-                        VulkanPipeline::SetGlobalUniformBuffer(0, i, camUBO->GetBuffer(i), sizeof(struct_CameraData));
-                }
-                if (lightUBO) {
-                    for (uint32_t i = 0; i < 3; i++)
-                        VulkanPipeline::SetGlobalUniformBuffer(1, i, lightUBO->GetBuffer(i), sizeof(struct_LightData));
-                }
-
-                uint32_t frameIdx = 0;
-                if (auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext()))
-                    frameIdx = vkCtx->GetCurrentFrameIndex();
-                m_RenderContext.Set("CurrentFrameIndex", frameIdx);
+                if (camUBO) for (uint32_t i=0;i<3;i++) VulkanPipeline::SetGlobalUniformBuffer(0,i,camUBO->GetBuffer(i),sizeof(struct_CameraData));
+                if (lightUBO) for (uint32_t i=0;i<3;i++) VulkanPipeline::SetGlobalUniformBuffer(1,i,lightUBO->GetBuffer(i),sizeof(struct_LightData));
 
                 m_RenderGraph.Execute(m_RenderContext, *cmd);
             } else {

@@ -22,7 +22,6 @@ namespace Ayaya {
     void VulkanPostProcessPass::DeclareResources(RGBuilder& builder, uint32_t width, uint32_t height) {
         builder.ReadTexture("SceneColor");
         builder.ReadTexture("Selection");
-
         FramebufferSpecification finalSpec;
         finalSpec.Width  = width;
         finalSpec.Height = height;
@@ -37,10 +36,7 @@ namespace Ayaya {
         if (width == 0 || height == 0) return;
 
         auto finalFBO = context.GetFramebuffer("FinalOutput");
-        if (!finalFBO) {
-            AYAYA_CORE_ERROR("VulkanPostProcessPass: FinalOutput FBO not found!");
-            return;
-        }
+        if (!finalFBO) return;
 
         if (!m_Pipeline) {
             m_PipeSpec.TargetFramebuffer = finalFBO;
@@ -51,18 +47,14 @@ namespace Ayaya {
         cmd.BindPipeline(m_Pipeline);
         context.Stats.ShaderBinds++;
 
-        // 获取上游场景颜色 — 优先从 Graph 黑板取，兼容旧的 context key
         std::shared_ptr<Framebuffer> sceneFBO = context.GetFramebuffer("SceneColor");
-        if (!sceneFBO) sceneFBO = context.GetFramebuffer("ForwardTest");
-        if (!sceneFBO) sceneFBO = context.GetFramebuffer("Lighting");
-
         auto whiteTex = context.GetTexture("WhiteTexture");
-        auto blackTex = context.GetTexture("BlackTexture");
 
         if (sceneFBO) cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, sceneFBO, 0);
         else          cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, whiteTex);
 
         auto selectionFBO = context.GetFramebuffer("Selection");
+        auto blackTex = context.GetTexture("BlackTexture");
         if (selectionFBO) cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, selectionFBO, 0);
         else              cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, blackTex);
 
@@ -79,14 +71,12 @@ namespace Ayaya {
         pc.TexelSize = glm::vec2(1.0f / (float)width, 1.0f / (float)height);
         pc.EnableBloom = bloomEnabled ? 1 : 0;
         pc.BloomIntensity = context.Get<float>("BloomIntensity", 1.0f);
-
         cmd.PushConstantData(m_Pipeline, &pc, sizeof(PostProcessPushConstants));
 
         if (context.RecordAndCheckDrawCall("Post Process Pass", "Tone Mapping & Combine", "PostProcess Shader", 1))
             cmd.DrawArrays(m_EmptyVAO, 3);
 
         cmd.EndRenderPass();
-        // RenderGraph 自动插入 Barrier
     }
 
 }
