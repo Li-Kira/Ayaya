@@ -182,28 +182,49 @@ namespace Ayaya {
         VkBuffer vertexBuffer = vkVertexBuffer->GetVulkanBuffer();
         VkBuffer indexBuffer = vkIndexBuffer->GetVulkanBuffer();
 
+        // Dynamic Rendering: FBO starts in SHADER_READ_ONLY (from Invalidate),
+        // transition to COLOR_ATTACHMENT before first vkCmdBeginRendering
+        {
+            VkImageMemoryBarrier preRender{};
+            preRender.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            preRender.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            preRender.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            preRender.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            preRender.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            preRender.image = fboImage;
+            preRender.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            preRender.subresourceRange.levelCount = 1;
+            preRender.subresourceRange.layerCount = 1;
+            vkCmdPipelineBarrier(cmd,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                0, 0, nullptr, 0, nullptr, 1, &preRender);
+        }
+
         for (int i = 0; i < 6; i++) {
             pc.View = captureViews[i];
 
-            // 5.b 开启 FBO 渲染通道
-            VkRenderPassBeginInfo renderPassInfo{};
-            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            renderPassInfo.renderPass = vulkanFbo->GetVulkanRenderPass();
-            renderPassInfo.framebuffer = vulkanFbo->GetVulkanFramebuffer();
-            renderPassInfo.renderArea.offset = { 0, 0 };
-            renderPassInfo.renderArea.extent = { dim, dim };
-            VkClearValue clearColor = {0.0f, 0.0f, 0.0f, 1.0f};
-            renderPassInfo.clearValueCount = 1;
-            renderPassInfo.pClearValues = &clearColor;
+            // 5.b Dynamic Rendering (no depth attachment for IBL FBO)
+            VkRenderingAttachmentInfo colorAttach{};
+            colorAttach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            colorAttach.imageView = vulkanFbo->GetColorAttachmentImageView(0);
+            colorAttach.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            colorAttach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            colorAttach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            colorAttach.clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
 
-            vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+            VkRenderingInfo renderingInfo{};
+            renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+            renderingInfo.renderArea = { {0, 0}, {dim, dim} };
+            renderingInfo.layerCount = 1;
+            renderingInfo.colorAttachmentCount = 1;
+            renderingInfo.pColorAttachments = &colorAttach;
+
+            vkCmdBeginRendering(cmd, &renderingInfo);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanPipeline->GetVulkanPipeline());
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanPipeline->GetVulkanPipelineLayout(), 1, 1, &descSet, 0, nullptr);
             vkCmdPushConstants(cmd, vulkanPipeline->GetVulkanPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pc);
-            
-            // ==========================================
-            // 【核心修复 2】：补充动态视口与裁剪指令！
-            // ==========================================
+
             VkViewport viewport{ 0.0f, 0.0f, (float)dim, (float)dim, 0.0f, 1.0f };
             vkCmdSetViewport(cmd, 0, 1, &viewport);
             VkRect2D scissor{ {0, 0}, {dim, dim} };
@@ -213,14 +234,14 @@ namespace Ayaya {
             vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffer, offsets);
             vkCmdBindIndexBuffer(cmd, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
             vkCmdDrawIndexed(cmd, cubeMesh->GetIndexCount(), 1, 0, 0, 0);
-            
-            vkCmdEndRenderPass(cmd);
+
+            vkCmdEndRendering(cmd);
 
             // 5.c 设置屏障，准备把刚刚画好的 FBO 画面拷贝出去
             VkImageMemoryBarrier copyBarrier{};
             copyBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            // 【核心修复 3.1】：匹配真实的引擎状态
-            copyBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; 
+            // Dynamic rendering leaves image in COLOR_ATTACHMENT_OPTIMAL
+            copyBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             copyBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             copyBarrier.image = fboImage;
             copyBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -228,10 +249,9 @@ namespace Ayaya {
             copyBarrier.subresourceRange.levelCount = 1;
             copyBarrier.subresourceRange.baseArrayLayer = 0;
             copyBarrier.subresourceRange.layerCount = 1;
-            // 【核心修复 3.2】：调整访问掩码
-            copyBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT; 
+            copyBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
             copyBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &copyBarrier);
+            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &copyBarrier);
 
             // 5.d 物理拷贝！将 FBO 的画面拷入 Cube 对应的 Layer (i) 中
             VkImageCopy copyRegion{};
@@ -250,11 +270,10 @@ namespace Ayaya {
 
             // 5.e 将 FBO 还原，以便下一次循环渲染
             copyBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            // 【核心修复 3.3】：还原为着色器只读，以匹配 RenderPass 开始时的预期
-            copyBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; 
+            copyBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             copyBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            copyBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &copyBarrier);
+            copyBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &copyBarrier);
         }
 
         // 6. 最终将填满 6 面的 Cubemap 设置为只读模式供给场景采样
@@ -397,23 +416,48 @@ namespace Ayaya {
         VkBuffer vertexBuffer = vkVertexBuffer->GetVulkanBuffer();
         VkBuffer indexBuffer = vkIndexBuffer->GetVulkanBuffer();
 
+        // Dynamic Rendering: FBO starts in SHADER_READ_ONLY (from Invalidate),
+        // transition to COLOR_ATTACHMENT before first vkCmdBeginRendering
+        {
+            VkImageMemoryBarrier preRender{};
+            preRender.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            preRender.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            preRender.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            preRender.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            preRender.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            preRender.image = fboImage;
+            preRender.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            preRender.subresourceRange.levelCount = 1;
+            preRender.subresourceRange.layerCount = 1;
+            vkCmdPipelineBarrier(cmd,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                0, 0, nullptr, 0, nullptr, 1, &preRender);
+        }
+
         for (int i = 0; i < 6; i++) {
             pc.View = captureViews[i];
 
-            VkRenderPassBeginInfo renderPassInfo{};
-            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            renderPassInfo.renderPass = vulkanFbo->GetVulkanRenderPass();
-            renderPassInfo.framebuffer = vulkanFbo->GetVulkanFramebuffer();
-            renderPassInfo.renderArea.extent = { dim, dim };
-            VkClearValue clearColor = {0.0f, 0.0f, 0.0f, 1.0f};
-            renderPassInfo.clearValueCount = 1;
-            renderPassInfo.pClearValues = &clearColor;
+            VkRenderingAttachmentInfo colorAttach{};
+            colorAttach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            colorAttach.imageView = vulkanFbo->GetColorAttachmentImageView(0);
+            colorAttach.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            colorAttach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            colorAttach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            colorAttach.clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
 
-            vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+            VkRenderingInfo renderingInfo{};
+            renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+            renderingInfo.renderArea = { {0, 0}, {dim, dim} };
+            renderingInfo.layerCount = 1;
+            renderingInfo.colorAttachmentCount = 1;
+            renderingInfo.pColorAttachments = &colorAttach;
+
+            vkCmdBeginRendering(cmd, &renderingInfo);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanPipeline->GetVulkanPipeline());
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanPipeline->GetVulkanPipelineLayout(), 1, 1, &descSet, 0, nullptr);
             vkCmdPushConstants(cmd, vulkanPipeline->GetVulkanPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pc);
-            
+
             VkViewport viewport{ 0.0f, 0.0f, (float)dim, (float)dim, 0.0f, 1.0f };
             vkCmdSetViewport(cmd, 0, 1, &viewport);
             VkRect2D scissor{ {0, 0}, {dim, dim} };
@@ -423,35 +467,36 @@ namespace Ayaya {
             vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffer, offsets);
             vkCmdBindIndexBuffer(cmd, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
             vkCmdDrawIndexed(cmd, cubeMesh->GetIndexCount(), 1, 0, 0, 0);
-            
-            vkCmdEndRenderPass(cmd);
+
+            vkCmdEndRendering(cmd);
 
             VkImageMemoryBarrier copyBarrier{};
             copyBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            copyBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; 
+            // Dynamic rendering leaves image in COLOR_ATTACHMENT_OPTIMAL
+            copyBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             copyBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             copyBarrier.image = fboImage;
             copyBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             copyBarrier.subresourceRange.levelCount = 1;
             copyBarrier.subresourceRange.layerCount = 1;
-            copyBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT; 
+            copyBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
             copyBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &copyBarrier);
+            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &copyBarrier);
 
             VkImageCopy copyRegion{};
             copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             copyRegion.srcSubresource.layerCount = 1;
             copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyRegion.dstSubresource.baseArrayLayer = i; 
+            copyRegion.dstSubresource.baseArrayLayer = i;
             copyRegion.dstSubresource.layerCount = 1;
             copyRegion.extent = { dim, dim, 1 };
             vkCmdCopyImage(cmd, fboImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, cubeImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
             copyBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            copyBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; 
+            copyBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             copyBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            copyBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &copyBarrier);
+            copyBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &copyBarrier);
         }
 
         cubeBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -587,6 +632,25 @@ namespace Ayaya {
         VkBuffer vertexBuffer = vkVertexBuffer->GetVulkanBuffer();
         VkBuffer indexBuffer = vkIndexBuffer->GetVulkanBuffer();
 
+        // Dynamic Rendering: FBO starts in SHADER_READ_ONLY (from Invalidate),
+        // transition to COLOR_ATTACHMENT before first vkCmdBeginRendering
+        {
+            VkImageMemoryBarrier preRender{};
+            preRender.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            preRender.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            preRender.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            preRender.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            preRender.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            preRender.image = fboImage;
+            preRender.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            preRender.subresourceRange.levelCount = 1;
+            preRender.subresourceRange.layerCount = 1;
+            vkCmdPipelineBarrier(cmd,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                0, 0, nullptr, 0, nullptr, 1, &preRender);
+        }
+
         // 5. 【核心逻辑】：双重循环，外层 Mipmap，内层 6 个面
         for (uint32_t mip = 0; mip < maxMipLevels; ++mip) {
             uint32_t mipWidth  = static_cast<uint32_t>(dim * std::pow(0.5, mip));
@@ -598,20 +662,27 @@ namespace Ayaya {
             for (int i = 0; i < 6; i++) {
                 pc.View = captureViews[i];
 
-                VkRenderPassBeginInfo renderPassInfo{};
-                renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-                renderPassInfo.renderPass = vulkanFbo->GetVulkanRenderPass();
-                renderPassInfo.framebuffer = vulkanFbo->GetVulkanFramebuffer();
-                renderPassInfo.renderArea.extent = { dim, dim }; // FBO 本身大小不变
-                VkClearValue clearColor = {0.0f, 0.0f, 0.0f, 1.0f};
-                renderPassInfo.clearValueCount = 1;
-                renderPassInfo.pClearValues = &clearColor;
 
-                vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+                VkRenderingAttachmentInfo colorAttach{};
+                colorAttach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+                colorAttach.imageView = vulkanFbo->GetColorAttachmentImageView(0);
+                colorAttach.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                colorAttach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+                colorAttach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+                colorAttach.clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+
+                VkRenderingInfo renderingInfo{};
+                renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+                renderingInfo.renderArea = { {0, 0}, {dim, dim} }; // FBO 本身大小不变
+                renderingInfo.layerCount = 1;
+                renderingInfo.colorAttachmentCount = 1;
+                renderingInfo.pColorAttachments = &colorAttach;
+
+                vkCmdBeginRendering(cmd, &renderingInfo);
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanPipeline->GetVulkanPipeline());
                 vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanPipeline->GetVulkanPipelineLayout(), 1, 1, &descSet, 0, nullptr);
                 vkCmdPushConstants(cmd, vulkanPipeline->GetVulkanPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pc);
-                
+
                 // 【绝妙技巧】：通过动态改变视口大小，将低分辨率图像渲染到大 FBO 的左下角！
                 VkViewport viewport{ 0.0f, 0.0f, (float)mipWidth, (float)mipHeight, 0.0f, 1.0f };
                 vkCmdSetViewport(cmd, 0, 1, &viewport);
@@ -622,37 +693,38 @@ namespace Ayaya {
                 vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffer, offsets);
                 vkCmdBindIndexBuffer(cmd, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
                 vkCmdDrawIndexed(cmd, cubeMesh->GetIndexCount(), 1, 0, 0, 0);
-                
-                vkCmdEndRenderPass(cmd);
+
+                vkCmdEndRendering(cmd);
 
                 // 拷贝逻辑：只拷贝 FBO 左下角我们刚画好的那个极小区域
                 VkImageMemoryBarrier copyBarrier{};
                 copyBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-                copyBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; 
+                // Dynamic rendering leaves image in COLOR_ATTACHMENT_OPTIMAL
+                copyBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
                 copyBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
                 copyBarrier.image = fboImage;
                 copyBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
                 copyBarrier.subresourceRange.levelCount = 1;
                 copyBarrier.subresourceRange.layerCount = 1;
-                copyBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT; 
+                copyBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
                 copyBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-                vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &copyBarrier);
+                vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &copyBarrier);
 
                 VkImageCopy copyRegion{};
                 copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
                 copyRegion.srcSubresource.layerCount = 1;
                 copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
                 copyRegion.dstSubresource.mipLevel = mip;     // 【关键】：放入目标的对应 mip 坑位
-                copyRegion.dstSubresource.baseArrayLayer = i; 
+                copyRegion.dstSubresource.baseArrayLayer = i;
                 copyRegion.dstSubresource.layerCount = 1;
                 copyRegion.extent = { mipWidth, mipHeight, 1 }; // 【关键】：只拷贝有效数据大小
                 vkCmdCopyImage(cmd, fboImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, cubeImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
                 copyBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-                copyBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; 
+                copyBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
                 copyBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-                copyBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-                vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &copyBarrier);
+                copyBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &copyBarrier);
             }
         }
 
@@ -750,18 +822,43 @@ namespace Ayaya {
         lutBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &lutBarrier);
 
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = vulkanFbo->GetVulkanRenderPass();
-        renderPassInfo.framebuffer = vulkanFbo->GetVulkanFramebuffer();
-        renderPassInfo.renderArea.extent = { dim, dim };
-        VkClearValue clearColor = {0.0f, 0.0f, 0.0f, 1.0f};
-        renderPassInfo.clearValueCount = 1;
-        renderPassInfo.pClearValues = &clearColor;
+        // Dynamic Rendering: FBO starts in SHADER_READ_ONLY, transition to COLOR_ATTACHMENT before rendering
+        {
+            VkImage fboImage = vulkanFbo->GetColorAttachmentImage(0);
+            VkImageMemoryBarrier preRender{};
+            preRender.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            preRender.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            preRender.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            preRender.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            preRender.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            preRender.image = fboImage;
+            preRender.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            preRender.subresourceRange.levelCount = 1;
+            preRender.subresourceRange.layerCount = 1;
+            vkCmdPipelineBarrier(cmd,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                0, 0, nullptr, 0, nullptr, 1, &preRender);
+        }
 
-        vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        VkRenderingAttachmentInfo colorAttach{};
+        colorAttach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        colorAttach.imageView = vulkanFbo->GetColorAttachmentImageView(0);
+        colorAttach.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        colorAttach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAttach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttach.clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+
+        VkRenderingInfo renderingInfo{};
+        renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        renderingInfo.renderArea = { {0, 0}, {dim, dim} };
+        renderingInfo.layerCount = 1;
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachments = &colorAttach;
+
+        vkCmdBeginRendering(cmd, &renderingInfo);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanPipeline->GetVulkanPipeline());
-        
+
         VkViewport viewport{ 0.0f, 0.0f, (float)dim, (float)dim, 0.0f, 1.0f };
         vkCmdSetViewport(cmd, 0, 1, &viewport);
         VkRect2D scissor{ {0, 0}, {dim, dim} };
@@ -769,23 +866,24 @@ namespace Ayaya {
 
         // 【最精简的绘制指令】：画 3 个点，不需要绑定任何 VBO/IBO，也不需要推常量和描述符！
         vkCmdDraw(cmd, 3, 1, 0, 0);
-        
-        vkCmdEndRenderPass(cmd);
+
+        vkCmdEndRendering(cmd);
 
         // 4. 将 FBO 的数据拷贝到 2D 贴图显存中
         VkImage fboImage = vulkanFbo->GetColorAttachmentImage(0);
 
         VkImageMemoryBarrier copyBarrier{};
         copyBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        copyBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; 
+        // Dynamic rendering leaves image in COLOR_ATTACHMENT_OPTIMAL
+        copyBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         copyBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         copyBarrier.image = fboImage;
         copyBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         copyBarrier.subresourceRange.levelCount = 1;
         copyBarrier.subresourceRange.layerCount = 1;
-        copyBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT; 
+        copyBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         copyBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &copyBarrier);
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &copyBarrier);
 
         VkImageCopy copyRegion{};
         copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;

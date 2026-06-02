@@ -6,6 +6,7 @@
 
 namespace Ayaya {
 
+    // Vulkan 1.3 Dynamic Rendering — 不再使用 VkRenderPass / VkFramebuffer
     class VulkanFramebuffer : public Framebuffer {
     public:
         VulkanFramebuffer(const FramebufferSpecification& spec);
@@ -20,34 +21,28 @@ namespace Ayaya {
 
         virtual void* GetColorAttachmentRendererID(uint32_t index = 0) const override;
         virtual void* GetDepthAttachmentRendererID() const override;
-        virtual void* GetRendererID() const override { return m_Framebuffer; }
+        virtual void* GetRendererID() const override { return nullptr; }
         virtual const FramebufferSpecification& GetSpecification() const override { return m_Specification; }
 
-        inline VkRenderPass GetVulkanRenderPass() const { return m_RenderPass; }
-        inline VkFramebuffer GetVulkanFramebuffer() const { return m_Framebuffer; }
+        // 格式查询 — 供 Pipeline (VkPipelineRenderingCreateInfo) 和 BeginRendering 使用
+        uint32_t GetColorAttachmentCount() const { return (uint32_t)m_ColorAttachmentSpecs.size(); }
+        VkFormat GetColorAttachmentFormat(uint32_t index) const;
+        VkFormat GetDepthAttachmentFormat() const;
+        bool HasDepthAttachment() const { return m_DepthImage != VK_NULL_HANDLE; }
+        VkSampleCountFlagBits GetSampleCount() const {
+            return static_cast<VkSampleCountFlagBits>(m_Specification.Samples);
+        }
 
-        // 创建并返回 LOAD_OP_LOAD 版本的 RenderPass + Framebuffer（UI 叠加用）
-        VkRenderPass  EnsureLoadRenderPass();
-        VkFramebuffer EnsureLoadFramebuffer();
-        void InvalidateLoadResources();
-
-        // ==========================================\
-        // 【核心对齐】：专供 VulkanRenderCommandBuffer 使用的获取器
-        // ==========================================
         inline VkImageView GetColorAttachmentImageView(uint32_t index) const {
             AYAYA_CORE_ASSERT(index < m_ColorImageViews.size(), "Color Attachment Index out of bounds!");
             return m_ColorImageViews[index];
         }
 
-        // ==========================================
-        // 【新增】：暴漏原生 VkImage 供 IBLBuilder 物理拷贝使用
-        // ==========================================
         inline VkImage GetColorAttachmentImage(uint32_t index) const {
             if (index >= m_ColorImages.size()) return VK_NULL_HANDLE;
             return m_ColorImages[index];
         }
         inline VkImage GetDepthAttachmentImage() const { return m_DepthImage; }
-
         inline VkImageView GetDepthAttachmentImageView() const { return m_DepthImageView; }
         inline VkSampler GetSampler() const { return m_Sampler; }
 
@@ -56,21 +51,15 @@ namespace Ayaya {
         std::vector<FramebufferTextureSpecification> m_ColorAttachmentSpecs;
         FramebufferTextureSpecification m_DepthAttachmentSpec = FramebufferTextureFormat::None;
 
-        // Vulkan 物理资源
         std::vector<VkImage> m_ColorImages;
         std::vector<VmaAllocation> m_ColorAllocations;
         std::vector<VkImageView> m_ColorImageViews;
-        std::vector<VkDescriptorSet> m_ImGuiDescriptorSets; 
+        std::vector<VkDescriptorSet> m_ImGuiDescriptorSets;
 
         VkImage m_DepthImage = VK_NULL_HANDLE;
         VmaAllocation m_DepthAllocation = VK_NULL_HANDLE;
         VkImageView m_DepthImageView = VK_NULL_HANDLE;
 
-        VkFramebuffer m_Framebuffer = VK_NULL_HANDLE;
-        VkRenderPass m_RenderPass = VK_NULL_HANDLE;
-        VkFramebuffer m_LoadFramebuffer = VK_NULL_HANDLE;
-        VkRenderPass m_LoadRenderPass = VK_NULL_HANDLE;
-        VkSampler m_Sampler = VK_NULL_HANDLE; // 全局采样器
+        VkSampler m_Sampler = VK_NULL_HANDLE;
     };
-
 }

@@ -163,9 +163,7 @@ namespace Ayaya {
             init_info.Instance = vulkanContext->GetInstance();
             init_info.PhysicalDevice = vulkanContext->GetPhysicalDevice();
             init_info.Device = vulkanContext->GetDevice();
-            
-            // 【保留这个修复】：动态获取精准的 QueueFamily，不要写死 0
-            init_info.QueueFamily = vulkanContext->GetGraphicsQueueFamily(); 
+            init_info.QueueFamily = vulkanContext->GetGraphicsQueueFamily();
             init_info.Queue = vulkanContext->GetGraphicsQueue();
             init_info.PipelineCache = VK_NULL_HANDLE;
             init_info.DescriptorPool = vulkanContext->GetDescriptorPool();
@@ -173,13 +171,15 @@ namespace Ayaya {
             init_info.ImageCount = vulkanContext->GetImageCount();
             init_info.Allocator = nullptr;
             init_info.CheckVkResultFn = nullptr;
-            
-            // 【恢复你的原始正确代码】：1.92 版本确实需要通过 PipelineInfoMain 传递！
-            init_info.PipelineInfoMain.RenderPass = vulkanContext->GetRenderPass();
-            init_info.PipelineInfoMain.Subpass = 0;
-            init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
-            // 加上断言，确保初始化真正成功，没有被静默失败掩盖！
+            // Vulkan 1.3 Dynamic Rendering — ImGui 原生支持
+            init_info.UseDynamicRendering = true;
+            init_info.PipelineInfoMain.PipelineRenderingCreateInfo.sType =
+                VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+            init_info.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+            VkFormat swapchainFormat = vulkanContext->GetSwapChainImageFormat();
+            init_info.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &swapchainFormat;
+
             bool success = ImGui_ImplVulkan_Init(&init_info);
             AYAYA_CORE_ASSERT(success, "Failed to initialize ImGui Vulkan Backend!");
         }

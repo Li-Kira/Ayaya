@@ -36,10 +36,8 @@ namespace Ayaya {
         else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
             auto vulkanContext = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
             VkCommandBuffer cmdBuffer = vulkanContext->GetCurrentCommandBuffer();
-            // ==========================================
+
             // 全局内存屏障：确保离屏 FBO 的颜色写入对 ImGui 片元着色器可见
-            // Apple TBDR GPU 必须在 RenderPass 切换时显式刷新 tile memory
-            // ==========================================
             VkMemoryBarrier globalBarrier{};
             globalBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
             globalBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
@@ -52,43 +50,79 @@ namespace Ayaya {
                 0, nullptr,
                 0, nullptr);
 
-            // ==========================================
-            // 【终极交接】：在这里开启指向主屏幕的 RenderPass，并包裹 ImGui 的绘制！
-            // ==========================================
-            VkRenderPassBeginInfo renderPassInfo{};
-            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            renderPassInfo.renderPass = vulkanContext->GetRenderPass();
-            renderPassInfo.framebuffer = vulkanContext->GetCurrentFramebuffer();
-            renderPassInfo.renderArea.offset = {0, 0};
-            renderPassInfo.renderArea.extent = vulkanContext->GetSwapChainExtent();
+            // Dynamic Rendering: swapchain image 在 Acquire 后处于 UNDEFINED（首帧）
+            // 或 PRESENT_SRC_KHR（后续帧），需显式过渡到 COLOR_ATTACHMENT。
+            // VK_IMAGE_LAYOUT_UNDEFINED 作为 oldLayout 始终合法。
+            {
+                VkImageMemoryBarrier swapchainBarrier{};
+                swapchainBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                swapchainBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                swapchainBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                swapchainBarrier.srcAccessMask = 0;
+                swapchainBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                swapchainBarrier.image = vulkanContext->GetCurrentImage();
+                swapchainBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                swapchainBarrier.subresourceRange.levelCount = 1;
+                swapchainBarrier.subresourceRange.layerCount = 1;
+                vkCmdPipelineBarrier(cmdBuffer,
+                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    0, 0, nullptr, 0, nullptr, 1, &swapchainBarrier);
+            }
 
-            VkClearValue clearColor = {{{0.08f, 0.085f, 0.09f, 1.0f}}}; // UI 背后的底色
-            renderPassInfo.clearValueCount = 1;
-            renderPassInfo.pClearValues = &clearColor;
+            // Dynamic Rendering: 直接在 swapchain image 上绘制
+            VkExtent2D extent = vulkanContext->GetSwapChainExtent();
+            VkRenderingAttachmentInfo colorAttachment{};
+            colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            colorAttachment.imageView = vulkanContext->GetCurrentImageView();
+            colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            colorAttachment.clearValue.color = {{0.08f, 0.085f, 0.09f, 1.0f}};
 
-            vkCmdBeginRenderPass(cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-            
+            VkRenderingInfo renderingInfo{};
+            renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+            renderingInfo.renderArea = {{0, 0}, {extent.width, extent.height}};
+            renderingInfo.layerCount = 1;
+            renderingInfo.colorAttachmentCount = 1;
+            renderingInfo.pColorAttachments = &colorAttachment;
+            renderingInfo.pDepthAttachment = nullptr;
+
+            vkCmdBeginRendering(cmdBuffer, &renderingInfo);
+
             ImDrawData* draw_data = ImGui::GetDrawData();
             if (draw_data) {
-                // 计算 ImGui 当前想要绘制的物理像素尺寸
                 int fb_width = (int)(draw_data->DisplaySize.x * draw_data->FramebufferScale.x);
                 int fb_height = (int)(draw_data->DisplaySize.y * draw_data->FramebufferScale.y);
 
-                // 获取当前窗口真实的底层物理像素尺寸
                 int win_fb_width, win_fb_height;
                 GLFWwindow* window = static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow());
                 glfwGetFramebufferSize(window, &win_fb_width, &win_fb_height);
 
-                // 【核心防御】：只有两者完美匹配，且不为 0 时，才提交绘制！
-                // 如果不匹配，静默跳过这一帧，防止 Vulkan/Metal 裁剪越界崩溃。
                 if (fb_width == win_fb_width && fb_height == win_fb_height && fb_width > 0 && fb_height > 0) {
                     ImGui_ImplVulkan_RenderDrawData(draw_data, vulkanContext->GetCurrentCommandBuffer());
                 } else {
                     AYAYA_CORE_WARN("Vulkan SwapChain size mismatch! Skipping ImGui render for 1 frame.");
                 }
             }
-            
-            vkCmdEndRenderPass(cmdBuffer); // 结束屏幕的绘制
+
+            vkCmdEndRendering(cmdBuffer);
+
+            // Dynamic Rendering: 手动将 swapchain image 从 COLOR_ATTACHMENT 转换为 PRESENT_SRC_KHR
+            VkImageMemoryBarrier presentBarrier{};
+            presentBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            presentBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            presentBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            presentBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            presentBarrier.dstAccessMask = 0;
+            presentBarrier.image = vulkanContext->GetCurrentImage();
+            presentBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            presentBarrier.subresourceRange.levelCount = 1;
+            presentBarrier.subresourceRange.layerCount = 1;
+            vkCmdPipelineBarrier(cmdBuffer,
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                0, 0, nullptr, 0, nullptr, 1, &presentBarrier);
         }
         
         // 处理多视口 (Viewports)

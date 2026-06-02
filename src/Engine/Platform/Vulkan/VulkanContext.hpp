@@ -13,8 +13,8 @@ struct GLFWwindow;
 namespace Ayaya {
 
     struct QueueFamilyIndices {
-        std::optional<uint32_t> GraphicsFamily; 
-        std::optional<uint32_t> PresentFamily;  
+        std::optional<uint32_t> GraphicsFamily;
+        std::optional<uint32_t> PresentFamily;
 
         bool IsComplete() {
             return GraphicsFamily.has_value() && PresentFamily.has_value();
@@ -27,6 +27,7 @@ namespace Ayaya {
         std::vector<VkPresentModeKHR> PresentModes;
     };
 
+    // Vulkan 1.3 Dynamic Rendering — 不再使用 VkRenderPass / VkFramebuffer
     class VulkanContext : public GraphicsContext {
     public:
         VulkanContext(GLFWwindow* windowHandle);
@@ -39,18 +40,17 @@ namespace Ayaya {
         inline VkPhysicalDevice GetPhysicalDevice() const { return m_PhysicalDevice; }
         inline VkDevice GetDevice() const { return m_Device; }
         inline VkQueue GetGraphicsQueue() const { return m_GraphicsQueue; }
-        inline VkRenderPass GetRenderPass() const { return m_RenderPass; }
         inline VkDescriptorPool GetDescriptorPool() const { return m_DescriptorPool; }
         inline uint32_t GetImageCount() const { return static_cast<uint32_t>(m_SwapChainImages.size()); }
-        inline uint32_t GetMinImageCount() const { return 2; } 
+        inline uint32_t GetMinImageCount() const { return 2; }
         inline uint32_t GetGraphicsQueueFamily() const { return m_GraphicsQueueFamily; }
         inline VmaAllocator GetAllocator() const { return m_Allocator; }
 
         virtual void BeginFrame() override;
-        inline VkFramebuffer GetCurrentFramebuffer() const { return m_SwapChainFramebuffers[m_ImageIndex]; }
         inline VkExtent2D GetSwapChainExtent() const { return m_SwapChainExtent; }
         inline VkFormat GetSwapChainImageFormat() const { return m_SwapChainImageFormat; }
-        inline VkImageView GetCurrentSwapChainImageView() const { return m_SwapChainImageViews[m_ImageIndex]; }
+        inline VkImageView GetCurrentImageView() const { return m_SwapChainImageViews[m_ImageIndex]; }
+        inline VkImage GetCurrentImage() const { return m_SwapChainImages[m_ImageIndex]; }
         inline VkCommandBuffer GetCurrentCommandBuffer() const { return m_CommandBuffers[m_CurrentFrame]; }
 
         VkCommandBuffer BeginSingleTimeCommands();
@@ -66,35 +66,31 @@ namespace Ayaya {
         inline VulkanBindlessManager& GetBindlessManager() { return m_BindlessManager; }
         inline VkDescriptorSetLayout GetBindlessLayout() const { return m_BindlessManager.GetLayout(); }
         inline VkDescriptorSet GetBindlessSet() const { return m_BindlessManager.GetSet(); }
-        
+
     private:
         GLFWwindow* m_WindowHandle;
-        
-        VkInstance m_Instance = VK_NULL_HANDLE; 
-        VkSurfaceKHR m_Surface = VK_NULL_HANDLE;       
-        VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE; 
-        VkDevice m_Device = VK_NULL_HANDLE;         
-        VkQueue m_GraphicsQueue = VK_NULL_HANDLE;   
-        VkQueue m_PresentQueue = VK_NULL_HANDLE;    
+
+        VkInstance m_Instance = VK_NULL_HANDLE;
+        VkSurfaceKHR m_Surface = VK_NULL_HANDLE;
+        VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
+        VkDevice m_Device = VK_NULL_HANDLE;
+        VkQueue m_GraphicsQueue = VK_NULL_HANDLE;
+        VkQueue m_PresentQueue = VK_NULL_HANDLE;
 
         VkSwapchainKHR m_SwapChain = VK_NULL_HANDLE;
-        std::vector<VkImage> m_SwapChainImages;      
-        VkFormat m_SwapChainImageFormat;             
-        VkExtent2D m_SwapChainExtent;                
-        std::vector<VkImageView> m_SwapChainImageViews; 
+        std::vector<VkImage> m_SwapChainImages;
+        VkFormat m_SwapChainImageFormat;
+        VkExtent2D m_SwapChainExtent;
+        std::vector<VkImageView> m_SwapChainImageViews;
 
-        VkRenderPass m_RenderPass = VK_NULL_HANDLE;
-        std::vector<VkFramebuffer> m_SwapChainFramebuffers;
-
-        // 【安全修复】：固定为 3 帧并发！不要和 Swapchain 的图片数量挂钩！
         uint32_t m_FramesInFlight = 3;
 
         VkCommandPool m_CommandPool = VK_NULL_HANDLE;
-        VkCommandPool m_OneTimeCommandPool = VK_NULL_HANDLE; // 独立 pool，避免验证层状态污染主命令缓冲区
+        VkCommandPool m_OneTimeCommandPool = VK_NULL_HANDLE;
 
-        std::vector<VkSemaphore> m_ImageAvailableSemaphores; 
-        std::vector<VkSemaphore> m_RenderFinishedSemaphores; 
-        std::vector<VkFence> m_InFlightFences;               
+        std::vector<VkSemaphore> m_ImageAvailableSemaphores;
+        std::vector<VkSemaphore> m_RenderFinishedSemaphores;
+        std::vector<VkFence> m_InFlightFences;
 
         std::vector<VkCommandBuffer> m_CommandBuffers;
         VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
@@ -111,7 +107,7 @@ namespace Ayaya {
         void PickPhysicalDevice();
         bool IsDeviceSuitable(VkPhysicalDevice device);
         QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
-        void CreateLogicalDevice(); 
+        void CreateLogicalDevice();
 
         SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device);
         VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
@@ -120,15 +116,12 @@ namespace Ayaya {
         void CreateSwapChain();
         void CreateImageViews();
 
-        void CreateRenderPass();
-        void CreateFramebuffers();
-
         void CreateCommandPool();
         void CreateSyncObjects();
 
         void AllocateCommandBuffers();
         void CreateDescriptorPool();
 
-        void CleanupSwapChain(); 
+        void CleanupSwapChain();
     };
 }

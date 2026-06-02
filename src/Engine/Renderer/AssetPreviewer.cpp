@@ -620,20 +620,72 @@ namespace Ayaya {
             auto vkFBO_MSAA = std::dynamic_pointer_cast<VulkanFramebuffer>(s_PreviewFBO_MSAA);
             if (!vkFBO_MSAA) return nullptr;
 
-            // === Render pass ===
+            // Dynamic Rendering: FBO starts in SHADER_READ_ONLY (from Invalidate),
+            // transition to COLOR_ATTACHMENT before vkCmdBeginRendering
             {
+                VkImage colorImg = vkFBO_MSAA->GetColorAttachmentImage(0);
+                VkImage depthImg = vkFBO_MSAA->GetDepthAttachmentImage();
+                VkImageMemoryBarrier barriers[2]{};
+                uint32_t barrierCount = 0;
 
-                VkRenderPassBeginInfo rp{};
-                rp.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-                rp.renderPass = vkFBO_MSAA->GetVulkanRenderPass();
-                rp.framebuffer = vkFBO_MSAA->GetVulkanFramebuffer();
-                rp.renderArea.extent = { kPreviewSize, kPreviewSize };
-                VkClearValue cv[2];
-                cv[0].color = {{ 0.11f, 0.11f, 0.12f, 1.0f }};
-                cv[1].depthStencil = { 1.0f, 0 };
-                rp.clearValueCount = 2;
-                rp.pClearValues = cv;
-                vkCmdBeginRenderPass(cmd, &rp, VK_SUBPASS_CONTENTS_INLINE);
+                barriers[barrierCount].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                barriers[barrierCount].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                barriers[barrierCount].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                barriers[barrierCount].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                barriers[barrierCount].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                barriers[barrierCount].image = colorImg;
+                barriers[barrierCount].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                barriers[barrierCount].subresourceRange.levelCount = 1;
+                barriers[barrierCount].subresourceRange.layerCount = 1;
+                barrierCount++;
+
+                if (depthImg != VK_NULL_HANDLE) {
+                    barriers[barrierCount].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                    barriers[barrierCount].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                    barriers[barrierCount].newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                    barriers[barrierCount].srcAccessMask = 0;
+                    barriers[barrierCount].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                    barriers[barrierCount].image = depthImg;
+                    // D32_SFLOAT_S8_UINT 格式必须同时包含 DEPTH + STENCIL aspect
+                    barriers[barrierCount].subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+                    barriers[barrierCount].subresourceRange.levelCount = 1;
+                    barriers[barrierCount].subresourceRange.layerCount = 1;
+                    barrierCount++;
+                }
+
+                vkCmdPipelineBarrier(cmd,
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                    0, 0, nullptr, 0, nullptr, barrierCount, barriers);
+            }
+
+            // === Dynamic Rendering ===
+            {
+                VkRenderingAttachmentInfo colorAttach{};
+                colorAttach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+                colorAttach.imageView = vkFBO_MSAA->GetColorAttachmentImageView(0);
+                colorAttach.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                colorAttach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+                colorAttach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+                colorAttach.clearValue.color = {{ 0.11f, 0.11f, 0.12f, 1.0f }};
+
+                VkRenderingAttachmentInfo depthAttach{};
+                depthAttach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+                depthAttach.imageView = vkFBO_MSAA->GetDepthAttachmentImageView();
+                depthAttach.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                depthAttach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+                depthAttach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+                depthAttach.clearValue.depthStencil = { 1.0f, 0 };
+
+                VkRenderingInfo renderingInfo{};
+                renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+                renderingInfo.renderArea = { {0, 0}, {kPreviewSize, kPreviewSize} };
+                renderingInfo.layerCount = 1;
+                renderingInfo.colorAttachmentCount = 1;
+                renderingInfo.pColorAttachments = &colorAttach;
+                renderingInfo.pDepthAttachment = &depthAttach;
+
+                vkCmdBeginRendering(cmd, &renderingInfo);
 
                 VkViewport vp{};
                 vp.x = 0; vp.y = (float)kPreviewSize;
@@ -671,7 +723,7 @@ namespace Ayaya {
                         vkCmdDrawIndexed(cmd, mesh->GetIndexCount(), 1, 0, 0, 0);
                     }
                 }
-                vkCmdEndRenderPass(cmd);
+                vkCmdEndRendering(cmd);
             }
 
             // === MSAA resolve: s_PreviewFBO_MSAA → s_PreviewFBO ===
@@ -680,8 +732,9 @@ namespace Ayaya {
                 VkImage dstImage = vkFBO->GetColorAttachmentImage(0);
 
                 VkImageMemoryBarrier preBarriers[2]{};
+                // MSAA src: dynamic rendering leaves it in COLOR_ATTACHMENT_OPTIMAL
                 preBarriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-                preBarriers[0].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                preBarriers[0].oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
                 preBarriers[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
                 preBarriers[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
                 preBarriers[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
@@ -690,6 +743,7 @@ namespace Ayaya {
                 preBarriers[0].subresourceRange.levelCount = 1;
                 preBarriers[0].subresourceRange.layerCount = 1;
 
+                // Resolve dst: still in SHADER_READ_ONLY_OPTIMAL (not yet rendered to)
                 preBarriers[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
                 preBarriers[1].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                 preBarriers[1].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;

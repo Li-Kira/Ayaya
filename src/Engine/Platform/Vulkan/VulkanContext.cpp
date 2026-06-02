@@ -20,20 +20,20 @@ namespace Ayaya {
         if (m_Device != VK_NULL_HANDLE) {
             vkDeviceWaitIdle(m_Device);
         }
-        
+
         m_BindlessManager.Shutdown(m_Device);
 
         if (m_DescriptorPool != VK_NULL_HANDLE) {
             vkDestroyDescriptorPool(m_Device, m_DescriptorPool, nullptr);
             AYAYA_CORE_INFO("Vulkan Descriptor Pool destroyed.");
         }
-        
+
         for (size_t i = 0; i < m_RenderFinishedSemaphores.size(); i++) {
             vkDestroySemaphore(m_Device, m_RenderFinishedSemaphores[i], nullptr);
             vkDestroySemaphore(m_Device, m_ImageAvailableSemaphores[i], nullptr);
             vkDestroyFence(m_Device, m_InFlightFences[i], nullptr);
         }
-        
+
         if (m_CommandPool != VK_NULL_HANDLE) {
             vkDestroyCommandPool(m_Device, m_CommandPool, nullptr);
         }
@@ -42,11 +42,6 @@ namespace Ayaya {
         }
 
         CleanupSwapChain();
-
-        if (m_RenderPass != VK_NULL_HANDLE) {
-            vkDestroyRenderPass(m_Device, m_RenderPass, nullptr);
-            AYAYA_CORE_INFO("Vulkan Render Pass destroyed.");
-        }
 
         if (m_Device != VK_NULL_HANDLE) {
             vkDestroyDevice(m_Device, nullptr);
@@ -64,7 +59,7 @@ namespace Ayaya {
     }
 
     void VulkanContext::Init() {
-        AYAYA_CORE_INFO("VulkanContext::Init - Initiating Vulkan Backend...");
+        AYAYA_CORE_INFO("VulkanContext::Init - Initiating Vulkan 1.3 Backend (Dynamic Rendering)...");
         AYAYA_CORE_ASSERT(glfwVulkanSupported(), "GLFW must be compiled with Vulkan support!");
 
         VkApplicationInfo appInfo{};
@@ -73,7 +68,7 @@ namespace Ayaya {
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
         appInfo.pEngineName = "Ayaya Engine";
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.apiVersion = VK_API_VERSION_1_2; 
+        appInfo.apiVersion = VK_API_VERSION_1_3;
 
         VkInstanceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -106,15 +101,13 @@ namespace Ayaya {
         allocatorInfo.physicalDevice = m_PhysicalDevice;
         allocatorInfo.device = m_Device;
         allocatorInfo.instance = m_Instance;
-        allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_2; 
-        
+        allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+
         VkResult vmaResult = vmaCreateAllocator(&allocatorInfo, &m_Allocator);
         AYAYA_CORE_ASSERT(vmaResult == VK_SUCCESS, "Failed to create VMA Allocator!");
 
         CreateSwapChain();
         CreateImageViews();
-        CreateRenderPass();
-        CreateFramebuffers();
         CreateCommandPool();
         CreateSyncObjects();
         AllocateCommandBuffers();
@@ -162,7 +155,7 @@ namespace Ayaya {
             }
         }
         AYAYA_CORE_ASSERT(m_PhysicalDevice != VK_NULL_HANDLE, "Failed to find a suitable GPU!");
-        
+
         VkPhysicalDeviceProperties deviceProperties;
         vkGetPhysicalDeviceProperties(m_PhysicalDevice, &deviceProperties);
         AYAYA_CORE_INFO("Selected GPU: {0}", deviceProperties.deviceName);
@@ -213,6 +206,7 @@ namespace Ayaya {
 
         VkPhysicalDeviceFeatures deviceFeatures{};
 
+        // Vulkan 1.2 features (bindless descriptors)
         VkPhysicalDeviceVulkan12Features vk12Features{};
         vk12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
         vk12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
@@ -220,6 +214,13 @@ namespace Ayaya {
         vk12Features.descriptorBindingVariableDescriptorCount = VK_TRUE;
         vk12Features.runtimeDescriptorArray = VK_TRUE;
         vk12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+
+        // Vulkan 1.3 feature: dynamic rendering
+        VkPhysicalDeviceVulkan13Features vk13Features{};
+        vk13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+        vk13Features.dynamicRendering = VK_TRUE;
+        vk13Features.pNext = nullptr;
+        vk12Features.pNext = &vk13Features;
 
         std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 #ifdef __APPLE__
@@ -320,13 +321,13 @@ namespace Ayaya {
             createInfo.queueFamilyIndexCount = 2;
             createInfo.pQueueFamilyIndices = queueFamilyIndices;
         } else {
-            createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE; 
+            createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
         }
 
-        createInfo.preTransform = swapChainSupport.Capabilities.currentTransform; 
-        createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR; 
+        createInfo.preTransform = swapChainSupport.Capabilities.currentTransform;
+        createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         createInfo.presentMode = presentMode;
-        createInfo.clipped = VK_TRUE; 
+        createInfo.clipped = VK_TRUE;
         createInfo.oldSwapchain = VK_NULL_HANDLE;
 
         VkResult result = vkCreateSwapchainKHR(m_Device, &createInfo, nullptr, &m_SwapChain);
@@ -338,9 +339,6 @@ namespace Ayaya {
 
         m_SwapChainImageFormat = surfaceFormat.format;
         m_SwapChainExtent = extent;
-        
-        // 【核心修复】：删除 m_FramesInFlight = imageCount; 
-        // 彻底解决由于窗口缩放引起的越界崩溃陷阱！
     }
 
     void VulkanContext::CreateImageViews() {
@@ -369,75 +367,6 @@ namespace Ayaya {
         }
     }
 
-    void VulkanContext::CreateRenderPass() {
-        VkAttachmentDescription colorAttachment{};
-        colorAttachment.format = m_SwapChainImageFormat;
-        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;   
-        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE; 
-        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED; 
-        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR; 
-
-        VkAttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0; 
-        colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        VkSubpassDescription subpass{};
-        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
-
-        VkSubpassDependency dependencies[2]{};
-        // Dependency 0: 确保之前帧的 COLOR_ATTACHMENT_WRITE 对当前帧可见 (TBDR tile flush)
-        dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependencies[0].dstSubpass = 0;
-        dependencies[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependencies[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        // Dependency 1: 确保当前帧 COLOR_ATTACHMENT_WRITE 完成后才允许 FRAGMENT_SHADER 读取 (present)
-        dependencies[1].srcSubpass = 0;
-        dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-        dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-        VkRenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        renderPassInfo.attachmentCount = 1;
-        renderPassInfo.pAttachments = &colorAttachment;
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpass;
-        renderPassInfo.dependencyCount = 2;
-        renderPassInfo.pDependencies = dependencies;
-
-        VkResult result = vkCreateRenderPass(m_Device, &renderPassInfo, nullptr, &m_RenderPass);
-        AYAYA_CORE_ASSERT(result == VK_SUCCESS, "Failed to create Render Pass!");
-    }
-
-    void VulkanContext::CreateFramebuffers() {
-        m_SwapChainFramebuffers.resize(m_SwapChainImageViews.size());
-
-        for (size_t i = 0; i < m_SwapChainImageViews.size(); i++) {
-            VkImageView attachments[] = { m_SwapChainImageViews[i] };
-
-            VkFramebufferCreateInfo framebufferInfo{};
-            framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            framebufferInfo.renderPass = m_RenderPass; 
-            framebufferInfo.attachmentCount = 1;
-            framebufferInfo.pAttachments = attachments;
-            framebufferInfo.width = m_SwapChainExtent.width;
-            framebufferInfo.height = m_SwapChainExtent.height;
-            framebufferInfo.layers = 1;
-
-            VkResult result = vkCreateFramebuffer(m_Device, &framebufferInfo, nullptr, &m_SwapChainFramebuffers[i]);
-            AYAYA_CORE_ASSERT(result == VK_SUCCESS, "Failed to create Framebuffer!");
-        }
-    }
-
     void VulkanContext::CreateCommandPool() {
         QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(m_PhysicalDevice);
 
@@ -449,7 +378,6 @@ namespace Ayaya {
         VkResult result = vkCreateCommandPool(m_Device, &poolInfo, nullptr, &m_CommandPool);
         AYAYA_CORE_ASSERT(result == VK_SUCCESS, "Failed to create Command Pool!");
 
-        // 独立的一次性命令池 — 避免验证层将临时 descriptor set 绑定状态泄漏到主命令缓冲区
         VkCommandPoolCreateInfo oneTimePoolInfo{};
         oneTimePoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         oneTimePoolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
@@ -468,7 +396,7 @@ namespace Ayaya {
 
         VkFenceCreateInfo fenceInfo{};
         fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; 
+        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
         for (size_t i = 0; i < m_FramesInFlight; i++) {
             if (vkCreateSemaphore(m_Device, &semaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS ||
@@ -485,7 +413,7 @@ namespace Ayaya {
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocInfo.commandPool = m_CommandPool;
-        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY; 
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = (uint32_t)m_CommandBuffers.size();
 
         VkResult result = vkAllocateCommandBuffers(m_Device, &allocInfo, m_CommandBuffers.data());
@@ -510,7 +438,7 @@ namespace Ayaya {
         VkDescriptorPoolCreateInfo pool_info{};
         pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-        pool_info.maxSets = 1000 * IM_ARRAYSIZE(pool_sizes); 
+        pool_info.maxSets = 1000 * IM_ARRAYSIZE(pool_sizes);
         pool_info.poolSizeCount = (uint32_t)IM_ARRAYSIZE(pool_sizes);
         pool_info.pPoolSizes = pool_sizes;
 
@@ -518,7 +446,6 @@ namespace Ayaya {
         AYAYA_CORE_ASSERT(result == VK_SUCCESS, "Failed to create Descriptor Pool!");
     }
 
-    // VkResult -> 可读字符串
     static const char* VkResultStr(VkResult r) {
         switch (r) {
             case VK_SUCCESS: return "VK_SUCCESS";
@@ -549,18 +476,13 @@ namespace Ayaya {
     }
 
     void VulkanContext::BeginFrame() {
-        // ==========================================
-        // 【核心防御】：完美融合 Fence 等待与安全重置
-        // ==========================================
         vkWaitForFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
 
         VkResult result = vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &m_ImageIndex);
 
-        // 如果画面过期（例如正在调整窗口大小），安全处理！
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
             AYAYA_CORE_WARN("[DBG] BeginFrame: swapchain OUT_OF_DATE, recreating...");
             RecreateSwapChain();
-            // 重新请求一次画布，保证后续录制必定有一个合法的 m_ImageIndex
             result = vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &m_ImageIndex);
         }
         if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
@@ -568,7 +490,6 @@ namespace Ayaya {
                 m_CurrentFrame, m_ImageIndex, (int)result, VkResultStr(result));
         }
 
-        // 只有在这里成功拿到了画面，才可以放行围栏！
         vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame]);
 
         VkResult resetResult = vkResetCommandBuffer(m_CommandBuffers[m_CurrentFrame], 0);
@@ -608,7 +529,6 @@ namespace Ayaya {
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
-        // 【提交 Fence】
         VkResult submitResult = vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, m_InFlightFences[m_CurrentFrame]);
         if (submitResult != VK_SUCCESS) {
             AYAYA_CORE_ERROR("[DBG] SwapBuffers: vkQueueSubmit FAILED! m_CurrentFrame={0}, m_ImageIndex={1}, result={2} ({3})",
@@ -642,7 +562,7 @@ namespace Ayaya {
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandPool = m_OneTimeCommandPool; // 使用独立 pool
+        allocInfo.commandPool = m_OneTimeCommandPool;
         allocInfo.commandBufferCount = 1;
 
         VkCommandBuffer commandBuffer;
@@ -671,16 +591,12 @@ namespace Ayaya {
         }
 
         vkQueueWaitIdle(m_GraphicsQueue);
-        vkDeviceWaitIdle(m_Device); // 确保 MoltenVK validation 层完全同步
+        vkDeviceWaitIdle(m_Device);
 
-        // 重置整个一次性 pool，彻底清除 validation 层的 descriptor set 绑定追踪
         vkResetCommandPool(m_Device, m_OneTimeCommandPool, 0);
     }
 
     void VulkanContext::CleanupSwapChain() {
-        for (auto framebuffer : m_SwapChainFramebuffers) {
-            vkDestroyFramebuffer(m_Device, framebuffer, nullptr);
-        }
         for (auto imageView : m_SwapChainImageViews) {
             vkDestroyImageView(m_Device, imageView, nullptr);
         }
@@ -698,13 +614,13 @@ namespace Ayaya {
             glfwWaitEvents();
         }
 
-        vkDeviceWaitIdle(m_Device); 
+        vkDeviceWaitIdle(m_Device);
 
-        CleanupSwapChain(); 
+        CleanupSwapChain();
 
         CreateSwapChain();
         CreateImageViews();
-        CreateFramebuffers();
+        // 动态渲染：不再需要 CreateFramebuffers
     }
 
     uint32_t VulkanContext::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {

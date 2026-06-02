@@ -279,8 +279,25 @@ namespace Ayaya {
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;
         pipelineInfo.layout = m_PipelineLayout;
-        pipelineInfo.renderPass = vulkanFBO ? vulkanFBO->GetVulkanRenderPass() : VK_NULL_HANDLE;
+        // Dynamic Rendering: 使用 VkPipelineRenderingCreateInfo 代替 VkRenderPass
+        pipelineInfo.renderPass = VK_NULL_HANDLE;
         pipelineInfo.subpass = 0;
+
+        VkPipelineRenderingCreateInfo renderingInfo{};
+        std::vector<VkFormat> colorFormats;
+        VkFormat depthFormat = VK_FORMAT_UNDEFINED;
+        if (vulkanFBO) {
+            uint32_t cc = vulkanFBO->GetColorAttachmentCount();
+            for (uint32_t i = 0; i < cc; i++) colorFormats.push_back(vulkanFBO->GetColorAttachmentFormat(i));
+            depthFormat = vulkanFBO->GetDepthAttachmentFormat();
+        }
+        renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+        renderingInfo.colorAttachmentCount = (uint32_t)colorFormats.size();
+        renderingInfo.pColorAttachmentFormats = colorFormats.data();
+        renderingInfo.depthAttachmentFormat = depthFormat;
+        renderingInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+        renderingInfo.pNext = nullptr;
+        pipelineInfo.pNext = &renderingInfo;
 
         if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_Pipeline) != VK_SUCCESS) {
             AYAYA_CORE_ERROR("Failed to create Vulkan Graphics Pipeline!");

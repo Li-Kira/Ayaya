@@ -21,54 +21,67 @@ namespace Ayaya {
     void VulkanRenderCommandBuffer::BeginRenderPass(const std::shared_ptr<Framebuffer>& targetFBO, bool clear, const glm::vec4& clearColor) {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         VkCommandBuffer cmdBuffer = context->GetCurrentCommandBuffer();
-        
+
         auto vulkanFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(targetFBO);
         if (!vulkanFBO) return;
 
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = vulkanFBO->GetVulkanRenderPass();
-        renderPassInfo.framebuffer = vulkanFBO->GetVulkanFramebuffer();
-        renderPassInfo.renderArea.offset = {0, 0};
-        renderPassInfo.renderArea.extent = { vulkanFBO->GetSpecification().Width, vulkanFBO->GetSpecification().Height };
+        uint32_t width  = vulkanFBO->GetSpecification().Width;
+        uint32_t height = vulkanFBO->GetSpecification().Height;
+        VkAttachmentLoadOp loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
 
-        std::vector<VkClearValue> clearValues;
-        for (auto format : vulkanFBO->GetSpecification().Attachments.Attachments) {
-            VkClearValue clearVal{};
-            if (format.TextureFormat == FramebufferTextureFormat::DEPTH24STENCIL8 || format.TextureFormat == FramebufferTextureFormat::Depth) {
-                clearVal.depthStencil = {1.0f, 0};
-            } else {
-                clearVal.color = {{clearColor.r, clearColor.g, clearColor.b, clearColor.a}};
-            }
-            clearValues.push_back(clearVal);
+        // 构建颜色附件
+        uint32_t colorCount = vulkanFBO->GetColorAttachmentCount();
+        std::vector<VkRenderingAttachmentInfo> colorAttachments(colorCount);
+        for (uint32_t i = 0; i < colorCount; i++) {
+            VkRenderingAttachmentInfo& att = colorAttachments[i];
+            att.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            att.imageView = vulkanFBO->GetColorAttachmentImageView(i);
+            att.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            att.loadOp = loadOp;
+            att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            att.clearValue.color = {{clearColor.r, clearColor.g, clearColor.b, clearColor.a}};
         }
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
 
-        vkCmdBeginRenderPass(cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        // 构建深度附件
+        VkRenderingAttachmentInfo depthAttachment{};
+        if (vulkanFBO->HasDepthAttachment()) {
+            depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            depthAttachment.imageView = vulkanFBO->GetDepthAttachmentImageView();
+            depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;    // 每帧清除深度
+            depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            depthAttachment.clearValue.depthStencil = { 1.0f, 0 };
+        }
 
-        // ==========================================
-        // 【核心修复 1】：Vulkan 负高度视口 (Y轴翻转黑魔法)
-        // 完美解决由于复用 OpenGL 投影矩阵导致的上下颠倒和背面剔除错误！
-        // ==========================================
+        VkRenderingInfo renderingInfo{};
+        renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        renderingInfo.renderArea = { {0, 0}, {width, height} };
+        renderingInfo.layerCount = 1;
+        renderingInfo.colorAttachmentCount = colorCount;
+        renderingInfo.pColorAttachments = colorAttachments.data();
+        renderingInfo.pDepthAttachment = vulkanFBO->HasDepthAttachment() ? &depthAttachment : nullptr;
+
+        vkCmdBeginRendering(cmdBuffer, &renderingInfo);
+
+        // Vulkan 负高度视口 (Y轴翻转，兼容 OpenGL 投影矩阵)
         VkViewport viewport{};
         viewport.x = 0.0f;
-        viewport.y = (float)vulkanFBO->GetSpecification().Height; // 起点移到下方
-        viewport.width = (float)vulkanFBO->GetSpecification().Width;
-        viewport.height = -(float)vulkanFBO->GetSpecification().Height; // 负数高度向上拉！
+        viewport.y = (float)height;
+        viewport.width = (float)width;
+        viewport.height = -(float)height;
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
         vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
 
         VkRect2D scissor{};
         scissor.offset = {0, 0};
-        scissor.extent = { vulkanFBO->GetSpecification().Width, vulkanFBO->GetSpecification().Height };
+        scissor.extent = { width, height };
         vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
     }
 
     void VulkanRenderCommandBuffer::EndRenderPass() {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-        vkCmdEndRenderPass(context->GetCurrentCommandBuffer());
+        vkCmdEndRendering(context->GetCurrentCommandBuffer());
     }
 
    void VulkanRenderCommandBuffer::BindPipeline(const std::shared_ptr<Pipeline>& pipeline) {
@@ -376,13 +389,14 @@ namespace Ayaya {
     // ==========================================
     static VkImageLayout ToVkImageLayout(ImageLayout layout) {
         switch (layout) {
-            case ImageLayout::Undefined:                     return VK_IMAGE_LAYOUT_UNDEFINED;
-            case ImageLayout::ColorAttachmentOptimal:        return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            case ImageLayout::DepthStencilAttachmentOptimal: return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            case ImageLayout::ShaderReadOnlyOptimal:         return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            case ImageLayout::TransferSrcOptimal:            return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            case ImageLayout::TransferDstOptimal:            return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            case ImageLayout::PresentSrc:                    return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            case ImageLayout::Undefined:                      return VK_IMAGE_LAYOUT_UNDEFINED;
+            case ImageLayout::ColorAttachmentOptimal:         return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            case ImageLayout::DepthStencilAttachmentOptimal:  return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            case ImageLayout::ShaderReadOnlyOptimal:          return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            case ImageLayout::DepthStencilReadOnlyOptimal:    return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+            case ImageLayout::TransferSrcOptimal:             return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            case ImageLayout::TransferDstOptimal:             return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            case ImageLayout::PresentSrc:                     return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
             default: AYAYA_CORE_ASSERT(false, "Unknown ImageLayout!"); return VK_IMAGE_LAYOUT_UNDEFINED;
         }
     }
@@ -423,7 +437,7 @@ namespace Ayaya {
         if (isDepth ||
             vkNew == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
             vkNew == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL) {
-            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
         } else {
             barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         }
@@ -469,6 +483,22 @@ namespace Ayaya {
             barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
             sourceStage      = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
             destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        }
+        else if (vkOld == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL &&
+                 vkNew == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+            // 纯深度 FBO：下帧写入前 → depth read-only → depth attachment
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            sourceStage      = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        }
+        else if (vkOld == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
+                 vkNew == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL) {
+            // 纯深度 FBO：写入后转可读 → depth attachment → depth read-only
+            barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            sourceStage      = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+            destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
         }
         else {
             AYAYA_CORE_ERROR("TransitionImageLayout: Unsupported transition {0} -> {1}",

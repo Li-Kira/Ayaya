@@ -20,6 +20,7 @@ namespace Ayaya {
         ColorAttachmentOptimal,
         DepthStencilAttachmentOptimal,
         ShaderReadOnlyOptimal,
+        DepthStencilReadOnlyOptimal,  // VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
         TransferSrcOptimal,
         TransferDstOptimal,
         PresentSrc
