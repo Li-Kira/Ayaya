@@ -3,7 +3,7 @@
 layout(location = 0) out vec4 g_Position;
 layout(location = 1) out vec4 g_Normal;
 layout(location = 2) out vec4 g_Albedo;
-layout(location = 3) out vec4 g_PBR; 
+layout(location = 3) out vec4 g_PBR;
 layout(location = 4) out vec4 g_CustomData;
 
 layout(location = 0) in vec3 v_FragPos;
@@ -16,7 +16,7 @@ layout(set = 1, binding = 3) uniform sampler2D u_RoughnessMap;
 layout(set = 1, binding = 4) uniform sampler2D u_AOMap;
 layout(set = 1, binding = 5) uniform sampler2D u_NormalMap;
 
-layout(push_constant) uniform Constants {
+layout(push_constant) uniform PushConstants {
     mat4 u_Transform;
     vec3 u_Albedo;
     float u_ReceiveShadows;
@@ -46,16 +46,15 @@ vec3 GetNormalFromMap() {
 void main() {
     g_Position = vec4(v_FragPos, 1.0);
 
-    // 【修复】：使用 pc. 进行获取，并用 == 1 替代隐式布尔转换
     vec3 finalNormal = (pc.u_UseNormalMap == 1) ? GetNormalFromMap() : normalize(v_Normal);
     g_Normal = vec4(finalNormal, 1.0);
 
-    vec3 albedo = (pc.u_UseAlbedoMap == 1) ? pow(texture(u_AlbedoMap, v_TexCoord).rgb, vec3(2.2)) : pc.u_Albedo;
+    vec3 albedo = (pc.u_UseAlbedoMap == 1) ? texture(u_AlbedoMap, v_TexCoord).rgb : pc.u_Albedo;
     g_Albedo = vec4(albedo, 1.0);
-    
-    float metallic = (pc.u_UseMetallicMap == 1) ? texture(u_MetallicMap, v_TexCoord).r : pc.u_Metallic;
+
+    float metallic  = (pc.u_UseMetallicMap  == 1) ? texture(u_MetallicMap,  v_TexCoord).r : pc.u_Metallic;
     float roughness = (pc.u_UseRoughnessMap == 1) ? texture(u_RoughnessMap, v_TexCoord).r : pc.u_Roughness;
-    float ao = (pc.u_UseAOMap == 1) ? texture(u_AOMap, v_TexCoord).r : pc.u_AO;
+    float ao        = (pc.u_UseAOMap       == 1) ? texture(u_AOMap,        v_TexCoord).r : pc.u_AO;
     g_PBR = vec4(metallic, roughness, ao, 1.0);
 
     g_CustomData = vec4(pc.u_ReceiveShadows, 0.0, 0.0, 1.0);

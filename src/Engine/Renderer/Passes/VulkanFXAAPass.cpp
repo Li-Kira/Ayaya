@@ -1,11 +1,22 @@
 #include "ayapch.h"
 #include "VulkanFXAAPass.hpp"
+#include "Renderer/RenderGraph.hpp"
 #include <glm/glm.hpp>
 
 namespace Ayaya {
 
     VulkanFXAAPass::VulkanFXAAPass() {
         m_PassName = "FXAA Pass";
+    }
+
+    void VulkanFXAAPass::DeclareResources(RGBuilder& builder, uint32_t width, uint32_t height) {
+        builder.ReadTexture("FinalOutput");
+        FramebufferSpecification spec;
+        spec.Width  = width;
+        spec.Height = height;
+        spec.Samples = 1;
+        spec.Attachments = { FramebufferTextureFormat::RGBA8 };
+        builder.WriteTexture("FXAA", spec);
     }
 
     void VulkanFXAAPass::OnAttach() {
@@ -79,7 +90,9 @@ namespace Ayaya {
         }
 
         cmd.EndRenderPass();
-        cmd.InsertExecutionBarrier(); // flush tile writes before ImGui samples this FBO
+        // 过渡到只读布局供 ImGui 采样
+        cmd.TransitionImageLayout(m_FXAAFBO, 0, ImageLayout::ColorAttachmentOptimal, ImageLayout::ShaderReadOnlyOptimal);
+        cmd.InsertExecutionBarrier();
 
         context.Set("Final_Output", std::dynamic_pointer_cast<void>(m_FXAAFBO));
         context.Framebuffers["FXAA"] = m_FXAAFBO;

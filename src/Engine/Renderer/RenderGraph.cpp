@@ -232,7 +232,11 @@ namespace Ayaya {
 
         if (current == writeLayout) return;
 
-        cmd.TransitionImageLayout(tex.PhysicalFBOs[idx], 0, current, writeLayout);
+        // Transition ALL color attachments (or depth for depth-only)
+        auto vkFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(tex.PhysicalFBOs[idx]);
+        uint32_t count = isDepth ? 1 : (vkFBO ? vkFBO->GetColorAttachmentCount() : 1);
+        for (uint32_t i = 0; i < count; i++)
+            cmd.TransitionImageLayout(tex.PhysicalFBOs[idx], i, current, writeLayout);
         tex.CurrentLayout[idx] = writeLayout;
     }
 
@@ -280,15 +284,20 @@ namespace Ayaya {
             }
 
             // Step c: 注入当前帧 FBO 到 context 黑板
+            //   Write 纹理 → 始终注入（Pass 需要渲染目标）
             for (auto& w : pass->TextureWrites) {
                 auto it = m_Textures.find(w);
                 if (it != m_Textures.end() && it->second.PhysicalFBOs[idx])
                     context.Framebuffers[w] = it->second.PhysicalFBOs[idx];
             }
+            //   Read 纹理 → 仅在 context 中尚不存在时注入
+            //   （允许前一 Pass 直接注入自己的 FBO，避免被空 FBO 覆盖）
             for (auto& r : pass->TextureReads) {
                 auto it = m_Textures.find(r);
-                if (it != m_Textures.end() && it->second.PhysicalFBOs[idx])
-                    context.Framebuffers[r] = it->second.PhysicalFBOs[idx];
+                if (it != m_Textures.end() && it->second.PhysicalFBOs[idx]) {
+                    if (context.Framebuffers.find(r) == context.Framebuffers.end())
+                        context.Framebuffers[r] = it->second.PhysicalFBOs[idx];
+                }
             }
 
             // Step d: 执行 Pass。
@@ -335,45 +344,50 @@ namespace Ayaya {
 
         bool isDepthOnly = IsDepthOnlyTexture(tex.Spec);
 
-        VkImage image = isDepthOnly
-            ? vkFBO->GetDepthAttachmentImage()
-            : vkFBO->GetColorAttachmentImage(0);
-        if (image == VK_NULL_HANDLE) return;
+        // Transition ALL color attachments (or depth for depth-only textures)
+        uint32_t count = isDepthOnly ? 1 : vkFBO->GetColorAttachmentCount();
+        std::vector<VkImageMemoryBarrier> barriers(count);
 
-        // 动态渲染：vkCmdEndRendering 后图像在 attachment 布局
-        VkImageLayout oldLayout = isDepthOnly
-            ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-            : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        VkImageLayout newLayout = isDepthOnly
-            ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
-            : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        VkImageLayout oldLayout, newLayout;
+        VkAccessFlags srcAccess, dstAccess;
+        VkPipelineStageFlags srcStage;
+        VkImageAspectFlags aspect;
 
-        VkImageMemoryBarrier barrier{};
-        barrier.sType         = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.oldLayout     = oldLayout;
-        barrier.newLayout     = newLayout;
-        barrier.srcAccessMask = isDepthOnly
-            ? VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
-            : VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        barrier.image         = image;
-        barrier.subresourceRange.aspectMask = isDepthOnly
-            ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
-            : VK_IMAGE_ASPECT_COLOR_BIT;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.layerCount = 1;
+        if (isDepthOnly) {
+            oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+            srcAccess = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            dstAccess = VK_ACCESS_SHADER_READ_BIT;
+            srcStage  = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+            aspect    = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            barriers[0].image = vkFBO->GetDepthAttachmentImage();
+        } else {
+            oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            srcAccess = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            dstAccess = VK_ACCESS_SHADER_READ_BIT;
+            srcStage  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            aspect    = VK_IMAGE_ASPECT_COLOR_BIT;
+            for (uint32_t i = 0; i < count; i++)
+                barriers[i].image = vkFBO->GetColorAttachmentImage(i);
+        }
 
-        VkPipelineStageFlags srcStage = isDepthOnly
-            ? VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT
-            : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        for (uint32_t i = 0; i < count; i++) {
+            if (barriers[i].image == VK_NULL_HANDLE) continue;
+            barriers[i].sType     = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barriers[i].oldLayout = oldLayout;
+            barriers[i].newLayout = newLayout;
+            barriers[i].srcAccessMask = srcAccess;
+            barriers[i].dstAccessMask = dstAccess;
+            barriers[i].subresourceRange.aspectMask = aspect;
+            barriers[i].subresourceRange.levelCount = 1;
+            barriers[i].subresourceRange.layerCount = 1;
+        }
 
         vkCmdPipelineBarrier(vkCtx->GetCurrentCommandBuffer(),
-            srcStage,
-            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            0,
-            0, nullptr, 0, nullptr, 1, &barrier);
+            srcStage, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0, 0, nullptr, 0, nullptr, count, barriers.data());
 
-        // 更新布局追踪：转换后图像处于可采样布局
         tex.CurrentLayout[idx] = isDepthOnly
             ? ImageLayout::DepthStencilReadOnlyOptimal
             : ImageLayout::ShaderReadOnlyOptimal;

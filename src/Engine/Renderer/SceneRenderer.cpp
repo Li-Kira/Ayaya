@@ -189,17 +189,24 @@ namespace Ayaya {
         else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
             AYAYA_CORE_INFO("Vulkan Pipeline: RenderGraph Mode");
 
-            // 创建 Pass 实例并仅初始化 Shader/Pipeline (Resource 由 Graph 管理)
+            // ==========================================
+            // Deferred Rendering Pipeline (Vulkan 1.3)
+            //    Shadow → GBuffer → Lighting → Bloom → PostProcess → FXAA → UI
+            // ==========================================
             m_ShadowPass      = std::make_shared<VulkanShadowPass>();
-            m_ForwardPass     = std::make_shared<VulkanForwardTestPass>();
-            m_OutlinePass     = std::make_shared<VulkanOutlinePass>();
+            m_GBufferPass     = std::make_shared<VulkanGBufferPass>();
+            m_LightingPass    = std::make_shared<VulkanLightingPass>();
+            m_BloomPass       = std::make_shared<VulkanBloomPass>();
             m_PostProcessPass = std::make_shared<VulkanPostProcessPass>();
+            m_FXAAPass        = std::make_shared<VulkanFXAAPass>();
             m_UIPass          = std::make_shared<UIPass>();
 
             m_ShadowPass->OnAttach();
-            m_ForwardPass->OnAttach();
-            m_OutlinePass->OnAttach();
+            m_GBufferPass->OnAttach();
+            m_LightingPass->OnAttach();
+            m_BloomPass->OnAttach();
             m_PostProcessPass->OnAttach();
+            m_FXAAPass->OnAttach();
             m_UIPass->OnAttach();
         }
     }
@@ -415,21 +422,19 @@ namespace Ayaya {
 
                 if (m_ViewportDirty) {
                     m_RenderGraph.Clear();
+                    // Deferred Pipeline: Shadow → GBuffer → Lighting → PostProcess
                     m_RenderGraph.AddPass("ShadowPass",
                         [&](RGBuilder& b) { VulkanShadowPass::DeclareResources(b); },
                         [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_ShadowPass) m_ShadowPass->Execute(ctx, c); });
-                    m_RenderGraph.AddPass("ForwardPass",
-                        [&](RGBuilder& b) { VulkanForwardTestPass::DeclareResources(b, vpW, vpH); },
-                        [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_ForwardPass) m_ForwardPass->Execute(ctx, c); });
-                    m_RenderGraph.AddPass("OutlinePass",
-                        [&](RGBuilder& b) { VulkanOutlinePass::DeclareResources(b, vpW, vpH); },
-                        [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_OutlinePass) m_OutlinePass->Execute(ctx, c); });
+                    m_RenderGraph.AddPass("GBufferPass",
+                        [&](RGBuilder& b) { VulkanGBufferPass::DeclareResources(b, vpW, vpH); },
+                        [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_GBufferPass) m_GBufferPass->Execute(ctx, c); });
+                    m_RenderGraph.AddPass("LightingPass",
+                        [&](RGBuilder& b) { VulkanLightingPass::DeclareResources(b, vpW, vpH); },
+                        [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_LightingPass) m_LightingPass->Execute(ctx, c); });
                     m_RenderGraph.AddPass("PostProcessPass",
                         [&](RGBuilder& b) { VulkanPostProcessPass::DeclareResources(b, vpW, vpH); },
                         [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_PostProcessPass) m_PostProcessPass->Execute(ctx, c); });
-                    m_RenderGraph.AddPass("UIPass",
-                        [&](RGBuilder& b) { UIPass::DeclareResources(b, vpW, vpH); },
-                        [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_UIPass) m_UIPass->Execute(ctx, c); });
                     m_RenderGraph.Compile();
                     m_ViewportDirty = false;
                 }
@@ -476,9 +481,9 @@ namespace Ayaya {
                 return it->second->GetColorAttachmentRendererID(0);
             return nullptr;
         };
-        if (void* id = tryFBO("FXAA"))         return id;
-        if (void* id = tryFBO("PostProcess"))   return id;
         if (void* id = tryFBO("FinalOutput"))   return id;
+        if (void* id = tryFBO("GBuffer"))       return id;
+        if (void* id = tryFBO("Lighting"))      return id;
         if (void* id = tryFBO("ForwardTest"))   return id;
         if (void* id = tryFBO("SceneColor"))    return id;
         return nullptr;

@@ -65,11 +65,13 @@ namespace Ayaya {
         RenderGraph m_RenderGraph;
         bool m_ViewportDirty = true;   // 首帧/Resize 时触发图重建
 
-        // Pass 实例 — 由 Graph 调度，管线只持有 Shader/Pipeline
+        // Deferred Pass 实例 — 由 Graph 调度
         std::shared_ptr<RenderPass> m_ShadowPass;
-        std::shared_ptr<RenderPass> m_ForwardPass;
-        std::shared_ptr<RenderPass> m_OutlinePass;
+        std::shared_ptr<RenderPass> m_GBufferPass;
+        std::shared_ptr<RenderPass> m_LightingPass;
+        std::shared_ptr<RenderPass> m_BloomPass;
         std::shared_ptr<RenderPass> m_PostProcessPass;
+        std::shared_ptr<RenderPass> m_FXAAPass;
         std::shared_ptr<RenderPass> m_UIPass;
 
         // GPU 资源延迟释放 (3 帧安全期)

@@ -1,10 +1,21 @@
 #include "ayapch.h"
 #include "VulkanBloomPass.hpp"
+#include "Renderer/RenderGraph.hpp"
 
 namespace Ayaya {
 
     VulkanBloomPass::VulkanBloomPass() {
         m_PassName = "Bloom Pass";
+    }
+
+    void VulkanBloomPass::DeclareResources(RGBuilder& builder, uint32_t width, uint32_t height) {
+        builder.ReadTexture("Lighting");
+        FramebufferSpecification spec;
+        spec.Width  = width;
+        spec.Height = height;
+        spec.Samples = 1;
+        spec.Attachments = { FramebufferTextureFormat::RGBA16F };
+        builder.WriteTexture("Bloom", spec);
     }
 
     void VulkanBloomPass::OnAttach() {
@@ -134,7 +145,9 @@ namespace Ayaya {
             cmd.EndRenderPass();
         }
 
-        cmd.InsertExecutionBarrier(); // flush tile writes before PostProcess reads bloom output
+        // 过渡到只读布局供 PostProcess 采样
+        cmd.TransitionImageLayout(m_MipChain[0].FBO, 0, ImageLayout::ColorAttachmentOptimal, ImageLayout::ShaderReadOnlyOptimal);
+        cmd.InsertExecutionBarrier();
 
         context.Set("Bloom_Output", std::dynamic_pointer_cast<void>(m_MipChain[0].FBO));
         context.Framebuffers["Bloom"] = m_MipChain[0].FBO;

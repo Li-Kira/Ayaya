@@ -13,7 +13,5 @@ layout(push_constant) uniform Constants {
 
 void main() {
     vec3 envColor = texture(u_Skybox, v_TexCoords).rgb;
-
-    // 对齐 OpenGL：乘强度 + 除曝光，使天空盒以屏幕亮度显示
     FragColor = vec4(envColor * pc.u_Intensity, 1.0);
 }
