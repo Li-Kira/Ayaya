@@ -101,7 +101,7 @@ Hi, welcome to Ayaya engine♪
 
         Renderer::LoadConfig();
 
-        m_Window = std::make_unique<Window>(1920, 1080, "Ayaya Engine v0.1");
+        m_Window = std::make_unique<Window>(1280, 720, "Ayaya Engine v0.1"); // logical size; PreferencesPanel adjusts to physical
         m_Window->SetEventCallback(std::bind(&Application::OnEvent, this, std::placeholders::_1));
         AYAYA_CORE_INFO("GLFW Window initialized successfully.");
 

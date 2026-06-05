@@ -1,7 +1,7 @@
 EditorPreferences:
-  WindowWidth: 1280
-  WindowHeight: 800
+  WindowWidth: 2560
+  WindowHeight: 1600
   UIScale: 1
   MaxUndoSteps: 100
   EnableVSync: false 
-  GraphicsAPI: 0
+  GraphicsAPI: 1

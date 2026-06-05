@@ -17,7 +17,16 @@ namespace Ayaya {
         LoadPreferences();
         InitialGraphicsAPI = GraphicsAPI;
 
-        Application::Get().GetWindow().SetSize(m_WindowWidth, m_WindowHeight);
+        // Detect content scale (macOS Retina = 2.0, standard = 1.0).
+        // Preferences store physical framebuffer size; convert to logical points for GLFW.
+        GLFWwindow* win = static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow());
+        if (win) {
+            glfwGetWindowContentScale(win, &m_ContentScale, nullptr);
+            if (m_ContentScale < 1.0f) m_ContentScale = 1.0f;
+        }
+        Application::Get().GetWindow().SetSize(
+            (int)(m_WindowWidth / m_ContentScale),
+            (int)(m_WindowHeight / m_ContentScale));
         ImGui::GetIO().FontGlobalScale = m_UIScale;
         
         // 【新增】：初始化时同步从 yaml 读到的历史容量！
@@ -29,8 +38,9 @@ namespace Ayaya {
     void PreferencesPanel::SetOpen(bool isOpen) {
         m_IsOpen = isOpen;
         if (isOpen) {
-            m_WindowWidth = (int)ImGui::GetMainViewport()->Size.x;
-            m_WindowHeight = (int)ImGui::GetMainViewport()->Size.y;
+            // ImGui viewport returns logical points; convert to physical framebuffer size
+            m_WindowWidth  = (int)(ImGui::GetMainViewport()->Size.x * m_ContentScale);
+            m_WindowHeight = (int)(ImGui::GetMainViewport()->Size.y * m_ContentScale);
             m_UIScale = ImGui::GetIO().FontGlobalScale;
         }
     }
@@ -182,8 +192,10 @@ namespace Ayaya {
 
                 ImGui::Spacing();
                 if (ImGui::Button("Apply Window Size", ImVec2(150.0f * currentScale, 0))) {
-                    Application::Get().GetWindow().SetSize(m_WindowWidth, m_WindowHeight);
-                    AYAYA_CORE_INFO("Changed window size to {0}x{1}", m_WindowWidth, m_WindowHeight);
+                    Application::Get().GetWindow().SetSize(
+                        (int)(m_WindowWidth / m_ContentScale),
+                        (int)(m_WindowHeight / m_ContentScale));
+                    AYAYA_CORE_INFO("Changed window size to {0}x{1} (physical)", m_WindowWidth, m_WindowHeight);
                 }
                 ImGui::TreePop();
             }
@@ -272,8 +284,8 @@ namespace Ayaya {
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.12f, 0.40f, 0.80f, 1.0f));
         
         if (ImGui::Button("Save Preferences", ImVec2(btnWidth, buttonHeight))) {
-            m_WindowWidth = (int)ImGui::GetMainViewport()->Size.x;
-            m_WindowHeight = (int)ImGui::GetMainViewport()->Size.y;
+            m_WindowWidth  = (int)(ImGui::GetMainViewport()->Size.x * m_ContentScale);
+            m_WindowHeight = (int)(ImGui::GetMainViewport()->Size.y * m_ContentScale);
             m_UIScale = ImGui::GetIO().FontGlobalScale;
             SavePreferences();
         }
