@@ -20,137 +20,121 @@ namespace Ayaya {
 
     void VulkanBloomPass::OnAttach() {
         m_DownsampleShader = Shader::Create("PostProcess/postprocess.vert", "PostProcess/bloom_downsample.frag");
-        m_UpsampleShader = Shader::Create("PostProcess/postprocess.vert", "PostProcess/bloom_upsample.frag");
-
-        OnResize(1280, 720);
-
-        PipelineSpecification downSpec;
-        downSpec.Shader = m_DownsampleShader;
-        downSpec.TargetFramebuffer = m_MipChain[0].FBO;
-        downSpec.Layout = {};
-        downSpec.DepthTest = false;
-        downSpec.DepthWrite = false;
-        downSpec.Blend = false;
-        downSpec.BackfaceCulling = CullMode::None;
-        m_DownsamplePipeline = Pipeline::Create(downSpec);
-
-        PipelineSpecification upSpec;
-        upSpec.Shader = m_UpsampleShader;
-        upSpec.TargetFramebuffer = m_MipChain[0].FBO;
-        upSpec.Layout = {};
-        upSpec.DepthTest = false;
-        upSpec.DepthWrite = false;
-        upSpec.Blend = true;
-        upSpec.BlendMode = BlendModeType::Additive;
-        upSpec.BackfaceCulling = CullMode::None;
-        m_UpsamplePipeline = Pipeline::Create(upSpec);
+        m_UpsampleShader   = Shader::Create("PostProcess/postprocess.vert", "PostProcess/bloom_upsample.frag");
     }
 
     void VulkanBloomPass::OnResize(uint32_t width, uint32_t height) {
-        m_MipChain.clear();
+        // Internal mips 1-4 (mip 0 is the RenderGraph-managed "Bloom" FBO)
+        m_InternalMips.clear();
+        glm::vec2 mipSize((float)width / 4.0f, (float)height / 4.0f); // start at 1/4 (already halved once from input)
 
-        glm::vec2 mipSize((float)width / 2.0f, (float)height / 2.0f);
-        glm::vec2 intMipSize((float)(uint32_t)mipSize.x, (float)(uint32_t)mipSize.y);
-
-        for (uint32_t i = 0; i < 5; i++) {
+        for (uint32_t i = 0; i < 4; i++) {
             VulkanBloomMip mip;
             mip.Size = mipSize;
-            mip.IntSize = intMipSize;
+            mip.IntSize = glm::vec2((float)(uint32_t)mipSize.x, (float)(uint32_t)mipSize.y);
 
             FramebufferSpecification spec;
-            spec.Width = (uint32_t)intMipSize.x;
-            spec.Height = (uint32_t)intMipSize.y;
+            spec.Width  = (uint32_t)mip.IntSize.x;
+            spec.Height = (uint32_t)mip.IntSize.y;
             spec.Samples = 1;
             spec.Attachments = { FramebufferTextureFormat::RGBA16F };
             mip.FBO = Framebuffer::Create(spec);
 
-            m_MipChain.push_back(mip);
-
+            m_InternalMips.push_back(mip);
             mipSize *= 0.5f;
-            intMipSize = glm::vec2((float)(uint32_t)mipSize.x, (float)(uint32_t)mipSize.y);
         }
     }
 
     void VulkanBloomPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
-        std::shared_ptr<Framebuffer> inputFBO;
-        if (context.Framebuffers.find("Lighting") != context.Framebuffers.end()) {
-            inputFBO = context.Framebuffers["Lighting"];
-        } else {
-            inputFBO = context.Get<std::shared_ptr<Framebuffer>>("Lighting_Output", nullptr);
-        }
+        auto inputFBO = context.GetFramebuffer("Lighting");
+        auto bloomFBO = context.GetFramebuffer("Bloom");
+        if (!inputFBO || !bloomFBO) return;
 
-        bool isBloomActive = context.Get<bool>("EnableBloom", true);
-        float bloomRadius = context.Get<float>("BloomRadius", 0.005f);
-        float bloomThreshold = context.Get<float>("BloomThreshold", 1.0f);
-        float bloomKnee = context.Get<float>("BloomKnee", 0.1f);
+        bool enableBloom = context.Get<bool>("EnableBloom", false);
+        float threshold = context.Get<float>("BloomThreshold", 1.0f);
+        float knee      = context.Get<float>("BloomKnee", 0.1f);
+        float radius    = context.Get<float>("BloomRadius", 0.005f);
 
-        if (!inputFBO || !isBloomActive) {
-            if (inputFBO) {
-                context.Set("Bloom_Output", std::dynamic_pointer_cast<void>(inputFBO));
-            } else {
-                context.Set("Bloom_Output", std::shared_ptr<void>(nullptr));
-            }
+        if (!enableBloom) {
+            // Clear bloom output to black so PostProcess blend is a no-op
+            cmd.BeginRenderPass(bloomFBO, true, glm::vec4(0.0f));
+            cmd.EndRenderPass();
+            context.Framebuffers["Bloom"] = bloomFBO;
             return;
         }
 
+        // Resize internal mips on first frame or viewport change
+        uint32_t vpW = context.Get<uint32_t>("ViewportWidth");
+        uint32_t vpH = context.Get<uint32_t>("ViewportHeight");
+        if (m_InternalMips.empty() || m_LastVPWidth != vpW || m_LastVPHeight != vpH) {
+            OnResize(vpW, vpH);
+            m_LastVPWidth  = vpW;
+            m_LastVPHeight = vpH;
+        }
+
+        // Lazy pipeline creation (FBO-dependent, so defer to first Execute)
+        if (!m_DownsamplePipeline) {
+            PipelineSpecification ds;
+            ds.Shader = m_DownsampleShader;
+            ds.TargetFramebuffer = bloomFBO;
+            ds.Layout = {};
+            ds.DepthTest = false; ds.DepthWrite = false; ds.Blend = false;
+            ds.BackfaceCulling = CullMode::None;
+            m_DownsamplePipeline = Pipeline::Create(ds);
+
+            PipelineSpecification us;
+            us.Shader = m_UpsampleShader;
+            us.TargetFramebuffer = bloomFBO;
+            us.Layout = {};
+            us.DepthTest = false; us.DepthWrite = false;
+            us.Blend = true; us.BlendMode = BlendModeType::Additive;
+            us.BackfaceCulling = CullMode::None;
+            m_UpsamplePipeline = Pipeline::Create(us);
+        }
+
+        glm::vec3 curve(threshold - knee, knee * 2.0f, 0.25f / knee);
+
+        // ---- Downsample (Lighting → mip[0]=Bloom → mip[1] → mip[2] → mip[3]) ----
         cmd.BindPipeline(m_DownsamplePipeline);
-        context.Stats.ShaderBinds++;
 
-        glm::vec3 curve(bloomThreshold - bloomKnee, bloomKnee * 2.0f, 0.25f / bloomKnee);
+        struct {
+            std::shared_ptr<Framebuffer> FBO;
+            glm::vec2 Size;
+        } chain[5];
+        chain[0] = { bloomFBO, glm::vec2((float)vpW / 2.0f, (float)vpH / 2.0f) };
+        for (int i = 0; i < 4; i++) chain[i+1] = { m_InternalMips[i].FBO, m_InternalMips[i].Size };
 
-        std::shared_ptr<Framebuffer> currentInputFBO = inputFBO;
+        for (int i = 0; i < 5; i++) {
+            auto src = (i == 0) ? inputFBO : chain[i-1].FBO;
+            cmd.BeginRenderPass(chain[i].FBO, false, glm::vec4(0.0f));
+            cmd.BindTexture2D(m_DownsamplePipeline, "u_Image", 0, src, 0);
 
-        for (size_t i = 0; i < m_MipChain.size(); i++) {
-            auto& mip = m_MipChain[i];
-
-            cmd.BeginRenderPass(mip.FBO, false, glm::vec4(0.0f));
-
-            cmd.BindTexture2D(m_DownsamplePipeline, "u_Image", 0, currentInputFBO, 0);
-
-            BloomDownsamplePushConstants constants{};
-            constants.TexelSize = 1.0f / mip.Size;
-            constants.MipLevel = (int)i;
-            constants.Threshold = bloomThreshold;
-            constants.Curve = curve;
-            cmd.PushConstantData(m_DownsamplePipeline, &constants, sizeof(BloomDownsamplePushConstants));
-
-            if (context.RecordAndCheckDrawCall("Bloom Pass", "Downsample Mip " + std::to_string(i), "Bloom Shader", 1)) {
-                cmd.DrawArrays(3);
-            }
-
+            BloomDownsamplePushConstants pc{};
+            pc.TexelSize = 1.0f / chain[i].Size;
+            pc.MipLevel  = i;
+            pc.Threshold = threshold;
+            pc.Curve     = curve;
+            cmd.PushConstantData(m_DownsamplePipeline, &pc, sizeof pc);
+            cmd.DrawArrays(3);
             cmd.EndRenderPass();
-
-            currentInputFBO = mip.FBO;
         }
 
+        // ---- Upsample (mip[3] → ... → mip[0]=Bloom) ----
         cmd.BindPipeline(m_UpsamplePipeline);
-        context.Stats.ShaderBinds++;
 
-        BloomUpsamplePushConstants upConstants{};
-        upConstants.FilterRadius = bloomRadius;
-        cmd.PushConstantData(m_UpsamplePipeline, &upConstants, sizeof(BloomUpsamplePushConstants));
+        BloomUpsamplePushConstants upPC{};
+        upPC.FilterRadius = radius;
+        cmd.PushConstantData(m_UpsamplePipeline, &upPC, sizeof upPC);
 
-        for (int i = (int)m_MipChain.size() - 2; i >= 0; i--) {
-            auto& currentMip = m_MipChain[i];
-            auto& prevMip = m_MipChain[i + 1];
-
-            cmd.BeginRenderPass(currentMip.FBO, false, glm::vec4(0.0f));
-
-            cmd.BindTexture2D(m_UpsamplePipeline, "u_Image", 0, prevMip.FBO, 0);
-
-            if (context.RecordAndCheckDrawCall("Bloom Pass", "Upsample Mip " + std::to_string(i), "Bloom Shader", 1)) {
-                cmd.DrawArrays(3);
-            }
-
+        for (int i = 3; i >= 0; i--) {
+            auto src = chain[i+1].FBO;
+            cmd.BeginRenderPass(chain[i].FBO, false, glm::vec4(0.0f));
+            cmd.BindTexture2D(m_UpsamplePipeline, "u_Image", 0, src, 0);
+            cmd.DrawArrays(3);
             cmd.EndRenderPass();
         }
 
-        // 过渡到只读布局供 PostProcess 采样
-        cmd.TransitionImageLayout(m_MipChain[0].FBO, 0, ImageLayout::ColorAttachmentOptimal, ImageLayout::ShaderReadOnlyOptimal);
-        cmd.InsertExecutionBarrier();
-
-        context.Set("Bloom_Output", std::dynamic_pointer_cast<void>(m_MipChain[0].FBO));
-        context.Framebuffers["Bloom"] = m_MipChain[0].FBO;
+        context.Framebuffers["Bloom"] = bloomFBO;
     }
 
 }

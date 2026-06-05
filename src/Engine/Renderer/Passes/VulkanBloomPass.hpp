@@ -38,7 +38,11 @@ namespace Ayaya {
     private:
         std::shared_ptr<Shader> m_DownsampleShader;
         std::shared_ptr<Shader> m_UpsampleShader;
-        std::vector<VulkanBloomMip> m_MipChain;
+
+        // Mip 0 = RenderGraph-managed "Bloom" FBO; mips 1-4 = pass-internal
+        std::vector<VulkanBloomMip> m_InternalMips; // indices 0-3 = mips 1-4
+        uint32_t m_LastVPWidth  = 0;
+        uint32_t m_LastVPHeight = 0;
 
         std::shared_ptr<Pipeline> m_DownsamplePipeline;
         std::shared_ptr<Pipeline> m_UpsamplePipeline;

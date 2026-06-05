@@ -19,6 +19,7 @@ namespace Ayaya {
     void VulkanPostProcessPass::DeclareResources(RGBuilder& builder, uint32_t width, uint32_t height) {
         builder.ReadTexture("Lighting");
         builder.ReadTexture("Selection");
+        builder.ReadTexture("Bloom");
         FramebufferSpecification s;
         s.Width = width; s.Height = height; s.Samples = 1;
         s.Attachments = { FramebufferTextureFormat::RGBA8 };
@@ -39,16 +40,20 @@ namespace Ayaya {
         if (src) cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, src, 0);
         else cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, wt);
         auto sel = context.GetFramebuffer("Selection");
+        auto bloom = context.GetFramebuffer("Bloom");
         auto bt  = context.GetTexture("BlackTexture");
         if (sel) cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, sel, 0);
         else if (bt) cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, bt);
-        if (bt) cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, bt);
+        if (bloom) cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, bloom, 0);
+        else if (bt) cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, bt);
         PostProcessPushConstants pc{};
         float physExposure = context.Get<float>("PhysicalExposure", 1.0f);
         float expComp = context.Get<float>("ExposureCompensation", 1.0f);
         pc.Exposure = physExposure * expComp;
         pc.ToneMappingType = context.Get<int>("ToneMappingType", 1);
         pc.TexelSize = glm::vec2(1.f/w, 1.f/h);
+        pc.EnableBloom = context.Get<bool>("EnableBloom", false) ? 1 : 0;
+        pc.BloomIntensity = context.Get<float>("BloomIntensity", 1.0f);
         cmd.PushConstantData(m_Pipeline, &pc, sizeof pc);
         cmd.DrawArrays(m_EmptyVAO, 3);
         cmd.EndRenderPass();

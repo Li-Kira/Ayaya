@@ -645,8 +645,12 @@ namespace Ayaya {
             [&](RGBuilder& b) { VulkanOutlinePass::DeclareResources(b, vpW, vpH); },
             [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_OutlinePass) m_OutlinePass->Execute(ctx, c); });
 
-        // 阶段4: 后处理 — ToneMapping + Outline 边缘检测
-        // TODO: Bloom (自有FBO需改造为RenderGraph三缓冲)
+        // 阶段4: Bloom — 5级 downsample/upsample → "Bloom" (RGBA16F)
+        m_RenderGraph.AddPass("BloomPass",
+            [&](RGBuilder& b) { VulkanBloomPass::DeclareResources(b, vpW, vpH); },
+            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_BloomPass) m_BloomPass->Execute(ctx, c); });
+
+        // 阶段4: 后处理 — ToneMapping + Bloom合成 + Outline 边缘检测
         m_RenderGraph.AddPass("PostProcessPass",
             [&](RGBuilder& b) { VulkanPostProcessPass::DeclareResources(b, vpW, vpH); },
             [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_PostProcessPass) m_PostProcessPass->Execute(ctx, c); });
