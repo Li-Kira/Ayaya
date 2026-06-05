@@ -28,15 +28,6 @@ namespace Ayaya {
         m_DeferredPipeSpec.DepthTest = true; m_DeferredPipeSpec.DepthWrite = true; // writes gl_FragDepth
         m_DeferredPipeSpec.Blend = false; m_DeferredPipeSpec.BackfaceCulling = CullMode::None;
         m_DeferredPipeline = Pipeline::Create(m_DeferredPipeSpec);
-
-        m_SkyboxShader = Shader::Create("Skybox/skybox.vert", "Skybox/skybox.frag");
-        m_SkyboxPipeSpec.Shader = m_SkyboxShader;
-        m_SkyboxPipeSpec.Layout = {{ShaderDataType::Float3,"a_Position"},{ShaderDataType::Float3,"a_Normal"},{ShaderDataType::Float2,"a_TexCoord"},{ShaderDataType::Float3,"a_Tangent"}};
-        m_SkyboxPipeSpec.TargetFramebuffer = m_RefFBO;
-        m_SkyboxPipeSpec.DepthTest = true; m_SkyboxPipeSpec.DepthWrite = false;
-        m_SkyboxPipeSpec.DepthOperator = DepthCompareOperator::LEqual;
-        m_SkyboxPipeSpec.BackfaceCulling = CullMode::None;
-        m_SkyboxPipeline = Pipeline::Create(m_SkyboxPipeSpec);
     }
 
     void VulkanLightingPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
@@ -54,12 +45,10 @@ namespace Ayaya {
         cmd.BindTexture2D(m_DeferredPipeline, "g_PBR", 3, gbufferFBO, 3);
         cmd.BindTexture2D(m_DeferredPipeline, "g_CustomData", 4, gbufferFBO, 4);
 
-        auto irrMap = context.Get<std::shared_ptr<TextureCube>>("IrradianceMap", nullptr);
-        auto preMap = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap", nullptr);
-        if (irrMap && preMap) {
-            cmd.BindTextureCube(m_DeferredPipeline, "u_IrradianceMap", 8, irrMap);
-            cmd.BindTextureCube(m_DeferredPipeline, "u_PrefilteredMap", 9, preMap);
-        }
+        auto irrMap = context.Get<std::shared_ptr<TextureCube>>("IrradianceMap");
+        auto preMap = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap");
+        cmd.BindTextureCube(m_DeferredPipeline, "u_IrradianceMap", 8, irrMap);
+        cmd.BindTextureCube(m_DeferredPipeline, "u_PrefilteredMap", 9, preMap);
         auto brdf = context.GetTexture("BRDFLUT");
         auto whiteTex = context.GetTexture("WhiteTexture");
         if (brdf) cmd.BindTexture2D(m_DeferredPipeline, "u_BRDFLUT", 10, brdf);
@@ -78,20 +67,6 @@ namespace Ayaya {
         defPC.EnvMapEnabled = (irrMap && preMap) ? 1 : 0;
         cmd.PushConstantData(m_DeferredPipeline, &defPC, sizeof(DeferredLightingPushConstants));
         cmd.DrawArrays(3);
-
-        // Skybox (depth already written by deferred shader via gl_FragDepth)
-        auto envMap = context.Get<std::shared_ptr<TextureCube>>("EnvironmentCubemap", nullptr);
-        if (envMap && context.Get<bool>("ShowSkybox", true)) {
-            cmd.BindPipeline(m_SkyboxPipeline);
-            cmd.BindTextureCube(m_SkyboxPipeline, "u_Skybox", 0, envMap);
-            struct alignas(16) { glm::mat4 VP; float I; } pc;
-            glm::mat4 v = glm::mat4(glm::mat3(context.ViewMatrix));
-            pc.VP = context.ProjectionMatrix * v;
-            pc.I = context.Get<float>("EnvironmentIntensity", 1.0f);
-            cmd.PushConstantData(m_SkyboxPipeline, &pc, sizeof pc);
-            auto mesh = context.Get<std::shared_ptr<Mesh>>("SkyboxMesh", nullptr);
-            if (mesh) cmd.DrawIndexed(mesh, mesh->GetIndexCount());
-        }
 
         cmd.EndRenderPass();
         context.Framebuffers["Lighting"] = lightingFBO;

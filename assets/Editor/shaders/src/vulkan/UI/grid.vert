@@ -13,9 +13,11 @@ layout(push_constant) uniform Constants {
 } pc;
 
 layout(location = 0) out vec3 v_WorldPos;
+layout(location = 1) out vec4 v_ClipPos;
 
 void main() {
     vec4 worldPos = pc.u_Transform * vec4(a_Position, 1.0);
     v_WorldPos = worldPos.xyz;
-    gl_Position = u_ViewProjection * worldPos;
+    v_ClipPos = u_ViewProjection * worldPos;
+    gl_Position = v_ClipPos;
 }

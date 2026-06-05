@@ -2,6 +2,7 @@
 #include "VulkanGbufferPass.hpp"
 #include "Renderer/RenderGraph.hpp"
 #include "Asset/AssetManager.hpp"
+#include "Renderer/Frustum.hpp"
 #include "Engine/Scene/Components.hpp"
 #include "Engine/Scene/Scene.hpp"
 
@@ -49,6 +50,9 @@ namespace Ayaya {
         auto fbo = context.GetFramebuffer("GBuffer");
         if (!fbo) return;
 
+        glm::mat4 viewProj = context.ProjectionMatrix * context.ViewMatrix;
+        Frustum frustum(viewProj);
+
         m_DrawList.clear();
         auto view = context.ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
         for (auto entityID : view) {
@@ -57,12 +61,14 @@ namespace Ayaya {
             auto& meshComp = entity.GetComponent<MeshRendererComponent>();
             auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
             if (!model) continue;
+            glm::mat4 transform = entity.GetWorldTransform();
             VulkanGBufferCommandData d;
-            d.Transform = entity.GetWorldTransform();
+            d.Transform = transform;
             d.TargetEntity = entity;
             d.ReceiveShadows = meshComp.ReceiveShadows;
             d.MaterialAsset = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
             for (auto& mesh : model->GetMeshes()) {
+                if (!frustum.IsBoxVisible(mesh->GetAABB(), transform)) continue;
                 d.MeshAsset = mesh;
                 m_DrawList.push_back(d);
             }
@@ -88,6 +94,10 @@ namespace Ayaya {
             pc.Metallic = 0.0f;
             pc.Roughness = 0.5f;
             pc.AO = 1.0f;
+
+            Entity selected = context.Get<Entity>("SelectedEntity", Entity{});
+            Entity hovered  = context.Get<Entity>("HoveredEntity", Entity{});
+            pc.IsSelected = (d.TargetEntity == selected || d.TargetEntity == hovered) ? 1 : 0;
 
             if (d.MaterialAsset) {
                 for (auto& prop : d.MaterialAsset->Properties) {

@@ -30,6 +30,8 @@
 #include "Renderer/Passes/VulkanLightingPass.hpp"
 #include "Renderer/Passes/VulkanPostProcessPass.hpp"
 #include "Renderer/Passes/VulkanForwardTestPass.hpp"
+#include "Renderer/Passes/VulkanForwardBlendPass.hpp"
+#include "Renderer/Passes/VulkanOutlinePass.hpp"
 #include "Renderer/Passes/VulkanOutlinePass.hpp"
 #include "Renderer/Passes/VulkanShadowPass.hpp"
 #include "Renderer/Passes/VulkanBloomPass.hpp"
@@ -87,7 +89,7 @@ namespace Ayaya {
         
         std::shared_ptr<Texture2D> WhiteTexture;
         std::shared_ptr<Texture2D> BlackTexture;
-        std::shared_ptr<Mesh> GridMesh;
+        std::shared_ptr<Mesh> GridMesh;  // TODO: use in ForwardBlend
 
         std::shared_ptr<Mesh> SkyboxMesh;
         std::shared_ptr<Shader> SkyboxShader;
@@ -196,6 +198,8 @@ namespace Ayaya {
             m_ShadowPass      = std::make_shared<VulkanShadowPass>();
             m_GBufferPass     = std::make_shared<VulkanGBufferPass>();
             m_LightingPass    = std::make_shared<VulkanLightingPass>();
+            m_ForwardBlendPass = std::make_shared<VulkanForwardBlendPass>();
+            m_OutlinePass     = std::make_shared<VulkanOutlinePass>();
             m_BloomPass       = std::make_shared<VulkanBloomPass>();
             m_PostProcessPass = std::make_shared<VulkanPostProcessPass>();
             m_FXAAPass        = std::make_shared<VulkanFXAAPass>();
@@ -204,6 +208,8 @@ namespace Ayaya {
             m_ShadowPass->OnAttach();
             m_GBufferPass->OnAttach();
             m_LightingPass->OnAttach();
+            m_ForwardBlendPass->OnAttach();
+            m_OutlinePass->OnAttach();
             m_BloomPass->OnAttach();
             m_PostProcessPass->OnAttach();
             m_FXAAPass->OnAttach();
@@ -285,7 +291,7 @@ namespace Ayaya {
     void SceneRenderer::EndScene() {
     }
 
-    void SceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene, Entity hoveredEntity, bool showGrid, bool showSkybox, const glm::vec4& clearColor) {
+    void SceneRenderer::RenderScene(const std::shared_ptr<Scene>& scene, const RenderViewConfig& config) {
         // 统计初始化
         auto cpuStartTime = std::chrono::high_resolution_clock::now();
 
@@ -358,19 +364,16 @@ namespace Ayaya {
         m_RenderContext.Set<std::shared_ptr<Mesh>>("GridMesh", m_Data->GridMesh);
         m_RenderContext.SetTexture("BRDFLUT", m_Data->BRDFLUT);
         m_RenderContext.Set<std::shared_ptr<TextureCube>>("EnvironmentCubemap", m_Data->EnvironmentCubemap);
-        m_RenderContext.Set<std::shared_ptr<TextureCube>>("IrradianceMap", m_Data->IrradianceMap);
-        m_RenderContext.Set<std::shared_ptr<TextureCube>>("PrefilterMap", m_Data->PrefilterMap);
+        m_RenderContext.Set<std::shared_ptr<TextureCube>>("IrradianceMap",
+            m_Data->IrradianceMap ? m_Data->IrradianceMap : s_DefaultIrradianceMap);
+        m_RenderContext.Set<std::shared_ptr<TextureCube>>("PrefilterMap",
+            m_Data->PrefilterMap ? m_Data->PrefilterMap : s_DefaultPrefilterMap);
 
-        m_RenderContext.Set("ClearColor", clearColor);
-        m_RenderContext.Set("ShowSkybox", showSkybox);
-        m_RenderContext.Set("ShowGrid", showGrid);
-
-        // 【排查黑色像素 - 步骤1】：DebugRed — 纯红材质 + 跳过IBL + 跳过贴图
-        // 取消注释以启用。纯红画面无黑色像素 → IBL/贴图问题
-        // 纯红画面有黑色像素 → PBR基础数学或UBO数据问题
-        // m_RenderContext.Set("DebugRed", true);
-
-        m_RenderContext.Set("HoveredEntity", hoveredEntity);
+        m_RenderContext.Set("ClearColor", config.ClearColor);
+        m_RenderContext.Set("ShowSkybox", config.EnableSkybox);
+        m_RenderContext.Set("ShowGrid", config.EnableGrid && config.IsEditorView);
+        m_RenderContext.Set("HoveredEntity", config.HoveredEntity);
+        m_RenderContext.Set("SelectedEntity", config.SelectedEntity);
         m_RenderContext.Set("EnvironmentIntensity", m_Data->EnvironmentIntensity);
         m_RenderContext.Set("EnvironmentAmbientColor", m_Data->EnvironmentAmbientColor);
 
@@ -420,24 +423,7 @@ namespace Ayaya {
                 uint32_t vpW = m_Data->ViewportWidth;
                 uint32_t vpH = m_Data->ViewportHeight;
 
-                if (m_ViewportDirty) {
-                    m_RenderGraph.Clear();
-                    // Deferred Pipeline: Shadow → GBuffer → Lighting → PostProcess
-                    m_RenderGraph.AddPass("ShadowPass",
-                        [&](RGBuilder& b) { VulkanShadowPass::DeclareResources(b); },
-                        [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_ShadowPass) m_ShadowPass->Execute(ctx, c); });
-                    m_RenderGraph.AddPass("GBufferPass",
-                        [&](RGBuilder& b) { VulkanGBufferPass::DeclareResources(b, vpW, vpH); },
-                        [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_GBufferPass) m_GBufferPass->Execute(ctx, c); });
-                    m_RenderGraph.AddPass("LightingPass",
-                        [&](RGBuilder& b) { VulkanLightingPass::DeclareResources(b, vpW, vpH); },
-                        [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_LightingPass) m_LightingPass->Execute(ctx, c); });
-                    m_RenderGraph.AddPass("PostProcessPass",
-                        [&](RGBuilder& b) { VulkanPostProcessPass::DeclareResources(b, vpW, vpH); },
-                        [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_PostProcessPass) m_PostProcessPass->Execute(ctx, c); });
-                    m_RenderGraph.Compile();
-                    m_ViewportDirty = false;
-                }
+                BuildRenderGraph(config, vpW, vpH);
 
                 VulkanPipeline::ClearGlobalUBOs();
                 auto camUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_CameraUniformBuffer);
@@ -481,11 +467,13 @@ namespace Ayaya {
                 return it->second->GetColorAttachmentRendererID(0);
             return nullptr;
         };
+        // Dynamic export (BuildRenderGraph sets this)
+        if (!m_FinalExportTexture.empty())
+            if (void* id = tryFBO(m_FinalExportTexture.c_str())) return id;
+        if (void* id = tryFBO("FXAA"))         return id;
         if (void* id = tryFBO("FinalOutput"))   return id;
         if (void* id = tryFBO("GBuffer"))       return id;
         if (void* id = tryFBO("Lighting"))      return id;
-        if (void* id = tryFBO("ForwardTest"))   return id;
-        if (void* id = tryFBO("SceneColor"))    return id;
         return nullptr;
     }
 
@@ -625,5 +613,60 @@ namespace Ayaya {
 
     void SceneRenderer::SetClearColor(const glm::vec4& color) {
         m_Data->ClearColor = color;
+    }
+
+    // ==========================================
+    // BuildRenderGraph — 5阶段动态组装
+    // ==========================================
+    void SceneRenderer::BuildRenderGraph(const RenderViewConfig& config, uint32_t vpW, uint32_t vpH) {
+        if (!m_ViewportDirty) return;
+        m_RenderGraph.Clear();
+
+        // 阶段1: 几何 — Shadow + GBuffer
+        m_RenderGraph.AddPass("ShadowPass",
+            [&](RGBuilder& b) { VulkanShadowPass::DeclareResources(b); },
+            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_ShadowPass) m_ShadowPass->Execute(ctx, c); });
+        m_RenderGraph.AddPass("GBufferPass",
+            [&](RGBuilder& b) { VulkanGBufferPass::DeclareResources(b, vpW, vpH); },
+            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_GBufferPass) m_GBufferPass->Execute(ctx, c); });
+
+        // 阶段2: 光照HDR — Deferred PBR + IBL + Shadow + Skybox
+        m_RenderGraph.AddPass("LightingPass",
+            [&](RGBuilder& b) { VulkanLightingPass::DeclareResources(b, vpW, vpH); },
+            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_LightingPass) m_LightingPass->Execute(ctx, c); });
+
+        // 阶段3: ForwardBlend — Skybox LOAD叠加到 Lighting HDR
+        m_RenderGraph.AddPass("ForwardBlend",
+            [&](RGBuilder& b) { VulkanForwardBlendPass::DeclareResources(b, vpW, vpH); },
+            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_ForwardBlendPass) m_ForwardBlendPass->Execute(ctx, c); });
+
+        // 阶段3.5: Outline — 选中物体白色遮罩 → Selection FBO (PostProcess Sobel 边缘检测)
+        m_RenderGraph.AddPass("OutlinePass",
+            [&](RGBuilder& b) { VulkanOutlinePass::DeclareResources(b, vpW, vpH); },
+            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_OutlinePass) m_OutlinePass->Execute(ctx, c); });
+
+        // 阶段4: 后处理 — ToneMapping + Outline 边缘检测
+        // TODO: Bloom (自有FBO需改造为RenderGraph三缓冲)
+        m_RenderGraph.AddPass("PostProcessPass",
+            [&](RGBuilder& b) { VulkanPostProcessPass::DeclareResources(b, vpW, vpH); },
+            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_PostProcessPass) m_PostProcessPass->Execute(ctx, c); });
+
+        // 阶段5: UI — 内置 UI 元素 (独立透明层, bindless)
+        m_RenderGraph.AddPass("UIPass",
+            [&](RGBuilder& b) { UIPass::DeclareResources(b, vpW, vpH); },
+            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_UIPass) m_UIPass->Execute(ctx, c); });
+
+        // TODO: 阶段5 — FXAA + Gizmo (自有FBO需改造)
+        m_FinalExportTexture = "FinalOutput";
+
+        m_RenderGraph.Compile();
+        m_ViewportDirty = false;
+    }
+
+    void SceneRenderer::AddCustomPostProcess(std::shared_ptr<CustomPostProcess> pass) {
+        m_CustomPostProcesses.push_back(std::move(pass));
+    }
+    void SceneRenderer::RemoveCustomPostProcess(const std::string& name) {
+        // reserved
     }
 }

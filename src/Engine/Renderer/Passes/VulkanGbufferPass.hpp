@@ -28,6 +28,7 @@ namespace Ayaya {
         int UseRoughnessMap;
         int UseAOMap;
         int UseNormalMap;
+        int IsSelected;
     };
 
     class VulkanGBufferPass : public RenderPass {

@@ -30,10 +30,23 @@ namespace Ayaya {
         bool IsWritten = false;
         bool IsRead   = false;
 
-        // 每帧独立布局追踪：VkRenderPass 处理后颜色为 SHADER_READ_ONLY，深度为 DEPTH_STENCIL_READ_ONLY
+        // Per-frame layout tracking — color and depth tracked independently since
+        // mixed FBOs (color+depth) have attachments in different layouts.
         std::array<ImageLayout, kRenderGraphFramesInFlight> CurrentLayout = {
             ImageLayout::Undefined, ImageLayout::Undefined, ImageLayout::Undefined
         };
+        std::array<ImageLayout, kRenderGraphFramesInFlight> DepthLayout = {
+            ImageLayout::Undefined, ImageLayout::Undefined, ImageLayout::Undefined
+        };
+
+        bool HasDepthAttachment() const {
+            for (auto& att : Spec.Attachments.Attachments) {
+                if (att.TextureFormat == FramebufferTextureFormat::Depth ||
+                    att.TextureFormat == FramebufferTextureFormat::DEPTH24STENCIL8)
+                    return true;
+            }
+            return false;
+        }
     };
 
     class RenderGraph;

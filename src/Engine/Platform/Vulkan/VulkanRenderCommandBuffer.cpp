@@ -48,7 +48,7 @@ namespace Ayaya {
             depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
             depthAttachment.imageView = vulkanFBO->GetDepthAttachmentImageView();
             depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;    // 每帧清除深度
+            depthAttachment.loadOp = loadOp;  // 跟随 color: CLEAR或LOAD
             depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
             depthAttachment.clearValue.depthStencil = { 1.0f, 0 };
         }

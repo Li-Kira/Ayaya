@@ -26,8 +26,5 @@ namespace Ayaya {
         std::shared_ptr<Shader> m_DeferredShader;
         PipelineSpecification m_DeferredPipeSpec;
         std::shared_ptr<Pipeline> m_DeferredPipeline;
-        std::shared_ptr<Shader> m_SkyboxShader;
-        PipelineSpecification m_SkyboxPipeSpec;
-        std::shared_ptr<Pipeline> m_SkyboxPipeline;
     };
 }

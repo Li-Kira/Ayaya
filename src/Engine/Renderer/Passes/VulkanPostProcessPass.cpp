@@ -18,6 +18,7 @@ namespace Ayaya {
 
     void VulkanPostProcessPass::DeclareResources(RGBuilder& builder, uint32_t width, uint32_t height) {
         builder.ReadTexture("Lighting");
+        builder.ReadTexture("Selection");
         FramebufferSpecification s;
         s.Width = width; s.Height = height; s.Samples = 1;
         s.Attachments = { FramebufferTextureFormat::RGBA8 };
@@ -37,8 +38,11 @@ namespace Ayaya {
         auto wt = context.GetTexture("WhiteTexture");
         if (src) cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, src, 0);
         else cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, wt);
-        auto bt = context.GetTexture("BlackTexture");
-        if (bt) { cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, bt); cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, bt); }
+        auto sel = context.GetFramebuffer("Selection");
+        auto bt  = context.GetTexture("BlackTexture");
+        if (sel) cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, sel, 0);
+        else if (bt) cmd.BindTexture2D(m_Pipeline, "u_SelectionTexture", 1, bt);
+        if (bt) cmd.BindTexture2D(m_Pipeline, "u_BloomTexture", 2, bt);
         PostProcessPushConstants pc{};
         float physExposure = context.Get<float>("PhysicalExposure", 1.0f);
         float expComp = context.Get<float>("ExposureCompensation", 1.0f);

@@ -98,18 +98,53 @@ namespace Ayaya {
     // ==========================================
     void RenderGraph::EnsureReadable(RGTexture& tex, uint32_t frameIndex, RenderCommandBuffer& cmd) {
         uint32_t idx = frameIndex % kRenderGraphFramesInFlight;
+        if (!tex.PhysicalFBOs[idx]) return;
+
+        bool depthOnly = IsDepthOnlyTexture(tex.Spec);
+        ImageLayout target = GetReadLayout(tex.Spec);
         ImageLayout current = tex.CurrentLayout[idx];
-        ImageLayout target  = GetReadLayout(tex.Spec);
 
-        if (current == target) return;  // 已在可读布局
-
-        // 首次使用：布局从 UNDEFINED 转为可读
-        // VulkanFramebuffer 在创建时已用 single-time command 做了此转换，
-        // 此处作为安全兜底显式插入 layout transition barrier
-        if (tex.PhysicalFBOs[idx]) {
-            cmd.TransitionImageLayout(tex.PhysicalFBOs[idx], 0, current, target);
+        // Transition all color attachments (not just [0]) for multi-attachment FBOs like GBuffer
+        if (current != target) {
+            auto vkFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(tex.PhysicalFBOs[idx]);
+            uint32_t count = depthOnly ? 1 : (vkFBO ? vkFBO->GetColorAttachmentCount() : 1);
+            for (uint32_t i = 0; i < count; i++)
+                cmd.TransitionImageLayout(tex.PhysicalFBOs[idx], i, current, target);
+            tex.CurrentLayout[idx] = target;
         }
-        tex.CurrentLayout[idx] = target;
+
+        // Ensure depth is readable for mixed color+depth FBOs
+        if (!depthOnly && tex.HasDepthAttachment()) {
+            auto vkFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(tex.PhysicalFBOs[idx]);
+            if (!vkFBO || !vkFBO->HasDepthAttachment()) return;
+
+            ImageLayout depthCur = tex.DepthLayout[idx];
+            if (depthCur == ImageLayout::DepthStencilReadOnlyOptimal ||
+                depthCur == ImageLayout::DepthStencilAttachmentOptimal) return;
+
+            auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+                Application::Get().GetWindow().GetContext());
+            if (!vkCtx) return;
+
+            VkImageMemoryBarrier b{};
+            b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            b.oldLayout = (depthCur == ImageLayout::Undefined)
+                ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            b.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+            b.srcAccessMask = (depthCur == ImageLayout::Undefined) ? 0 : VK_ACCESS_SHADER_READ_BIT;
+            b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            b.image = vkFBO->GetDepthAttachmentImage();
+            b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            b.subresourceRange.levelCount = 1;
+            b.subresourceRange.layerCount = 1;
+
+            vkCmdPipelineBarrier(vkCtx->GetCurrentCommandBuffer(),
+                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                0, 0, nullptr, 0, nullptr, 1, &b);
+
+            tex.DepthLayout[idx] = ImageLayout::DepthStencilReadOnlyOptimal;
+        }
     }
 
     // ==========================================
@@ -127,7 +162,7 @@ namespace Ayaya {
             for (auto& w : p->TextureWrites) {
                 auto it = producers.find(w);
                 if (it != producers.end() && it->second != p->Name) {
-                    AYAYA_CORE_WARN("[RenderGraph] Texture '{}' written by '{}' and '{}' — adding implicit dependency",
+                    AYAYA_CORE_TRACE("[RenderGraph] Texture '{}' written by '{}' and '{}' — adding implicit dependency",
                         w, it->second, p->Name);
                     implicitEdges.push_back({it->second, p->Name});
                 }
@@ -198,15 +233,20 @@ namespace Ayaya {
                     depthOnly = false; break;
                 }
             }
-            ImageLayout initLayout = depthOnly
+            ImageLayout initColorLayout = depthOnly
                 ? ImageLayout::DepthStencilAttachmentOptimal
                 : ImageLayout::ShaderReadOnlyOptimal;
+            // VulkanFramebuffer::Invalidate transitions depth UNDEFINED→DEPTH_STENCIL_ATTACHMENT
+            ImageLayout initDepthLayout = tex.HasDepthAttachment()
+                ? ImageLayout::DepthStencilAttachmentOptimal
+                : ImageLayout::Undefined;
 
             for (uint32_t i = 0; i < kRenderGraphFramesInFlight; ++i) {
                 if (!tex.PhysicalFBOs[i]) {
                     tex.PhysicalFBOs[i] = Framebuffer::Create(tex.Spec);
                 }
-                tex.CurrentLayout[i] = initLayout;
+                tex.CurrentLayout[i] = initColorLayout;
+                tex.DepthLayout[i]   = initDepthLayout;
             }
         }
 
@@ -224,20 +264,58 @@ namespace Ayaya {
         uint32_t idx = frameIndex % kRenderGraphFramesInFlight;
         if (!tex.PhysicalFBOs[idx]) return;
 
-        bool isDepth = IsDepthOnlyTexture(tex.Spec);
-        ImageLayout writeLayout = isDepth
+        bool depthOnly = IsDepthOnlyTexture(tex.Spec);
+        ImageLayout colorTarget = depthOnly
             ? ImageLayout::DepthStencilAttachmentOptimal
             : ImageLayout::ColorAttachmentOptimal;
         ImageLayout current = tex.CurrentLayout[idx];
 
-        if (current == writeLayout) return;
+        // Transition color attachments (or depth for depth-only textures)
+        if (current != colorTarget) {
+            auto vkFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(tex.PhysicalFBOs[idx]);
+            uint32_t count = depthOnly ? 1 : (vkFBO ? vkFBO->GetColorAttachmentCount() : 1);
+            for (uint32_t i = 0; i < count; i++)
+                cmd.TransitionImageLayout(tex.PhysicalFBOs[idx], i, current, colorTarget);
+            tex.CurrentLayout[idx] = colorTarget;
+        }
 
-        // Transition ALL color attachments (or depth for depth-only)
-        auto vkFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(tex.PhysicalFBOs[idx]);
-        uint32_t count = isDepth ? 1 : (vkFBO ? vkFBO->GetColorAttachmentCount() : 1);
-        for (uint32_t i = 0; i < count; i++)
-            cmd.TransitionImageLayout(tex.PhysicalFBOs[idx], i, current, writeLayout);
-        tex.CurrentLayout[idx] = writeLayout;
+        // Transition depth for mixed color+depth FBOs.
+        // TransitionImageLayout only handles color for non-depth-only textures,
+        // so depth must be transitioned via raw Vulkan barrier.
+        if (!depthOnly && tex.HasDepthAttachment()) {
+            auto vkFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(tex.PhysicalFBOs[idx]);
+            if (!vkFBO || !vkFBO->HasDepthAttachment()) return;
+
+            ImageLayout depthCur = tex.DepthLayout[idx];
+            if (depthCur == ImageLayout::DepthStencilAttachmentOptimal) return;
+
+            auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+                Application::Get().GetWindow().GetContext());
+            if (!vkCtx) return;
+
+            VkImageLayout vkOld = (depthCur == ImageLayout::ShaderReadOnlyOptimal ||
+                                   depthCur == ImageLayout::Undefined)
+                ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                : VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+
+            VkImageMemoryBarrier b{};
+            b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            b.oldLayout = vkOld;
+            b.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            b.srcAccessMask = (depthCur == ImageLayout::Undefined) ? 0 : VK_ACCESS_SHADER_READ_BIT;
+            b.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            b.image = vkFBO->GetDepthAttachmentImage();
+            b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            b.subresourceRange.levelCount = 1;
+            b.subresourceRange.layerCount = 1;
+
+            vkCmdPipelineBarrier(vkCtx->GetCurrentCommandBuffer(),
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                0, 0, nullptr, 0, nullptr, 1, &b);
+
+            tex.DepthLayout[idx] = ImageLayout::DepthStencilAttachmentOptimal;
+        }
     }
 
     // ==========================================
@@ -269,18 +347,19 @@ namespace Ayaya {
         for (auto& pass : m_Passes) {
             if (pass->IsCulled) continue;
 
-            // Step a: 确保 Write 纹理处于 attachment 布局（vkCmdBeginRendering 的前置条件）
-            for (auto& w : pass->TextureWrites) {
-                auto it = m_Textures.find(w);
-                if (it != m_Textures.end() && it->second.PhysicalFBOs[idx])
-                    EnsureWritable(it->second, frameIndex, cmd);
-            }
-
-            // Step b: 确保 Read 纹理处于可采样布局
+            // Step a: 确保 Read 纹理处于可采样布局（必须在 EnsureWritable 之前执行，
+            //         避免 ReadWrite 纹理被 EnsureReadable 把 attachment 布局又转回只读）
             for (auto& r : pass->TextureReads) {
                 auto it = m_Textures.find(r);
                 if (it != m_Textures.end())
                     EnsureReadable(it->second, frameIndex, cmd);
+            }
+
+            // Step b: 确保 Write 纹理处于 attachment 布局（vkCmdBeginRendering 的前置条件）
+            for (auto& w : pass->TextureWrites) {
+                auto it = m_Textures.find(w);
+                if (it != m_Textures.end() && it->second.PhysicalFBOs[idx])
+                    EnsureWritable(it->second, frameIndex, cmd);
             }
 
             // Step c: 注入当前帧 FBO 到 context 黑板
@@ -391,6 +470,27 @@ namespace Ayaya {
         tex.CurrentLayout[idx] = isDepthOnly
             ? ImageLayout::DepthStencilReadOnlyOptimal
             : ImageLayout::ShaderReadOnlyOptimal;
+
+        // Transition depth to read-only for mixed color+depth FBOs
+        if (!isDepthOnly && tex.HasDepthAttachment() && vkFBO->HasDepthAttachment()) {
+            VkImageMemoryBarrier db{};
+            db.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            db.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            db.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+            db.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            db.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            db.image = vkFBO->GetDepthAttachmentImage();
+            db.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            db.subresourceRange.levelCount = 1;
+            db.subresourceRange.layerCount = 1;
+
+            vkCmdPipelineBarrier(vkCtx->GetCurrentCommandBuffer(),
+                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                0, 0, nullptr, 0, nullptr, 1, &db);
+
+            tex.DepthLayout[idx] = ImageLayout::DepthStencilReadOnlyOptimal;
+        }
     }
 
     std::shared_ptr<Framebuffer> RenderGraph::GetPhysicalFBO(const std::string& name, uint32_t frameIndex) {

@@ -28,6 +28,7 @@ layout(push_constant) uniform PushConstants {
     int u_UseRoughnessMap;
     int u_UseAOMap;
     int u_UseNormalMap;
+    int u_IsSelected;
 } pc;
 
 vec3 GetNormalFromMap() {
@@ -57,5 +58,5 @@ void main() {
     float ao        = (pc.u_UseAOMap       == 1) ? texture(u_AOMap,        v_TexCoord).r : pc.u_AO;
     g_PBR = vec4(metallic, roughness, ao, 1.0);
 
-    g_CustomData = vec4(pc.u_ReceiveShadows, 0.0, 0.0, 1.0);
+    g_CustomData = vec4(pc.u_ReceiveShadows, float(pc.u_IsSelected), 0.0, 1.0);
 }

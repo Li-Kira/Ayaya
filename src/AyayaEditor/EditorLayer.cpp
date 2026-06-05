@@ -224,7 +224,10 @@ namespace Ayaya {
 
         if (hasValidCamera) {
             m_GameRenderer->BeginScene(cameraViewMatrix, cameraProjectionMatrix, cameraPosition);
-            m_GameRenderer->RenderScene(m_ActiveScene, {}, false, renderSkybox, clearColor);
+            RenderViewConfig gameCfg;
+            gameCfg.EnableSkybox = renderSkybox;
+            gameCfg.ClearColor = clearColor;
+            m_GameRenderer->RenderScene(m_ActiveScene, gameCfg);
             m_GameRenderer->EndScene();
 
             m_GameStats = m_GameRenderer->GetStats();
@@ -232,7 +235,10 @@ namespace Ayaya {
             memset(&m_GameStats, 0, sizeof(SceneRenderer::Statistics));
             // 由于没有主相机，直接让管线渲染黑屏
             m_GameRenderer->BeginScene(glm::mat4(1.0f), glm::mat4(1.0f), glm::vec3(0.0f));
-            m_GameRenderer->RenderScene(m_ActiveScene, {}, false, false, {0.0f, 0.0f, 0.0f, 1.0f});
+            RenderViewConfig gameCfg2;
+            gameCfg2.EnableSkybox = false;
+            gameCfg2.ClearColor = {0.0f, 0.0f, 0.0f, 1.0f};
+            m_GameRenderer->RenderScene(m_ActiveScene, gameCfg2);
             m_GameRenderer->EndScene();
         }
 
@@ -241,7 +247,14 @@ namespace Ayaya {
         // ------------------------------------------
         m_SceneRenderer->SetClearColor(clearColor);
         m_SceneRenderer->BeginScene(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection(), m_EditorCamera.GetPosition());
-        m_SceneRenderer->RenderScene(m_ActiveScene, m_HoveredEntity, m_ShowGrid, renderSkybox, clearColor);
+        RenderViewConfig editorCfg;
+        editorCfg.IsEditorView = true;
+        editorCfg.EnableGrid = m_ShowGrid;
+        editorCfg.EnableSkybox = renderSkybox;
+        editorCfg.HoveredEntity = m_HoveredEntity;
+        editorCfg.SelectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
+        editorCfg.ClearColor = clearColor;
+        m_SceneRenderer->RenderScene(m_ActiveScene, editorCfg);
         m_SceneRenderer->EndScene();
 
         // ------------------------------------------
@@ -281,7 +294,10 @@ namespace Ayaya {
                     // 4. 独立执行一帧专属渲染！
                     bool drawSkybox = (cameraComp.ClearFlag == CameraComponent::ClearFlags::Skybox);
                     m_GameRenderer->BeginScene(camViewMat, camProjMat, camPos);
-                    m_GameRenderer->RenderScene(m_ActiveScene, {}, false, drawSkybox, cameraComp.BackgroundColor);
+                    RenderViewConfig gameCfg3;
+                    gameCfg3.EnableSkybox = drawSkybox;
+                    gameCfg3.ClearColor = cameraComp.BackgroundColor;
+                    m_GameRenderer->RenderScene(m_ActiveScene, gameCfg3);
                     m_GameRenderer->EndScene();
 
                     // 5. 从显存偷出像素数据
