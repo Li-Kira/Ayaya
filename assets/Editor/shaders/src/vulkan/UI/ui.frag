@@ -12,4 +12,6 @@ layout(set = 0, binding = 0) uniform sampler2D u_GlobalTextures[];
 void main() {
     vec4 texColor = texture(u_GlobalTextures[nonuniformEXT(v_TexIndex)], v_TexCoord);
     FragColor = v_Color * texColor;
+    // Pre-multiply alpha for correct ONE / ONE_MINUS_SRC_ALPHA blending.
+    FragColor.rgb *= FragColor.a;
 }

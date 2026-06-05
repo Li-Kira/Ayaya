@@ -655,13 +655,17 @@ namespace Ayaya {
             [&](RGBuilder& b) { VulkanPostProcessPass::DeclareResources(b, vpW, vpH); },
             [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_PostProcessPass) m_PostProcessPass->Execute(ctx, c); });
 
+        // 阶段5: FXAA — LDR空间抗锯齿 (必须在tone mapping之后)
+        m_RenderGraph.AddPass("FXAAPass",
+            [&](RGBuilder& b) { VulkanFXAAPass::DeclareResources(b, vpW, vpH); },
+            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_FXAAPass) m_FXAAPass->Execute(ctx, c); });
+
         // 阶段5: UI — 内置 UI 元素 (独立透明层, bindless)
         m_RenderGraph.AddPass("UIPass",
             [&](RGBuilder& b) { UIPass::DeclareResources(b, vpW, vpH); },
             [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_UIPass) m_UIPass->Execute(ctx, c); });
 
-        // TODO: 阶段5 — FXAA + Gizmo (自有FBO需改造)
-        m_FinalExportTexture = "FinalOutput";
+        m_FinalExportTexture = "FXAA";
 
         m_RenderGraph.Compile();
         m_ViewportDirty = false;

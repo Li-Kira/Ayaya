@@ -20,10 +20,16 @@ namespace Ayaya {
         PipelineSpecification m_MaskPipeSpec;
         std::shared_ptr<Pipeline> m_MaskPipeline;
 
-        // Geometry rendering for full silhouette
+        // Geometry rendering for full silhouette (meshes)
         std::shared_ptr<Shader> m_GeomShader;
         PipelineSpecification m_GeomPipeSpec;
         std::shared_ptr<Pipeline> m_GeomPipeline;
+
+        // Sprite silhouette (vertex-index-driven quad)
+        std::shared_ptr<Shader> m_SpriteShader;
+        PipelineSpecification m_SpritePipeSpec;
+        std::shared_ptr<Pipeline> m_SpritePipeline;
+
         std::shared_ptr<Framebuffer> m_RefFBO;
     };
 }

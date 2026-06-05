@@ -13,7 +13,17 @@ layout(set = 1, binding = 9) uniform samplerCube u_PrefilteredMap;
 layout(set = 1, binding = 10) uniform sampler2D u_BRDFLUT;
 
 layout(set = 0, binding = 0) uniform Camera { mat4 u_ViewProjection; vec3 u_CameraPosition; };
-layout(set = 0, binding = 1) uniform LightData { vec4 DirLightDir; vec4 DirLightColor; };
+
+struct PointLight {
+    vec4 Position; // xyz = world position, w = radius
+    vec4 Color;    // rgb * luminous power, w = falloff exponent
+};
+layout(set = 0, binding = 1) uniform LightData {
+    vec4 DirLightDir;
+    vec4 DirLightColor;
+    PointLight PointLights[4];
+    int PointLightCount;
+};
 
 layout(push_constant) uniform PC { mat4 u_LightSpaceMatrix; vec3 u_AmbientColor; float u_Intensity; int u_EnvMapEnabled; } pc;
 
@@ -64,6 +74,37 @@ void main() {
     vec4 fragPosLight = pc.u_LightSpaceMatrix * vec4(FragPos, 1.0);
     float shadow = ShadowCalculation(fragPosLight, NdotL) * ReceiveShadows;
     Lo += (kD*Albedo/PI+spec)*DirLightColor.rgb*NdotL*(1.0-shadow);
+
+    // ---- Point Lights (UE4-style windowing falloff) ----
+    for (int i = 0; i < PointLightCount && i < 4; i++) {
+        vec3  lightPos  = PointLights[i].Position.xyz;
+        float radius    = PointLights[i].Position.w;
+        vec3  lightCol  = PointLights[i].Color.rgb;
+        float falloff   = PointLights[i].Color.w;
+
+        vec3  L_pt   = normalize(lightPos - FragPos);
+        vec3  H_pt   = normalize(V + L_pt);
+        float dist   = length(lightPos - FragPos);
+
+        float attenuation   = 1.0 / (dist * dist + 0.0001);
+        float distByRadius  = dist / radius;
+        float distByRadius4 = pow(distByRadius, 4.0);
+        float windowing     = clamp(1.0 - distByRadius4, 0.0, 1.0);
+        windowing           = pow(windowing, falloff + 1.0);
+        attenuation        *= windowing;
+
+        vec3  radiance_pt = lightCol * attenuation;
+        float NdotL_pt    = max(dot(N, L_pt), 0.0);
+
+        float D_pt = DistributionGGX(N, H_pt, Roughness);
+        float G_pt = GeometrySmith(N, V, L_pt, Roughness);
+        vec3  F_pt = fresnelSchlick(max(dot(H_pt, V), 0.0), F0);
+        vec3  spec_pt = (D_pt * G_pt * F_pt) / max(4.0 * max(dot(N, V), 0.0) * NdotL_pt, 0.001);
+
+        vec3 kS_pt = F_pt;
+        vec3 kD_pt = (1.0 - kS_pt) * (1.0 - Metallic);
+        Lo += (kD_pt * Albedo / PI + spec_pt) * radiance_pt * NdotL_pt;
+    }
 
     float NdV = max(dot(N,V),0.0);
     vec3 F_ibl = fresnelSchlickRoughness(NdV,F0,Roughness);

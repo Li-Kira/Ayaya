@@ -17,16 +17,43 @@ namespace Ayaya {
         LoadPreferences();
         InitialGraphicsAPI = GraphicsAPI;
 
-        // Detect content scale (macOS Retina = 2.0, standard = 1.0).
-        // Preferences store physical framebuffer size; convert to logical points for GLFW.
+        // Compute actual content scale from window state, NOT from
+        // glfwGetWindowContentScale. The latter returns the monitor's
+        // theoretical DPI (e.g. 1.5 for 150%) even when the app runs in a
+        // DPI-virtualized mode where framebuffer pixels == window pixels,
+        // causing the stored physical size to be divided too aggressively.
         GLFWwindow* win = static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow());
         if (win) {
-            glfwGetWindowContentScale(win, &m_ContentScale, nullptr);
+            int winW, winH, fbW, fbH;
+            glfwGetWindowSize(win, &winW, &winH);
+            glfwGetFramebufferSize(win, &fbW, &fbH);
+            if (winW > 0 && fbW > 0) {
+                m_ContentScale = (float)fbW / (float)winW;
+            }
             if (m_ContentScale < 1.0f) m_ContentScale = 1.0f;
         }
-        Application::Get().GetWindow().SetSize(
-            (int)(m_WindowWidth / m_ContentScale),
-            (int)(m_WindowHeight / m_ContentScale));
+
+        // Clamp stored physical size to current monitor so cross-machine YAML
+        // (e.g. 2560x1600 from a Mac) fits the actual screen on this machine.
+        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+        if (monitor) {
+            const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+            int maxPhysW = mode->width;
+            int maxPhysH = mode->height;
+            if (m_WindowWidth > maxPhysW || m_WindowHeight > maxPhysH) {
+                AYAYA_CORE_WARN("Preferences stored size {0}x{1} exceeds monitor {2}x{3}, clamping.",
+                    m_WindowWidth, m_WindowHeight, maxPhysW, maxPhysH);
+                m_WindowWidth  = std::min(m_WindowWidth,  maxPhysW);
+                m_WindowHeight = std::min(m_WindowHeight, maxPhysH);
+            }
+        }
+
+        int logicalW = (int)(m_WindowWidth / m_ContentScale);
+        int logicalH = (int)(m_WindowHeight / m_ContentScale);
+        AYAYA_CORE_INFO("Preferences: contentScale={0}, physical={1}x{2} -> logical={3}x{4}",
+            m_ContentScale, m_WindowWidth, m_WindowHeight, logicalW, logicalH);
+
+        Application::Get().GetWindow().SetSize(logicalW, logicalH);
         ImGui::GetIO().FontGlobalScale = m_UIScale;
         
         // 【新增】：初始化时同步从 yaml 读到的历史容量！
@@ -38,6 +65,17 @@ namespace Ayaya {
     void PreferencesPanel::SetOpen(bool isOpen) {
         m_IsOpen = isOpen;
         if (isOpen) {
+            // Recompute content scale from current window in case monitor changed.
+            GLFWwindow* win = static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow());
+            if (win) {
+                int winW, winH, fbW, fbH;
+                glfwGetWindowSize(win, &winW, &winH);
+                glfwGetFramebufferSize(win, &fbW, &fbH);
+                if (winW > 0 && fbW > 0) {
+                    m_ContentScale = (float)fbW / (float)winW;
+                }
+                if (m_ContentScale < 1.0f) m_ContentScale = 1.0f;
+            }
             // ImGui viewport returns logical points; convert to physical framebuffer size
             m_WindowWidth  = (int)(ImGui::GetMainViewport()->Size.x * m_ContentScale);
             m_WindowHeight = (int)(ImGui::GetMainViewport()->Size.y * m_ContentScale);

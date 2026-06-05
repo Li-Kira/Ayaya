@@ -92,7 +92,11 @@ namespace Ayaya {
         // ==========================================
         VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssembly.topology = attributeDescriptions.empty() ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        switch (spec.Topology) {
+            case PrimitiveTopology::Lines:         inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST; break;
+            case PrimitiveTopology::TriangleStrip: inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP; break;
+            default: inputAssembly.topology = attributeDescriptions.empty() ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; break;
+        }
         inputAssembly.primitiveRestartEnable = VK_FALSE;
 
         std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
@@ -117,8 +121,11 @@ namespace Ayaya {
         rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         rasterizer.depthClampEnable = VK_FALSE;
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
-        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterizer.lineWidth = spec.LineWidth; 
+        if (spec.PolygonModeLine) rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
+        else if (spec.PolygonMode == PolygonMode::Line) rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
+        else if (spec.PolygonMode == PolygonMode::Point) rasterizer.polygonMode = VK_POLYGON_MODE_POINT;
+        else rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterizer.lineWidth = spec.LineWidth;
         
         rasterizer.cullMode = VK_CULL_MODE_NONE;
         if (spec.BackfaceCulling == CullMode::Back) rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
@@ -174,12 +181,27 @@ namespace Ayaya {
             blendAttachments[i].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
             if (spec.Blend) {
                 blendAttachments[i].blendEnable = VK_TRUE;
-                blendAttachments[i].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-                blendAttachments[i].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
                 blendAttachments[i].colorBlendOp = VK_BLEND_OP_ADD;
-                blendAttachments[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-                blendAttachments[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
                 blendAttachments[i].alphaBlendOp = VK_BLEND_OP_ADD;
+
+                if (spec.BlendMode == BlendModeType::PremultipliedAlpha) {
+                    // Pre-multiplied alpha: src.rgb is already multiplied by src.a.
+                    blendAttachments[i].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+                    blendAttachments[i].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+                    blendAttachments[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+                    blendAttachments[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+                } else if (spec.BlendMode == BlendModeType::Additive) {
+                    blendAttachments[i].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+                    blendAttachments[i].dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+                    blendAttachments[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+                    blendAttachments[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+                } else {
+                    // Alpha / None: straight (non-premultiplied) alpha
+                    blendAttachments[i].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+                    blendAttachments[i].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+                    blendAttachments[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+                    blendAttachments[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+                }
             } else {
                 blendAttachments[i].blendEnable = VK_FALSE;
             }

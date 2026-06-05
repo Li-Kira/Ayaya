@@ -24,7 +24,7 @@ namespace Ayaya {
 
     private:
         std::shared_ptr<Shader> m_FXAAShader;
-        std::shared_ptr<Framebuffer> m_FXAAFBO;
+        std::shared_ptr<Framebuffer> m_RefFBO;  // format reference only; target comes from RenderGraph
         std::shared_ptr<Pipeline> m_Pipeline;
     };
 

@@ -28,12 +28,12 @@ namespace Ayaya {
         m_MaskPipeSpec.Blend = false;
         m_MaskPipeSpec.BackfaceCulling = CullMode::None;
 
-        // Geometry rendering for full silhouette (no depth test, writes white)
         FramebufferSpecification ref;
         ref.Width = 1280; ref.Height = 720; ref.Samples = 1;
         ref.Attachments = {FramebufferTextureFormat::RGBA8};
         m_RefFBO = Framebuffer::Create(ref);
 
+        // Mesh silhouette pipeline
         m_GeomShader = Shader::Create("UI/outline.vert", "UI/outline.frag");
         m_GeomPipeSpec.Shader = m_GeomShader;
         m_GeomPipeSpec.Layout = {{ShaderDataType::Float3,"a_Position"},{ShaderDataType::Float3,"a_Normal"},{ShaderDataType::Float2,"a_TexCoord"},{ShaderDataType::Float3,"a_Tangent"}};
@@ -43,6 +43,17 @@ namespace Ayaya {
         m_GeomPipeSpec.DepthWrite = false;
         m_GeomPipeSpec.Blend = false;
         m_GeomPipeSpec.BackfaceCulling = CullMode::None;
+
+        // Sprite silhouette pipeline (vertex-index-driven quad, pure white fill)
+        m_SpriteShader = Shader::Create("2D/sprite.vert", "2D/sprite.frag");
+        m_SpritePipeSpec.Shader = m_SpriteShader;
+        m_SpritePipeSpec.Layout = {}; // gl_VertexIndex driven, no vertex attributes
+        m_SpritePipeSpec.TargetFramebuffer = m_RefFBO;
+        m_SpritePipeSpec.DepthTest = false;
+        m_SpritePipeSpec.DepthWrite = false;
+        m_SpritePipeSpec.Blend = false;
+        m_SpritePipeSpec.BackfaceCulling = CullMode::None;
+        m_SpritePipeSpec.Topology = PrimitiveTopology::TriangleStrip;
     }
 
     void VulkanOutlinePass::Execute(RenderContext& ctx, RenderCommandBuffer& cmd) {
@@ -56,6 +67,8 @@ namespace Ayaya {
             m_MaskPipeline = Pipeline::Create(m_MaskPipeSpec);
             m_GeomPipeSpec.TargetFramebuffer = selFBO;
             m_GeomPipeline = Pipeline::Create(m_GeomPipeSpec);
+            m_SpritePipeSpec.TargetFramebuffer = selFBO;
+            m_SpritePipeline = Pipeline::Create(m_SpritePipeSpec);
         }
 
         // Step 1: Extract visible mask from GBuffer (only pixels where selected entity is visible)
@@ -66,22 +79,41 @@ namespace Ayaya {
             cmd.DrawArrays(m_EmptyVAO, 3);
         }
 
-        // Step 2: Render selected entity geometry → fills occluded silhouette areas.
-        // Depth test OFF so the full outline is captured even behind foreground objects.
+        // Step 2: Render selected/hovered entity geometry → fills occluded silhouette.
         Entity sel = ctx.Get<Entity>("SelectedEntity", Entity{});
         Entity hov = ctx.Get<Entity>("HoveredEntity", Entity{});
         auto renderEntity = [&](Entity e) {
-            if (!e || !e.HasComponent<MeshRendererComponent>()) return;
-            auto& mc = e.GetComponent<MeshRendererComponent>();
-            auto model = AssetManager::GetAsset<Model>(mc.ModelHandle);
-            if (!model) return;
-            cmd.BindPipeline(m_GeomPipeline);
-            struct alignas(16) { glm::mat4 Transform; alignas(16) glm::vec3 Color; } pc;
-            pc.Color = glm::vec3(1.0f);
-            pc.Transform = e.GetWorldTransform();
-            for (auto& mesh : model->GetMeshes()) {
-                cmd.PushConstantData(m_GeomPipeline, &pc, sizeof pc);
-                cmd.DrawIndexed(mesh, mesh->GetIndexCount());
+            if (!e) return;
+
+            // Mesh silhouette
+            if (e.HasComponent<MeshRendererComponent>()) {
+                auto& mc = e.GetComponent<MeshRendererComponent>();
+                auto model = AssetManager::GetAsset<Model>(mc.ModelHandle);
+                if (!model) return;
+                cmd.BindPipeline(m_GeomPipeline);
+                struct alignas(16) { glm::mat4 Transform; alignas(16) glm::vec3 Color; } pc;
+                pc.Color = glm::vec3(1.0f);
+                pc.Transform = e.GetWorldTransform();
+                for (auto& mesh : model->GetMeshes()) {
+                    cmd.PushConstantData(m_GeomPipeline, &pc, sizeof pc);
+                    cmd.DrawIndexed(mesh, mesh->GetIndexCount());
+                }
+            }
+            // Sprite silhouette (white quad, no alpha discard)
+            else if (e.HasComponent<SpriteRendererComponent>()) {
+                cmd.BindPipeline(m_SpritePipeline);
+                struct alignas(16) {
+                    glm::mat4 Transform;
+                    glm::vec4 Color;
+                    float ExposureInverse;
+                    int UseTexture;
+                } pc;
+                pc.Transform = e.GetWorldTransform();
+                pc.Color = glm::vec4(1.0f);       // solid white
+                pc.ExposureInverse = 1.0f;         // no exposure correction
+                pc.UseTexture = 0;                  // skip texture (avoids alpha discard)
+                cmd.PushConstantData(m_SpritePipeline, &pc, sizeof pc);
+                cmd.DrawArrays(4);
             }
         };
         renderEntity(sel);

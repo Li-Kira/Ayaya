@@ -12,6 +12,7 @@ namespace Ayaya {
         bool SRGB           = true;
         bool GenerateMipmaps = true;
         bool FlipY          = true;
+        bool UnpremultiplyAlpha = false; // undo pre-multiplied alpha on load (Photoshop exports)
     };
 
     enum class NormalMode   { Import = 0, Calculate = 1, None = 2 };

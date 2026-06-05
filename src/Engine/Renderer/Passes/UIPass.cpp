@@ -34,17 +34,20 @@ namespace Ayaya {
         m_PipeSpec.DepthTest = false;
         m_PipeSpec.DepthWrite = false;
         m_PipeSpec.Blend = true;
+        m_PipeSpec.BlendMode = BlendModeType::PremultipliedAlpha;
         m_PipeSpec.BackfaceCulling = CullMode::None;
         m_PipeSpec.NoGlobalUBOs = true;
         m_PipeSpec.UseBindlessTextures = (RendererAPI::GetAPI() == RendererAPI::API::Vulkan);
     }
 
     void UIPass::DeclareResources(RGBuilder& builder, uint32_t width, uint32_t height) {
+        // UI overlays on top of the FXAA result — reads the rendered frame,
+        // writes back the final composited output.
         FramebufferSpecification spec;
         spec.Width  = width;
         spec.Height = height;
         spec.Attachments = { FramebufferTextureFormat::RGBA8 };
-        builder.WriteTexture("UI_Output", spec);
+        builder.ReadWriteTexture("FXAA", spec);
     }
 
     void UIPass::Shutdown() {
@@ -230,15 +233,18 @@ namespace Ayaya {
 
         UILayoutSystem::Update(*scene, width, height);
 
-        auto uiFBO = context.GetFramebuffer("UI_Output");
-        if (!uiFBO) { AYAYA_CORE_WARN("[UIPass] UI_Output FBO not found!"); return; }
+        // Read the FXAA-processed frame, draw UI on top with alpha blending.
+        auto outFBO = context.GetFramebuffer("FXAA");
+        if (!outFBO) { AYAYA_CORE_WARN("[UIPass] FXAA FBO not found!"); return; }
 
         if (!m_UIPipeline) {
-            m_PipeSpec.TargetFramebuffer = uiFBO;
+            m_PipeSpec.TargetFramebuffer = outFBO;
             m_UIPipeline = Pipeline::Create(m_PipeSpec);
         }
 
-        cmd.BeginRenderPass(uiFBO, true, glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
+        // LOAD the existing frame (do NOT clear) so UI is drawn *on top* of
+        // the fully tone-mapped, FXAA-processed 3D scene.
+        cmd.BeginRenderPass(outFBO, false, glm::vec4(0.0f));
         cmd.BindPipeline(m_UIPipeline);
 
         StartBatch();
@@ -274,7 +280,7 @@ namespace Ayaya {
         if (s_Data.QuadIndexCount > 0) Flush(cmd);
         cmd.EndRenderPass();
 
-        context.Framebuffers["UI"] = context.GetFramebuffer("UI_Output");
+        context.Framebuffers["FXAA"] = outFBO;
     }
 
 }

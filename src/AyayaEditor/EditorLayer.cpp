@@ -41,6 +41,11 @@ namespace Ayaya {
         m_PreferencesPanel.Init();
         ScriptEngine::Init();
 
+        // Gizmo icons
+        m_CameraIcon    = Texture2D::Create("assets/Editor/icons/camera_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png");
+        m_PointLightIcon = Texture2D::Create("assets/Editor/icons/lightbulb_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png");
+        m_DirLightIcon  = Texture2D::Create("assets/Editor/icons/sunny_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png");
+
         m_SceneRenderer = std::make_shared<SceneRenderer>();
         m_SceneRenderer->Init();
         m_GameRenderer = std::make_shared<SceneRenderer>();
@@ -1185,12 +1190,8 @@ namespace Ayaya {
             }
 
             if (ImGui::BeginMenu("View")) {
-                ImGui::MenuItem("Show Grid", nullptr, &m_ShowGrid);
-                ImGui::MenuItem("Show Camera Gizmos", nullptr, &m_ShowCameraGizmos);
-                ImGui::MenuItem("Show Light Gizmos", nullptr, &m_ShowLightGizmos);
-
+                ImGui::MenuItem("Show Gizmos", nullptr, &m_ShowGizmosOverlay);
                 ImGui::Separator();
-
                 ImGui::MenuItem("Show Statistics", nullptr, &m_ShowStatsPanel);
                 ImGui::MenuItem("Show History", nullptr, &m_HistoryPanel.IsOpen);
                 ImGui::MenuItem("Frame Debugger", nullptr, &m_FrameDebuggerPanel.IsOpen);
@@ -1268,6 +1269,33 @@ namespace Ayaya {
                 HandleMousePicking(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
                 HandleGizmo(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
                 UIRenderDebugGizmos(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
+
+                // ---- Gizmos overlay (right side) ----
+                if (m_ShowGizmosOverlay) {
+                    ImVec2 vpMin = ImGui::GetItemRectMin();
+                    ImVec2 vpSize = ImVec2(m_ViewportSize.x, m_ViewportSize.y);
+                    float panelW = 140.0f;
+                    ImGui::SetCursorScreenPos(ImVec2(vpMin.x + vpSize.x - panelW - 6, vpMin.y + 6));
+                    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.12f, 0.12f, 0.12f, 0.85f));
+                    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 4.0f);
+                    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 8));
+                    ImGui::BeginChild("GizmosOverlay", ImVec2(panelW, 0),
+                        ImGuiChildFlags_AutoResizeY,
+                        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+                    ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+                    ImGui::Text("Gizmos");
+                    ImGui::PopFont();
+                    ImGui::Separator();
+                    ImGui::Checkbox("Grid", &m_ShowGrid);
+                    ImGui::Checkbox("Camera", &m_ShowCameraGizmos);
+                    ImGui::Checkbox("Light", &m_ShowLightGizmos);
+                    ImGui::Checkbox("UI", &m_ShowUIGizmos);
+
+                    ImGui::EndChild();
+                    ImGui::PopStyleVar(2);
+                    ImGui::PopStyleColor();
+                }
             } else {
                 ImGui::Text("Viewport is initializing...");
             }
@@ -1629,25 +1657,44 @@ namespace Ayaya {
     }
 
     void EditorLayer::UIRenderDebugGizmos(const glm::mat4& cameraViewMatrix, const glm::mat4& cameraProjectionMatrix) {
-        // 【修改】：不再因为没有选中物体就 return，我们需要获取它用来做"高亮区分"
-        Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
-
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         glm::mat4 viewProj = cameraProjectionMatrix * cameraViewMatrix;
+        ImVec2 mousePos = ImGui::GetMousePos();
+        bool canClick = m_ViewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+        Entity bestClick;
+        float bestClickDist = FLT_MAX;
 
-        auto ProjectToScreen = [&](const glm::vec3& worldPos, ImVec2& outScreenPos) -> bool {
+        auto ProjectToScreen = [&](const glm::vec3& worldPos, ImVec2& outScreenPos, float* outDepth = nullptr) -> bool {
             glm::vec4 clipPos = viewProj * glm::vec4(worldPos, 1.0f);
-            if (clipPos.w < 0.01f) return false; 
+            if (clipPos.w < 0.01f) return false;
             glm::vec3 ndcPos = glm::vec3(clipPos) / clipPos.w;
-            float viewportWidth = m_ViewportBounds[1].x - m_ViewportBounds[0].x;
-            float viewportHeight = m_ViewportBounds[1].y - m_ViewportBounds[0].y;
-            outScreenPos.x = m_ViewportBounds[0].x + (ndcPos.x + 1.0f) * 0.5f * viewportWidth;
-            outScreenPos.y = m_ViewportBounds[0].y + (1.0f - ndcPos.y) * 0.5f * viewportHeight;
+            if (outDepth) *outDepth = ndcPos.z;
+            float vpW = m_ViewportBounds[1].x - m_ViewportBounds[0].x;
+            float vpH = m_ViewportBounds[1].y - m_ViewportBounds[0].y;
+            outScreenPos.x = m_ViewportBounds[0].x + (ndcPos.x + 1.0f) * 0.5f * vpW;
+            outScreenPos.y = m_ViewportBounds[0].y + (1.0f - ndcPos.y) * 0.5f * vpH;
             return true;
         };
 
+        // Helper: draw an icon and check if the mouse clicked inside it.
+        auto DrawGizmoIcon = [&](Entity entity, const ImVec2& pos, float size,
+                                  std::shared_ptr<Texture2D>& tex, ImU32 tint) {
+            if (!tex) return;
+            float s = size * 0.5f;
+            drawList->AddImage((ImTextureID)tex->GetImGuiTextureID(),
+                ImVec2(pos.x - s, pos.y - s), ImVec2(pos.x + s, pos.y + s),
+                ImVec2(0, 1), ImVec2(1, 0), tint);
+            if (canClick && mousePos.x >= pos.x - s && mousePos.x <= pos.x + s &&
+                mousePos.y >= pos.y - s && mousePos.y <= pos.y + s) {
+                float depth;
+                ImVec2 dummy;
+                ProjectToScreen(glm::vec3(entity.GetWorldTransform()[3]), dummy, &depth);
+                if (depth < bestClickDist) { bestClickDist = depth; bestClick = entity; }
+            }
+        };
+
         // ==========================================
-        // 1. 遍历并绘制所有 Camera 的视锥体
+        // 1. Cameras: frustum + icon
         // ==========================================
         if (m_ShowCameraGizmos) {
             auto view = m_ActiveScene->Reg().view<TransformComponent, CameraComponent>();
@@ -1655,42 +1702,50 @@ namespace Ayaya {
                 Entity entity{ entityID, m_ActiveScene.get() };
                 if (!entity.IsActiveInHierarchy()) continue;
 
-                // 【绝妙细节】：被选中的相机白线加粗，未选中的相机变成半透明灰线
-                bool isSelected = (entity == selectedEntity);
-                ImU32 color = isSelected ? IM_COL32(255, 255, 255, 255) : IM_COL32(200, 200, 200, 200);
-                float thickness = isSelected ? 2.0f : 1.0f;
-
                 auto& cameraComp = entity.GetComponent<CameraComponent>();
                 glm::mat4 transform = entity.GetWorldTransform();
                 glm::mat4 proj = cameraComp.Camera.GetProjection();
-                
-                glm::mat4 invViewProj = transform * glm::inverse(proj); 
+                glm::mat4 invViewProj = transform * glm::inverse(proj);
 
-                glm::vec3 frustumCornersNDC[8] = {
-                    {-1.0f, -1.0f, -1.0f}, { 1.0f, -1.0f, -1.0f}, { 1.0f,  1.0f, -1.0f}, {-1.0f,  1.0f, -1.0f}, 
-                    {-1.0f, -1.0f,  1.0f}, { 1.0f, -1.0f,  1.0f}, { 1.0f,  1.0f,  1.0f}, {-1.0f,  1.0f,  1.0f}  
-                };
-
-                ImVec2 screenPoints[8];
-                bool pointsValid[8];
+                glm::vec3 fc[8] = {
+                    {-1,-1,-1},{ 1,-1,-1},{ 1, 1,-1},{-1, 1,-1},
+                    {-1,-1, 1},{ 1,-1, 1},{ 1, 1, 1},{-1, 1, 1}};
+                ImVec2 sp[8]; bool v[8];
                 for (int i = 0; i < 8; i++) {
-                    glm::vec4 worldPos = invViewProj * glm::vec4(frustumCornersNDC[i], 1.0f);
-                    worldPos /= worldPos.w; 
-                    pointsValid[i] = ProjectToScreen(glm::vec3(worldPos), screenPoints[i]);
+                    glm::vec4 wp = invViewProj * glm::vec4(fc[i], 1.0f); wp /= wp.w;
+                    v[i] = ProjectToScreen(glm::vec3(wp), sp[i]);
                 }
+                ImU32 col = IM_COL32(200, 200, 200, 200);
+                auto DL = [&](int a, int b) { if (v[a] && v[b]) drawList->AddLine(sp[a], sp[b], col); };
+                DL(0,1); DL(1,2); DL(2,3); DL(3,0); DL(4,5); DL(5,6); DL(6,7); DL(7,4);
+                DL(0,4); DL(1,5); DL(2,6); DL(3,7);
 
-                auto DrawLineIfValid = [&](int p1, int p2) {
-                    if (pointsValid[p1] && pointsValid[p2]) drawList->AddLine(screenPoints[p1], screenPoints[p2], color, thickness);
-                };
-
-                DrawLineIfValid(0, 1); DrawLineIfValid(1, 2); DrawLineIfValid(2, 3); DrawLineIfValid(3, 0);
-                DrawLineIfValid(4, 5); DrawLineIfValid(5, 6); DrawLineIfValid(6, 7); DrawLineIfValid(7, 4);
-                DrawLineIfValid(0, 4); DrawLineIfValid(1, 5); DrawLineIfValid(2, 6); DrawLineIfValid(3, 7);
+                glm::vec3 camPos = glm::vec3(transform[3]);
+                ImVec2 iconPos;
+                if (ProjectToScreen(camPos, iconPos))
+                    DrawGizmoIcon(entity, iconPos, 44.0f, m_CameraIcon,
+                                  IM_COL32(255, 255, 255, 255));
             }
         }
 
         // ==========================================
-        // 2. 遍历并绘制所有 Point Light 的光照球体
+        // 2a. Directional Light: sun icon
+        // ==========================================
+        if (m_ShowLightGizmos) {
+            auto view = m_ActiveScene->Reg().view<TransformComponent, DirectionalLightComponent>();
+            for (auto entityID : view) {
+                Entity entity{ entityID, m_ActiveScene.get() };
+                if (!entity.IsActiveInHierarchy()) continue;
+                glm::vec3 pos = entity.GetWorldTransform()[3];
+                ImVec2 sp;
+                if (ProjectToScreen(pos, sp))
+                    DrawGizmoIcon(entity, sp, 48.0f, m_DirLightIcon,
+                                  IM_COL32(255, 255, 255, 255));
+            }
+        }
+
+        // ==========================================
+        // 2b. Point Light: lightbulb icon + rings
         // ==========================================
         if (m_ShowLightGizmos) {
             auto view = m_ActiveScene->Reg().view<TransformComponent, PointLightComponent>();
@@ -1698,54 +1753,38 @@ namespace Ayaya {
                 Entity entity{ entityID, m_ActiveScene.get() };
                 if (!entity.IsActiveInHierarchy()) continue;
 
-                bool isSelected = (entity == selectedEntity);
-                
                 auto& lightComp = entity.GetComponent<PointLightComponent>();
-                glm::mat4 transform = entity.GetWorldTransform();
-                glm::vec3 worldPos = glm::vec3(transform[3]);
+                glm::vec3 worldPos = entity.GetWorldTransform()[3];
 
                 ImVec2 screenPos;
                 if (ProjectToScreen(worldPos, screenPos)) {
-                    ImU32 lightColor = IM_COL32((int)(lightComp.Color.r * 255), (int)(lightComp.Color.g * 255), (int)(lightComp.Color.b * 255), 255);
-                    drawList->AddCircleFilled(screenPos, 6.0f, lightColor);
-                    
-                    // 中心圆点的选中反馈：选中白边加粗，未选中给个黑边
-                    ImU32 outlineColor = isSelected ? IM_COL32(255, 255, 255, 255) : IM_COL32(0, 0, 0, 255);
-                    float outlineThick = isSelected ? 2.0f : 1.0f;
-                    drawList->AddCircle(screenPos, 8.0f, outlineColor, 0, outlineThick);
+                    ImU32 tint = IM_COL32((int)(lightComp.Color.r*255), (int)(lightComp.Color.g*255), (int)(lightComp.Color.b*255), 255);
+                    DrawGizmoIcon(entity, screenPos, 40.0f, m_PointLightIcon, tint);
                 }
 
-                // 【绝妙细节】：未选中的光环透明度极低，防止场景里灯太多导致画面被淹没！
-                int alpha = isSelected ? 150 : 25; 
-                float lineThick = isSelected ? 1.5f : 1.0f;
-                ImU32 ringColor = IM_COL32((int)(lightComp.Color.r * 255), (int)(lightComp.Color.g * 255), (int)(lightComp.Color.b * 255), alpha);
-
+                // Wireframe rings
+                ImU32 ringColor = IM_COL32((int)(lightComp.Color.r*255), (int)(lightComp.Color.g*255), (int)(lightComp.Color.b*255), 25);
                 float radius = lightComp.Radius;
-
-                const int segments = 48; 
+                const int segments = 48;
                 for (int plane = 0; plane < 3; plane++) {
-                    ImVec2 prevScreenPos;
-                    bool prevValid = false;
+                    ImVec2 prev; bool prevOk = false;
                     for (int i = 0; i <= segments; i++) {
-                        float angle = (float)i / (float)segments * 2.0f * 3.14159265f;
-                        glm::vec3 offset;
-                        
-                        if (plane == 0) offset = glm::vec3(glm::cos(angle), glm::sin(angle), 0.0f) * radius;     
-                        else if (plane == 1) offset = glm::vec3(glm::cos(angle), 0.0f, glm::sin(angle)) * radius; 
-                        else offset = glm::vec3(0.0f, glm::cos(angle), glm::sin(angle)) * radius;                 
-
-                        ImVec2 currScreenPos;
-                        bool currValid = ProjectToScreen(worldPos + offset, currScreenPos);
-
-                        if (i > 0 && prevValid && currValid) {
-                            drawList->AddLine(prevScreenPos, currScreenPos, ringColor, lineThick);
-                        }
-                        prevScreenPos = currScreenPos;
-                        prevValid = currValid;
+                        float a = (float)i / (float)segments * 2.0f * 3.14159265f;
+                        glm::vec3 off;
+                        if (plane == 0)      off = glm::vec3(cosf(a), sinf(a), 0) * radius;
+                        else if (plane == 1) off = glm::vec3(cosf(a), 0, sinf(a)) * radius;
+                        else                 off = glm::vec3(0, cosf(a), sinf(a)) * radius;
+                        ImVec2 cur; bool curOk = ProjectToScreen(worldPos + off, cur);
+                        if (i > 0 && prevOk && curOk) drawList->AddLine(prev, cur, ringColor);
+                        prev = cur; prevOk = curOk;
                     }
                 }
             }
         }
+
+        // Apply click selection (closest entity to camera wins)
+        if (bestClick)
+            m_SceneHierarchyPanel.SetSelectedEntity(bestClick);
     }
 
     void EditorLayer::UIRenderDebugUIGizmos(ImVec2 viewportScreenMin, ImVec2 vpSize, float dpiScale) {

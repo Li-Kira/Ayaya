@@ -27,7 +27,7 @@ namespace Ayaya {
     };
     
     // 混合模式：将类型重命名为 BlendModeType，解决成员变量同名导致的 C2653 错误
-    enum class BlendModeType { None = 0, Alpha, Additive };
+    enum class BlendModeType { None = 0, Alpha, Additive, PremultipliedAlpha };
 
     // ==========================================
     // 2. 管线图纸 (PipelineSpecification)

@@ -59,6 +59,21 @@ namespace Ayaya {
             return;
         }
 
+        // Un-premultiply alpha if the texture was saved with pre-multiplied alpha
+        // (e.g. Photoshop "Export As"). Produces straight alpha for the shader.
+        if (m_ImportSettings.UnpremultiplyAlpha && !isHDR) {
+            uint8_t* p = (uint8_t*)pixels;
+            for (int i = 0; i < w * h; i++) {
+                uint8_t a = p[3];
+                if (a > 0 && a < 255) {
+                    p[0] = (uint8_t)std::min((uint32_t)p[0] * 255 / a, 255u);
+                    p[1] = (uint8_t)std::min((uint32_t)p[1] * 255 / a, 255u);
+                    p[2] = (uint8_t)std::min((uint32_t)p[2] * 255 / a, 255u);
+                }
+                p += 4;
+            }
+        }
+
         m_Width = w; m_Height = h;
         Invalidate(); // 内部使用更新后的 m_Format 创建 VkImage
         
@@ -79,6 +94,20 @@ namespace Ayaya {
         } else {
             m_Format = m_ImportSettings.SRGB ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
         }
+        // Un-premultiply alpha for async-loaded textures
+        if (m_ImportSettings.UnpremultiplyAlpha && !raw.IsHDR) {
+            uint8_t* p = (uint8_t*)raw.Pixels;
+            for (int i = 0; i < (int)(m_Width * m_Height); i++) {
+                uint8_t a = p[3];
+                if (a > 0 && a < 255) {
+                    p[0] = (uint8_t)std::min((uint32_t)p[0] * 255 / a, 255u);
+                    p[1] = (uint8_t)std::min((uint32_t)p[1] * 255 / a, 255u);
+                    p[2] = (uint8_t)std::min((uint32_t)p[2] * 255 / a, 255u);
+                }
+                p += 4;
+            }
+        }
+
         Invalidate();
         uint32_t bpp = raw.IsHDR ? 16 : 4;
         SetData(raw.Pixels, m_Width * m_Height * bpp);

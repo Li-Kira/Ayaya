@@ -52,7 +52,7 @@ namespace Ayaya {
         pc.Exposure = physExposure * expComp;
         pc.ToneMappingType = context.Get<int>("ToneMappingType", 1);
         pc.TexelSize = glm::vec2(1.f/w, 1.f/h);
-        pc.EnableBloom = context.Get<bool>("EnableBloom", false) ? 1 : 0;
+        pc.EnableBloom = context.Get<bool>("EnableBloom", true) ? 1 : 0;
         pc.BloomIntensity = context.Get<float>("BloomIntensity", 1.0f);
         cmd.PushConstantData(m_Pipeline, &pc, sizeof pc);
         cmd.DrawArrays(m_EmptyVAO, 3);
