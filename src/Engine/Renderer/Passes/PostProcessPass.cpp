@@ -58,10 +58,10 @@ namespace Ayaya {
         
         if (context.Framebuffers.find("Lighting") != context.Framebuffers.end()) {
             screenFBO = context.Framebuffers["Lighting"];
-            screenAttachmentIndex = 0; 
+            screenAttachmentIndex = 0;
         } else if (context.Framebuffers.find("GBuffer") != context.Framebuffers.end()) {
             screenFBO = context.Framebuffers["GBuffer"];
-            screenAttachmentIndex = 3; 
+            screenAttachmentIndex = 3;
         }
 
         if (screenFBO) {
@@ -138,6 +138,8 @@ namespace Ayaya {
         // ==========================================
         context.Set("Final_Output", m_PostProcessFBO);
         context.Set("PostProcess_Output", m_PostProcessFBO);
+        context.Framebuffers["FinalOutput"] = m_PostProcessFBO;
+        context.Framebuffers["FXAA"] = m_PostProcessFBO;
         context.Framebuffers["PostProcess"] = m_PostProcessFBO;
     }
 

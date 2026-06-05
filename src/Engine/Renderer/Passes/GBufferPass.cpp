@@ -164,7 +164,7 @@ namespace Ayaya {
         // ==========================================
         // 【核心适配 2】：为 Vulkan 照明阶段补充完整的 FBO 实体对象！
         // ==========================================
-        context.Set("GBuffer_FBO", m_GeometryFBO); 
+        context.Set("GBuffer_FBO", m_GeometryFBO);
         context.Framebuffers["GBuffer"] = m_GeometryFBO;
         context.Framebuffers["Geometry"] = m_GeometryFBO;
     }

@@ -182,7 +182,7 @@ namespace Ayaya {
             m_Pipeline.AddPass(std::make_shared<BloomPass>());
             m_Pipeline.AddPass(std::make_shared<PostProcessPass>());
             m_Pipeline.AddPass(std::make_shared<FXAAPass>());
-            m_Pipeline.AddPass(std::make_shared<UIPass>());
+            // UIPass requires RenderGraph FBO injection — not supported in OpenGL linear pipeline
             m_Pipeline.Init();
 
             if (m_Data->EmptyVAO == 0) glGenVertexArrays(1, &m_Data->EmptyVAO);
