@@ -58,7 +58,12 @@ namespace Ayaya {
         // ==========================================
         virtual void BeginRenderPass(const std::shared_ptr<Framebuffer>& targetFBO, bool clear = true, const glm::vec4& clearColor = glm::vec4(0.0f)) = 0;
         virtual void EndRenderPass() = 0;
+        virtual void SetPerAttachmentClearColors(const std::vector<glm::vec4>& colors) = 0;
         virtual void BindPipeline(const std::shared_ptr<Pipeline>& pipeline) = 0;
+
+        virtual uint32_t GetDrawCallCount() const { return 0; }
+        virtual uint32_t GetTriangleCount() const { return 0; }
+        virtual void ResetDrawStats() {}
 
         // --- 推送常量 ---
         virtual void PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, float data) = 0;

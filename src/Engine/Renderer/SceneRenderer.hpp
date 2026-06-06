@@ -6,6 +6,7 @@
 #include "Renderer/UniformBuffer.hpp"
 #include "Renderer/RenderPipeline.hpp"
 #include "Renderer/RenderGraph.hpp"
+#include "Renderer/RenderQueue.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <string>
@@ -109,6 +110,7 @@ namespace Ayaya {
         std::shared_ptr<RenderPass> m_PostProcessPass;
         std::shared_ptr<RenderPass> m_FXAAPass;
         std::shared_ptr<RenderPass> m_UIPass;
+        std::shared_ptr<class VulkanWBOITPass> m_WBOITPass;
 
         std::vector<std::shared_ptr<CustomPostProcess>> m_CustomPostProcesses;
 
@@ -119,6 +121,7 @@ namespace Ayaya {
         std::vector<DeferredRelease> m_DeferredReleases;
 
         RenderContext m_RenderContext;
+        RenderQueue  m_RenderQueue;
         float m_Exposure = 1.0f;
     };
 

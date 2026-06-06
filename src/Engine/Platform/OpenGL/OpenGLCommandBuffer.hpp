@@ -63,5 +63,6 @@ namespace Ayaya {
         virtual void TransitionImageLayout(const std::shared_ptr<Framebuffer>&,
                                            uint32_t, ImageLayout, ImageLayout) override {}
         virtual void FlushDescriptorSets() override {}
+        virtual void SetPerAttachmentClearColors(const std::vector<glm::vec4>&) override {}
     };
 }

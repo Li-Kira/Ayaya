@@ -15,6 +15,7 @@ layout(set = 1, binding = 2) uniform sampler2D u_MetallicMap;
 layout(set = 1, binding = 3) uniform sampler2D u_RoughnessMap;
 layout(set = 1, binding = 4) uniform sampler2D u_AOMap;
 layout(set = 1, binding = 5) uniform sampler2D u_NormalMap;
+layout(set = 1, binding = 6) uniform sampler2D u_AlphaMap;
 
 layout(push_constant) uniform PushConstants {
     mat4 u_Transform;
@@ -23,11 +24,15 @@ layout(push_constant) uniform PushConstants {
     float u_Metallic;
     float u_Roughness;
     float u_AO;
+    float u_AlphaMultiplier;
+    float u_AlphaCutoff;
+    int   u_BlendMode;       // 0=Opaque, 1=Masked
     int u_UseAlbedoMap;
     int u_UseMetallicMap;
     int u_UseRoughnessMap;
     int u_UseAOMap;
     int u_UseNormalMap;
+    int u_UseAlphaMap;
     int u_IsSelected;
 } pc;
 
@@ -45,6 +50,17 @@ vec3 GetNormalFromMap() {
 }
 
 void main() {
+    // ---- Alpha / masked discard ----
+    float alpha = pc.u_AlphaMultiplier;
+    if (pc.u_UseAlbedoMap == 1)
+        alpha *= texture(u_AlbedoMap, v_TexCoord).a;
+    else if (pc.u_UseAlphaMap == 1)
+        alpha *= texture(u_AlphaMap, v_TexCoord).r;
+
+    // Masked blend mode: alpha-test discard
+    if (pc.u_BlendMode == 1 && alpha < pc.u_AlphaCutoff)
+        discard;
+
     g_Position = vec4(v_FragPos, 1.0);
 
     vec3 finalNormal = (pc.u_UseNormalMap == 1) ? GetNormalFromMap() : normalize(v_Normal);

@@ -65,6 +65,9 @@ namespace Ayaya {
         // Populated by both RenderGraph and RenderPipeline before pass execution.
         std::unordered_map<std::string, PassDebugInfo> PassDebugInfos;
 
+        // RenderQueue — populated before graph execution, consumed by passes
+        struct RenderQueue* RenderQueue = nullptr;
+
         struct {
             uint32_t DrawCalls = 0;
             uint32_t ShaderBinds = 0;

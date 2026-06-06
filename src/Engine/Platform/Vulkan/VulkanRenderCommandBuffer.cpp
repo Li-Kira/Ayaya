@@ -42,6 +42,15 @@ namespace Ayaya {
             att.clearValue.color = {{clearColor.r, clearColor.g, clearColor.b, clearColor.a}};
         }
 
+        // Per-attachment clear color overrides (e.g. WBOIT attachment 1 needs 1.0)
+        if (!m_PendingClearColors.empty()) {
+            for (uint32_t i = 0; i < std::min(colorCount, (uint32_t)m_PendingClearColors.size()); i++) {
+                auto& c = m_PendingClearColors[i];
+                colorAttachments[i].clearValue.color = {{c.r, c.g, c.b, c.a}};
+            }
+            m_PendingClearColors.clear();
+        }
+
         // 构建深度附件
         VkRenderingAttachmentInfo depthAttachment{};
         if (vulkanFBO->HasDepthAttachment()) {
@@ -260,6 +269,8 @@ namespace Ayaya {
         // 4. 执行绘制
         uint32_t count = indexCount ? indexCount : mesh->GetIndexCount();
         vkCmdDrawIndexed(cmd, count, 1, 0, 0, 0);
+        m_DrawCallCount++;
+        m_TriangleCount += count / 3;
     }
 
     void VulkanRenderCommandBuffer::DrawArrays(uint32_t vertexCount) {
@@ -276,6 +287,8 @@ namespace Ayaya {
         }
         FlushDescriptorSets();
         vkCmdDraw(cmd, vertexCount, 1, 0, 0);
+        m_DrawCallCount++;
+        m_TriangleCount += vertexCount / 3;
     }
 
     void VulkanRenderCommandBuffer::DrawArrays(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount) {
@@ -292,6 +305,8 @@ namespace Ayaya {
         FlushDescriptorSets();
         uint32_t count = vertexCount ? vertexCount : mesh->GetVertexCount();
         vkCmdDraw(cmd, count, 1, 0, 0);
+        m_DrawCallCount++;
+        m_TriangleCount += count / 3;
     }
 
     void VulkanRenderCommandBuffer::DrawTriangleStrip(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount) {
@@ -308,6 +323,8 @@ namespace Ayaya {
         FlushDescriptorSets();
         uint32_t count = vertexCount ? vertexCount : mesh->GetVertexCount();
         vkCmdDraw(cmd, count, 1, 0, 0);
+        m_DrawCallCount++;
+        m_TriangleCount += count / 3;
     }
 
     void VulkanRenderCommandBuffer::DrawTriangleStrip(uint32_t vertexCount) {
@@ -323,6 +340,8 @@ namespace Ayaya {
         }
         FlushDescriptorSets();
         vkCmdDraw(cmd, vertexCount, 1, 0, 0);
+        m_DrawCallCount++;
+        m_TriangleCount += vertexCount / 3;
     }
 
     void VulkanRenderCommandBuffer::DrawArrays(const std::shared_ptr<VertexArray>& vertexArray, uint32_t vertexCount) {
@@ -362,6 +381,8 @@ namespace Ayaya {
         // 4. 发起绘制！
         uint32_t count = vertexCount ? vertexCount : 3;
         vkCmdDraw(cmd, count, 1, 0, 0);
+        m_DrawCallCount++;
+        m_TriangleCount += count / 3;
     }
 
     void VulkanRenderCommandBuffer::InsertExecutionBarrier() {

@@ -357,7 +357,8 @@ namespace Ayaya {
         UIRenderViewport();
         UIRenderGameViewport();
 
-        UIRenderNewProjectPopup(); // 【新增】：渲染弹窗层
+        UIRenderNewProjectPopup();
+        UIRenderSaveAsPopup();
 
         ImGui::End(); // End DockSpace
     }
@@ -516,64 +517,136 @@ namespace Ayaya {
     // 另存为项目：选择文件夹 → 创建项目结构 → 保存当前场景+材质+注册表
     // =====================================================================
     void EditorLayer::SaveProjectAs() {
-        std::string parentDir = FileDialogs::OpenFolder();
-        if (parentDir.empty()) return;
-
-        std::string projectName = "AyayaProject";
-        if (!m_CurrentScenePath.empty()) {
-            size_t pos = m_CurrentScenePath.find_last_of("/\\");
-            std::string sceneName = pos != std::string::npos ? m_CurrentScenePath.substr(pos + 1) : m_CurrentScenePath;
-            size_t dot = sceneName.rfind(".ayaya");
-            if (dot != std::string::npos) projectName = sceneName.substr(0, dot);
+        // Populate defaults from current project
+        auto active = Project::GetActive();
+        if (active) {
+            strncpy(m_SaveAsProjectName, active->GetConfig().Name.c_str(), sizeof(m_SaveAsProjectName) - 1);
+            m_SaveAsProjectName[sizeof(m_SaveAsProjectName) - 1] = '\0';
+        } else {
+            strncpy(m_SaveAsProjectName, "AyayaProject", sizeof(m_SaveAsProjectName) - 1);
+            m_SaveAsProjectName[sizeof(m_SaveAsProjectName) - 1] = '\0';
         }
 
-        std::filesystem::path finalDir = std::filesystem::path(parentDir) / projectName;
-        int suffix = 2;
-        while (std::filesystem::exists(finalDir)) {
-            finalDir = std::filesystem::path(parentDir) / (projectName + " (" + std::to_string(suffix) + ")");
-            suffix++;
-        }
-        if (finalDir.filename().string() != projectName)
-            projectName = finalDir.filename().string();
-
-        std::filesystem::path assetDir = finalDir / "Assets";
-        std::filesystem::path projectFile = finalDir / (projectName + ".ayaproj");
-
-        try {
-            std::filesystem::create_directories(assetDir / "Scenes");
-            std::filesystem::create_directories(assetDir / "Models");
-            std::filesystem::create_directories(assetDir / "Textures");
-            std::filesystem::create_directories(assetDir / "Materials");
-            std::filesystem::create_directories(finalDir / "Temp");
-        } catch (const std::exception& e) {
-            AYAYA_CORE_ERROR("SaveProjectAs: failed to create dirs: {0}", e.what());
-            return;
+        // Default location: parent of current project directory
+        auto projDir = Project::GetProjectDirectory();
+        if (!projDir.empty()) {
+            std::string parent = projDir.parent_path().string();
+            strncpy(m_SaveAsProjectLocation, parent.c_str(), sizeof(m_SaveAsProjectLocation) - 1);
         }
 
-        auto project = Project::New();
-        project->GetConfig().Name = projectName;
-        project->GetConfig().AssetDirectory = "Assets";
-        project->GetConfig().StartScene = "Scenes/Default.ayaya";
-        Project::SaveActive(projectFile);
+        m_ShowSaveAsPopup = true;
+    }
 
-        VFS::Mount("project", assetDir);
-
-        UUID builtInMat = AssetManager::GetBuiltInMaterial();
-        std::string engineMatPath = AssetManager::GetAssetPhysicalPath(builtInMat);
-        if (!engineMatPath.empty()) {
-            try {
-                auto projectMatPath = VFS::Resolve("project://Materials/DefaultPBR.mat");
-                std::filesystem::copy_file(engineMatPath, projectMatPath,
-                    std::filesystem::copy_options::overwrite_existing);
-                AssetManager::UpdateAssetPath(builtInMat, "project://Materials/DefaultPBR.mat");
-                AssetManager::WriteMetaFile(projectMatPath, builtInMat, AssetType::Material);
-            } catch (...) {}
+    void EditorLayer::UIRenderSaveAsPopup() {
+        if (m_ShowSaveAsPopup) {
+            ImGui::OpenPopup("Save Project As");
+            m_ShowSaveAsPopup = false;
         }
 
-        m_CurrentScenePath = VFS::ResolveString("project://Scenes/Default.ayaya");
-        SaveScene();
-        SaveProject();
-        AYAYA_CORE_INFO("Project saved as: {0}", finalDir.string());
+        ImGui::SetNextWindowSize(ImVec2(500.0f, 0.0f), ImGuiCond_Appearing);
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        if (ImGui::BeginPopupModal("Save Project As", nullptr, ImGuiWindowFlags_NoResize)) {
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.9f, 1.0f), ICON_FA_SAVE " Save Project As");
+            ImGui::PopFont();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            ImGui::Text("Project Name");
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::InputText("##SaveAsName", m_SaveAsProjectName, sizeof(m_SaveAsProjectName));
+            ImGui::Spacing();
+
+            ImGui::Text("Location");
+            ImGui::PushItemWidth(-110.0f);
+            ImGui::InputText("##SaveAsLocation", m_SaveAsProjectLocation, sizeof(m_SaveAsProjectLocation), ImGuiInputTextFlags_ReadOnly);
+            ImGui::PopItemWidth();
+            ImGui::SameLine();
+            if (ImGui::Button("Browse...", ImVec2(100, 0))) {
+                std::string selectedDir = FileDialogs::OpenFolder();
+                if (!selectedDir.empty()) {
+                    strncpy(m_SaveAsProjectLocation, selectedDir.c_str(), sizeof(m_SaveAsProjectLocation) - 1);
+                }
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Preview
+            std::filesystem::path finalDir = std::filesystem::path(m_SaveAsProjectLocation) / m_SaveAsProjectName;
+            ImGui::TextDisabled("Project will be saved to:");
+            ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 480.0f);
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", finalDir.generic_string().c_str());
+            ImGui::PopTextWrapPos();
+            ImGui::Spacing(); ImGui::Spacing();
+
+            if (ImGui::Button("Save", ImVec2(120, 35))) {
+                if (strlen(m_SaveAsProjectName) > 0 && strlen(m_SaveAsProjectLocation) > 0) {
+                    std::string baseName = m_SaveAsProjectName;
+                    std::filesystem::path finalDirTry = std::filesystem::path(m_SaveAsProjectLocation) / baseName;
+                    int suffix = 2;
+                    while (std::filesystem::exists(finalDirTry)) {
+                        baseName = std::string(m_SaveAsProjectName) + " (" + std::to_string(suffix) + ")";
+                        finalDirTry = std::filesystem::path(m_SaveAsProjectLocation) / baseName;
+                        suffix++;
+                    }
+                    if (baseName != std::string(m_SaveAsProjectName)) {
+                        strncpy(m_SaveAsProjectName, baseName.c_str(), sizeof(m_SaveAsProjectName) - 1);
+                    }
+                    std::filesystem::path destDir = finalDirTry;
+
+                    // Copy entire project directory
+                    try {
+                        auto srcDir = Project::GetProjectDirectory();
+                        if (!srcDir.empty() && std::filesystem::exists(srcDir)) {
+                            std::filesystem::copy(srcDir, destDir,
+                                std::filesystem::copy_options::recursive |
+                                std::filesystem::copy_options::overwrite_existing);
+                        } else {
+                            std::filesystem::create_directories(destDir / "Assets" / "Scenes");
+                            std::filesystem::create_directories(destDir / "Assets" / "Models");
+                            std::filesystem::create_directories(destDir / "Assets" / "Textures");
+                            std::filesystem::create_directories(destDir / "Assets" / "Materials");
+                        }
+                    } catch (const std::exception& e) {
+                        AYAYA_CORE_ERROR("SaveProjectAs: copy failed: {0}", e.what());
+                    }
+
+                    // Save new project file
+                    std::filesystem::path projFile = destDir / (baseName + ".ayaproj");
+
+                    // Remove old .ayaproj copied from source
+                    auto oldActive = Project::GetActive();
+                    if (oldActive) {
+                        std::string oldName = oldActive->GetConfig().Name;
+                        std::filesystem::path oldProj = destDir / (oldName + ".ayaproj");
+                        if (oldProj != projFile && std::filesystem::exists(oldProj))
+                            std::filesystem::remove(oldProj);
+                    }
+                    auto project = Project::New();
+                    project->GetConfig().Name = baseName;
+                    project->GetConfig().AssetDirectory = "Assets";
+                    project->GetConfig().StartScene = "Scenes/Default.ayaya";
+                    Project::SaveActive(projFile);
+
+                    // Reload the new project so VFS/assets point to the new location
+                    m_ProjectToLoad = projFile.string();
+
+                    AYAYA_CORE_INFO("Project saved as: {0}", destDir.string());
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(80, 35))) {
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
     }
 
     void EditorLayer::NewScene() {

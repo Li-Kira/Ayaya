@@ -205,6 +205,7 @@ namespace Ayaya {
         }
 
         VkPhysicalDeviceFeatures deviceFeatures{};
+        deviceFeatures.independentBlend = VK_TRUE;  // WBOIT per-attachment blend
 
         // Vulkan 1.2 features (bindless descriptors)
         VkPhysicalDeviceVulkan12Features vk12Features{};

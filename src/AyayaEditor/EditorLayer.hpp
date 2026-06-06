@@ -56,6 +56,7 @@ namespace Ayaya {
         void SaveScene();
         void SaveSceneAs();
         void SaveProjectAs();
+        void UIRenderSaveAsPopup();
 
         void NewProject();
         void OpenProject();
@@ -146,7 +147,11 @@ namespace Ayaya {
         // ==========================================
         bool m_ShowNewProjectPopup = false;
         char m_NewProjectName[256] = "MyProject";
-        char m_NewProjectLocation[256] = ""; 
+        char m_NewProjectLocation[256] = "";
+
+        bool m_ShowSaveAsPopup = false;
+        char m_SaveAsProjectName[256] = "";
+        char m_SaveAsProjectLocation[256] = ""; 
         
         // 渲染弹窗的函数
         void UIRenderNewProjectPopup();

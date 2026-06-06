@@ -12,13 +12,20 @@ namespace Ayaya {
     class Texture2D;
     class TextureCube;
 
+    // Exposed material blend mode — maps to RenderBucket for queue classification
+    enum class MaterialBlendMode : uint8_t {
+        Opaque      = 0,  // default, into GBuffer
+        Masked      = 1,  // alpha-test, into GBuffer after opaque
+        Translucent = 3,  // WBOIT translucent, skips GBuffer
+    };
+
     enum class MaterialPropertyType {
-        Float     = 0, 
+        Float     = 0,
         Int       = 1,
         Bool      = 2,
-        Vec2      = 3, 
-        Vec3      = 4, 
-        Vec4      = 5, 
+        Vec2      = 3,
+        Vec3      = 4,
+        Vec4      = 5,
         Mat3      = 6,
         Mat4      = 7,
         Texture2D   = 8,
@@ -54,17 +61,28 @@ namespace Ayaya {
         ~Material() = default;
         
         std::string Name = "Empty Material";
-        std::string ShaderName = "Default";   // 完美保留！
-        std::string AssetPath = "";           // 完美保留！
+        std::string ShaderName = "Default";
+        std::string AssetPath = "";
+
+        // Blend mode → RenderBucket mapping for queue classification
+        void SetBlendMode(MaterialBlendMode mode) { m_BlendMode = mode; }
+        MaterialBlendMode GetBlendMode() const { return m_BlendMode; }
+        uint8_t GetRenderBucket() const { return static_cast<uint8_t>(m_BlendMode); }
+
+        // Alpha cutoff for Masked blend mode (alpha-test threshold)
+        void SetAlphaCutoff(float cutoff) { m_AlphaCutoff = cutoff; }
+        float GetAlphaCutoff() const { return m_AlphaCutoff; }
 
         std::vector<MaterialProperty> Properties;
 
         std::shared_ptr<Material> Clone() const {
             auto clone = std::make_shared<Material>();
-            clone->Name = this->Name + " (Instance)"; 
+            clone->Name = this->Name + " (Instance)";
             clone->ShaderName = this->ShaderName;
-            clone->AssetPath = ""; 
-            clone->Properties = this->Properties; 
+            clone->AssetPath = "";
+            clone->m_BlendMode = this->m_BlendMode;
+            clone->m_AlphaCutoff = this->m_AlphaCutoff;
+            clone->Properties = this->Properties;
             return clone;
         }
 
@@ -96,6 +114,9 @@ namespace Ayaya {
         void SetRuntimeTextureCube(const std::string& name, const std::shared_ptr<TextureCube>& texture);
 
     private:
+        MaterialBlendMode m_BlendMode = MaterialBlendMode::Opaque;
+        float m_AlphaCutoff = 0.5f;
+
         template<typename T>
         void SetPropertyInternal(const std::string& name, MaterialPropertyType type, T setter) {
             for (auto& prop : Properties) {

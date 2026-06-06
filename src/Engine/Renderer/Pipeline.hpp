@@ -27,7 +27,9 @@ namespace Ayaya {
     };
     
     // 混合模式：将类型重命名为 BlendModeType，解决成员变量同名导致的 C2653 错误
-    enum class BlendModeType { None = 0, Alpha, Additive, PremultipliedAlpha };
+    enum class BlendModeType { None = 0, Alpha, Additive, PremultipliedAlpha,
+        WBOITRevealage  // src=ZERO, dst=ONE_MINUS_SRC_COLOR (multiply-attenuation for WBOIT)
+    };
 
     // ==========================================
     // 2. 管线图纸 (PipelineSpecification)
@@ -37,21 +39,25 @@ namespace Ayaya {
         std::shared_ptr<Framebuffer> TargetFramebuffer;
 
         BufferLayout Layout;
-        
+
         PrimitiveTopology Topology = PrimitiveTopology::Triangles;
         PolygonMode PolygonMode = PolygonMode::Fill;
-        
+
         // 【兼容性】：保留旧名称 DepthOperator，解决 C2039 报错
         DepthCompareOperator DepthOperator = DepthCompareOperator::Less;
-        
+
         bool DepthTest = true;
         bool DepthWrite = true;
         bool Blend = false;
-        
+
         CullMode BackfaceCulling = CullMode::Back;
 
         // 【兼容性】：变量名保持为 BlendMode，但类型使用 BlendModeType
         BlendModeType BlendMode = BlendModeType::Alpha;
+
+        // Per-attachment blend overrides (WBOIT dual-attachment blend, etc.)
+        // If non-empty, each attachment uses its own BlendMode; falls back to BlendMode otherwise.
+        std::vector<BlendModeType> PerAttachmentBlend;
 
         // ==========================================
         // 【新增】：支持天空盒与高级渲染状态

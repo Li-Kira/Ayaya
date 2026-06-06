@@ -179,22 +179,33 @@ namespace Ayaya {
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(colorAttachmentCount);
         for (uint32_t i = 0; i < colorAttachmentCount; i++) {
             blendAttachments[i].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+            // Per-attachment blend mode (WBOIT dual-attachment, etc.)
+            BlendModeType attBlend = spec.BlendMode;
+            if (i < spec.PerAttachmentBlend.size())
+                attBlend = spec.PerAttachmentBlend[i];
+
             if (spec.Blend) {
                 blendAttachments[i].blendEnable = VK_TRUE;
                 blendAttachments[i].colorBlendOp = VK_BLEND_OP_ADD;
                 blendAttachments[i].alphaBlendOp = VK_BLEND_OP_ADD;
 
-                if (spec.BlendMode == BlendModeType::PremultipliedAlpha) {
-                    // Pre-multiplied alpha: src.rgb is already multiplied by src.a.
+                if (attBlend == BlendModeType::PremultipliedAlpha) {
                     blendAttachments[i].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
                     blendAttachments[i].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
                     blendAttachments[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
                     blendAttachments[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-                } else if (spec.BlendMode == BlendModeType::Additive) {
+                } else if (attBlend == BlendModeType::Additive) {
                     blendAttachments[i].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
                     blendAttachments[i].dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
                     blendAttachments[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
                     blendAttachments[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+                } else if (attBlend == BlendModeType::WBOITRevealage) {
+                    // WBOIT revealage: src*0 + dst*(1-srcColor) = multiply-attenuation
+                    blendAttachments[i].srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+                    blendAttachments[i].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+                    blendAttachments[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+                    blendAttachments[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
                 } else {
                     // Alpha / None: straight (non-premultiplied) alpha
                     blendAttachments[i].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;

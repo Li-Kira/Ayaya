@@ -12,6 +12,8 @@ namespace Ayaya {
         out << YAML::BeginMap;
         out << YAML::Key << "MaterialName" << YAML::Value << material->Name;
         out << YAML::Key << "ShaderName" << YAML::Value << material->ShaderName;
+        out << YAML::Key << "BlendMode" << YAML::Value << static_cast<int>(material->GetBlendMode());
+        out << YAML::Key << "AlphaCutoff" << YAML::Value << material->GetAlphaCutoff();
         
         out << YAML::Key << "Properties" << YAML::BeginSeq;
         for (auto& prop : material->Properties) {
@@ -70,7 +72,20 @@ namespace Ayaya {
 
         material->Name = data["MaterialName"].as<std::string>();
         material->ShaderName = data["ShaderName"].as<std::string>();
-        material->AssetPath = filepath; 
+        material->AssetPath = filepath;
+
+        // BlendMode — optional, defaults to Opaque for backward compat
+        if (data["BlendMode"]) {
+            int bm = data["BlendMode"].as<int>();
+            if (bm == 2) bm = 3; // migrate old buggy Translucent value
+            material->SetBlendMode(static_cast<MaterialBlendMode>(bm));
+        } else
+            material->SetBlendMode(MaterialBlendMode::Opaque);
+
+        // AlphaCutoff — optional, defaults to 0.5
+        if (data["AlphaCutoff"])
+            material->SetAlphaCutoff(data["AlphaCutoff"].as<float>());
+
         material->Properties.clear();   
 
         auto propertiesNode = data["Properties"];
@@ -115,6 +130,41 @@ namespace Ayaya {
                 material->Properties.push_back(prop);
             }
         }
+
+        // Migrate: ensure alpha properties exist (old .mat files lack them)
+        auto hasProp = [&](const std::string& name) {
+            for (auto& p : material->Properties)
+                if (p.UniformName == name) return true;
+            return false;
+        };
+        auto addFloat = [&](const char* name, const char* display, float val) {
+            if (!hasProp(name)) {
+                MaterialProperty p;
+                p.UniformName = name; p.DisplayName = display;
+                p.Type = MaterialPropertyType::Float; p.FloatValue = val;
+                material->Properties.push_back(p);
+            }
+        };
+        auto addBool = [&](const char* name, const char* display, bool val) {
+            if (!hasProp(name)) {
+                MaterialProperty p;
+                p.UniformName = name; p.DisplayName = display;
+                p.Type = MaterialPropertyType::Bool; p.BoolValue = val;
+                material->Properties.push_back(p);
+            }
+        };
+        auto addTex = [&](const char* name, const char* display) {
+            if (!hasProp(name)) {
+                MaterialProperty p;
+                p.UniformName = name; p.DisplayName = display;
+                p.Type = MaterialPropertyType::Texture2D; p.TextureHandle = 0;
+                material->Properties.push_back(p);
+            }
+        };
+        addFloat("u_Alpha",      "Alpha Multiplier",    1.0f);
+        addBool ("u_UseAlphaMap","Enable Alpha Map",    false);
+        addTex  ("u_AlphaMap",   "Alpha/Opacity Map");
+
         return true;
     }
 }

@@ -1,0 +1,4 @@
+Project:
+  Name: testAlphaCutoff
+  StartScene: Scenes/Default.ayaya
+  AssetDirectory: Assets

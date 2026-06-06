@@ -78,9 +78,20 @@ namespace Ayaya {
 
         virtual void FlushDescriptorSets() override;
 
+        // Per-attachment clear overrides — consumed by next BeginRenderPass, then cleared
+        virtual void SetPerAttachmentClearColors(const std::vector<glm::vec4>& c) override { m_PendingClearColors = c; }
+
+        // Per-pass draw-call stats (read by RenderGraph after each pass)
+        uint32_t GetDrawCallCount() const { return m_DrawCallCount; }
+        uint32_t GetTriangleCount() const { return m_TriangleCount; }
+        void ResetDrawStats() { m_DrawCallCount = 0; m_TriangleCount = 0; }
+
     private:
         std::shared_ptr<VulkanPipeline> m_BoundPipeline;
         std::unordered_map<uint32_t, VkDescriptorImageInfo> m_PendingImageInfos;
+        std::vector<glm::vec4> m_PendingClearColors;
+        uint32_t m_DrawCallCount = 0;
+        uint32_t m_TriangleCount = 0;
 
         bool m_DescriptorSetDirty = false;
     };

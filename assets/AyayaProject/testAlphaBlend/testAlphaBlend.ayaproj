@@ -1,0 +1,4 @@
+Project:
+  Name: testAlphaBlend
+  StartScene: Scenes/Default.ayaya
+  AssetDirectory: Assets

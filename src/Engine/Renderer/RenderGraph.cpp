@@ -382,27 +382,30 @@ namespace Ayaya {
 
             // Step d: 执行 Pass (with CPU timing and debug-info recording).
             {
-                uint32_t startDC   = context.Stats.DrawCalls;
-                uint32_t startTris = context.Stats.TriangleCount;
+                uint32_t startDC   = cmd.GetDrawCallCount();
+                uint32_t startTris = cmd.GetTriangleCount();
                 auto cpuStart = std::chrono::high_resolution_clock::now();
 
                 pass->ExecuteCallback(context, cmd);
 
                 auto cpuEnd = std::chrono::high_resolution_clock::now();
 
+                uint32_t dc   = cmd.GetDrawCallCount() - startDC;
+                uint32_t tris = cmd.GetTriangleCount() - startTris;
+
                 // Populate PassProfile
                 auto& prof = context.PassProfiles[pass->Name];
                 prof.CPUTime   = std::chrono::duration<float, std::milli>(cpuEnd - cpuStart).count();
-                prof.DrawCalls = context.Stats.DrawCalls - startDC;
-                prof.Triangles = context.Stats.TriangleCount - startTris;
+                prof.DrawCalls = dc;
+                prof.Triangles = tris;
 
                 // Populate PassDebugInfo (texture I/O + metadata)
                 auto& info = context.PassDebugInfos[pass->Name];
                 info.PassName  = pass->Name;
                 info.CPUTime   = prof.CPUTime;
                 info.GPUTime   = prof.GPUTime;
-                info.DrawCalls = prof.DrawCalls;
-                info.Triangles = prof.Triangles;
+                info.DrawCalls = dc;
+                info.Triangles = tris;
                 info.TexturesRead.assign(pass->TextureReads.begin(), pass->TextureReads.end());
                 info.TexturesWritten.assign(pass->TextureWrites.begin(), pass->TextureWrites.end());
                 info.Enabled  = !pass->IsCulled;

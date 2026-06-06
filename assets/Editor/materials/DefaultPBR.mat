@@ -1,5 +1,7 @@
 MaterialName: Default PBR
 ShaderName: PBR
+BlendMode: 0
+AlphaCutoff: 0.5
 Properties:
   - UniformName: u_Albedo
     DisplayName: Albedo Color
@@ -50,5 +52,16 @@ Properties:
     Type: 2
   - UniformName: u_AOMap
     DisplayName: AO Texture
+    Type: 8
+    TexturePath: ""
+  - UniformName: u_Alpha
+    DisplayName: Alpha Multiplier
+    Type: 0
+    FloatValue: 1
+  - UniformName: u_UseAlphaMap
+    DisplayName: Enable Alpha Map
+    Type: 2
+  - UniformName: u_AlphaMap
+    DisplayName: Alpha/Opacity Map
     Type: 8
     TexturePath: ""

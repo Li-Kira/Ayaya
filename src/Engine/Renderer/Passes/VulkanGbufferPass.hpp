@@ -8,14 +8,6 @@
 
 namespace Ayaya {
 
-    struct VulkanGBufferCommandData {
-        glm::mat4 Transform;
-        std::shared_ptr<Mesh> MeshAsset;
-        Entity TargetEntity;
-        bool ReceiveShadows;
-        std::shared_ptr<Material> MaterialAsset;
-    };
-
     struct alignas(16) GBufferPushConstants {
         glm::mat4 Transform;
         alignas(16) glm::vec3 Albedo;
@@ -23,11 +15,15 @@ namespace Ayaya {
         float Metallic;
         float Roughness;
         float AO;
+        float AlphaMultiplier;
+        float AlphaCutoff;
+        int   BlendMode;       // 0=Opaque, 1=Masked
         int UseAlbedoMap;
         int UseMetallicMap;
         int UseRoughnessMap;
         int UseAOMap;
         int UseNormalMap;
+        int UseAlphaMap;
         int IsSelected;
     };
 
@@ -43,6 +39,5 @@ namespace Ayaya {
         std::shared_ptr<Framebuffer> m_RefFBO;  // format reference FBO
         PipelineSpecification m_PipeSpec;
         std::shared_ptr<Pipeline> m_Pipeline;
-        std::vector<VulkanGBufferCommandData> m_DrawList;
     };
 }

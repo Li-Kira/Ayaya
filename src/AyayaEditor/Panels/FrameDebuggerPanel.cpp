@@ -35,6 +35,12 @@ namespace Ayaya {
             {0, "AO (R8)"}
         }});
 
+        // --- WBOIT (Transparency) ---
+        m_PassTextures.push_back({"WBOIT_Gather", "WBOIT_Gather", {
+            {0, "Accumulation (RGBA16F)"},
+            {1, "Revealage (RG16F)"}
+        }});
+
         // --- Lighting (Deferred PBR) ---
         m_PassTextures.push_back({"Lighting", "Lighting", {
             {0, "HDR Color (RGBA16F)"}

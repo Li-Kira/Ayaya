@@ -16,11 +16,16 @@ layout(push_constant) uniform PushConstants {
     float u_Metallic;
     float u_Roughness;
     float u_AO;
+    float u_AlphaMultiplier;
+    float u_AlphaCutoff;
+    int   u_BlendMode;
     int u_UseAlbedoMap;
     int u_UseMetallicMap;
     int u_UseRoughnessMap;
     int u_UseAOMap;
     int u_UseNormalMap;
+    int u_UseAlphaMap;
+    int u_IsSelected;
 } pc;
 
 layout(location = 0) out vec3 v_FragPos;

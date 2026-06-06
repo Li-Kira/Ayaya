@@ -33,6 +33,12 @@ namespace Ayaya {
         MaterialProperty p7; p7.UniformName = "u_UseNormalMap"; p7.DisplayName = "Enable Normal Map"; p7.Type = MaterialPropertyType::Bool; p7.BoolValue = false; mat->Properties.push_back(p7);
         MaterialProperty p8; p8.UniformName = "u_AO"; p8.DisplayName = "Ambient Occlusion"; p8.Type = MaterialPropertyType::Float; p8.FloatValue = 1.0f; mat->Properties.push_back(p8);
         MaterialProperty p9; p9.UniformName = "u_UseAOMap"; p9.DisplayName = "Enable AO Map"; p9.Type = MaterialPropertyType::Bool; p9.BoolValue = false; mat->Properties.push_back(p9);
+
+        // Alpha / transparency
+        MaterialProperty p10; p10.UniformName = "u_Alpha"; p10.DisplayName = "Alpha Multiplier"; p10.Type = MaterialPropertyType::Float; p10.FloatValue = 1.0f; mat->Properties.push_back(p10);
+        MaterialProperty p11; p11.UniformName = "u_UseAlphaMap"; p11.DisplayName = "Enable Alpha Map"; p11.Type = MaterialPropertyType::Bool; p11.BoolValue = false; mat->Properties.push_back(p11);
+        MaterialProperty p12; p12.UniformName = "u_AlphaMap"; p12.DisplayName = "Alpha/Opacity Map"; p12.Type = MaterialPropertyType::Texture2D; p12.TextureHandle = 0; mat->Properties.push_back(p12);
+
         return mat;
     }
 
@@ -1295,13 +1301,64 @@ namespace Ayaya {
                         }
 
                         ImGui::Text("Shader: %s", currentMat->ShaderName.c_str());
+
+                        // Blend Mode dropdown (combo indices → enum values)
+                        static const char* kBlendNames[] = { "Opaque", "Masked", "Translucent" };
+                        // Map enum → combo index
+                        int currentBlend = 0;
+                        switch (currentMat->GetBlendMode()) {
+                            case MaterialBlendMode::Opaque:      currentBlend = 0; break;
+                            case MaterialBlendMode::Masked:      currentBlend = 1; break;
+                            case MaterialBlendMode::Translucent: currentBlend = 2; break;
+                        }
+                        ImGui::Spacing();
+                        ImGui::Text("Blend Mode:");
+                        ImGui::SameLine();
+                        ImGui::SetNextItemWidth(160.0f);
+                        if (ImGui::Combo("##BlendMode", &currentBlend, kBlendNames, 3)) {
+                            // Map combo index → enum
+                            MaterialBlendMode newBlend = MaterialBlendMode::Opaque;
+                            switch (currentBlend) {
+                                case 0: newBlend = MaterialBlendMode::Opaque; break;
+                                case 1: newBlend = MaterialBlendMode::Masked; break;
+                                case 2: newBlend = MaterialBlendMode::Translucent; break;
+                            }
+                            currentMat->SetBlendMode(newBlend);
+                            for (auto e : m_SelectedEntities) {
+                                auto& mrc = e.GetComponent<MeshRendererComponent>();
+                                if (mrc.MaterialHandle != 0) {
+                                    auto mat = AssetManager::GetAsset<Material>(mrc.MaterialHandle);
+                                    if (mat) mat->SetBlendMode(newBlend);
+                                }
+                            }
+                        }
                         ImGui::Separator();
 
                         ImGui::Columns(2, "MaterialProperties", false);
                         ImGui::SetColumnWidth(0, 140.0f * uiScale);
-                        std::string lastCategory = ""; 
+                        std::string lastCategory = "";
+
+                        // Track whether an alpha texture is assigned
+                        bool hasAlphaTex = false;
 
                         for (auto& prop : currentMat->Properties) {
+                            // Smart filtering based on BlendMode
+                            if (currentMat->GetBlendMode() == MaterialBlendMode::Opaque) {
+                                if (prop.UniformName == "u_Alpha" ||
+                                    prop.UniformName == "u_UseAlphaMap" ||
+                                    prop.UniformName == "u_AlphaMap") {
+                                    continue;
+                                }
+                            }
+                            // In Masked mode: hide the "Enable Alpha Map" checkbox (redundant)
+                            if (currentMat->GetBlendMode() == MaterialBlendMode::Masked) {
+                                if (prop.UniformName == "u_UseAlphaMap") continue;
+                            }
+
+                            // Detect alpha texture presence
+                            if (prop.UniformName == "u_AlphaMap" && prop.TextureHandle != 0)
+                                hasAlphaTex = true;
+
                             std::string currentCategory = "Other";
                             if (prop.UniformName.find("Albedo") != std::string::npos) currentCategory = "Albedo";
                             else if (prop.UniformName.find("Metallic") != std::string::npos) currentCategory = "Metallic";
@@ -1385,6 +1442,27 @@ namespace Ayaya {
 
                             ImGui::NextColumn();
                             ImGui::PopID();
+                        }
+
+                        // Alpha Cutoff: only shown in Masked mode with an alpha texture assigned
+                        if (currentMat->GetBlendMode() == MaterialBlendMode::Masked && hasAlphaTex) {
+                            ImGui::Separator();
+                            float cutoff = currentMat->GetAlphaCutoff();
+                            ImGui::AlignTextToFramePadding();
+                            ImGui::Text("Alpha Cutoff");
+                            ImGui::NextColumn();
+                            ImGui::SetNextItemWidth(-1.0f);
+                            if (ImGui::SliderFloat("##AlphaCutoff", &cutoff, 0.0f, 1.0f, "%.3f")) {
+                                currentMat->SetAlphaCutoff(cutoff);
+                                for (auto e : m_SelectedEntities) {
+                                    auto& mrc = e.GetComponent<MeshRendererComponent>();
+                                    if (mrc.MaterialHandle != 0) {
+                                        auto mat = AssetManager::GetAsset<Material>(mrc.MaterialHandle);
+                                        if (mat) mat->SetAlphaCutoff(cutoff);
+                                    }
+                                }
+                            }
+                            ImGui::NextColumn();
                         }
 
                         ImGui::Columns(1);

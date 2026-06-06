@@ -37,6 +37,9 @@
 #include "Renderer/Passes/VulkanBloomPass.hpp"
 #include "Renderer/Passes/VulkanFXAAPass.hpp"
 #include "Renderer/Passes/VulkanSSAOPass.hpp"
+#include "Renderer/Passes/VulkanWBOITPass.hpp"
+#include "Renderer/RenderQueue.hpp"
+#include "Renderer/Frustum.hpp"
 
 #include "Core/Application.hpp"
 #include "Platform/Vulkan/VulkanContext.hpp"
@@ -206,6 +209,7 @@ namespace Ayaya {
             m_FXAAPass        = std::make_shared<VulkanFXAAPass>();
             m_SSAOPass        = std::make_shared<VulkanSSAOPass>();
             m_UIPass          = std::make_shared<UIPass>();
+            m_WBOITPass       = std::make_shared<VulkanWBOITPass>();
 
             m_ShadowPass->OnAttach();
             m_GBufferPass->OnAttach();
@@ -217,6 +221,7 @@ namespace Ayaya {
             m_PostProcessPass->OnAttach();
             m_FXAAPass->OnAttach();
             m_UIPass->OnAttach();
+            m_WBOITPass->OnAttach();
         }
     }
 
@@ -352,6 +357,62 @@ namespace Ayaya {
         m_Data->LightData.PointLightCount = pointLightIndex;
         m_LightUniformBuffer->SetData(&m_Data->LightData, sizeof(struct_LightData));
 
+        // ==========================================
+        // RenderQueue: 提取 / 剔除 / 分桶 / 排序
+        // ==========================================
+        m_RenderQueue.Clear();
+        {
+            glm::mat4 viewProj = m_RenderContext.ProjectionMatrix * m_RenderContext.ViewMatrix;
+            Frustum frustum(viewProj);
+            glm::vec3 camPos = m_RenderContext.CameraPosition;
+
+            auto view = scene->Reg().view<TransformComponent, MeshRendererComponent>();
+            for (auto entityID : view) {
+                Entity entity{ entityID, scene.get() };
+                if (!entity.IsActiveInHierarchy()) continue;
+
+                auto& meshComp = entity.GetComponent<MeshRendererComponent>();
+                auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
+                if (!model) continue;
+                auto material = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
+                glm::mat4 transform = entity.GetWorldTransform();
+
+                for (auto& mesh : model->GetMeshes()) {
+                    if (!frustum.IsBoxVisible(mesh->GetAABB(), transform)) continue;
+
+                    DrawPacket packet;
+                    packet.Transform = transform;
+                    packet.ReceiveShadows = meshComp.ReceiveShadows;
+                    packet.MeshAsset = mesh;
+                    packet.MaterialAsset = material;
+
+                    // 64-bit sort key assembly
+                    SortKey key; key.Value = 0;
+                    uint8_t bucket = material ? material->GetRenderBucket() : 0;
+                    key.Bits.BucketID     = bucket;
+                    key.Bits.MaterialHash = (meshComp.MaterialHandle & 0xFFF);
+                    key.Bits.EntityID     = static_cast<uint32_t>(entityID) & 0xFFFF;
+
+                    if (bucket == 0 || bucket == 1) { // Opaque or Masked: front-to-back
+                        float dist = glm::distance(camPos, glm::vec3(transform[3]));
+                        key.Bits.Depth = FloatToDepthInt(dist);
+                    } else {
+                        key.Bits.Depth = 0; // Translucent etc.: no depth sort
+                    }
+
+                    packet.SortKey = key.Value;
+                    m_RenderQueue.Packets.push_back(packet);
+                }
+            }
+        }
+        m_RenderQueue.Sort();
+
+        // AYAYA_CORE_INFO("[RenderQueue] Extracted {} draw packets from {} entities",
+        //     m_RenderQueue.Packets.size(),
+        //     scene->Reg().view<TransformComponent, MeshRendererComponent>().size_hint());
+
+        // Inject render queue into context for passes to consume
+        m_RenderContext.RenderQueue = &m_RenderQueue;
 
         // ==========================================
         // 布置 Render Graph 数据黑板并轰鸣管线！
@@ -660,6 +721,16 @@ namespace Ayaya {
         m_RenderGraph.AddPass("ForwardBlend",
             [&](RGBuilder& b) { VulkanForwardBlendPass::DeclareResources(b, vpW, vpH); },
             [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_ForwardBlendPass) m_ForwardBlendPass->Execute(ctx, c); });
+
+        // 阶段3.1: WBOIT Gather — 半透明物体无序累加 (Accumulation + Revealage)
+        m_RenderGraph.AddPass("WBOIT_Gather",
+            [&](RGBuilder& b) { VulkanWBOITPass::DeclareGatherResources(b, vpW, vpH); },
+            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_WBOITPass) m_WBOITPass->ExecuteGather(ctx, c); });
+
+        // 阶段3.2: WBOIT Resolve — 合成累加结果到 SceneColor_HDR
+        m_RenderGraph.AddPass("WBOIT_Resolve",
+            [&](RGBuilder& b) { VulkanWBOITPass::DeclareResolveResources(b, vpW, vpH); },
+            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_WBOITPass) m_WBOITPass->ExecuteResolve(ctx, c); });
 
         // 阶段3.5: Outline — 选中物体白色遮罩 → Selection FBO (PostProcess Sobel 边缘检测)
         m_RenderGraph.AddPass("OutlinePass",
