@@ -26,12 +26,23 @@ namespace Ayaya {
         uint32_t TriangleCount;
     };
     
-    // 【新增】：单个 Pass 的性能体检报告
+    // Per-pass performance profile
     struct PassProfileData {
         float CPUTime = 0.0f;
         float GPUTime = 0.0f;
         uint32_t DrawCalls = 0;
         uint32_t Triangles = 0;
+    };
+
+    // Extended per-pass debug info — populated by both RenderGraph (Vulkan) and RenderPipeline (OpenGL).
+    // Feeds the Pipeline Profiler and FrameDebugger panels.
+    struct PassDebugInfo : PassProfileData {
+        std::string PassName;
+        std::vector<std::string> TexturesRead;
+        std::vector<std::string> TexturesWritten;
+        bool Enabled = true;
+        bool Executed = false;       // actually ran this frame
+        int  Order = 0;              // execution order within the frame
     };
 
     // ==========================================
@@ -47,8 +58,12 @@ namespace Ayaya {
         std::unordered_map<std::string, std::shared_ptr<Framebuffer>> Framebuffers;
         std::unordered_map<std::string, std::any> Settings;
 
-        // 【新增】：存储每个 Pass 的独立体检报告
+        // Per-pass profiling data (populated during Execute)
         std::unordered_map<std::string, PassProfileData> PassProfiles;
+
+        // Extended per-pass debug info — textures read/written, execution order, etc.
+        // Populated by both RenderGraph and RenderPipeline before pass execution.
+        std::unordered_map<std::string, PassDebugInfo> PassDebugInfos;
 
         struct {
             uint32_t DrawCalls = 0;
@@ -83,7 +98,7 @@ namespace Ayaya {
         void Set(std::string_view key, const T& value) { Settings[std::string(key)] = value; }
 
         template<typename T>
-        T Get(std::string_view key, T defaultValue = T()) {
+        T Get(std::string_view key, T defaultValue = T()) const {
             auto it = Settings.find(std::string(key));
             if (it != Settings.end()) return std::any_cast<T>(it->second);
             return defaultValue;
@@ -152,6 +167,7 @@ namespace Ayaya {
         void Execute(RenderContext& context, RenderCommandBuffer& cmd) {
             bool isOpenGL = RendererAPI::GetAPI() == RendererAPI::API::OpenGL;
 
+            int passOrder = 0;
             for (auto& pass : m_Passes) {
                 if (!pass->IsEnabled()) continue;
 
@@ -201,10 +217,21 @@ namespace Ayaya {
                 auto cpuEnd = std::chrono::high_resolution_clock::now();
 
                 // 5. 结算数据并登记到黑板上
-                context.PassProfiles[passName].CPUTime = std::chrono::duration<float, std::milli>(cpuEnd - cpuStart).count();
+                float cpuMs = std::chrono::duration<float, std::milli>(cpuEnd - cpuStart).count();
+                context.PassProfiles[passName].CPUTime   = cpuMs;
                 context.PassProfiles[passName].DrawCalls = context.Stats.DrawCalls - startDC;
                 context.PassProfiles[passName].Triangles = context.Stats.TriangleCount - startTris;
-                
+
+                // Populate PassDebugInfo (OpenGL path — texture I/O metadata not tracked here)
+                auto& info = context.PassDebugInfos[passName];
+                info.PassName  = passName;
+                info.CPUTime   = cpuMs;
+                info.DrawCalls = context.PassProfiles[passName].DrawCalls;
+                info.Triangles = context.PassProfiles[passName].Triangles;
+                info.Enabled   = pass->IsEnabled();
+                info.Executed  = true;
+                info.Order     = passOrder++;
+
                 // 注意：Vulkan 的 GPU Time 暂时保留为初始的 0.0f，未来我们会通过 VkQueryPool 补齐
             }
         }

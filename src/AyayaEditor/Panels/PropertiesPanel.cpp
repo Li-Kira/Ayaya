@@ -1583,6 +1583,28 @@ namespace Ayaya {
                     commitInstantCommand("Toggle Enable FXAA", oldComps);
                 }
 
+                // ------------------------------------------
+                // 5. SSAO
+                // ------------------------------------------
+                bool enableSSAO = refPPV.EnableSSAO;
+                if (ImGui::Checkbox("Enable SSAO", &enableSSAO)) {
+                    std::vector<PostProcessVolumeComponent> oldComps = pureOldPPVs;
+                    for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().EnableSSAO = enableSSAO;
+                    commitInstantCommand("Toggle Enable SSAO", oldComps);
+                }
+                if (enableSSAO) {
+                    float ssaoRadius = refPPV.SSAORadius;
+                    if (ImGui::DragFloat("SSAO Radius", &ssaoRadius, 0.01f, 0.1f, 3.0f, "%.2f")) {
+                        for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().SSAORadius = ssaoRadius;
+                    }
+                    handleDragState("Change SSAO Radius");
+                    float ssaoBias = refPPV.SSAOBias;
+                    if (ImGui::DragFloat("SSAO Bias", &ssaoBias, 0.001f, 0.001f, 0.2f, "%.3f")) {
+                        for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().SSAOBias = ssaoBias;
+                    }
+                    handleDragState("Change SSAO Bias");
+                }
+
                 ImGui::TreePop();
             }
 

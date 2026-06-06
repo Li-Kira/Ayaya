@@ -344,10 +344,11 @@ namespace Ayaya {
         if (vkCtx) frameIndex = vkCtx->GetCurrentFrameIndex();
         uint32_t idx = frameIndex % kRenderGraphFramesInFlight;
 
+        int passOrder = 0;
         for (auto& pass : m_Passes) {
             if (pass->IsCulled) continue;
 
-            // Step a: 确保 Read 纹理处于可采样布局（必须在 EnsureWritable 之前执行，
+            // Step a: 確保 Read 纹理处于可采样布局（必须在 EnsureWritable 之前执行，
             //         避免 ReadWrite 纹理被 EnsureReadable 把 attachment 布局又转回只读）
             for (auto& r : pass->TextureReads) {
                 auto it = m_Textures.find(r);
@@ -379,10 +380,35 @@ namespace Ayaya {
                 }
             }
 
-            // Step d: 执行 Pass。
-            // vkCmdEndRendering 后图像留在 attachment 布局（COLOR_ATTACHMENT 或 DEPTH_STENCIL_ATTACHMENT），
-            // CurrentLayout 由 EnsureWritable 已设置为对应的 attachment 布局。
-            pass->ExecuteCallback(context, cmd);
+            // Step d: 执行 Pass (with CPU timing and debug-info recording).
+            {
+                uint32_t startDC   = context.Stats.DrawCalls;
+                uint32_t startTris = context.Stats.TriangleCount;
+                auto cpuStart = std::chrono::high_resolution_clock::now();
+
+                pass->ExecuteCallback(context, cmd);
+
+                auto cpuEnd = std::chrono::high_resolution_clock::now();
+
+                // Populate PassProfile
+                auto& prof = context.PassProfiles[pass->Name];
+                prof.CPUTime   = std::chrono::duration<float, std::milli>(cpuEnd - cpuStart).count();
+                prof.DrawCalls = context.Stats.DrawCalls - startDC;
+                prof.Triangles = context.Stats.TriangleCount - startTris;
+
+                // Populate PassDebugInfo (texture I/O + metadata)
+                auto& info = context.PassDebugInfos[pass->Name];
+                info.PassName  = pass->Name;
+                info.CPUTime   = prof.CPUTime;
+                info.GPUTime   = prof.GPUTime;
+                info.DrawCalls = prof.DrawCalls;
+                info.Triangles = prof.Triangles;
+                info.TexturesRead.assign(pass->TextureReads.begin(), pass->TextureReads.end());
+                info.TexturesWritten.assign(pass->TextureWrites.begin(), pass->TextureWrites.end());
+                info.Enabled  = !pass->IsCulled;
+                info.Executed = true;
+                info.Order    = passOrder++;
+            }
 
             // Step e: Attachment → ReadOnly 布局转换 + TBDR tile-resolve
             // InsertTileResolveBarrier 负责：

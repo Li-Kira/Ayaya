@@ -55,6 +55,7 @@ namespace Ayaya {
         std::vector<VmaAllocation> m_ColorAllocations;
         std::vector<VkImageView> m_ColorImageViews;
         std::vector<VkDescriptorSet> m_ImGuiDescriptorSets;
+        VkDescriptorSet m_DepthImGuiSet = VK_NULL_HANDLE;
 
         VkImage m_DepthImage = VK_NULL_HANDLE;
         VmaAllocation m_DepthAllocation = VK_NULL_HANDLE;

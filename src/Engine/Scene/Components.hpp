@@ -182,6 +182,11 @@ namespace Ayaya {
         // --- FXAA ---
         bool EnableFXAA = false;
 
+        // --- SSAO ---
+        bool  EnableSSAO = false;
+        float SSAORadius = 0.5f;
+        float SSAOBias   = 0.025f;
+
         PostProcessVolumeComponent() = default;
         PostProcessVolumeComponent(const PostProcessVolumeComponent&) = default;
     };

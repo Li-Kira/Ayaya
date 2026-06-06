@@ -11,6 +11,7 @@ layout(set = 1, binding = 5) uniform sampler2D u_ShadowMap;
 layout(set = 1, binding = 8) uniform samplerCube u_IrradianceMap;
 layout(set = 1, binding = 9) uniform samplerCube u_PrefilteredMap;
 layout(set = 1, binding = 10) uniform sampler2D u_BRDFLUT;
+layout(set = 1, binding = 11) uniform sampler2D u_SSAO;
 
 layout(set = 0, binding = 0) uniform Camera { mat4 u_ViewProjection; vec3 u_CameraPosition; };
 
@@ -25,7 +26,7 @@ layout(set = 0, binding = 1) uniform LightData {
     int PointLightCount;
 };
 
-layout(push_constant) uniform PC { mat4 u_LightSpaceMatrix; vec3 u_AmbientColor; float u_Intensity; int u_EnvMapEnabled; } pc;
+layout(push_constant) uniform PC { mat4 u_LightSpaceMatrix; vec3 u_AmbientColor; float u_Intensity; int u_EnvMapEnabled; int u_EnableSSAO; } pc;
 
 const float PI = 3.14159265359;
 float DistributionGGX(vec3 N, vec3 H, float r) { float a=r*r,a2=a*a; float NdH=max(dot(N,H),0.0); float d=(NdH*NdH*(a2-1.0)+1.0); return a2/(PI*d*d); }
@@ -118,6 +119,8 @@ void main() {
         vec2 brdf = texture(u_BRDFLUT, vec2(max(NdV,1e-5), Roughness)).rg;
         spec_ibl = prefiltered * (F_ibl * brdf.x + brdf.y);
     }
-    vec3 ambient = (kD_ibl*irradiance*Albedo + spec_ibl) * AO;
+    // SSAO only affects ambient/IBL, not direct lights
+    float ssao = (pc.u_EnableSSAO == 1) ? texture(u_SSAO, v_TexCoord).r : 1.0;
+    vec3 ambient = (kD_ibl*irradiance*Albedo + spec_ibl) * AO * ssao;
     FragColor = vec4(ambient + Lo, 1.0);
 }

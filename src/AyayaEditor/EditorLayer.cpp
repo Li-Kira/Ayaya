@@ -337,22 +337,22 @@ namespace Ayaya {
         m_PreferencesPanel.OnImGuiRender();
         m_ScreenshotPanel.OnImGuiRender();
         m_HistoryPanel.OnImGuiRender();
-        // m_FrameDebuggerPanel.OnImGuiRender();
+        m_FrameDebuggerPanel.OnImGuiRender();
 
-        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
-            // OpenGL 模式下，一切照常渲染
-            // m_ContentBrowserPanel.OnImGuiRender();
-            m_FrameDebuggerPanel.OnImGuiRender();
-        } else {
-            // Vulkan 模式下，保留窗口外壳防止布局错乱，但内部用文字占位
-            // ImGui::Begin("Content Browser");
-            // ImGui::TextDisabled("Vulkan Mode: Content Browser is paused pending Descriptor Sets.");
-            // ImGui::End();
+        // if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+        //     // OpenGL 模式下，一切照常渲染
+        //     // m_ContentBrowserPanel.OnImGuiRender();
+        //     m_FrameDebuggerPanel.OnImGuiRender();
+        // } else {
+        //     // Vulkan 模式下，保留窗口外壳防止布局错乱，但内部用文字占位
+        //     // ImGui::Begin("Content Browser");
+        //     // ImGui::TextDisabled("Vulkan Mode: Content Browser is paused pending Descriptor Sets.");
+        //     // ImGui::End();
 
-            // ImGui::Begin("Frame Debugger");
-            // ImGui::TextDisabled("Vulkan Mode: Frame Debugger is paused pending Descriptor Sets.");
-            // ImGui::End();
-        }
+        //     // ImGui::Begin("Frame Debugger");
+        //     // ImGui::TextDisabled("Vulkan Mode: Frame Debugger is paused pending Descriptor Sets.");
+        //     // ImGui::End();
+        // }
         
         UIRenderViewport();
         UIRenderGameViewport();
@@ -577,6 +577,9 @@ namespace Ayaya {
     }
 
     void EditorLayer::NewScene() {
+        if (m_SceneState == SceneState::Play) OnSceneStop();
+        m_FrameDebuggerPanel.Reset();
+
         m_ActiveScene = std::make_shared<Scene>();
         m_EditorScene = m_ActiveScene;
 
@@ -605,6 +608,10 @@ namespace Ayaya {
         std::string filepath = FileDialogs::OpenFile("ayaya");
         if (filepath.empty()) return;
 
+        // Stop game if running, reset debugger
+        if (m_SceneState == SceneState::Play) OnSceneStop();
+        m_FrameDebuggerPanel.Reset();
+
         std::shared_ptr<Scene> newScene = std::make_shared<Scene>();
         SceneSerializer serializer(newScene);
         EditorState state;
@@ -632,6 +639,10 @@ namespace Ayaya {
         // 1. 弹出原生保存对话框让用户选择项目路径和名称 (.ayaproj)
         std::string filepath = FileDialogs::SaveFile("Ayaya Project (*.ayaproj)|*.ayaproj");
         if (filepath.empty()) return;
+
+        // Stop game if running, reset debugger before creating new project
+        if (m_SceneState == SceneState::Play) OnSceneStop();
+        m_FrameDebuggerPanel.Reset();
 
         std::filesystem::path projectFilePath = filepath;
         std::filesystem::path projectDir = projectFilePath.parent_path();
@@ -901,6 +912,10 @@ namespace Ayaya {
     }
 }
     void EditorLayer::LoadProjectWithProgress(const std::string& projectFilePath) {
+        // Stop game if running, reset debugger before loading new project
+        if (m_SceneState == SceneState::Play) OnSceneStop();
+        m_FrameDebuggerPanel.Reset();
+
         // 进度条渲染（OpenGL 可显示图形进度条，Vulkan 输出到控制台）
         auto renderProgressFrame = [&](float progress, const std::string& message) {
             if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {

@@ -10,6 +10,7 @@ namespace Ayaya {
 
     static VkFormat AyayaFormatToVulkanFormat(FramebufferTextureFormat format) {
         switch (format) {
+            case FramebufferTextureFormat::R8:          return VK_FORMAT_R8_UNORM;
             case FramebufferTextureFormat::RGBA8:       return VK_FORMAT_R8G8B8A8_UNORM;
             case FramebufferTextureFormat::RG16F:       return VK_FORMAT_R16G16_SFLOAT;
             case FramebufferTextureFormat::RGBA16F:     return VK_FORMAT_R16G16B16A16_SFLOAT;
@@ -55,6 +56,11 @@ namespace Ayaya {
             if (desc) ImGui_ImplVulkan_RemoveTexture(desc);
         }
         m_ImGuiDescriptorSets.clear();
+
+        if (m_DepthImGuiSet) {
+            ImGui_ImplVulkan_RemoveTexture(m_DepthImGuiSet);
+            m_DepthImGuiSet = VK_NULL_HANDLE;
+        }
 
         for (size_t i = 0; i < m_ColorImages.size(); i++) {
             vkDestroyImageView(device, m_ColorImageViews[i], nullptr);
@@ -228,6 +234,15 @@ namespace Ayaya {
             m_ImGuiDescriptorSets.push_back(
                 ImGui_ImplVulkan_AddTexture(m_Sampler, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
         }
+
+        // Depth attachment ImGui descriptor — for FrameDebugger preview
+        if (m_DepthImageView != VK_NULL_HANDLE) {
+            // After the first RenderGraph execution, the depth is transitioned to
+            // DEPTH_STENCIL_READ_ONLY_OPTIMAL by InsertTileResolveBarrier, so sampling works.
+            m_DepthImGuiSet = ImGui_ImplVulkan_AddTexture(
+                m_Sampler, m_DepthImageView,
+                VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
+        }
     }
 
     void VulkanFramebuffer::Bind() {}
@@ -247,6 +262,8 @@ namespace Ayaya {
         return nullptr;
     }
 
-    void* VulkanFramebuffer::GetDepthAttachmentRendererID() const { return nullptr; }
+    void* VulkanFramebuffer::GetDepthAttachmentRendererID() const {
+        return (void*)m_DepthImGuiSet;
+    }
 
 } // namespace Ayaya

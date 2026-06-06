@@ -2,11 +2,11 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition: [-1.4011785, 1.4229293, 3.8456283]
+  CameraPosition: [-2.5962868, 2.111395, 4.5988035]
   CameraDistance: 4.0768633
-  CameraPitch: -0.2347161
-  CameraYaw: -0.8515272
-  CameraFocalPoint: [1.5816995, 0.47478592, 1.2332964]
+  CameraPitch: -0.39971608
+  CameraYaw: 5.589475
+  CameraFocalPoint: [-0.19504786, 0.52485573, 1.7112856]
 Entities:
   - Entity: 13032611445651691836
     TagComponent:
@@ -119,5 +119,28 @@ Entities:
       MaterialHandle: 13774308301806651622
       CastShadows: true
       ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 6824562218491328365
+    TagComponent:
+      Tag: Post Process Volume
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    PostProcessVolumeComponent:
+      IsGlobal: true
+      ToneMappingType: 0
+      Exposure: 1
+      EnableBloom: false
+      BloomThreshold: 1
+      BloomKnee: 0.1
+      BloomRadius: 0.005
+      BloomIntensity: 1
+      EnableFXAA: false
+      EnableSSAO: true
+      SSAORadius: 0.15
+      SSAOBias: 0.111
     RelationshipComponent:
       Parent: 0

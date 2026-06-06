@@ -26,6 +26,7 @@ namespace Ayaya {
         bool EnableSkybox  = true;    // 天空盒
         bool EnableBloom   = true;    // 泛光
         bool EnableFXAA    = true;    // 抗锯齿
+        bool EnableSSAO    = false;   // 屏幕空间环境光遮蔽 (需 PostProcessVolume)
         bool EnableSprites = true;    // 2D 精灵
         Entity SelectedEntity{};      // 选中实体 (Outline + Gizmo)
         Entity HoveredEntity{};       // 悬停实体 (Outline)
@@ -53,6 +54,7 @@ namespace Ayaya {
         void Init();
         static void Shutdown();
         void OnWindowResize(uint32_t width, uint32_t height);
+        void MarkViewportDirty() { m_ViewportDirty = true; }
         void* GetFinalColorAttachmentRendererID();
         void* GetPostProcessFBORendererID();
 
@@ -101,6 +103,7 @@ namespace Ayaya {
         std::shared_ptr<RenderPass> m_GBufferPass;
         std::shared_ptr<RenderPass> m_LightingPass;
         std::shared_ptr<RenderPass> m_ForwardBlendPass;
+        std::shared_ptr<RenderPass> m_SSAOPass;
         std::shared_ptr<RenderPass> m_OutlinePass;
         std::shared_ptr<RenderPass> m_BloomPass;
         std::shared_ptr<RenderPass> m_PostProcessPass;

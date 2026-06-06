@@ -12,6 +12,7 @@ namespace Ayaya {
         alignas(16) glm::vec3 AmbientColor;
         float Intensity;
         int EnvMapEnabled;
+        int EnableSSAO;
     };
 
     class VulkanLightingPass : public RenderPass {

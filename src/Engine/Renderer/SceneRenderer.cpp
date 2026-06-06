@@ -36,6 +36,7 @@
 #include "Renderer/Passes/VulkanShadowPass.hpp"
 #include "Renderer/Passes/VulkanBloomPass.hpp"
 #include "Renderer/Passes/VulkanFXAAPass.hpp"
+#include "Renderer/Passes/VulkanSSAOPass.hpp"
 
 #include "Core/Application.hpp"
 #include "Platform/Vulkan/VulkanContext.hpp"
@@ -203,10 +204,12 @@ namespace Ayaya {
             m_BloomPass       = std::make_shared<VulkanBloomPass>();
             m_PostProcessPass = std::make_shared<VulkanPostProcessPass>();
             m_FXAAPass        = std::make_shared<VulkanFXAAPass>();
+            m_SSAOPass        = std::make_shared<VulkanSSAOPass>();
             m_UIPass          = std::make_shared<UIPass>();
 
             m_ShadowPass->OnAttach();
             m_GBufferPass->OnAttach();
+            m_SSAOPass->OnAttach();
             m_LightingPass->OnAttach();
             m_ForwardBlendPass->OnAttach();
             m_OutlinePass->OnAttach();
@@ -219,6 +222,7 @@ namespace Ayaya {
 
     void SceneRenderer::Shutdown() {
         UIPass::Shutdown();
+        VulkanSSAOPass::ReleaseNoiseTexture();
         // s_CameraUniformBuffer.reset();
         // s_LightUniformBuffer.reset();
         s_SkyboxMesh.reset();
@@ -387,6 +391,8 @@ namespace Ayaya {
         bool  enableBloom = false;
         float bThreshold = 1.0f, bKnee = 0.1f, bRadius = 0.005f, bIntensity = 1.0f;
         bool  enableFXAA = false;
+        bool  enableSSAO = false;
+        float ssaoRadius = 0.5f, ssaoBias = 0.025f;
 
         // 遍历场景，寻找全局的 Volume
         auto volumeView = scene->Reg().view<PostProcessVolumeComponent>();
@@ -401,7 +407,10 @@ namespace Ayaya {
                 bRadius = volume.BloomRadius;
                 bIntensity = volume.BloomIntensity;
                 enableFXAA = volume.EnableFXAA;
-                break; // 找到全局体积后退出循环
+                enableSSAO = volume.EnableSSAO;
+                ssaoRadius = volume.SSAORadius;
+                ssaoBias   = volume.SSAOBias;
+                break;
             }
         }
 
@@ -413,6 +422,9 @@ namespace Ayaya {
         m_RenderContext.Set("BloomRadius", bRadius);
         m_RenderContext.Set("BloomIntensity", bIntensity);
         m_RenderContext.Set("EnableFXAA", enableFXAA);
+        m_RenderContext.Set("EnableSSAO", enableSSAO);
+        m_RenderContext.Set("SSAORadius", ssaoRadius);
+        m_RenderContext.Set("SSAOBias", ssaoBias);
 
         std::shared_ptr<RenderCommandBuffer> cmd = RenderCommandBuffer::Create();
 
@@ -630,9 +642,18 @@ namespace Ayaya {
             [&](RGBuilder& b) { VulkanGBufferPass::DeclareResources(b, vpW, vpH); },
             [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_GBufferPass) m_GBufferPass->Execute(ctx, c); });
 
-        // 阶段2: 光照HDR — Deferred PBR + IBL + Shadow + Skybox
+        // 阶段1.5: SSAO — 屏幕空间环境光遮蔽 (half-res, 3-pass)
+        // Always in graph (like Bloom/FXAA); runtime enable/disable handled inside Execute
+        m_RenderGraph.AddPass("SSAOPass",
+            [&](RGBuilder& b) { VulkanSSAOPass::DeclareResources(b, vpW, vpH); },
+            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_SSAOPass) m_SSAOPass->Execute(ctx, c); });
+
+        // 阶段2: 光照HDR — Deferred PBR + IBL + Shadow + SSAO + Skybox
         m_RenderGraph.AddPass("LightingPass",
-            [&](RGBuilder& b) { VulkanLightingPass::DeclareResources(b, vpW, vpH); },
+            [&](RGBuilder& b) {
+                VulkanLightingPass::DeclareResources(b, vpW, vpH);
+                b.ReadTexture("SSAO_Final");  // always declare — pass handles fallback internally
+            },
             [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_LightingPass) m_LightingPass->Execute(ctx, c); });
 
         // 阶段3: ForwardBlend — Skybox LOAD叠加到 Lighting HDR
