@@ -43,6 +43,7 @@ namespace Ayaya {
         bool Enabled = true;
         bool Executed = false;       // actually ran this frame
         int  Order = 0;              // execution order within the frame
+        uint32_t TimestampSlot = UINT32_MAX; // GPU timestamp start index (N-1 frame)
     };
 
     // ==========================================

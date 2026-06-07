@@ -8,6 +8,7 @@
 #include "Renderer/Texture.hpp"
 #include "Platform/Vulkan/VulkanContext.hpp"
 #include "Platform/Vulkan/VulkanPipeline.hpp"
+#include "Platform/Vulkan/VulkanFramebuffer.hpp"
 #include "Core/Application.hpp"
 
 namespace Ayaya {
@@ -99,10 +100,13 @@ namespace Ayaya {
         m_ResolveShader = Shader::Create("PostProcess/postprocess.vert", "WBOIT/wboit_resolve.frag");
         m_InstancedShader = Shader::Create("WBOIT/wboit_gather_instanced.vert", "WBOIT/wboit_gather.frag");
 
-        // Ref FBOs
+        // Ref FBO for pipeline creation — must include Depth format so
+        // VkPipelineRenderingCreateInfo gets a valid depthAttachmentFormat,
+        // otherwise depthTestEnable is ignored by Vulkan dynamic rendering.
         FramebufferSpecification gatherRef;
         gatherRef.Width = 1280; gatherRef.Height = 720; gatherRef.Samples = 1;
-        gatherRef.Attachments = { FramebufferTextureFormat::RGBA16F, FramebufferTextureFormat::RG16F };
+        gatherRef.Attachments = { FramebufferTextureFormat::RGBA16F, FramebufferTextureFormat::RG16F,
+                                  FramebufferTextureFormat::Depth };
         m_GatherRefFBO = Framebuffer::Create(gatherRef);
 
         // Non-instanced gather pipeline (fallback)
@@ -114,6 +118,7 @@ namespace Ayaya {
         };
         m_GatherSpec.DepthTest = true;
         m_GatherSpec.DepthWrite = false;
+        m_GatherSpec.DepthOperator = DepthCompareOperator::LEqual;  // WBOIT: avoid z-fight with GBuffer
         m_GatherSpec.Blend = true;
         m_GatherSpec.BackfaceCulling = CullMode::None;
         m_GatherSpec.PerAttachmentBlend = { BlendModeType::Additive, BlendModeType::WBOITRevealage };
@@ -198,10 +203,56 @@ namespace Ayaya {
         uint32_t frameIdx = ctx->GetCurrentFrameIndex() % ctx->GetFramesInFlight();
         VkCommandBuffer vkCmd = ctx->GetCurrentCommandBuffer();
 
-        cmd.SetPerAttachmentClearColors({
-            glm::vec4(0,0,0,0), glm::vec4(1,0,0,0)
-        });
-        cmd.BeginRenderPass(gatherFBO, true, glm::vec4(0));
+        // ==== Shared depth from GBuffer (read-only, LOAD, never CLEAR) ====
+        auto gbufferFBO = context.GetFramebuffer("GBuffer");
+        auto vkGbuffer = std::dynamic_pointer_cast<VulkanFramebuffer>(gbufferFBO);
+        auto vkGather  = std::dynamic_pointer_cast<VulkanFramebuffer>(gatherFBO);
+        auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+            Application::Get().GetWindow().GetContext());
+
+        // Color attachments — clear to zero / revealage-start
+        uint32_t cCount = vkGather->GetColorAttachmentCount();
+        std::vector<VkRenderingAttachmentInfo> colorAtts(cCount);
+        glm::vec4 clearColors[2] = { {0,0,0,0}, {1,0,0,0} };
+        for (uint32_t i = 0; i < cCount; i++) {
+            colorAtts[i].sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            colorAtts[i].imageView = vkGather->GetColorAttachmentImageView(i);
+            colorAtts[i].imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            colorAtts[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            colorAtts[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            colorAtts[i].clearValue.color = {
+                {clearColors[i].r, clearColors[i].g, clearColors[i].b, clearColors[i].a}};
+        }
+
+        // Depth attachment — shared from GBuffer, LOAD only, read-only layout
+        VkRenderingAttachmentInfo depthAtt{};
+        bool hasSharedDepth = vkGbuffer && vkGbuffer->HasDepthAttachment();
+        if (hasSharedDepth) {
+            depthAtt.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            depthAtt.imageView = vkGbuffer->GetDepthAttachmentImageView();
+            depthAtt.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+            depthAtt.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+            depthAtt.storeOp = VK_ATTACHMENT_STORE_OP_NONE;
+        }
+
+        VkRenderingInfo renderingInfo{};
+        renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        renderingInfo.renderArea = {{0, 0}, {vkGather->GetSpecification().Width,
+                                              vkGather->GetSpecification().Height}};
+        renderingInfo.layerCount = 1;
+        renderingInfo.colorAttachmentCount = cCount;
+        renderingInfo.pColorAttachments = colorAtts.data();
+        renderingInfo.pDepthAttachment = hasSharedDepth ? &depthAtt : nullptr;
+
+        vkCmdBeginRendering(vkCmd, &renderingInfo);
+
+        // Viewport + scissor
+        float vpW = (float)vkGather->GetSpecification().Width;
+        float vpH = (float)vkGather->GetSpecification().Height;
+        VkViewport viewport{ 0, vpH, vpW, -vpH, 0, 1 };
+        vkCmdSetViewport(vkCmd, 0, 1, &viewport);
+        VkRect2D scissor{ {0, 0}, {(uint32_t)vpW, (uint32_t)vpH} };
+        vkCmdSetScissor(vkCmd, 0, 1, &scissor);
 
         // ==== Instanced path: batch by (Mesh, Material) ====
         // Pack all instance transforms contiguously into the SSBO.
@@ -297,7 +348,7 @@ namespace Ayaya {
                                       batch.count, batch.first);
         }
 
-        cmd.EndRenderPass();
+        vkCmdEndRendering(vkCmd);
     }
 
     // ========================================================================

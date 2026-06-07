@@ -108,6 +108,9 @@ namespace Ayaya {
         virtual void DrawTriangleStrip(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount = 0) = 0;
         virtual void DrawTriangleStrip(uint32_t vertexCount) = 0;
 
+        // GPU timestamp query — topOfPipe=true for pass start, false for pass end
+        virtual void WriteTimestamp(uint32_t queryIndex, bool topOfPipe) = 0;
+
         // 插入全局执行屏障，用于隔离前后两个具有依赖关系的 Pass
         virtual void InsertExecutionBarrier() = 0;
 

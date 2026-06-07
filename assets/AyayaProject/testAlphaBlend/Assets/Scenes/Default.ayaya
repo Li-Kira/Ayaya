@@ -2,19 +2,19 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition: [-4.803777, 4.438423, 3.7365294]
-  CameraDistance: 14.5152
-  CameraPitch: -0.3165943
-  CameraYaw: -0.39099833
-  CameraFocalPoint: [0.45320463, -0.08062172, -9.016251]
+  CameraPosition: [-3.159439, 0.002193451, 5.048015]
+  CameraDistance: 12.441599
+  CameraPitch: 0.23240542
+  CameraYaw: -0.27700034
+  CameraFocalPoint: [0.15151048, 2.8677292, -6.597572]
 Entities:
   - Entity: 5769124819470007597
     TagComponent:
       Tag: Main Camera
       IsActive: true
     TransformComponent:
-      Translation: [0, 0, 5]
-      Rotation: [0, 0, 0]
+      Translation: [0, 0.9, 5]
+      Rotation: [-0.09250245, 0, 0]
       Scale: [1, 1, 1]
     CameraComponent:
       Primary: true
@@ -38,8 +38,8 @@ Entities:
       IsActive: true
     TransformComponent:
       Translation: [3.221919, -0.028098544, -0.24923718]
-      Rotation: [-0.047125377, 0.61282533, -2.9091034]
-      Scale: [0.9999919, 0.9999922, 1]
+      Rotation: [-0.6675609, 0.6548927, 0.45018798]
+      Scale: [0.9999999, 0.9999999, 0.9999995]
     DirectionalLightComponent:
       Color: [1, 1, 1]
       Illuminance: 100000
@@ -61,66 +61,6 @@ Entities:
       CubemapHandle: 16140901000000000006
     RelationshipComponent:
       Parent: 0
-  - Entity: 9146103221410212819
-    TagComponent:
-      Tag: Plane
-      IsActive: false
-    TransformComponent:
-      Translation: [0, 1.7867102e-22, 6.6613387e-16]
-      Rotation: [1.570796, -0, 0]
-      Scale: [1, 0.9999985, 0.9999985]
-    MeshRendererComponent:
-      ModelHandle: 16140901000000000003
-      MaterialHandle: 2877837325534738788
-      CastShadows: true
-      ReceiveShadows: true
-    RelationshipComponent:
-      Parent: 0
-  - Entity: 16370475242133006536
-    TagComponent:
-      Tag: Plane (1)
-      IsActive: false
-    TransformComponent:
-      Translation: [-0.6360179, -2.6146574e-07, -0.7311115]
-      Rotation: [1.570796, -0, 0]
-      Scale: [1, 0.99994594, 0.99994594]
-    MeshRendererComponent:
-      ModelHandle: 16140901000000000003
-      MaterialHandle: 2877837325534738788
-      CastShadows: true
-      ReceiveShadows: true
-    RelationshipComponent:
-      Parent: 0
-  - Entity: 15396264193041094046
-    TagComponent:
-      Tag: Plane (2)
-      IsActive: false
-    TransformComponent:
-      Translation: [0.9010126, -3.7991865e-07, -1.06233]
-      Rotation: [1.570796, -0, 0]
-      Scale: [1, 0.9999773, 0.9999773]
-    MeshRendererComponent:
-      ModelHandle: 16140901000000000003
-      MaterialHandle: 15677845308231836913
-      CastShadows: true
-      ReceiveShadows: true
-    RelationshipComponent:
-      Parent: 0
-  - Entity: 1327621530611434189
-    TagComponent:
-      Tag: Plane (3)
-      IsActive: false
-    TransformComponent:
-      Translation: [1.5177712, 0, 0]
-      Rotation: [1.5705327, -0, 0]
-      Scale: [1, 0.99999744, 0.99999744]
-    MeshRendererComponent:
-      ModelHandle: 16140901000000000003
-      MaterialHandle: 15677845308231836913
-      CastShadows: true
-      ReceiveShadows: true
-    RelationshipComponent:
-      Parent: 0
   - Entity: 3323697270862889094
     TagComponent:
       Tag: Empty Entity
@@ -132,19 +72,81 @@ Entities:
     LuaScriptComponent:
       ScriptHandle: 17524875716680435729
       ConfigOverrides:
+        rotJitter: 0.900000
         count: 200
-        spacingX: 0.700000
         depth: 2.010000
+        spacingX: 0.700000
         spacingY: 0.900000
+        posJitter: 0.300000
     RelationshipComponent:
       Parent: 0
-  - Entity: 10844263634581955240
+  - Entity: 4747957252340717438
+    TagComponent:
+      Tag: Plane
+      IsActive: true
+    TransformComponent:
+      Translation: [-4.8669734, -6.1086545, 0.04966395]
+      Rotation: [0.9944784, 0.34863818, -0.526406]
+      Scale: [1, 0.9999985, 0.9999985]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000003
+      MaterialHandle: 2877837325534738788
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 3323697270862889094
+  - Entity: 18386478960241181984
+    TagComponent:
+      Tag: Plane (1)
+      IsActive: true
+    TransformComponent:
+      Translation: [-4.454621, -5.7963023, -0.2379837]
+      Rotation: [1.9315355, -0.51430476, 0.41065103]
+      Scale: [1, 0.9999985, 0.9999985]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000003
+      MaterialHandle: 2877837325534738788
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 3323697270862889094
+  - Entity: 1183377957354003916
+    TagComponent:
+      Tag: Plane (2)
+      IsActive: true
+    TransformComponent:
+      Translation: [-3.4422684, -6.0839496, 0.074368656]
+      Rotation: [1.0685925, 0.4227523, -0.45229188]
+      Scale: [1, 0.9999985, 0.9999985]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000003
+      MaterialHandle: 2877837325534738788
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 3323697270862889094
+  - Entity: 2424908652921888055
+    TagComponent:
+      Tag: Plane (3)
+      IsActive: true
+    TransformComponent:
+      Translation: [-3.029916, -5.7715974, -0.21327901]
+      Rotation: [2.0056496, -0.4401906, 0.48476514]
+      Scale: [1, 0.9999985, 0.9999985]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000003
+      MaterialHandle: 2877837325534738788
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 3323697270862889094
+  - Entity: 15650274485009489545
     TagComponent:
       Tag: Plane (4)
       IsActive: true
     TransformComponent:
-      Translation: [-4.9, -5.85, 0]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.0175638, -6.059245, 0.099073365]
+      Rotation: [1.1427066, 0.4968664, -0.37817776]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -153,13 +155,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 17526424065214870550
+  - Entity: 13881347268095037630
     TagComponent:
       Tag: Plane (5)
       IsActive: true
     TransformComponent:
-      Translation: [-4.2, -5.85, 0]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-1.6052115, -5.746893, -0.1885743]
+      Rotation: [2.0797637, -0.3660765, 0.55887926]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -168,13 +170,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 6466211288755972343
+  - Entity: 9435702666491494474
     TagComponent:
       Tag: Plane (6)
       IsActive: true
     TransformComponent:
-      Translation: [-3.5, -5.85, 0]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.5928591, -6.03454, 0.12377807]
+      Rotation: [1.2168207, 0.57098055, -0.30406365]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -183,13 +185,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 3681118334611184222
+  - Entity: 355835730492959377
     TagComponent:
       Tag: Plane (7)
       IsActive: true
     TransformComponent:
-      Translation: [-2.8, -5.85, 0]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.18050678, -5.722188, -0.16386959]
+      Rotation: [2.1538777, -0.2919624, 0.6329934]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -198,13 +200,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 8370728735010972036
+  - Entity: 11414683440226837818
     TagComponent:
       Tag: Plane (8)
       IsActive: true
     TransformComponent:
-      Translation: [-2.1, -5.85, 0]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.8318456, -6.0098357, 0.14848277]
+      Rotation: [1.2909349, 0.64509463, -0.22994955]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -213,13 +215,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 4683388510401947147
+  - Entity: 12998433279075850588
     TagComponent:
       Tag: Plane (9)
       IsActive: true
     TransformComponent:
-      Translation: [-1.4, -5.85, 0]
-      Rotation: [1.570796, -0, 0]
+      Translation: [1.2441978, -5.6974835, -0.13916488]
+      Rotation: [2.2279918, -0.21784827, 0.7071075]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -228,13 +230,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 8275145570229986771
+  - Entity: 9679704862629301507
     TagComponent:
       Tag: Plane (10)
       IsActive: true
     TransformComponent:
-      Translation: [-0.7, -5.85, 0]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.2565503, -5.985131, 0.17318748]
+      Rotation: [1.365049, 0.7192088, -0.15583542]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -243,13 +245,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 15919239846278511557
+  - Entity: 11476841874214002018
     TagComponent:
       Tag: Plane (11)
       IsActive: true
     TransformComponent:
-      Translation: [0, -5.85, 0]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.6689026, -5.6727786, -0.11446018]
+      Rotation: [2.302106, -0.14373416, 0.7812216]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -258,13 +260,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 10153429930744443079
+  - Entity: 4898892291828449021
     TagComponent:
       Tag: Plane (12)
       IsActive: true
     TransformComponent:
-      Translation: [0.7, -5.85, 0]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.6812549, -5.9604263, 0.19789219]
+      Rotation: [1.4391631, 0.79332286, -0.08172131]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -273,13 +275,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 2932782388409695299
+  - Entity: 15251429842154383513
     TagComponent:
       Tag: Plane (13)
       IsActive: true
     TransformComponent:
-      Translation: [1.4, -5.85, 0]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.0936074, -5.6480737, -0.08975547]
+      Rotation: [2.3762202, -0.06962004, 0.8553357]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -288,13 +290,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 7992047427674407855
+  - Entity: 11377142220069616878
     TagComponent:
       Tag: Plane (14)
       IsActive: true
     TransformComponent:
-      Translation: [2.1, -5.85, 0]
-      Rotation: [1.570796, -0, 0]
+      Translation: [5.1059594, -5.9357214, 0.2225969]
+      Rotation: [1.5132772, 0.867437, -0.0076071965]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -303,13 +305,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 5566182771700099658
+  - Entity: 17830590900868893703
     TagComponent:
       Tag: Plane (15)
       IsActive: true
     TransformComponent:
-      Translation: [2.8, -5.85, 0]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.981688, -4.723369, -2.0750508]
+      Rotation: [2.4503343, 0.0044940687, -0.8705501]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -318,13 +320,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 3831491488632689613
+  - Entity: 2361788651377309236
     TagComponent:
       Tag: Plane (16)
       IsActive: true
     TransformComponent:
-      Translation: [3.5, -5.85, 0]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.9693356, -5.011017, -1.7626984]
+      Rotation: [1.5873914, -0.85844886, 0.06650692]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -333,13 +335,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 1023382173054803632
+  - Entity: 1382797359988888312
     TagComponent:
       Tag: Plane (17)
       IsActive: true
     TransformComponent:
-      Translation: [4.2, -5.85, 0]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.5569832, -4.6986647, -2.0503461]
+      Rotation: [0.72444844, 0.078608185, -0.796436]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -348,13 +350,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 14244715755411218916
+  - Entity: 1919676336781251351
     TagComponent:
       Tag: Plane (18)
       IsActive: true
     TransformComponent:
-      Translation: [4.9, -5.85, 0]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.5446308, -4.9863124, -1.7379937]
+      Rotation: [1.6615055, -0.7843347, 0.14062104]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -363,13 +365,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 6635539060405038999
+  - Entity: 10427274915375150232
     TagComponent:
       Tag: Plane (19)
       IsActive: true
     TransformComponent:
-      Translation: [-4.9, -4.95, -2.01]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.1322784, -4.6739597, -2.0256414]
+      Rotation: [0.7985625, 0.1527223, -0.72232187]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -378,13 +380,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 7473994428237584429
+  - Entity: 5465685018294862188
     TagComponent:
       Tag: Plane (20)
       IsActive: true
     TransformComponent:
-      Translation: [-4.2, -4.95, -2.01]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-1.1199262, -4.9616075, -1.713289]
+      Rotation: [1.7356195, -0.71022063, 0.21473515]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -393,13 +395,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 7601778664932573003
+  - Entity: 6890415691998890999
     TagComponent:
       Tag: Plane (21)
       IsActive: true
     TransformComponent:
-      Translation: [-3.5, -4.95, -2.01]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.70757383, -5.249255, -2.0009367]
+      Rotation: [0.8726767, 0.22683641, -0.6482078]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -408,13 +410,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 10930981931548405340
+  - Entity: 205431412626879541
     TagComponent:
       Tag: Plane (22)
       IsActive: true
     TransformComponent:
-      Translation: [-2.8, -4.95, -2.01]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.2952215, -4.9369025, -2.2885842]
+      Rotation: [1.8097336, -0.6361065, 0.28884926]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -423,13 +425,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 11994401094937454198
+  - Entity: 475737214333645835
     TagComponent:
       Tag: Plane (23)
       IsActive: true
     TransformComponent:
-      Translation: [-2.1, -4.95, -2.01]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.71713084, -5.2245502, -1.9762319]
+      Rotation: [0.94679075, 0.30095053, -0.57409364]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -438,13 +440,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 15541549883188500420
+  - Entity: 10993137503383341212
     TagComponent:
       Tag: Plane (24)
       IsActive: true
     TransformComponent:
-      Translation: [-1.4, -4.95, -2.01]
-      Rotation: [1.570796, -0, 0]
+      Translation: [1.1294832, -4.912198, -2.2638795]
+      Rotation: [1.8838478, -0.5619924, 0.36296338]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -453,14 +455,14 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 8385649136248171149
+  - Entity: 10591576988039433596
     TagComponent:
       Tag: Plane (25)
       IsActive: true
     TransformComponent:
-      Translation: [-0.7, -4.95, -2.01]
-      Rotation: [1.570796, -0, 0]
-      Scale: [1, 0.9999983, 0.9999983]
+      Translation: [2.1418355, -5.199846, -1.9515272]
+      Rotation: [1.0209049, 0.37506464, -0.49997953]
+      Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
       MaterialHandle: 2877837325534738788
@@ -468,13 +470,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 11024880807290282294
+  - Entity: 17178361612772571563
     TagComponent:
       Tag: Plane (26)
       IsActive: true
     TransformComponent:
-      Translation: [0, -4.95, -2.01]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.5541878, -4.887493, -2.2391748]
+      Rotation: [1.9579619, -0.48787826, 0.4370775]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -483,13 +485,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 16673448985971941413
+  - Entity: 18085679434951978228
     TagComponent:
       Tag: Plane (27)
       IsActive: true
     TransformComponent:
-      Translation: [0.7, -4.95, -2.01]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.5665402, -5.175141, -1.9268225]
+      Rotation: [1.095019, 0.44917876, -0.4258654]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -498,13 +500,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 17683132853087016098
+  - Entity: 961901489502670842
     TagComponent:
       Tag: Plane (28)
       IsActive: true
     TransformComponent:
-      Translation: [1.4, -4.95, -2.01]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.9788926, -4.8627887, -2.2144701]
+      Rotation: [2.0320761, -0.41376415, 0.5111916]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -513,13 +515,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 18023979941410968357
+  - Entity: 7091033448974872349
     TagComponent:
       Tag: Plane (29)
       IsActive: true
     TransformComponent:
-      Translation: [2.1, -4.95, -2.01]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.991245, -5.1504364, -1.9021178]
+      Rotation: [1.1691331, 0.5232929, -0.3517513]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -528,13 +530,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 4344861850380490151
+  - Entity: 7473896364009578763
     TagComponent:
       Tag: Plane (30)
       IsActive: true
     TransformComponent:
-      Translation: [2.8, -4.95, -2.01]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-5.0964026, -3.938084, -4.1997657]
+      Rotation: [2.1061902, -0.33965003, 0.58530575]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -543,13 +545,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 12956278380570626606
+  - Entity: 16578258317164998205
     TagComponent:
       Tag: Plane (31)
       IsActive: true
     TransformComponent:
-      Translation: [3.5, -4.95, -2.01]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.08405, -4.2257314, -3.887413]
+      Rotation: [1.2432473, 0.597407, -0.27763718]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -558,13 +560,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 16023581444468971726
+  - Entity: 10017945149057645725
     TagComponent:
       Tag: Plane (32)
       IsActive: true
     TransformComponent:
-      Translation: [4.2, -4.95, -2.01]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.6716979, -3.9133792, -4.1750607]
+      Rotation: [2.1803043, -0.26553592, 0.65941983]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -573,13 +575,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 3141151074848536164
+  - Entity: 4279121395369269438
     TagComponent:
       Tag: Plane (33)
       IsActive: true
     TransformComponent:
-      Translation: [4.9, -4.95, -2.01]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.6593456, -4.201027, -3.8627083]
+      Rotation: [1.3173614, 0.6715211, -0.20352308]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -588,13 +590,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 3667019434872278272
+  - Entity: 3961563926878438333
     TagComponent:
       Tag: Plane (34)
       IsActive: true
     TransformComponent:
-      Translation: [-4.9, -4.0499997, -4.02]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.2469933, -3.8886745, -4.150356]
+      Rotation: [2.2544184, -0.1914218, 0.733534]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -603,13 +605,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 9057593657176285810
+  - Entity: 7371362483270855496
     TagComponent:
       Tag: Plane (35)
       IsActive: true
     TransformComponent:
-      Translation: [-4.2, -4.0499997, -4.02]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-1.2346408, -4.176322, -3.8380036]
+      Rotation: [1.3914754, 0.7456352, -0.12940896]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -618,13 +620,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 5382860367516022434
+  - Entity: 880782699783427771
     TagComponent:
       Tag: Plane (36)
       IsActive: true
     TransformComponent:
-      Translation: [-3.5, -4.0499997, -4.02]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.8222885, -3.8639698, -4.1256514]
+      Rotation: [2.3285325, -0.1173077, 0.80764806]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -633,13 +635,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 15438647264447338102
+  - Entity: 5093356866998951966
     TagComponent:
       Tag: Plane (37)
       IsActive: true
     TransformComponent:
-      Translation: [-2.8, -4.0499997, -4.02]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.19006382, -4.1516175, -3.813299]
+      Rotation: [1.4655895, 0.81974936, -0.05529485]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -648,13 +650,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 17000910903602938758
+  - Entity: 17183376376171672861
     TagComponent:
       Tag: Plane (38)
       IsActive: true
     TransformComponent:
-      Translation: [-2.1, -4.0499997, -4.02]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.60241616, -3.839265, -4.1009464]
+      Rotation: [2.4026465, -0.043193582, 0.8817622]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -663,13 +665,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 6253277837318509148
+  - Entity: 5038980802489142639
     TagComponent:
       Tag: Plane (39)
       IsActive: true
     TransformComponent:
-      Translation: [-1.4, -4.0499997, -4.02]
-      Rotation: [1.570796, -0, 0]
+      Translation: [1.6147685, -4.1269126, -3.7885942]
+      Rotation: [1.5397037, 0.89386344, 0.018819269]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -678,13 +680,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 5968587300610842019
+  - Entity: 7461657656269395741
     TagComponent:
       Tag: Plane (40)
       IsActive: true
     TransformComponent:
-      Translation: [-0.7, -4.0499997, -4.02]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.0271208, -3.8145604, -4.076242]
+      Rotation: [0.6767608, 0.030920533, -0.84412366]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -693,13 +695,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 15161505054811237585
+  - Entity: 412920319075522141
     TagComponent:
       Tag: Plane (41)
       IsActive: true
     TransformComponent:
-      Translation: [0, -4.0499997, -4.02]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.0394733, -4.102208, -3.7638896]
+      Rotation: [1.6138178, -0.83202237, 0.09293339]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -708,13 +710,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 3127806031147032099
+  - Entity: 11040365890983511940
     TagComponent:
       Tag: Plane (42)
       IsActive: true
     TransformComponent:
-      Translation: [0.7, -4.0499997, -4.02]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.4518256, -3.7898557, -4.051537]
+      Rotation: [0.7508749, 0.10503465, -0.7700095]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -723,13 +725,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 9651679261200565836
+  - Entity: 17162454988452490574
     TagComponent:
       Tag: Plane (43)
       IsActive: true
     TransformComponent:
-      Translation: [1.4, -4.0499997, -4.02]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.464178, -4.077503, -3.7391849]
+      Rotation: [1.6879319, -0.7579083, 0.1670475]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -738,13 +740,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 2555541005739086405
+  - Entity: 13416125521080055990
     TagComponent:
       Tag: Plane (44)
       IsActive: true
     TransformComponent:
-      Translation: [2.1, -4.0499997, -4.02]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.87653, -3.765151, -4.0268326]
+      Rotation: [0.824989, 0.17914876, -0.69589543]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -753,13 +755,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 224182775933988896
+  - Entity: 10286374915327809452
     TagComponent:
       Tag: Plane (45)
       IsActive: true
     TransformComponent:
-      Translation: [2.8, -4.0499997, -4.02]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.6111174, -3.1527987, -6.32448]
+      Rotation: [1.762046, -0.68379414, 0.24116161]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -768,13 +770,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 1873275114788715373
+  - Entity: 15716910189669704362
     TagComponent:
       Tag: Plane (46)
       IsActive: true
     TransformComponent:
-      Translation: [3.5, -4.0499997, -4.02]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.198765, -3.4404464, -6.012128]
+      Rotation: [0.8991031, 0.25326288, -0.6217813]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -783,13 +785,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 3500606874377179181
+  - Entity: 2902563873999035450
     TagComponent:
       Tag: Plane (47)
       IsActive: true
     TransformComponent:
-      Translation: [4.2, -4.0499997, -4.02]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.7864127, -3.128094, -6.2997756]
+      Rotation: [1.8361602, -0.60968006, 0.31527573]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -798,13 +800,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 4992111807393412124
+  - Entity: 9063882577494018417
     TagComponent:
       Tag: Plane (48)
       IsActive: true
     TransformComponent:
-      Translation: [4.9, -4.0499997, -4.02]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.7740602, -3.4157417, -5.987423]
+      Rotation: [0.97321725, 0.327377, -0.5476672]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -813,13 +815,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 8574959656597349095
+  - Entity: 18291843176097655345
     TagComponent:
       Tag: Plane (49)
       IsActive: true
     TransformComponent:
-      Translation: [-4.9, -3.1499999, -6.0299997]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.361708, -3.1033893, -6.2750707]
+      Rotation: [1.9102743, -0.5355659, 0.38938984]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -828,13 +830,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 10700789211795655663
+  - Entity: 18028951963408788520
     TagComponent:
       Tag: Plane (50)
       IsActive: true
     TransformComponent:
-      Translation: [-4.2, -3.1499999, -6.0299997]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-1.3493556, -3.391037, -5.9627185]
+      Rotation: [1.0473313, 0.4014911, -0.47355306]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -843,13 +845,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 9788378834458976427
+  - Entity: 11962720801391345289
     TagComponent:
       Tag: Plane (51)
       IsActive: true
     TransformComponent:
-      Translation: [-3.5, -3.1499999, -6.0299997]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.93700325, -3.0786846, -6.250366]
+      Rotation: [1.9843884, -0.4614518, 0.46350396]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -858,13 +860,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 15256472903248120589
+  - Entity: 11554488381775086214
     TagComponent:
       Tag: Plane (52)
       IsActive: true
     TransformComponent:
-      Translation: [-2.8, -3.1499999, -6.0299997]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.07534911, -3.3663323, -5.9380136]
+      Rotation: [1.1214454, 0.47560522, -0.39943895]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -873,13 +875,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 15751978029951818519
+  - Entity: 4718490637739440698
     TagComponent:
       Tag: Plane (53)
       IsActive: true
     TransformComponent:
-      Translation: [-2.1, -3.1499999, -6.0299997]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.48770145, -3.0539799, -6.2256613]
+      Rotation: [2.0585024, -0.38733768, 0.5376181]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -888,13 +890,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 9074903983993997324
+  - Entity: 17697741244713646261
     TagComponent:
       Tag: Plane (54)
       IsActive: true
     TransformComponent:
-      Translation: [-1.4, -3.1499999, -6.0299997]
-      Rotation: [1.570796, -0, 0]
+      Translation: [1.5000538, -3.3416276, -5.913309]
+      Rotation: [1.1955596, 0.54971933, -0.32532483]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -903,13 +905,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 7825450906029426495
+  - Entity: 12327695738266121468
     TagComponent:
       Tag: Plane (55)
       IsActive: true
     TransformComponent:
-      Translation: [-0.7, -3.1499999, -6.0299997]
-      Rotation: [1.570796, -0, 0]
+      Translation: [1.9124061, -3.0292752, -6.200957]
+      Rotation: [2.1326165, -0.31322357, 0.6117322]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -918,13 +920,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 146520727643136155
+  - Entity: 16050661033818512897
     TagComponent:
       Tag: Plane (56)
       IsActive: true
     TransformComponent:
-      Translation: [0, -3.1499999, -6.0299997]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.9247584, -3.316923, -5.888604]
+      Rotation: [1.2696737, 0.6238335, -0.25121072]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -933,13 +935,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 5723273639746743339
+  - Entity: 408785738821790658
     TagComponent:
       Tag: Plane (57)
       IsActive: true
     TransformComponent:
-      Translation: [0.7, -3.1499999, -6.0299997]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.3371108, -3.0045705, -6.176252]
+      Rotation: [2.2067306, -0.23910946, 0.6858463]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -948,13 +950,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 4083942155872620424
+  - Entity: 1635255117460390394
     TagComponent:
       Tag: Plane (58)
       IsActive: true
     TransformComponent:
-      Translation: [1.4, -3.1499999, -6.0299997]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.349463, -3.2922182, -5.8638997]
+      Rotation: [1.3437878, 0.69794756, -0.17709662]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -963,13 +965,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 15097675379432581934
+  - Entity: 5154643320852862219
     TagComponent:
       Tag: Plane (59)
       IsActive: true
     TransformComponent:
-      Translation: [2.1, -3.1499999, -6.0299997]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.7618155, -2.9798658, -6.1515474]
+      Rotation: [2.280845, -0.16499534, 0.7599604]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -978,13 +980,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 2378253798242820196
+  - Entity: 11285279953666783298
     TagComponent:
       Tag: Plane (60)
       IsActive: true
     TransformComponent:
-      Translation: [2.8, -3.1499999, -6.0299997]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.725832, -2.3675134, -7.849195]
+      Rotation: [1.4179019, 0.7720617, -0.1029825]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -993,13 +995,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 2509882697293842412
+  - Entity: 13197633235741571388
     TagComponent:
       Tag: Plane (61)
       IsActive: true
     TransformComponent:
-      Translation: [3.5, -3.1499999, -6.0299997]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.3134794, -2.055161, -8.136843]
+      Rotation: [2.354959, -0.090881236, 0.83407456]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1008,13 +1010,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 13874591360597368042
+  - Entity: 18238033441666200521
     TagComponent:
       Tag: Plane (62)
       IsActive: true
     TransformComponent:
-      Translation: [4.2, -3.1499999, -6.0299997]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.3011272, -2.3428087, -7.82449]
+      Rotation: [1.4920161, 0.8461758, -0.028868383]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1023,13 +1025,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 4497967184213994457
+  - Entity: 7838233383544837372
     TagComponent:
       Tag: Plane (63)
       IsActive: true
     TransformComponent:
-      Translation: [4.9, -3.1499999, -6.0299997]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.8887749, -2.0304563, -8.112138]
+      Rotation: [2.429073, -0.016767118, -0.8918113]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1038,13 +1040,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 15099835517186591027
+  - Entity: 11088687908182056794
     TagComponent:
       Tag: Plane (64)
       IsActive: true
     TransformComponent:
-      Translation: [-4.9, -2.25, -8.04]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-1.8764226, -2.318104, -7.7997856]
+      Rotation: [1.5661302, -0.87971, 0.045245733]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1053,13 +1055,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 14196756003029883956
+  - Entity: 16410191214191701525
     TagComponent:
       Tag: Plane (65)
       IsActive: true
     TransformComponent:
-      Translation: [-4.2, -2.25, -8.04]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-1.4640703, -2.0057516, -8.087433]
+      Rotation: [0.7031872, 0.057346996, -0.81769717]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1068,13 +1070,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 3643704858611450757
+  - Entity: 1168198454185479424
     TagComponent:
       Tag: Plane (66)
       IsActive: true
     TransformComponent:
-      Translation: [-3.5, -2.25, -8.04]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.45171794, -2.2933993, -7.7750807]
+      Rotation: [1.6402442, -0.80559593, 0.11935985]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1083,13 +1085,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 15460450833502716608
+  - Entity: 11090311122187546751
     TagComponent:
       Tag: Plane (67)
       IsActive: true
     TransformComponent:
-      Translation: [-2.8, -2.25, -8.04]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.03936561, -1.9810469, -8.062728]
+      Rotation: [0.7773014, 0.13146111, -0.7435831]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1098,13 +1100,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 6566965610990899951
+  - Entity: 12063726208902989259
     TagComponent:
       Tag: Plane (68)
       IsActive: true
     TransformComponent:
-      Translation: [-2.1, -2.25, -8.04]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.97298676, -2.2686946, -7.750376]
+      Rotation: [1.7143583, -0.7314818, 0.19347396]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1113,13 +1115,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 9123793831682353036
+  - Entity: 7882606540605150281
     TagComponent:
       Tag: Plane (69)
       IsActive: true
     TransformComponent:
-      Translation: [-1.4, -2.25, -8.04]
-      Rotation: [1.570796, -0, 0]
+      Translation: [1.385339, -1.9563422, -8.038024]
+      Rotation: [0.85141546, 0.20557523, -0.66946894]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1128,13 +1130,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 8632705267568428321
+  - Entity: 4783522871964731248
     TagComponent:
       Tag: Plane (70)
       IsActive: true
     TransformComponent:
-      Translation: [-0.7, -2.25, -8.04]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.3976915, -2.24399, -8.325671]
+      Rotation: [1.7884725, -0.6573677, 0.26758808]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1143,13 +1145,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 6556957162716724255
+  - Entity: 8984118603458355404
     TagComponent:
       Tag: Plane (71)
       IsActive: true
     TransformComponent:
-      Translation: [0, -2.25, -8.04]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.8100438, -2.5316374, -8.013319]
+      Rotation: [0.9255296, 0.27968934, -0.59535486]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1158,13 +1160,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 13106376413741686148
+  - Entity: 11328811819430419283
     TagComponent:
       Tag: Plane (72)
       IsActive: true
     TransformComponent:
-      Translation: [0.7, -2.25, -8.04]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.2223961, -2.2192852, -8.300966]
+      Rotation: [1.8625866, -0.58325356, 0.3417022]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1173,13 +1175,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 10327943124343264177
+  - Entity: 11265588765495396255
     TagComponent:
       Tag: Plane (73)
       IsActive: true
     TransformComponent:
-      Translation: [1.4, -2.25, -8.04]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.2347484, -2.5069327, -7.988614]
+      Rotation: [0.9996437, 0.35380346, -0.5212407]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1188,13 +1190,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 16279935348325627837
+  - Entity: 7889936449963261289
     TagComponent:
       Tag: Plane (74)
       IsActive: true
     TransformComponent:
-      Translation: [2.1, -2.25, -8.04]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.647101, -2.1945806, -8.276262]
+      Rotation: [1.9367007, -0.5091395, 0.4158163]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1203,13 +1205,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 8083733191062091952
+  - Entity: 2026920868066709502
     TagComponent:
       Tag: Plane (75)
       IsActive: true
     TransformComponent:
-      Translation: [2.8, -2.25, -8.04]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.8405466, -1.5822282, -9.973909]
+      Rotation: [1.0737578, 0.42791757, -0.4471266]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1218,13 +1220,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 6980592300726346724
+  - Entity: 12973926471314068594
     TagComponent:
       Tag: Plane (76)
       IsActive: true
     TransformComponent:
-      Translation: [3.5, -2.25, -8.04]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.4281945, -1.2698758, -10.261558]
+      Rotation: [2.010815, -0.43502533, 0.48993042]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1233,13 +1235,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 1832869659283909185
+  - Entity: 10072748071125351843
     TagComponent:
       Tag: Plane (77)
       IsActive: true
     TransformComponent:
-      Translation: [4.2, -2.25, -8.04]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.415842, -1.5575235, -9.949204]
+      Rotation: [1.147872, 0.5020317, -0.37301248]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1248,13 +1250,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 10064904731261224267
+  - Entity: 6754150776121094145
     TagComponent:
       Tag: Plane (78)
       IsActive: true
     TransformComponent:
-      Translation: [4.9, -2.25, -8.04]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.0034897, -1.2451711, -10.236853]
+      Rotation: [2.084929, -0.36091122, 0.56404454]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1263,13 +1265,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 14025202604175175357
+  - Entity: 6609869585284151020
     TagComponent:
       Tag: Plane (79)
       IsActive: true
     TransformComponent:
-      Translation: [-4.9, -1.3499999, -10.05]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-1.9911374, -1.5328188, -9.9245]
+      Rotation: [1.221986, 0.5761458, -0.29889837]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1278,13 +1280,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 12682009476047338709
+  - Entity: 4497185069376503684
     TagComponent:
       Tag: Plane (80)
       IsActive: true
     TransformComponent:
-      Translation: [-4.2, -1.3499999, -10.05]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-1.578785, -1.2204664, -10.212148]
+      Rotation: [2.159043, -0.2867971, 0.6381587]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1293,13 +1295,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 6831868186786720960
+  - Entity: 10388565455755567799
     TagComponent:
       Tag: Plane (81)
       IsActive: true
     TransformComponent:
-      Translation: [-3.5, -1.3499999, -10.05]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.56643265, -1.508114, -9.899796]
+      Rotation: [1.2961001, 0.6502599, -0.22478427]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1308,13 +1310,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 14650976996657660312
+  - Entity: 15665138834982932270
     TagComponent:
       Tag: Plane (82)
       IsActive: true
     TransformComponent:
-      Translation: [-2.8, -1.3499999, -10.05]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.15408032, -1.1957617, -10.187443]
+      Rotation: [2.2331572, -0.21268299, 0.71227276]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1323,13 +1325,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 7084027607820183413
+  - Entity: 8587427575954368823
     TagComponent:
       Tag: Plane (83)
       IsActive: true
     TransformComponent:
-      Translation: [-2.1, -1.3499999, -10.05]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.858272, -1.4834093, -9.875091]
+      Rotation: [1.3702142, 0.72437406, -0.15067016]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1338,13 +1340,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 12554597771831333971
+  - Entity: 6039083032213383460
     TagComponent:
       Tag: Plane (84)
       IsActive: true
     TransformComponent:
-      Translation: [-1.4, -1.3499999, -10.05]
-      Rotation: [1.570796, -0, 0]
+      Translation: [1.2706244, -1.171057, -10.162739]
+      Rotation: [2.3072712, -0.13856888, 0.7863869]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1353,13 +1355,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 6057363207234123866
+  - Entity: 17052545464459329717
     TagComponent:
       Tag: Plane (85)
       IsActive: true
     TransformComponent:
-      Translation: [-0.7, -1.3499999, -10.05]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.2829766, -1.4587046, -9.850386]
+      Rotation: [1.4443284, 0.79848814, -0.076556034]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1368,13 +1370,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 2426680249022347078
+  - Entity: 3142349588318282409
     TagComponent:
       Tag: Plane (86)
       IsActive: true
     TransformComponent:
-      Translation: [0, -1.3499999, -10.05]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.695329, -1.1463523, -10.138034]
+      Rotation: [2.3813853, -0.06445477, 0.860501]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1383,13 +1385,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 420777299152254288
+  - Entity: 7813350391615754807
     TagComponent:
       Tag: Plane (87)
       IsActive: true
     TransformComponent:
-      Translation: [0.7, -1.3499999, -10.05]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.7076814, -1.4339999, -9.825682]
+      Rotation: [1.5184425, 0.8726023, -0.0024419182]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1398,13 +1400,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 16640158187653785852
+  - Entity: 9079247315658932099
     TagComponent:
       Tag: Plane (88)
       IsActive: true
     TransformComponent:
-      Translation: [1.4, -1.3499999, -10.05]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.1200337, -1.1216476, -10.113329]
+      Rotation: [2.4554996, 0.009659347, -0.8653848]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1413,13 +1415,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 15948514767978317979
+  - Entity: 8169710041485501304
     TagComponent:
       Tag: Plane (89)
       IsActive: true
     TransformComponent:
-      Translation: [2.1, -1.3499999, -10.05]
-      Rotation: [1.570796, -0, 0]
+      Translation: [5.132386, -1.4092952, -9.800977]
+      Rotation: [1.5925566, -0.8532836, 0.07167219]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1428,13 +1430,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 2470857826554188902
+  - Entity: 8614411263637850960
     TagComponent:
       Tag: Plane (90)
       IsActive: true
     TransformComponent:
-      Translation: [2.8, -1.3499999, -10.05]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.955261, -0.19694287, -12.098624]
+      Rotation: [0.7296137, 0.083773464, -0.79127073]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1443,13 +1445,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 17837278216359324794
+  - Entity: 8992973623023010858
     TagComponent:
       Tag: Plane (91)
       IsActive: true
     TransformComponent:
-      Translation: [3.5, -1.3499999, -10.05]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.942909, -0.48459053, -11.786272]
+      Rotation: [1.6666707, -0.77916944, 0.14578632]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1458,13 +1460,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 6024095693027631960
+  - Entity: 12684547138506114707
     TagComponent:
       Tag: Plane (92)
       IsActive: true
     TransformComponent:
-      Translation: [4.2, -1.3499999, -10.05]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.5305567, -0.17223816, -12.073919]
+      Rotation: [0.8037278, 0.15788758, -0.7171566]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1473,13 +1475,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 7415435417677422692
+  - Entity: 8247563110592013046
     TagComponent:
       Tag: Plane (93)
       IsActive: true
     TransformComponent:
-      Translation: [4.9, -1.3499999, -10.05]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.5182045, -0.45988584, -11.761567]
+      Rotation: [1.7407849, -0.70505536, 0.21990043]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1488,13 +1490,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 13458765828435650659
+  - Entity: 5314651713932197325
     TagComponent:
       Tag: Plane (94)
       IsActive: true
     TransformComponent:
-      Translation: [-4.9, -0.45, -12.059999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.1058521, -0.7475335, -12.049214]
+      Rotation: [0.87784195, 0.23200169, -0.6430425]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1503,13 +1505,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 10146778508435778193
+  - Entity: 7942269792120979951
     TagComponent:
       Tag: Plane (95)
       IsActive: true
     TransformComponent:
-      Translation: [-4.2, -0.45, -12.059999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-1.6934997, -0.4351811, -12.336863]
+      Rotation: [1.814899, -0.6309412, 0.29401454]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1518,13 +1520,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 7457719134325156770
+  - Entity: 12143778569559901500
     TagComponent:
       Tag: Plane (96)
       IsActive: true
     TransformComponent:
-      Translation: [-3.5, -0.45, -12.059999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.68114734, -0.72282875, -12.02451]
+      Rotation: [0.95195603, 0.3061158, -0.56892836]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1533,13 +1535,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 10409178593389195189
+  - Entity: 8303109560140153489
     TagComponent:
       Tag: Plane (97)
       IsActive: true
     TransformComponent:
-      Translation: [-2.8, -0.45, -12.059999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.26879504, -0.41047642, -12.312158]
+      Rotation: [1.889013, -0.5568271, 0.36812866]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1548,13 +1550,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 10685250332551541395
+  - Entity: 14707495410552409887
     TagComponent:
       Tag: Plane (98)
       IsActive: true
     TransformComponent:
-      Translation: [-2.1, -0.45, -12.059999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.74355733, -0.69812405, -11.999805]
+      Rotation: [1.0260701, 0.38022992, -0.49481425]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1563,13 +1565,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 11484799810518533497
+  - Entity: 7034491258282240407
     TagComponent:
       Tag: Plane (99)
       IsActive: true
     TransformComponent:
-      Translation: [-1.4, -0.45, -12.059999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [1.1559097, -0.3857717, -12.287453]
+      Rotation: [1.9631271, -0.48271298, 0.44224277]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1578,13 +1580,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 905314465642240839
+  - Entity: 11390115252926100016
     TagComponent:
       Tag: Plane (100)
       IsActive: true
     TransformComponent:
-      Translation: [-0.7, -0.45, -12.059999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.168262, -0.67341936, -11.9751005]
+      Rotation: [1.1001843, 0.45434403, -0.42070013]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1593,13 +1595,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 15668745430818355123
+  - Entity: 10888048881508457846
     TagComponent:
       Tag: Plane (101)
       IsActive: true
     TransformComponent:
-      Translation: [0, -0.45, -12.059999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.5806143, -0.361067, -12.262749]
+      Rotation: [2.0372412, -0.40859887, 0.5163569]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1608,13 +1610,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 16001214759587720796
+  - Entity: 8055751650671027413
     TagComponent:
       Tag: Plane (102)
       IsActive: true
     TransformComponent:
-      Translation: [0.7, -0.45, -12.059999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.5929668, -0.64871466, -11.950396]
+      Rotation: [1.1742984, 0.5284582, -0.34658602]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1623,13 +1625,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 11534018259913320276
+  - Entity: 18257149471278459904
     TagComponent:
       Tag: Plane (103)
       IsActive: true
     TransformComponent:
-      Translation: [1.4, -0.45, -12.059999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.005319, -0.3363623, -12.238044]
+      Rotation: [2.1113553, -0.33448476, 0.590471]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1638,13 +1640,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 17981287994127383778
+  - Entity: 10891403126535885022
     TagComponent:
       Tag: Plane (104)
       IsActive: true
     TransformComponent:
-      Translation: [2.1, -0.45, -12.059999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [5.0176716, -0.62400997, -11.925692]
+      Rotation: [1.2484125, 0.60257226, -0.2724719]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1653,13 +1655,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 6512695743166878851
+  - Entity: 2170554179319919422
     TagComponent:
       Tag: Plane (105)
       IsActive: true
     TransformComponent:
-      Translation: [2.8, -0.45, -12.059999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-5.0699763, 0.58834237, -14.223339]
+      Rotation: [2.1854696, -0.26037064, 0.6645851]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1668,13 +1670,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 5439952810740314914
+  - Entity: 15006926200815251090
     TagComponent:
       Tag: Plane (106)
       IsActive: true
     TransformComponent:
-      Translation: [3.5, -0.45, -12.059999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.057624, 0.30069473, -13.910987]
+      Rotation: [1.3225266, 0.6766864, -0.1983578]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1683,13 +1685,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 4638872263528329868
+  - Entity: 416196318293362062
     TagComponent:
       Tag: Plane (107)
       IsActive: true
     TransformComponent:
-      Translation: [4.2, -0.45, -12.059999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.6452715, 0.6130471, -14.198634]
+      Rotation: [2.2595837, -0.18625653, 0.73869926]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1698,13 +1700,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 17580798641315786041
+  - Entity: 2112551538856244708
     TagComponent:
       Tag: Plane (108)
       IsActive: true
     TransformComponent:
-      Translation: [4.9, -0.45, -12.059999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.632919, 0.32539943, -13.886282]
+      Rotation: [1.3966408, 0.7508005, -0.124243684]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1713,13 +1715,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 13109246833082294927
+  - Entity: 11557541573423526219
     TagComponent:
       Tag: Plane (109)
       IsActive: true
     TransformComponent:
-      Translation: [-4.9, 0.45, -14.07]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.2205667, 0.6377518, -14.173929]
+      Rotation: [2.3336978, -0.11214242, 0.81281334]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1728,13 +1730,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 3147838789511612914
+  - Entity: 14100373181945743788
     TagComponent:
       Tag: Plane (110)
       IsActive: true
     TransformComponent:
-      Translation: [-4.2, 0.45, -14.07]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-1.2082144, 0.35010415, -13.861577]
+      Rotation: [1.4707549, 0.82491463, -0.05012957]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1743,13 +1745,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 17022960645262180255
+  - Entity: 2941469018826776462
     TagComponent:
       Tag: Plane (111)
       IsActive: true
     TransformComponent:
-      Translation: [-3.5, 0.45, -14.07]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.7958621, 0.6624565, -14.149225]
+      Rotation: [2.4078119, -0.038028304, 0.8869275]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1758,13 +1760,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 7275130582759884508
+  - Entity: 17875937556742488090
     TagComponent:
       Tag: Plane (112)
       IsActive: true
     TransformComponent:
-      Translation: [-2.8, 0.45, -14.07]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.21649028, 0.37480885, -13.836872]
+      Rotation: [1.544869, 0.8990287, 0.023984546]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1773,13 +1775,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 10452661009850213123
+  - Entity: 1840869752188607142
     TagComponent:
       Tag: Plane (113)
       IsActive: true
     TransformComponent:
-      Translation: [-2.1, 0.45, -14.07]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.6288426, 0.6871612, -14.12452]
+      Rotation: [0.6819261, 0.03608581, -0.8389584]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1788,13 +1790,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 15583530607321199249
+  - Entity: 5826881757710439994
     TagComponent:
       Tag: Plane (114)
       IsActive: true
     TransformComponent:
-      Translation: [-1.4, 0.45, -14.07]
-      Rotation: [1.570796, -0, 0]
+      Translation: [1.6411949, 0.39951357, -13.812168]
+      Rotation: [1.618983, -0.8268571, 0.09809866]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1803,13 +1805,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 4403889898096804154
+  - Entity: 13243037284636884662
     TagComponent:
       Tag: Plane (115)
       IsActive: true
     TransformComponent:
-      Translation: [-0.7, 0.45, -14.07]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.0535474, 0.7118659, -14.099815]
+      Rotation: [0.75604016, 0.11019993, -0.76484424]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1818,13 +1820,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 16309427803028101590
+  - Entity: 17066256093024624829
     TagComponent:
       Tag: Plane (116)
       IsActive: true
     TransformComponent:
-      Translation: [0, 0.45, -14.07]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.0658996, 0.42421827, -13.787463]
+      Rotation: [1.6930972, -0.752743, 0.17221278]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1833,13 +1835,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 4903954919942675817
+  - Entity: 12483753318683675396
     TagComponent:
       Tag: Plane (117)
       IsActive: true
     TransformComponent:
-      Translation: [0.7, 0.45, -14.07]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.478252, 0.73657066, -14.07511]
+      Rotation: [0.8301543, 0.18431404, -0.69073015]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1848,13 +1850,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 4513695193625855007
+  - Entity: 9131886717935896218
     TagComponent:
       Tag: Plane (118)
       IsActive: true
     TransformComponent:
-      Translation: [1.4, 0.45, -14.07]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.4906044, 0.448923, -14.362759]
+      Rotation: [1.7672113, -0.67862886, 0.2463269]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1863,13 +1865,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 14466777738795504396
+  - Entity: 17242549682634067163
     TagComponent:
       Tag: Plane (119)
       IsActive: true
     TransformComponent:
-      Translation: [2.1, 0.45, -14.07]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.9029565, 0.16127531, -14.050406]
+      Rotation: [0.9042684, 0.25842816, -0.616616]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1878,13 +1880,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 14286463913099743983
+  - Entity: 12675124127406484983
     TagComponent:
       Tag: Plane (120)
       IsActive: true
     TransformComponent:
-      Translation: [2.8, 0.45, -14.07]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-5.184691, 1.3736277, -16.348053]
+      Rotation: [1.8413254, -0.6045148, 0.320441]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1893,13 +1895,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 12365561598052170760
+  - Entity: 3288206252459995024
     TagComponent:
       Tag: Plane (121)
       IsActive: true
     TransformComponent:
-      Translation: [3.5, 0.45, -14.07]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.1723385, 1.08598, -16.035702]
+      Rotation: [0.9783825, 0.33254227, -0.5425019]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1908,13 +1910,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 15308520619514033357
+  - Entity: 17036447492382972561
     TagComponent:
       Tag: Plane (122)
       IsActive: true
     TransformComponent:
-      Translation: [4.2, 0.45, -14.07]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.7599862, 1.3983324, -16.323349]
+      Rotation: [1.9154395, -0.53040063, 0.39455512]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1923,13 +1925,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 8576275571072824903
+  - Entity: 16963197841915963651
     TagComponent:
       Tag: Plane (123)
       IsActive: true
     TransformComponent:
-      Translation: [4.9, 0.45, -14.07]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.7476337, 1.1106848, -16.010996]
+      Rotation: [1.0524967, 0.40665638, -0.46838778]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1938,13 +1940,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 6286997440774510560
+  - Entity: 13676012956441014774
     TagComponent:
       Tag: Plane (124)
       IsActive: true
     TransformComponent:
-      Translation: [-4.9, 1.3499999, -16.08]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.3352814, 1.423037, -16.298645]
+      Rotation: [1.9895537, -0.45628652, 0.46866924]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1953,13 +1955,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 1086481427413107432
+  - Entity: 5832794906385459450
     TagComponent:
       Tag: Plane (125)
       IsActive: true
     TransformComponent:
-      Translation: [-4.2, 1.3499999, -16.08]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-1.3229291, 1.1353894, -15.986292]
+      Rotation: [1.1266108, 0.4807705, -0.39427367]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1968,13 +1970,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 12090913048170828123
+  - Entity: 10341297364209773266
     TagComponent:
       Tag: Plane (126)
       IsActive: true
     TransformComponent:
-      Translation: [-3.5, 1.3499999, -16.08]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.91057676, 1.4477417, -16.27394]
+      Rotation: [2.0636678, -0.3821724, 0.5427834]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1983,13 +1985,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 4742006977626052178
+  - Entity: 16254529515195921898
     TagComponent:
       Tag: Plane (127)
       IsActive: true
     TransformComponent:
-      Translation: [-2.8, 1.3499999, -16.08]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.10177557, 1.1600941, -15.961587]
+      Rotation: [1.2007248, 0.5548846, -0.32015955]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -1998,13 +2000,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 1935783033518050780
+  - Entity: 17996189334842079875
     TagComponent:
       Tag: Plane (128)
       IsActive: true
     TransformComponent:
-      Translation: [-2.1, 1.3499999, -16.08]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.5141279, 1.4724464, -16.249235]
+      Rotation: [2.1377819, -0.3080583, 0.61689746]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2013,13 +2015,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 1411059722159263757
+  - Entity: 8318191413599081991
     TagComponent:
       Tag: Plane (129)
       IsActive: true
     TransformComponent:
-      Translation: [-1.4, 1.3499999, -16.08]
-      Rotation: [1.570796, -0, 0]
+      Translation: [1.5264802, 1.1847988, -15.936882]
+      Rotation: [1.2748389, 0.62899876, -0.24604546]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2028,13 +2030,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 15258175020873263109
+  - Entity: 4604518652760814501
     TagComponent:
       Tag: Plane (130)
       IsActive: true
     TransformComponent:
-      Translation: [-0.7, 1.3499999, -16.08]
-      Rotation: [1.570796, -0, 0]
+      Translation: [1.9388326, 1.4971511, -16.22453]
+      Rotation: [2.211896, -0.23394419, 0.6910116]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2043,13 +2045,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 6868628016904003462
+  - Entity: 2131699094943215026
     TagComponent:
       Tag: Plane (131)
       IsActive: true
     TransformComponent:
-      Translation: [0, 1.3499999, -16.08]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.951185, 1.2095035, -15.912178]
+      Rotation: [1.3489531, 0.70311284, -0.17193134]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2058,13 +2060,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 13705634163890389780
+  - Entity: 13530835995294006544
     TagComponent:
       Tag: Plane (132)
       IsActive: true
     TransformComponent:
-      Translation: [0.7, 1.3499999, -16.08]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.3635373, 1.521856, -16.199825]
+      Rotation: [2.28601, -0.15983006, 0.7651257]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2073,13 +2075,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 4233586813801732558
+  - Entity: 6569345257830454277
     TagComponent:
       Tag: Plane (133)
       IsActive: true
     TransformComponent:
-      Translation: [1.4, 1.3499999, -16.08]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.37589, 1.2342082, -15.887473]
+      Rotation: [1.4230672, 0.777227, -0.09781722]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2088,13 +2090,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 7743074896868491354
+  - Entity: 3403538283284349355
     TagComponent:
       Tag: Plane (134)
       IsActive: true
     TransformComponent:
-      Translation: [2.1, 1.3499999, -16.08]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.788242, 1.5465606, -16.175121]
+      Rotation: [2.360124, -0.08571596, 0.83923984]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2103,13 +2105,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 8686425588008703848
+  - Entity: 15548148141144628766
     TagComponent:
       Tag: Plane (135)
       IsActive: true
     TransformComponent:
-      Translation: [2.8, 1.3499999, -16.08]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.6994057, 2.158913, -17.872768]
+      Rotation: [1.4971813, 0.85134107, -0.023703104]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2118,13 +2120,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 14136481004606890883
+  - Entity: 6106738026100942484
     TagComponent:
       Tag: Plane (136)
       IsActive: true
     TransformComponent:
-      Translation: [3.5, 1.3499999, -16.08]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.287053, 2.4712653, -18.160416]
+      Rotation: [2.4342384, -0.011601839, -0.88664603]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2133,13 +2135,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 3868636057021950172
+  - Entity: 16958819154447500486
     TagComponent:
       Tag: Plane (137)
       IsActive: true
     TransformComponent:
-      Translation: [4.2, 1.3499999, -16.08]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.2747009, 2.1836176, -17.848064]
+      Rotation: [1.5712954, -0.87454474, 0.050411012]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2148,13 +2150,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 17492920670250557969
+  - Entity: 17501439191958431964
     TagComponent:
       Tag: Plane (138)
       IsActive: true
     TransformComponent:
-      Translation: [4.9, 1.3499999, -16.08]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.8623486, 2.49597, -18.135712]
+      Rotation: [0.7083525, 0.06251228, -0.8125319]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2163,13 +2165,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 16883589551531977684
+  - Entity: 7522444873663769165
     TagComponent:
       Tag: Plane (139)
       IsActive: true
     TransformComponent:
-      Translation: [-4.9, 2.25, -18.09]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-1.8499962, 2.2083223, -17.823359]
+      Rotation: [1.6454096, -0.80043066, 0.12452512]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2178,13 +2180,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 15600374231419270737
+  - Entity: 2257699149490441947
     TagComponent:
       Tag: Plane (140)
       IsActive: true
     TransformComponent:
-      Translation: [-4.2, 2.25, -18.09]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-1.4376438, 2.5206747, -18.111006]
+      Rotation: [0.78246665, 0.1366264, -0.7384178]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2193,13 +2195,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 13158651269560649271
+  - Entity: 13630410473995714686
     TagComponent:
       Tag: Plane (141)
       IsActive: true
     TransformComponent:
-      Translation: [-3.5, 2.25, -18.09]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.42529148, 2.233027, -17.798655]
+      Rotation: [1.7195237, -0.7263165, 0.19863924]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2208,13 +2210,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 13135410057951116558
+  - Entity: 9784962232997789716
     TagComponent:
       Tag: Plane (142)
       IsActive: true
     TransformComponent:
-      Translation: [-2.8, 2.25, -18.09]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.01293914, 2.5453794, -18.086302]
+      Rotation: [0.85658073, 0.2107405, -0.66430366]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2223,13 +2225,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 14098608438925941373
+  - Entity: 7360749724880250638
     TagComponent:
       Tag: Plane (143)
       IsActive: true
     TransformComponent:
-      Translation: [-2.1, 2.25, -18.09]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.9994132, 2.2577317, -18.37395]
+      Rotation: [1.7936378, -0.6522024, 0.27275336]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2238,13 +2240,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 12092623274634698204
+  - Entity: 7619831375180746542
     TagComponent:
       Tag: Plane (144)
       IsActive: true
     TransformComponent:
-      Translation: [-1.4, 2.25, -18.09]
-      Rotation: [1.570796, -0, 0]
+      Translation: [1.4117656, 1.9700841, -18.061598]
+      Rotation: [0.9306949, 0.28485462, -0.5901896]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2253,13 +2255,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 10822608433891386984
+  - Entity: 7036944714025042296
     TagComponent:
       Tag: Plane (145)
       IsActive: true
     TransformComponent:
-      Translation: [-0.7, 2.25, -18.09]
-      Rotation: [1.570796, -0, 0]
+      Translation: [1.8241179, 2.2824364, -18.349245]
+      Rotation: [1.8677518, -0.5780883, 0.34686747]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2268,13 +2270,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 3569071488424829546
+  - Entity: 9338504701071352225
     TagComponent:
       Tag: Plane (146)
       IsActive: true
     TransformComponent:
-      Translation: [0, 2.25, -18.09]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.8364701, 1.9947888, -18.036892]
+      Rotation: [1.004809, 0.35896873, -0.51607543]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2283,13 +2285,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 3610802861179024246
+  - Entity: 1309849320056766446
     TagComponent:
       Tag: Plane (147)
       IsActive: true
     TransformComponent:
-      Translation: [0.7, 2.25, -18.09]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.2488225, 2.307141, -18.32454]
+      Rotation: [1.941866, -0.5039742, 0.4209816]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2298,13 +2300,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 1378506138006625813
+  - Entity: 15708079333113272600
     TagComponent:
       Tag: Plane (148)
       IsActive: true
     TransformComponent:
-      Translation: [1.4, 2.25, -18.09]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.2611747, 2.0194936, -18.012188]
+      Rotation: [1.0789231, 0.43308285, -0.44196132]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2313,13 +2315,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 12978858660988249744
+  - Entity: 14605985788437175479
     TagComponent:
       Tag: Plane (149)
       IsActive: true
     TransformComponent:
-      Translation: [2.1, 2.25, -18.09]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.6735272, 2.3318458, -18.299835]
+      Rotation: [2.01598, -0.42986006, 0.4950957]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2328,13 +2330,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 7125136764157878582
+  - Entity: 4342687409751841092
     TagComponent:
       Tag: Plane (150)
       IsActive: true
     TransformComponent:
-      Translation: [2.8, 2.25, -18.09]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.8141203, 2.9441981, -19.997482]
+      Rotation: [1.1530372, 0.50719696, -0.3678472]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2343,13 +2345,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 10653147617296730840
+  - Entity: 9204585310782791829
     TagComponent:
       Tag: Plane (151)
       IsActive: true
     TransformComponent:
-      Translation: [3.5, 2.25, -18.09]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.4017677, 3.2565506, -20.285131]
+      Rotation: [2.0900943, -0.35574594, 0.5692098]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2358,13 +2360,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 10550781632617016013
+  - Entity: 17008212767258302119
     TagComponent:
       Tag: Plane (152)
       IsActive: true
     TransformComponent:
-      Translation: [4.2, 2.25, -18.09]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.3894155, 2.9689028, -19.972778]
+      Rotation: [1.2271513, 0.5813111, -0.2937331]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2373,13 +2375,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 16124252421797277709
+  - Entity: 11115354962457934645
     TagComponent:
       Tag: Plane (153)
       IsActive: true
     TransformComponent:
-      Translation: [4.9, 2.25, -18.09]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.9770632, 3.2812552, -20.260426]
+      Rotation: [2.1642084, -0.28163183, 0.64332396]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2388,13 +2390,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 4510553973881503386
+  - Entity: 2051898096469777163
     TagComponent:
       Tag: Plane (154)
       IsActive: true
     TransformComponent:
-      Translation: [-4.9, 3.1499999, -20.1]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-1.9647108, 2.9936075, -19.948074]
+      Rotation: [1.3012655, 0.6554252, -0.21961899]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2403,13 +2405,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 10680114257563169475
+  - Entity: 3917902818217520628
     TagComponent:
       Tag: Plane (155)
       IsActive: true
     TransformComponent:
-      Translation: [-4.2, 3.1499999, -20.1]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-1.5523585, 3.30596, -20.235722]
+      Rotation: [2.2383225, -0.20751771, 0.71743804]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2418,13 +2420,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 555411008205689395
+  - Entity: 17417861720133982377
     TagComponent:
       Tag: Plane (156)
       IsActive: true
     TransformComponent:
-      Translation: [-3.5, 3.1499999, -20.1]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.54000616, 3.0183122, -19.923368]
+      Rotation: [1.3753796, 0.72953933, -0.14550488]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2433,13 +2435,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 10919349238611431581
+  - Entity: 4616867647962158821
     TagComponent:
       Tag: Plane (157)
       IsActive: true
     TransformComponent:
-      Translation: [-2.8, 3.1499999, -20.1]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.12765385, 3.3306646, -20.211016]
+      Rotation: [2.3124366, -0.1334036, 0.7915522]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2448,13 +2450,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 2822173606981718775
+  - Entity: 17077288770813875828
     TagComponent:
       Tag: Plane (158)
       IsActive: true
     TransformComponent:
-      Translation: [-2.1, 3.1499999, -20.1]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.8846985, 3.043017, -19.898664]
+      Rotation: [1.4494936, 0.8036534, -0.071390755]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2463,13 +2465,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 11794803504859928218
+  - Entity: 7575215944749862473
     TagComponent:
       Tag: Plane (159)
       IsActive: true
     TransformComponent:
-      Translation: [-1.4, 3.1499999, -20.1]
-      Rotation: [1.570796, -0, 0]
+      Translation: [1.2970508, 3.3553693, -20.186312]
+      Rotation: [2.3865507, -0.05928949, 0.8656663]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2478,13 +2480,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 12199495323249827931
+  - Entity: 18285920592828139205
     TagComponent:
       Tag: Plane (160)
       IsActive: true
     TransformComponent:
-      Translation: [-0.7, 3.1499999, -20.1]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.3094032, 3.0677216, -19.873959]
+      Rotation: [1.5236077, 0.87776756, 0.00272336]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2493,13 +2495,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 6906565883635483388
+  - Entity: 12925423209238209346
     TagComponent:
       Tag: Plane (161)
       IsActive: true
     TransformComponent:
-      Translation: [0, 3.1499999, -20.1]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.7217555, 3.380074, -20.161608]
+      Rotation: [2.4606647, 0.014824625, -0.86021954]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2508,13 +2510,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 13047055076229713233
+  - Entity: 6022403361302198084
     TagComponent:
       Tag: Plane (162)
       IsActive: true
     TransformComponent:
-      Translation: [0.7, 3.1499999, -20.1]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.734108, 3.0924265, -19.849255]
+      Rotation: [1.5977219, -0.8481183, 0.07683747]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2523,13 +2525,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 13124006126862367976
+  - Entity: 10427834778854991334
     TagComponent:
       Tag: Plane (163)
       IsActive: true
     TransformComponent:
-      Translation: [1.4, 3.1499999, -20.1]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.14646, 3.4047787, -20.136902]
+      Rotation: [0.734779, 0.08893874, -0.78610545]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2538,13 +2540,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 18124417887963584938
+  - Entity: 15994201921993428670
     TagComponent:
       Tag: Plane (164)
       IsActive: true
     TransformComponent:
-      Translation: [2.1, 3.1499999, -20.1]
-      Rotation: [1.570796, -0, 0]
+      Translation: [5.1588125, 3.1171312, -19.82455]
+      Rotation: [1.671836, -0.77400416, 0.1509516]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2553,13 +2555,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 10798412484088294397
+  - Entity: 5400575141273611608
     TagComponent:
       Tag: Plane (165)
       IsActive: true
     TransformComponent:
-      Translation: [2.8, 3.1499999, -20.1]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.928835, 4.3294835, -22.122198]
+      Rotation: [0.8088931, 0.16305286, -0.7119913]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2568,13 +2570,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 8266009231207737875
+  - Entity: 14716543098041524572
     TagComponent:
       Tag: Plane (166)
       IsActive: true
     TransformComponent:
-      Translation: [3.5, 3.1499999, -20.1]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.9164827, 4.041836, -22.409845]
+      Rotation: [1.7459501, -0.6998901, 0.22506571]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2583,13 +2585,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 12330807030080130303
+  - Entity: 15170651729831204143
     TagComponent:
       Tag: Plane (167)
       IsActive: true
     TransformComponent:
-      Translation: [4.2, 3.1499999, -20.1]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.5041304, 3.754188, -22.097492]
+      Rotation: [0.8830072, 0.23716697, -0.6378772]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2598,13 +2600,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 9218763404720936329
+  - Entity: 626682040301636836
     TagComponent:
       Tag: Plane (168)
       IsActive: true
     TransformComponent:
-      Translation: [4.9, 3.1499999, -20.1]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.091778, 4.0665407, -22.385141]
+      Rotation: [1.8200642, -0.62577593, 0.29917982]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2613,13 +2615,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 5765165616496156568
+  - Entity: 857743434126057369
     TagComponent:
       Tag: Plane (169)
       IsActive: true
     TransformComponent:
-      Translation: [-4.9, 4.0499997, -22.11]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.0794256, 3.7788928, -22.072788]
+      Rotation: [0.9571213, 0.31128109, -0.5637631]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2628,13 +2630,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 17143602162478379301
+  - Entity: 5819186166148596549
     TagComponent:
       Tag: Plane (170)
       IsActive: true
     TransformComponent:
-      Translation: [-4.2, 4.0499997, -22.11]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-1.6670732, 4.091245, -22.360435]
+      Rotation: [1.8941784, -0.55166185, 0.37329394]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2643,13 +2645,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 4877023624240872457
+  - Entity: 6730501055005702656
     TagComponent:
       Tag: Plane (171)
       IsActive: true
     TransformComponent:
-      Translation: [-3.5, 4.0499997, -22.11]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.6547209, 3.8035977, -22.048084]
+      Rotation: [1.0312355, 0.3853952, -0.48964897]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2658,13 +2660,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 12266870207976347182
+  - Entity: 3299979353989971401
     TagComponent:
       Tag: Plane (172)
       IsActive: true
     TransformComponent:
-      Translation: [-2.8, 4.0499997, -22.11]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.24236856, 4.11595, -22.335732]
+      Rotation: [1.9682925, -0.4775477, 0.44740805]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2673,13 +2675,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 17358133803860161686
+  - Entity: 3658224013246498445
     TagComponent:
       Tag: Plane (173)
       IsActive: true
     TransformComponent:
-      Translation: [-2.1, 4.0499997, -22.11]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.76998377, 3.8283024, -22.023378]
+      Rotation: [1.1053495, 0.4595093, -0.41553485]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2688,13 +2690,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 18136924325837231458
+  - Entity: 8367619044571066676
     TagComponent:
       Tag: Plane (174)
       IsActive: true
     TransformComponent:
-      Translation: [-1.4, 4.0499997, -22.11]
-      Rotation: [1.570796, -0, 0]
+      Translation: [1.1823361, 4.1406546, -22.311026]
+      Rotation: [2.0424066, -0.4034336, 0.52152216]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2703,13 +2705,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 4133999740757340966
+  - Entity: 13879482486719972690
     TagComponent:
       Tag: Plane (175)
       IsActive: true
     TransformComponent:
-      Translation: [-0.7, 4.0499997, -22.11]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.1946886, 3.853007, -21.998674]
+      Rotation: [1.1794636, 0.53362346, -0.34142074]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2718,13 +2720,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 12087351205461359447
+  - Entity: 14726263482426488202
     TagComponent:
       Tag: Plane (176)
       IsActive: true
     TransformComponent:
-      Translation: [0, 4.0499997, -22.11]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.607041, 4.1653595, -22.286322]
+      Rotation: [2.1165206, -0.32931948, 0.5956363]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2733,13 +2735,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 721073581784213754
+  - Entity: 14277213245904678979
     TagComponent:
       Tag: Plane (177)
       IsActive: true
     TransformComponent:
-      Translation: [0.7, 4.0499997, -22.11]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.619393, 3.8777118, -21.97397]
+      Rotation: [1.2535778, 0.60773754, -0.26730663]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2748,13 +2750,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 12962699696906130331
+  - Entity: 2716362781014920038
     TagComponent:
       Tag: Plane (178)
       IsActive: true
     TransformComponent:
-      Translation: [1.4, 4.0499997, -22.11]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.0317454, 4.190064, -22.261618]
+      Rotation: [2.1906347, -0.25520536, 0.6697504]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2763,13 +2765,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 12986216716526344842
+  - Entity: 16280931285406702234
     TagComponent:
       Tag: Plane (179)
       IsActive: true
     TransformComponent:
-      Translation: [2.1, 4.0499997, -22.11]
-      Rotation: [1.570796, -0, 0]
+      Translation: [5.044098, 3.9024165, -21.949265]
+      Rotation: [1.3276919, 0.6818517, -0.19319253]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2778,13 +2780,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 2419408488503956757
+  - Entity: 9733432537526153742
     TagComponent:
       Tag: Plane (180)
       IsActive: true
     TransformComponent:
-      Translation: [2.8, 4.0499997, -22.11]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-5.0435495, 5.1147685, -24.246912]
+      Rotation: [2.2647488, -0.18109125, 0.74386454]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2793,13 +2795,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 10728331734910262410
+  - Entity: 17010129620472224114
     TagComponent:
       Tag: Plane (181)
       IsActive: true
     TransformComponent:
-      Translation: [3.5, 4.0499997, -22.11]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.031197, 4.8271213, -23.93456]
+      Rotation: [1.401806, 0.75596577, -0.119078405]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2808,13 +2810,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 14681207472562008254
+  - Entity: 14901392155720825966
     TagComponent:
       Tag: Plane (182)
       IsActive: true
     TransformComponent:
-      Translation: [4.2, 4.0499997, -22.11]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.618845, 5.1394734, -24.222208]
+      Rotation: [2.3388631, -0.10697714, 0.8179786]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2823,13 +2825,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 475586956498192871
+  - Entity: 12181876939072934714
     TagComponent:
       Tag: Plane (183)
       IsActive: true
     TransformComponent:
-      Translation: [4.9, 4.0499997, -22.11]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.6064925, 4.8518257, -23.909855]
+      Rotation: [1.4759201, 0.8300799, -0.04496429]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2838,13 +2840,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 2393616201071703261
+  - Entity: 4796065521180180976
     TagComponent:
       Tag: Plane (184)
       IsActive: true
     TransformComponent:
-      Translation: [-4.9, 4.95, -24.119999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.1941402, 5.1641784, -24.197502]
+      Rotation: [2.4129772, -0.032863025, 0.89209276]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2853,13 +2855,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 1285702408882824952
+  - Entity: 7704836959287710251
     TagComponent:
       Tag: Plane (185)
       IsActive: true
     TransformComponent:
-      Translation: [-4.2, 4.95, -24.119999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-1.181788, 4.8765306, -23.88515]
+      Rotation: [1.5500343, -0.89580595, 0.029149825]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2868,13 +2870,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 11088428074675730370
+  - Entity: 1202681953109910447
     TagComponent:
       Tag: Plane (186)
       IsActive: true
     TransformComponent:
-      Translation: [-3.5, 4.95, -24.119999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-0.7694356, 5.188883, -24.172798]
+      Rotation: [0.68709135, 0.04125109, -0.8337931]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2883,13 +2885,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 5098054407853923002
+  - Entity: 6739460284362604224
     TagComponent:
       Tag: Plane (187)
       IsActive: true
     TransformComponent:
-      Translation: [-2.8, 4.95, -24.119999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.24291675, 4.901235, -23.860445]
+      Rotation: [1.6241484, -0.8216918, 0.10326394]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2898,13 +2900,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 4926003502792208913
+  - Entity: 16007710212930710929
     TagComponent:
       Tag: Plane (188)
       IsActive: true
     TransformComponent:
-      Translation: [-2.1, 4.95, -24.119999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [0.6552691, 5.2135878, -24.148094]
+      Rotation: [0.76120543, 0.11536521, -0.75967896]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2913,13 +2915,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 14885313737169755553
+  - Entity: 14824710442881956681
     TagComponent:
       Tag: Plane (189)
       IsActive: true
     TransformComponent:
-      Translation: [-1.4, 4.95, -24.119999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [1.6676214, 4.92594, -23.835741]
+      Rotation: [1.6982625, -0.7475777, 0.17737806]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2928,13 +2930,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 6104286566718762367
+  - Entity: 7414372624503791547
     TagComponent:
       Tag: Plane (190)
       IsActive: true
     TransformComponent:
-      Translation: [-0.7, 4.95, -24.119999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [2.0799737, 5.238292, -24.123388]
+      Rotation: [0.8353196, 0.18947932, -0.6855649]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2943,13 +2945,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 4041443947032281251
+  - Entity: 17455073057363785566
     TagComponent:
       Tag: Plane (191)
       IsActive: true
     TransformComponent:
-      Translation: [0, 4.95, -24.119999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.0923262, 4.9506445, -24.411037]
+      Rotation: [1.7723765, -0.6734636, 0.25149217]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2958,13 +2960,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 2412600353035627327
+  - Entity: 988939891683789945
     TagComponent:
       Tag: Plane (192)
       IsActive: true
     TransformComponent:
-      Translation: [0.7, 4.95, -24.119999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.5046785, 4.662997, -24.098684]
+      Rotation: [0.90943366, 0.26359344, -0.61145073]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2973,13 +2975,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 4244226600379910405
+  - Entity: 8749273995457132831
     TagComponent:
       Tag: Plane (193)
       IsActive: true
     TransformComponent:
-      Translation: [1.4, 4.95, -24.119999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [3.9170308, 4.9753494, -24.386332]
+      Rotation: [1.8464907, -0.5993495, 0.3256063]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -2988,13 +2990,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 13594246030681660182
+  - Entity: 16946698058959175838
     TagComponent:
       Tag: Plane (194)
       IsActive: true
     TransformComponent:
-      Translation: [2.1, 4.95, -24.119999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [4.9293833, 4.6877017, -24.07398]
+      Rotation: [0.9835478, 0.33770755, -0.53733665]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -3003,13 +3005,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 15756539327030409980
+  - Entity: 17874395150996845900
     TagComponent:
       Tag: Plane (195)
       IsActive: true
     TransformComponent:
-      Translation: [2.8, 4.95, -24.119999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-5.158264, 5.900054, -26.371628]
+      Rotation: [1.9206048, -0.52523535, 0.3997204]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -3018,13 +3020,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 15942025795765681730
+  - Entity: 2383637771906751565
     TagComponent:
       Tag: Plane (196)
       IsActive: true
     TransformComponent:
-      Translation: [3.5, 4.95, -24.119999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-4.145912, 5.6124063, -26.059275]
+      Rotation: [1.0576619, 0.41182166, -0.4632225]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -3033,13 +3035,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 8195187043689509596
+  - Entity: 12906417141924334773
     TagComponent:
       Tag: Plane (197)
       IsActive: true
     TransformComponent:
-      Translation: [4.2, 4.95, -24.119999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-3.7335596, 5.924759, -26.346922]
+      Rotation: [1.9947189, -0.45112124, 0.4738345]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -3048,13 +3050,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 13771210706614183641
+  - Entity: 17815991966410144796
     TagComponent:
       Tag: Plane (198)
       IsActive: true
     TransformComponent:
-      Translation: [4.9, 4.95, -24.119999]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.7212074, 5.637111, -26.03457]
+      Rotation: [1.131776, 0.48593578, -0.3891084]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -3063,73 +3065,13 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 3323697270862889094
-  - Entity: 189886079711247060
+  - Entity: 4438571315684779451
     TagComponent:
       Tag: Plane (199)
       IsActive: true
     TransformComponent:
-      Translation: [-4.9, 5.85, -26.13]
-      Rotation: [1.570796, -0, 0]
-      Scale: [1, 0.9999985, 0.9999985]
-    MeshRendererComponent:
-      ModelHandle: 16140901000000000003
-      MaterialHandle: 2877837325534738788
-      CastShadows: true
-      ReceiveShadows: true
-    RelationshipComponent:
-      Parent: 3323697270862889094
-  - Entity: 1774804806242060490
-    TagComponent:
-      Tag: Plane (200)
-      IsActive: true
-    TransformComponent:
-      Translation: [-4.2, 5.85, -26.13]
-      Rotation: [1.570796, -0, 0]
-      Scale: [1, 0.9999985, 0.9999985]
-    MeshRendererComponent:
-      ModelHandle: 16140901000000000003
-      MaterialHandle: 2877837325534738788
-      CastShadows: true
-      ReceiveShadows: true
-    RelationshipComponent:
-      Parent: 3323697270862889094
-  - Entity: 8500721435783908368
-    TagComponent:
-      Tag: Plane (201)
-      IsActive: true
-    TransformComponent:
-      Translation: [-3.5, 5.85, -26.13]
-      Rotation: [1.570796, -0, 0]
-      Scale: [1, 0.9999985, 0.9999985]
-    MeshRendererComponent:
-      ModelHandle: 16140901000000000003
-      MaterialHandle: 2877837325534738788
-      CastShadows: true
-      ReceiveShadows: true
-    RelationshipComponent:
-      Parent: 3323697270862889094
-  - Entity: 14715385856915586730
-    TagComponent:
-      Tag: Plane (202)
-      IsActive: true
-    TransformComponent:
-      Translation: [-2.8, 5.85, -26.13]
-      Rotation: [1.570796, -0, 0]
-      Scale: [1, 0.9999985, 0.9999985]
-    MeshRendererComponent:
-      ModelHandle: 16140901000000000003
-      MaterialHandle: 2877837325534738788
-      CastShadows: true
-      ReceiveShadows: true
-    RelationshipComponent:
-      Parent: 3323697270862889094
-  - Entity: 13652294433293292357
-    TagComponent:
-      Tag: Plane (203)
-      IsActive: true
-    TransformComponent:
-      Translation: [-2.1, 5.85, -26.13]
-      Rotation: [1.570796, -0, 0]
+      Translation: [-2.308855, 5.9494634, -26.322218]
+      Rotation: [2.068833, -0.37700713, 0.54794866]
       Scale: [1, 0.9999985, 0.9999985]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
@@ -3143,12 +3085,57 @@ Entities:
       Tag: Cube
       IsActive: true
     TransformComponent:
-      Translation: [0, 0, -11.313732]
-      Rotation: [0, -0, 0]
-      Scale: [12.303961, 1.07, 13.677186]
+      Translation: [0, -1.3, -11.313732]
+      Rotation: [0, 0, 0]
+      Scale: [20, 0.27, 18.5]
     MeshRendererComponent:
       ModelHandle: 16140901000000000001
-      MaterialHandle: 5829192948109183656
+      MaterialHandle: 15334676293031836192
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 15365813361261833418
+    TagComponent:
+      Tag: Cube (1)
+      IsActive: true
+    TransformComponent:
+      Translation: [0.744812, -0.12516789, 1.4235992]
+      Rotation: [-3.8444066e-09, 0.2495821, 0.52883476]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000001
+      MaterialHandle: 3972635815643862782
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 2516172571071517753
+    TagComponent:
+      Tag: Cube (1) (1)
+      IsActive: true
+    TransformComponent:
+      Translation: [4.1, 2.12, -7.2346253]
+      Rotation: [0, 0.28274336, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000001
+      MaterialHandle: 3972635815643862782
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 6140692037560767299
+    TagComponent:
+      Tag: Cube (1) (1) (1)
+      IsActive: true
+    TransformComponent:
+      Translation: [-2.7623315, 7.6169324, -21.070246]
+      Rotation: [0, 0.28274322, 2.2095866]
+      Scale: [0.9999999, 0.99999994, 0.9999992]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000001
+      MaterialHandle: 3972635815643862782
       CastShadows: true
       ReceiveShadows: true
     RelationshipComponent:

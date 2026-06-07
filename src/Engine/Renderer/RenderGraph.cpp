@@ -386,7 +386,22 @@ namespace Ayaya {
                 uint32_t startTris = cmd.GetTriangleCount();
                 auto cpuStart = std::chrono::high_resolution_clock::now();
 
+                // GPU timestamp: record new slots for THIS frame
+                auto vkCtx2 = std::dynamic_pointer_cast<VulkanContext>(
+                    Application::Get().GetWindow().GetContext());
+                uint32_t tsNow = UINT32_MAX;
+                if (vkCtx2 && vkCtx2->IsTimestampSupported()) {
+                    tsNow = vkCtx2->AllocTimestampSlot();
+                    if (tsNow != UINT32_MAX) {
+                        cmd.WriteTimestamp(tsNow, true);   // TOP_OF_PIPE
+                    }
+                }
+
                 pass->ExecuteCallback(context, cmd);
+
+                if (tsNow != UINT32_MAX) {
+                    cmd.WriteTimestamp(tsNow + 1, false);  // BOTTOM_OF_PIPE
+                }
 
                 auto cpuEnd = std::chrono::high_resolution_clock::now();
 
@@ -398,6 +413,30 @@ namespace Ayaya {
                 prof.CPUTime   = std::chrono::duration<float, std::milli>(cpuEnd - cpuStart).count();
                 prof.DrawCalls = dc;
                 prof.Triangles = tris;
+
+                // Compute GPU time from persisted N-1 frame timestamp slots.
+                // Results are interleaved: [ts0, avail0, ts1, avail1, ...] (stride=16).
+                auto& dbgInfo = context.PassDebugInfos[pass->Name];
+                if (vkCtx2 && vkCtx2->IsTimestampSupported() && dbgInfo.TimestampSlot != UINT32_MAX) {
+                    uint64_t mask   = vkCtx2->GetTimestampMask();
+                    float    period = vkCtx2->GetTimestampPeriod();
+                    auto&   results = vkCtx2->GetTimestampResults();
+                    uint32_t slot   = dbgInfo.TimestampSlot;
+                    // Each pass uses 2 queries → 4 result slots (ts0, avail0, ts1, avail1)
+                    uint32_t idx0 = slot * 2;      // ts0,  idx0+1 = avail0
+                    uint32_t idx1 = (slot + 1) * 2; // ts1,  idx1+1 = avail1
+                    if (idx1 < results.size()) {
+                        uint64_t t0 = results[idx0] & mask;
+                        uint64_t t1 = results[idx1] & mask;
+                        bool avail = (results[idx0 + 1] & 1) && (results[idx1 + 1] & 1);
+                        if (avail && t1 > 0) {
+                            uint64_t delta = (t1 >= t0) ? (t1 - t0)
+                                : ((mask - t0) + t1 + 1);
+                            prof.GPUTime = static_cast<float>(delta) * period / 1e6f;
+                        }
+                    }
+                }
+                dbgInfo.TimestampSlot = tsNow;
 
                 // Populate PassDebugInfo (texture I/O + metadata)
                 auto& info = context.PassDebugInfos[pass->Name];

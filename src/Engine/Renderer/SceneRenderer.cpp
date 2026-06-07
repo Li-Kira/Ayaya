@@ -505,6 +505,11 @@ namespace Ayaya {
                 if (camUBO) for (uint32_t i=0;i<3;i++) VulkanPipeline::SetGlobalUniformBuffer(0,i,camUBO->GetBuffer(i),sizeof(struct_CameraData));
                 if (lightUBO) for (uint32_t i=0;i<3;i++) VulkanPipeline::SetGlobalUniformBuffer(1,i,lightUBO->GetBuffer(i),sizeof(struct_LightData));
 
+                // Read N-1 frame GPU timestamps before executing current frame
+                auto tsCtx = std::dynamic_pointer_cast<VulkanContext>(
+                    Application::Get().GetWindow().GetContext());
+                if (tsCtx) tsCtx->ReadTimestampResults();
+
                 m_RenderGraph.Execute(m_RenderContext, *cmd);
             } else {
                 // OpenGL 线性管线 (保持兼容)

@@ -63,6 +63,7 @@ namespace Ayaya {
         virtual void BlitDepth(const std::shared_ptr<Framebuffer>& readFBO, const std::shared_ptr<Framebuffer>& drawFBO, uint32_t width, uint32_t height) override;
         virtual void DrawTriangleStrip(uint32_t vertexCount) override;
 
+        virtual void WriteTimestamp(uint32_t, bool) override {}
         virtual void InsertExecutionBarrier() override {}
         virtual void TransitionImageLayout(const std::shared_ptr<Framebuffer>&,
                                            uint32_t, ImageLayout, ImageLayout) override {}

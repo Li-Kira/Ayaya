@@ -374,39 +374,45 @@ namespace Ayaya {
         auto& snapDB = m_HasSnapshot ? m_SnapshotDebugInfos : ctx.PassDebugInfos;
 
         // Summary cards — aggregate from PassDebugInfos
-        float totalCPU = 0.0f;
+        float totalCPU = 0.0f, totalGPU = 0.0f;
         uint32_t totalDC = 0, totalTris = 0;
         int nPasses = 0;
         for (auto& [_, p] : snapDB) {
             if (!p.Executed) continue;
-            totalCPU += p.CPUTime; totalDC += p.DrawCalls; totalTris += p.Triangles; nPasses++;
+            totalCPU += p.CPUTime; totalGPU += p.GPUTime;
+            totalDC += p.DrawCalls; totalTris += p.Triangles; nPasses++;
         }
+        bool hasGPU = totalGPU > 0.0f;
 
-        // Fixed header: compact stats row + status (never scrolls away)
+        // Fixed header: compact stats row (never scrolls away)
         ImGui::BeginChild("ProfHeader", ImVec2(0, 70), false);
-        if (ImGui::BeginTable("ProfSum", 4, ImGuiTableFlags_Borders)) {
-            ImGui::TableSetupColumn("##h0", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("##h1", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("##h2", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("##h3", ImGuiTableColumnFlags_WidthStretch);
+        int cols = hasGPU ? 5 : 4;
+        if (ImGui::BeginTable("ProfSum", cols, ImGuiTableFlags_Borders)) {
+            for (int i = 0; i < cols; i++) ImGui::TableSetupColumn("##h", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
-            ImGui::TextDisabled("Executed"); ImGui::SameLine();
+            ImGui::TextDisabled("Passes"); ImGui::SameLine();
             ImGui::TextColored(ImVec4(1,1,1,1), "%d", nPasses);
             ImGui::TableSetColumnIndex(1);
-            ImGui::TextDisabled("CPU Total"); ImGui::SameLine();
+            ImGui::TextDisabled("CPU"); ImGui::SameLine();
             ImGui::TextColored(totalCPU > 16.6f ? ImVec4(1,0.4f,0.4f,1) : ImVec4(1,0.8f,0.2f,1),
                 "%.2f ms", totalCPU);
-            ImGui::TableSetColumnIndex(2);
-            ImGui::TextDisabled("Draw Calls"); ImGui::SameLine();
+            if (hasGPU) {
+                ImGui::TableSetColumnIndex(2);
+                ImGui::TextDisabled("GPU"); ImGui::SameLine();
+                ImGui::TextColored(totalGPU > 16.6f ? ImVec4(1,0.4f,0.4f,1) : ImVec4(0.4f,0.8f,1,1),
+                    "%.2f ms", totalGPU);
+            }
+            ImGui::TableSetColumnIndex(hasGPU ? 3 : 2);
+            ImGui::TextDisabled("Draws"); ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.4f,1,0.4f,1), "%u", totalDC);
-            ImGui::TableSetColumnIndex(3);
-            ImGui::TextDisabled("Triangles"); ImGui::SameLine();
+            ImGui::TableSetColumnIndex(hasGPU ? 4 : 3);
+            ImGui::TextDisabled("Tris"); ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.4f,1,0.4f,1), "%u", totalTris);
             ImGui::EndTable();
         }
-        if (isVulkan)
-            ImGui::TextDisabled("Vulkan: GPU timing via VkQueryPool pending. CPU times shown.");
+        if (isVulkan && !hasGPU)
+            ImGui::TextDisabled("GPU timestamps: first frame warmup...");
         ImGui::EndChild();
         ImGui::Separator();
 
@@ -436,13 +442,16 @@ namespace Ayaya {
                     ImGui::TableSetColumnIndex(1);
                     ImVec4 col = info->Executed ? ImVec4(1,1,1,1) : ImVec4(0.5f,0.5f,0.5f,1);
                     ImGui::TextColored(col, "%s", info->PassName.c_str());
+                    auto timeColor = [](float ms) -> ImVec4 {
+                        return ms > 2.0f ? ImVec4(1,0.3f,0.3f,1)   // red
+                             : ms > 1.0f ? ImVec4(1,0.7f,0.2f,1)   // yellow
+                             : ImVec4(0.4f,1,0.4f,1);              // green
+                    };
                     ImGui::TableSetColumnIndex(2);
-                    ImVec4 tc = info->CPUTime > 2.0f ? ImVec4(1,0.3f,0.3f,1)
-                        : info->CPUTime > 1.0f ? ImVec4(1,0.7f,0.2f,1)
-                        : ImVec4(0.4f,1,0.4f,1);
-                    ImGui::TextColored(tc, "%.3f", info->CPUTime);
+                    ImGui::TextColored(timeColor(info->CPUTime), "%.3f", info->CPUTime);
                     ImGui::TableSetColumnIndex(3);
-                    if (info->GPUTime > 0.0f) ImGui::Text("%.3f", info->GPUTime);
+                    if (info->GPUTime > 0.0f)
+                        ImGui::TextColored(timeColor(info->GPUTime), "%.3f", info->GPUTime);
                     else ImGui::TextDisabled("-");
                     ImGui::TableSetColumnIndex(4);
                     ImGui::Text("%u", info->DrawCalls);
@@ -462,11 +471,16 @@ namespace Ayaya {
                 ImGui::TableSetupColumn("Tris",    ImGuiTableColumnFlags_WidthFixed, 90.0f);
                 ImGui::TableHeadersRow();
                 float tCPU=0, tGPU=0; uint32_t tDC=0, tT=0;
+                auto timeColor = [](float ms) -> ImVec4 {
+                    return ms > 2.0f ? ImVec4(1,0.3f,0.3f,1)
+                         : ms > 1.0f ? ImVec4(1,0.7f,0.2f,1)
+                         : ImVec4(0.4f,1,0.4f,1);
+                };
                 for (auto& [n, p] : ctx.PassProfiles) {
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0); ImGui::Text("%s", n.c_str());
-                    ImGui::TableSetColumnIndex(1); ImGui::Text("%.3f", p.CPUTime);
-                    ImGui::TableSetColumnIndex(2); ImGui::Text("%.3f", p.GPUTime);
+                    ImGui::TableSetColumnIndex(1); ImGui::TextColored(timeColor(p.CPUTime), "%.3f", p.CPUTime);
+                    ImGui::TableSetColumnIndex(2); ImGui::TextColored(timeColor(p.GPUTime), "%.3f", p.GPUTime);
                     ImGui::TableSetColumnIndex(3); ImGui::Text("%u", p.DrawCalls);
                     ImGui::TableSetColumnIndex(4); ImGui::Text("%u", p.Triangles);
                     tCPU+=p.CPUTime; tGPU+=p.GPUTime; tDC+=p.DrawCalls; tT+=p.Triangles;

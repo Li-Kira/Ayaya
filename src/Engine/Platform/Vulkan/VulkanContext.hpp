@@ -64,6 +64,16 @@ namespace Ayaya {
         inline uint32_t GetCurrentFrameIndex() const { return m_CurrentFrame; }
         inline uint32_t GetFramesInFlight() const { return m_FramesInFlight; }
 
+        // ---- GPU Timestamp Queries ----
+        bool IsTimestampSupported() const { return m_TimestampValidBits > 0; }
+        float GetTimestampPeriod() const { return m_TimestampPeriod; }
+        uint64_t GetTimestampMask() const { return m_TimestampMask; }
+        VkQueryPool GetTimestampPool() const { return m_TimestampPool; }
+        const std::vector<uint64_t>& GetTimestampResults() const { return m_TimestampResults; }
+        void ReadTimestampResults();
+        // Allocate consecutive query indices for one pass (returns start index).
+        uint32_t AllocTimestampSlot();
+
         inline VulkanBindlessManager& GetBindlessManager() { return m_BindlessManager; }
         inline VkDescriptorSetLayout GetBindlessLayout() const { return m_BindlessManager.GetLayout(); }
         inline VkDescriptorSet GetBindlessSet() const { return m_BindlessManager.GetSet(); }
@@ -103,6 +113,18 @@ namespace Ayaya {
         uint32_t m_GraphicsQueueFamily = 0;
 
         VulkanBindlessManager m_BindlessManager;
+
+        // GPU timestamp queries (16 passes × 2 slots × 3 frames-in-flight)
+        static constexpr uint32_t kMaxTimestampQueries = 96;
+        // Results buffer: 2× query count (result + availability interleaved, stride=16)
+        static constexpr uint32_t kMaxTimestampResults  = kMaxTimestampQueries * 2;
+        VkQueryPool m_TimestampPool = VK_NULL_HANDLE;
+        std::vector<uint64_t> m_TimestampResults;  // [r0, avail0, r1, avail1, ...]
+        uint32_t m_TimestampValidBits = 0;
+        float    m_TimestampPeriod    = 0.0f;
+        uint64_t m_TimestampMask      = 0;
+        uint32_t m_TimestampSlotsUsed = 0;
+        uint32_t m_LastFrameSlotCount = 0;
 
         void CreateSurface();
         void PickPhysicalDevice();

@@ -422,6 +422,17 @@ namespace Ayaya {
         m_TriangleCount += count / 3;
     }
 
+    void VulkanRenderCommandBuffer::WriteTimestamp(uint32_t queryIndex, bool topOfPipe) {
+        auto ctx = std::dynamic_pointer_cast<VulkanContext>(
+            Application::Get().GetWindow().GetContext());
+        if (!ctx || ctx->GetTimestampPool() == VK_NULL_HANDLE) return;
+        VkPipelineStageFlagBits stage = topOfPipe
+            ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+            : VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+        vkCmdWriteTimestamp(ctx->GetCurrentCommandBuffer(), stage,
+            ctx->GetTimestampPool(), queryIndex);
+    }
+
     void VulkanRenderCommandBuffer::InsertExecutionBarrier() {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         VkCommandBuffer cmdBuffer = context->GetCurrentCommandBuffer();

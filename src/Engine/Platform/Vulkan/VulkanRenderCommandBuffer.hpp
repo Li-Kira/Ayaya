@@ -74,6 +74,7 @@ namespace Ayaya {
         virtual void DrawTriangleStrip(uint32_t vertexCount) override;
 
         // 管线屏障
+        virtual void WriteTimestamp(uint32_t queryIndex, bool topOfPipe) override;
         virtual void InsertExecutionBarrier() override;
         virtual void TransitionImageLayout(const std::shared_ptr<Framebuffer>& fbo,
                                            uint32_t attachmentIndex,

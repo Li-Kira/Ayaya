@@ -40,6 +40,9 @@ namespace Ayaya {
         if (m_OneTimeCommandPool != VK_NULL_HANDLE) {
             vkDestroyCommandPool(m_Device, m_OneTimeCommandPool, nullptr);
         }
+        if (m_TimestampPool != VK_NULL_HANDLE) {
+            vkDestroyQueryPool(m_Device, m_TimestampPool, nullptr);
+        }
 
         CleanupSwapChain();
 
@@ -246,6 +249,34 @@ namespace Ayaya {
 
         vkGetDeviceQueue(m_Device, indices.GraphicsFamily.value(), 0, &m_GraphicsQueue);
         vkGetDeviceQueue(m_Device, indices.PresentFamily.value(), 0, &m_PresentQueue);
+
+        // ---- GPU Timestamp Query Pool ----
+        VkPhysicalDeviceProperties props;
+        vkGetPhysicalDeviceProperties(m_PhysicalDevice, &props);
+        m_TimestampPeriod = props.limits.timestampPeriod > 0.0f
+            ? props.limits.timestampPeriod : 1.0f;
+
+        // Vulkan 1.4+: timestampValidBits moved from VkPhysicalDeviceLimits to
+        // VkQueueFamilyProperties.  Query the graphics queue family for it.
+        uint32_t qfCount = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(m_PhysicalDevice, &qfCount, nullptr);
+        std::vector<VkQueueFamilyProperties> qfProps(qfCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(m_PhysicalDevice, &qfCount, qfProps.data());
+        m_TimestampValidBits = qfProps[m_GraphicsQueueFamily].timestampValidBits; // nanoseconds per tick
+        m_TimestampMask = (m_TimestampValidBits == 64)
+            ? ~0ULL : ((1ULL << m_TimestampValidBits) - 1);
+
+        if (m_TimestampValidBits > 0) {
+            VkQueryPoolCreateInfo qpCI{ VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO };
+            qpCI.queryType  = VK_QUERY_TYPE_TIMESTAMP;
+            qpCI.queryCount = kMaxTimestampQueries;
+            vkCreateQueryPool(m_Device, &qpCI, nullptr, &m_TimestampPool);
+            m_TimestampResults.resize(kMaxTimestampResults);
+            AYAYA_CORE_INFO("GPU Timestamp pool created: validBits={0} period={1}ns",
+                m_TimestampValidBits, m_TimestampPeriod);
+        } else {
+            AYAYA_CORE_WARN("GPU Timestamps NOT supported (validBits=0)");
+        }
     }
 
     SwapChainSupportDetails VulkanContext::QuerySwapChainSupport(VkPhysicalDevice device) {
@@ -506,6 +537,44 @@ namespace Ayaya {
             AYAYA_CORE_ERROR("[DBG] BeginFrame: vkBeginCommandBuffer FAILED! m_CurrentFrame={0}, result={1} ({2})",
                 m_CurrentFrame, (int)beginResult, VkResultStr(beginResult));
         }
+
+        // Reset ALL timestamp queries every frame.  vkCmdResetQueryPool is
+        // cheap and guarantees every slot is fresh — avoids the first-frame
+        // cold-start where m_TimestampSlotsUsed is still 0.
+        if (m_TimestampPool != VK_NULL_HANDLE) {
+            vkCmdResetQueryPool(m_CommandBuffers[m_CurrentFrame],
+                m_TimestampPool, 0, kMaxTimestampQueries);
+        }
+        m_LastFrameSlotCount = m_TimestampSlotsUsed;
+        m_TimestampSlotsUsed = 0;
+    }
+
+    uint32_t VulkanContext::AllocTimestampSlot() {
+        if (m_TimestampPool == VK_NULL_HANDLE) return UINT32_MAX;
+        if (m_TimestampSlotsUsed + 2 > kMaxTimestampQueries) return UINT32_MAX;
+        uint32_t slot = m_TimestampSlotsUsed;
+        m_TimestampSlotsUsed += 2;
+        return slot;
+    }
+
+    void VulkanContext::ReadTimestampResults() {
+        if (m_TimestampPool == VK_NULL_HANDLE || m_LastFrameSlotCount == 0) return;
+
+        uint32_t count = m_LastFrameSlotCount;
+        // With VK_QUERY_RESULT_WITH_AVAILABILITY_BIT, stride must be >= 16:
+        // each query produces [result64, availability64] interleaved.
+        const uint32_t stride = 16;
+        uint32_t dataSize = count * stride;
+        if (dataSize > m_TimestampResults.size() * sizeof(uint64_t)) {
+            m_TimestampResults.resize(dataSize / sizeof(uint64_t));
+        }
+
+        VkResult result = vkGetQueryPoolResults(m_Device, m_TimestampPool, 0, count,
+            dataSize, m_TimestampResults.data(), stride,
+            VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+
+        if (result == VK_NOT_READY) return;
+        // Results layout: [ts0, avail0, ts1, avail1, ...]
     }
 
     void VulkanContext::SwapBuffers() {

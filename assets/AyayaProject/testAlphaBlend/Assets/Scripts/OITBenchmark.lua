@@ -49,6 +49,20 @@ CONFIG = {
         max   = 5.0,
         label = "Depth Offset"
     },
+    posJitter = {
+        value = 0.0,
+        type  = "float",
+        min   = 0.0,
+        max   = 5.0,
+        label = "Position Jitter"
+    },
+    rotJitter = {
+        value = 0.0,
+        type  = "float",
+        min   = 0.0,
+        max   = 180.0,
+        label = "Rotation Jitter (deg)"
+    },
 }
 
 -- ============================================================
@@ -57,10 +71,24 @@ CONFIG = {
 local spawned = {}      -- array of child entities
 local layoutNames = { "Grid", "Line", "Fan", "LayerStack" }
 
+-- Deterministic pseudo-random per entity index (0-based)
+-- Uses a simple LCG so jitter is stable across rebuilds.
+local function randFor(i, seed)
+    local s = (i + 1) * 1103515245 + (seed or 12345)
+    s = (s * 1103515245 + 12345) % 2147483648
+    return s / 2147483648  -- [0, 1)
+end
+
+local function jittered(center, jitter, i, seed)
+    if jitter <= 0 then return center end
+    return center + (randFor(i, seed) - 0.5) * jitter * 2.0
+end
+
 -- ============================================================
 -- Compute position for entity index i (1-based)
 -- ============================================================
-local function calcPosition(i, n, layout, sx, sy, dz)
+local function calcPosition(i, n, layout, sx, sy, dz, pJit)
+    local x, y, z
     if layout == 0 then  -- Grid
         local cols = math.ceil(math.sqrt(n))
         local rows = math.ceil(n / cols)
@@ -68,35 +96,60 @@ local function calcPosition(i, n, layout, sx, sy, dz)
         local hh = (rows - 1) * sy * 0.5
         local c = (i - 1) % cols
         local r = math.floor((i - 1) / cols)
-        return vec3.new(c * sx - hw, r * sy - hh, -r * dz)
+        x = c * sx - hw
+        y = r * sy - hh
+        z = -r * dz
     elseif layout == 1 then  -- Line
         local hw = (n - 1) * sx * 0.5
-        return vec3.new((i - 1) * sx - hw, 0.0, -((i - 1) % 3) * dz)
+        x = (i - 1) * sx - hw
+        y = 0.0
+        z = -((i - 1) % 3) * dz
     elseif layout == 2 then  -- Fan
         local radius = sx * 2.0
         local angle = (i - 1) * 6.28318 / n
-        return vec3.new(math.cos(angle) * radius, math.sin(angle) * radius, -i * dz * 0.5)
+        x = math.cos(angle) * radius
+        y = math.sin(angle) * radius
+        z = -i * dz * 0.5
     else  -- LayerStack
-        return vec3.new(0.0, 0.0, -i * dz * 0.25)
+        x = 0.0
+        y = 0.0
+        z = -i * dz * 0.25
     end
+    return vec3.new(
+        jittered(x, pJit, i, 1),
+        jittered(y, pJit, i, 2),
+        jittered(z, pJit, i, 3))
 end
 
 -- ============================================================
--- Reposition all existing children (no spawn/despawn, just move)
+-- Reposition all existing children with optional random jitter
 -- ============================================================
 local function repositionAll()
     local n = #spawned
-    -- Flat array {x1,y1,z1, x2,y2,z2, ...} — parses 3× faster than table-of-vec3
-    local flat = {}
+    local tflat, rflat = {}, {}
+    local pJit = posJitter
+    local rJit = rotJitter
+    -- Plane.prefab default rotation: 90° around X to stand upright facing camera
+    local baseRotX, baseRotY, baseRotZ = 1.570796, 0.0, 0.0
+
     for i = 1, n do
         if spawned[i] and spawned[i]:IsValid() then
-            local pos = calcPosition(i, n, layout, spacingX, spacingY, depth)
-            flat[#flat + 1] = pos.x
-            flat[#flat + 1] = pos.y
-            flat[#flat + 1] = pos.z
+            local pos = calcPosition(i, n, layout, spacingX, spacingY, depth, pJit)
+            tflat[#tflat + 1] = pos.x
+            tflat[#tflat + 1] = pos.y
+            tflat[#tflat + 1] = pos.z
+
+            if rJit > 0 then
+                rflat[#rflat + 1] = baseRotX + jittered(0, rJit, i, 10)
+                rflat[#rflat + 1] = baseRotY + jittered(0, rJit, i, 11)
+                rflat[#rflat + 1] = baseRotZ + jittered(0, rJit, i, 12)
+            end
         end
     end
-    Ayaya.SetTranslationsBatch(spawned, flat)
+    Ayaya.SetTranslationsBatch(spawned, tflat)
+    if rJit > 0 then
+        Ayaya.SetRotationsBatch(spawned, rflat)
+    end
 end
 
 -- ============================================================
@@ -107,7 +160,7 @@ function Rebuild(spawnerEntity, sceneRef)
     local current = #spawned
     local target  = count
 
-    -- Remove excess (guard against stale references)
+    -- Remove excess
     while #spawned > target do
         local e = spawned[#spawned]
         spawned[#spawned] = nil
@@ -125,9 +178,7 @@ function Rebuild(spawnerEntity, sceneRef)
         table.insert(spawned, e)
     end
 
-    -- Reposition ALL children for the current layout
     repositionAll()
-
     Log.Info("OIT: " .. #spawned .. " planes, layout=" .. layoutNames[layout + 1])
 end
 
