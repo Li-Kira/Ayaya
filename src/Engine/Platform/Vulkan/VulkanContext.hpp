@@ -62,6 +62,7 @@ namespace Ayaya {
         VkFormat FindDepthFormat();
 
         inline uint32_t GetCurrentFrameIndex() const { return m_CurrentFrame; }
+        inline uint32_t GetFramesInFlight() const { return m_FramesInFlight; }
 
         inline VulkanBindlessManager& GetBindlessManager() { return m_BindlessManager; }
         inline VkDescriptorSetLayout GetBindlessLayout() const { return m_BindlessManager.GetLayout(); }

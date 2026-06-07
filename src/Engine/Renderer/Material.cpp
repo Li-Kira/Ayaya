@@ -54,54 +54,96 @@ namespace Ayaya {
     // ==========================================
     
     void Material::SetFloat(const std::string& name, float value) {
+        m_BakedPC.Dirty = true;
         SetPropertyInternal(name, MaterialPropertyType::Float, [&](MaterialProperty& p) { p.FloatValue = value; });
     }
-
     void Material::SetInt(const std::string& name, int value) {
+        m_BakedPC.Dirty = true;
         SetPropertyInternal(name, MaterialPropertyType::Int, [&](MaterialProperty& p) { p.IntValue = value; });
     }
-
     void Material::SetBool(const std::string& name, bool value) {
+        m_BakedPC.Dirty = true;
         SetPropertyInternal(name, MaterialPropertyType::Bool, [&](MaterialProperty& p) { p.BoolValue = value; });
     }
-
     void Material::SetVec2(const std::string& name, const glm::vec2& value) {
+        m_BakedPC.Dirty = true;
         SetPropertyInternal(name, MaterialPropertyType::Vec2, [&](MaterialProperty& p) { p.Vec2Value = value; });
     }
-
     void Material::SetVec3(const std::string& name, const glm::vec3& value) {
+        m_BakedPC.Dirty = true;
         SetPropertyInternal(name, MaterialPropertyType::Vec3, [&](MaterialProperty& p) { p.Vec3Value = value; });
     }
-
     void Material::SetVec4(const std::string& name, const glm::vec4& value) {
+        m_BakedPC.Dirty = true;
         SetPropertyInternal(name, MaterialPropertyType::Vec4, [&](MaterialProperty& p) { p.Vec4Value = value; });
     }
-
     void Material::SetMat3(const std::string& name, const glm::mat3& value) {
+        m_BakedPC.Dirty = true;
         SetPropertyInternal(name, MaterialPropertyType::Mat3, [&](MaterialProperty& p) { p.Mat3Value = value; });
     }
-
     void Material::SetMat4(const std::string& name, const glm::mat4& value) {
+        m_BakedPC.Dirty = true;
         SetPropertyInternal(name, MaterialPropertyType::Mat4, [&](MaterialProperty& p) { p.Mat4Value = value; });
     }
-
     void Material::SetTexture(const std::string& name, UUID textureHandle) {
-        SetPropertyInternal(name, MaterialPropertyType::Texture2D, [&](MaterialProperty& p) { 
-            p.TextureHandle = textureHandle; 
-            p.RuntimeTexture = nullptr; // 清除可能残留的运行时对象
+        m_BakedPC.Dirty = true;
+        SetPropertyInternal(name, MaterialPropertyType::Texture2D, [&](MaterialProperty& p) {
+            p.TextureHandle = textureHandle;
+            p.RuntimeTexture = nullptr;
         });
     }
-
     void Material::SetRuntimeTexture(const std::string& name, const std::shared_ptr<Texture2D>& texture) {
-        SetPropertyInternal(name, MaterialPropertyType::Texture2D, [&](MaterialProperty& p) { 
-            p.RuntimeTexture = texture; 
-            p.TextureHandle = 0; // 清除可能残留的资产 ID
+        m_BakedPC.Dirty = true;
+        SetPropertyInternal(name, MaterialPropertyType::Texture2D, [&](MaterialProperty& p) {
+            p.RuntimeTexture = texture;
+            p.TextureHandle = 0;
         });
     }
     
     void Material::SetRuntimeTextureCube(const std::string& name, const std::shared_ptr<TextureCube>& texture) {
-    SetPropertyInternal(name, MaterialPropertyType::TextureCube, [&texture](MaterialProperty& prop) {
-        prop.RuntimeTextureCube = texture;
-    });
-}
+        m_BakedPC.Dirty = true;
+        SetPropertyInternal(name, MaterialPropertyType::TextureCube, [&texture](MaterialProperty& prop) {
+            prop.RuntimeTextureCube = texture;
+        });
+    }
+
+    void Material::BakeProperties() {
+        m_BakedPC = BakedPC{};  // reset to defaults
+        for (auto& prop : Properties) {
+            if (prop.UniformName == "u_Albedo" && prop.Type == MaterialPropertyType::Vec3) {
+                m_BakedPC.Albedo = glm::vec4(prop.Vec3Value, 1.0f);
+            } else if (prop.UniformName == "u_Metallic" && prop.Type == MaterialPropertyType::Float) {
+                m_BakedPC.Metallic = prop.FloatValue;
+            } else if (prop.UniformName == "u_Roughness" && prop.Type == MaterialPropertyType::Float) {
+                m_BakedPC.Roughness = prop.FloatValue;
+            } else if (prop.UniformName == "u_AO" && prop.Type == MaterialPropertyType::Float) {
+                m_BakedPC.AO = prop.FloatValue;
+            } else if (prop.UniformName == "u_Alpha" && prop.Type == MaterialPropertyType::Float) {
+                m_BakedPC.Alpha = prop.FloatValue;
+            } else if (prop.Type == MaterialPropertyType::Texture2D) {
+                // Resolve texture pointer once, cache in array
+                std::shared_ptr<Texture2D> tex = prop.RuntimeTexture;
+                if (!tex && prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle))
+                    tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
+                if (tex) {
+                    if (prop.UniformName == "u_AlbedoMap") {
+                        m_BakedPC.UseAlbedoMap = 1;
+                        m_BakedPC.Textures[0] = tex;
+                    } else if (prop.UniformName == "u_MetallicMap") {
+                        m_BakedPC.UseMetallicMap = 1;
+                        m_BakedPC.Textures[1] = tex;
+                    } else if (prop.UniformName == "u_RoughnessMap") {
+                        m_BakedPC.UseRoughnessMap = 1;
+                        m_BakedPC.Textures[2] = tex;
+                    }
+                }
+            }
+        }
+        m_BakedPC.Dirty = false;
+    }
+
+    const Material::BakedPC& Material::GetBakedPC() {
+        if (m_BakedPC.Dirty) BakeProperties();
+        return m_BakedPC;
+    }
 }

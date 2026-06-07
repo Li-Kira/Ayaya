@@ -2,11 +2,11 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition: [-1.1087471, 1.0701371, 6.8407264]
-  CameraDistance: 4.254928
-  CameraPitch: -0.1635944
-  CameraYaw: -0.232
-  CameraFocalPoint: [-0.14349747, 0.37715548, 2.755083]
+  CameraPosition: [-1.0236, 0.41132274, 5.4849286]
+  CameraDistance: 2.4092722
+  CameraPitch: -0.121594414
+  CameraYaw: -0.283
+  CameraFocalPoint: [-0.35580802, 0.11909005, 3.1885736]
 Entities:
   - Entity: 5769124819470007597
     TagComponent:
@@ -74,5 +74,20 @@ Entities:
       AmbientColor: [0, 0, 0]
       EquirectangularHandle: 0
       CubemapHandle: 16140901000000000006
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 15303463689400891349
+    TagComponent:
+      Tag: Cube (1)
+      IsActive: true
+    TransformComponent:
+      Translation: [0.02312946, -0.013031116, 2.9094565]
+      Rotation: [0, 0.42062435, 0]
+      Scale: [0.5, 0.5, 0.5]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000001
+      MaterialHandle: 3225459638960510756
+      CastShadows: true
+      ReceiveShadows: true
     RelationshipComponent:
       Parent: 0

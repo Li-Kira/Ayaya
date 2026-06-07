@@ -54,6 +54,10 @@ namespace Ayaya {
         virtual void DrawTriangleStrip(const std::shared_ptr<VertexArray>& vertexArray, uint32_t vertexCount) override;
         // 【新增】：实现 Mesh 接口
         virtual void DrawIndexed(const std::shared_ptr<Mesh>& mesh, uint32_t indexCount = 0) override;
+        virtual void DrawIndexedInstanced(const std::shared_ptr<Mesh>& mesh,
+                                           uint32_t indexCount,
+                                           uint32_t instanceCount,
+                                           uint32_t firstInstance) override {}
         virtual void DrawArrays(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount = 0) override;
         virtual void DrawTriangleStrip(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount = 0) override;
         virtual void BlitDepth(const std::shared_ptr<Framebuffer>& readFBO, const std::shared_ptr<Framebuffer>& drawFBO, uint32_t width, uint32_t height) override;

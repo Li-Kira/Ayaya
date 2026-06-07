@@ -113,9 +113,27 @@ namespace Ayaya {
         // 【新增】：动态 TextureCube 绑定 (例如注入预滤波环境贴图 PrefilterMap)
         void SetRuntimeTextureCube(const std::string& name, const std::shared_ptr<TextureCube>& texture);
 
+        // ==========================================
+        // Pre-baked push-constant cache (eliminates per-packet string parsing)
+        // ==========================================
+        struct BakedPC {
+            // Scalar values (directly memcpy-able to WBOITGatherPushConstants)
+            glm::vec4 Albedo{1.0f};
+            float Metallic = 0.0f, Roughness = 0.5f, AO = 1.0f, Alpha = 0.5f;
+            int UseAlbedoMap = 0, UseMetallicMap = 0, UseRoughnessMap = 0;
+            int UseAOMap = 0, UseNormalMap = 0;
+            bool Dirty = true;
+            // Pre-resolved texture pointers (slot 0=Albedo, 1=Metallic, 2=Roughness).
+            // nullptr means "no texture, use white fallback".
+            std::shared_ptr<class Texture2D> Textures[3];
+        };
+        const BakedPC& GetBakedPC();
+        void BakeProperties();  // rebuild BakedPC from Properties vector
+
     private:
         MaterialBlendMode m_BlendMode = MaterialBlendMode::Opaque;
         float m_AlphaCutoff = 0.5f;
+        mutable BakedPC m_BakedPC;  // lazy-baked: rebuilt when Dirty
 
         template<typename T>
         void SetPropertyInternal(const std::string& name, MaterialPropertyType type, T setter) {

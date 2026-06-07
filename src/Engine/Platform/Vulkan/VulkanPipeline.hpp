@@ -17,7 +17,12 @@ namespace Ayaya {
         virtual void Bind() override {} 
 
         VkPipeline GetVulkanPipeline() const { return m_Pipeline; }
-        VkPipelineLayout GetVulkanPipelineLayout() const { return m_PipelineLayout; }
+        VkPipelineLayout GetVulkanPipelineLayout() const {
+            return m_CustomLayout != VK_NULL_HANDLE ? m_CustomLayout : m_PipelineLayout;
+        }
+        // Override the reflected pipeline layout (e.g. for instanced set=2 SSBO).
+        void SetCustomLayout(VkPipelineLayout layout) { m_CustomLayout = layout; }
+        VkPipelineLayout GetCustomLayout() const { return m_CustomLayout; }
         
         // ==========================================
         // 【核心修改】：现在需要传入 frameIndex 来获取对应帧的相机描述符集 (Set 0)
@@ -50,6 +55,10 @@ namespace Ayaya {
         static void SetGlobalUniformBuffer(uint32_t binding, uint32_t frameIndex, VkBuffer buffer, uint32_t size);
         static void ClearGlobalUBOs() { s_GlobalUBOs.clear(); }
 
+        // Extra descriptor-set layouts appended after the reflected ones.
+        // Set before calling Pipeline::Create(), cleared automatically.
+        static std::vector<VkDescriptorSetLayout> s_ExtraSetLayouts;
+
         // 重新写入 UBO 描述符集 (多实例 s_GlobalUBOs 竞争修复)
         void RefreshDescriptorSets(VkDevice device);
 
@@ -71,6 +80,7 @@ namespace Ayaya {
 
         VkPipeline m_Pipeline = VK_NULL_HANDLE;
         VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
+        VkPipelineLayout m_CustomLayout = VK_NULL_HANDLE;  // overridden for instancing
         
         std::array<VkDescriptorSetLayout, 2> m_DescriptorSetLayouts = { VK_NULL_HANDLE, VK_NULL_HANDLE };
 

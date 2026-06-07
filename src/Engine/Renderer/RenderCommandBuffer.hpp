@@ -99,6 +99,11 @@ namespace Ayaya {
 
         // 【新增】：现代 RHI 接口，直接接受纯数据资产 Mesh
         virtual void DrawIndexed(const std::shared_ptr<Mesh>& mesh, uint32_t indexCount = 0) = 0;
+        // GPU instancing: firstInstance = byte offset into SSBO / sizeof(mat4)
+        virtual void DrawIndexedInstanced(const std::shared_ptr<Mesh>& mesh,
+                                           uint32_t indexCount,
+                                           uint32_t instanceCount,
+                                           uint32_t firstInstance) = 0;
         virtual void DrawArrays(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount = 0) = 0;
         virtual void DrawTriangleStrip(const std::shared_ptr<Mesh>& mesh, uint32_t vertexCount = 0) = 0;
         virtual void DrawTriangleStrip(uint32_t vertexCount) = 0;

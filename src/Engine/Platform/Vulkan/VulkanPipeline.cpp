@@ -8,6 +8,7 @@
 
 namespace Ayaya {
     std::unordered_map<uint32_t, std::array<VkDescriptorBufferInfo, 3>> VulkanPipeline::s_GlobalUBOs;
+    std::vector<VkDescriptorSetLayout> VulkanPipeline::s_ExtraSetLayouts;
 
     // 记录 UBO 缓冲区信息 (增加 frameIndex 参数)
     void VulkanPipeline::SetGlobalUniformBuffer(uint32_t binding, uint32_t frameIndex, VkBuffer buffer, uint32_t size) {
@@ -282,10 +283,19 @@ namespace Ayaya {
         pushConstantRange.offset = 0;
         pushConstantRange.size = 256;
 
+        // Append extra set layouts (e.g. SSBO for instancing), then clear the static hook
+        uint32_t extraCount = (uint32_t)s_ExtraSetLayouts.size();
+        std::vector<VkDescriptorSetLayout> allLayouts;
+        for (uint32_t i = 0; i < setCount; ++i)
+            allLayouts.push_back(m_DescriptorSetLayouts[i]);
+        for (auto& l : s_ExtraSetLayouts)
+            allLayouts.push_back(l);
+        s_ExtraSetLayouts.clear();
+
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = setCount;
-        pipelineLayoutInfo.pSetLayouts = m_DescriptorSetLayouts.data();
+        pipelineLayoutInfo.setLayoutCount = (uint32_t)allLayouts.size();
+        pipelineLayoutInfo.pSetLayouts = allLayouts.data();
         pipelineLayoutInfo.pushConstantRangeCount = 1;
         pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
@@ -469,6 +479,7 @@ namespace Ayaya {
             VkDevice device = context->GetDevice();
             if (m_Pipeline) vkDestroyPipeline(device, m_Pipeline, nullptr);
             if (m_PipelineLayout) vkDestroyPipelineLayout(device, m_PipelineLayout, nullptr);
+            if (m_CustomLayout) vkDestroyPipelineLayout(device, m_CustomLayout, nullptr);
             // 不销毁全局 Bindless Layout (由 VulkanContext 管理)
             if (!m_Specification.UseBindlessTextures) {
                 if (m_DescriptorSetLayouts[0]) vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayouts[0], nullptr);

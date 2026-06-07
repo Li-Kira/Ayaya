@@ -273,6 +273,43 @@ namespace Ayaya {
         m_TriangleCount += count / 3;
     }
 
+    void VulkanRenderCommandBuffer::DrawIndexedInstanced(
+            const std::shared_ptr<Mesh>& mesh,
+            uint32_t indexCount,
+            uint32_t instanceCount,
+            uint32_t firstInstance) {
+        if (!m_BoundPipeline || !mesh || instanceCount == 0) return;
+        auto context = std::dynamic_pointer_cast<VulkanContext>(
+            Application::Get().GetWindow().GetContext());
+        uint32_t currentFrame = context->GetCurrentFrameIndex() % 3;
+        VkCommandBuffer cmd = context->GetCurrentCommandBuffer();
+
+        // Bind camera UBO (Set 0) for current frame
+        VkDescriptorSet cameraSet = m_BoundPipeline->GetVulkanDescriptorSet(0, currentFrame);
+        if (cameraSet != VK_NULL_HANDLE) {
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                m_BoundPipeline->GetVulkanPipelineLayout(), 0, 1, &cameraSet, 0, nullptr);
+        }
+
+        // Bind material textures (Set 1)
+        FlushDescriptorSets();
+
+        // Bind VBO + IBO
+        auto vb = std::dynamic_pointer_cast<VulkanVertexBuffer>(mesh->GetVertexBuffer());
+        auto ib = std::dynamic_pointer_cast<VulkanIndexBuffer>(mesh->GetIndexBuffer());
+        if (vb && ib) {
+            VkBuffer vbs[] = { vb->GetVulkanBuffer() };
+            VkDeviceSize off[] = { 0 };
+            vkCmdBindVertexBuffers(cmd, 0, 1, vbs, off);
+            vkCmdBindIndexBuffer(cmd, ib->GetVulkanBuffer(), 0, VK_INDEX_TYPE_UINT32);
+        }
+
+        uint32_t count = indexCount ? indexCount : mesh->GetIndexCount();
+        vkCmdDrawIndexed(cmd, count, instanceCount, 0, 0, firstInstance);
+        m_DrawCallCount++;
+        m_TriangleCount += (count / 3) * instanceCount;
+    }
+
     void VulkanRenderCommandBuffer::DrawArrays(uint32_t vertexCount) {
         if (!m_BoundPipeline) return;
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
