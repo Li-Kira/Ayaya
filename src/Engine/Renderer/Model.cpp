@@ -14,7 +14,11 @@ namespace Ayaya {
     }
 
     Model::Model(const std::string& path) {
-        LoadModel(path);
+        LoadModel(path, ModelImportSettings{});
+    }
+
+    Model::Model(const std::string& path, const ModelImportSettings& settings) {
+        LoadModel(path, settings);
     }
 
     Model::Model(const std::shared_ptr<Mesh>& mesh) {
@@ -24,12 +28,23 @@ namespace Ayaya {
         m_RootNode.Meshes.push_back(mesh);
     }
 
-    void Model::LoadModel(const std::string& path) {
+    void Model::LoadModel(const std::string& path, const ModelImportSettings& settings) {
         m_Path = path;
         Assimp::Importer importer;
-        const aiScene* scene = importer.ReadFile(path, 
-            aiProcess_Triangulate | aiProcess_GenSmoothNormals | 
-            aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
+
+        // Build Assimp post-process flags from settings
+        unsigned int pFlags = aiProcess_Triangulate | aiProcess_GenBoundingBoxes;
+
+        if (settings.Tangents == TangentMode::Calculate)
+            pFlags |= aiProcess_CalcTangentSpace;
+        if (settings.Normals == NormalMode::Calculate)
+            pFlags |= aiProcess_GenSmoothNormals;
+        if (settings.OptimizeMesh)
+            pFlags |= aiProcess_JoinIdenticalVertices | aiProcess_OptimizeMeshes;
+        // FlipUVs is applied by default for OpenGL/Vulkan texture coordinate convention
+        pFlags |= aiProcess_FlipUVs;
+
+        const aiScene* scene = importer.ReadFile(path, pFlags);
 
         if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
             AYAYA_CORE_ERROR("Assimp Error: {0}", importer.GetErrorString());
@@ -38,13 +53,29 @@ namespace Ayaya {
 
         m_Directory = path.substr(0, path.find_last_of('/'));
         // 从根节点递归
-        m_RootNode = ProcessNode(scene->mRootNode, scene);
+        m_RootNode = ProcessNode(scene->mRootNode, scene, settings, /*isRoot=*/true);
     }
 
-    ModelNode Model::ProcessNode(aiNode* node, const aiScene* scene) {
+    ModelNode Model::ProcessNode(aiNode* node, const aiScene* scene,
+                                  const ModelImportSettings& settings, bool isRoot) {
         ModelNode modelNode;
         modelNode.Name = node->mName.C_Str();
         modelNode.LocalTransform = AssimpMatToGlm(node->mTransformation);
+
+        // Apply coordinate system conversion to root node (refinement #2)
+        // Maya Y-up → engine Z-up: rotate -90° around X, preserving vertex normals/tangents
+        if (settings.SwapYZ && isRoot) {
+            glm::mat4 axisFix = glm::rotate(glm::mat4(1.0f),
+                glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+            modelNode.LocalTransform = axisFix * modelNode.LocalTransform;
+        }
+
+        // Apply global scale to root node
+        if (isRoot && settings.GlobalScale != 1.0f) {
+            glm::mat4 scaleMat = glm::scale(glm::mat4(1.0f),
+                glm::vec3(settings.GlobalScale));
+            modelNode.LocalTransform = scaleMat * modelNode.LocalTransform;
+        }
 
         // 处理当前节点的所有网格
         for (unsigned int i = 0; i < node->mNumMeshes; i++) {
@@ -56,7 +87,8 @@ namespace Ayaya {
 
         // 递归处理子节点
         for (unsigned int i = 0; i < node->mNumChildren; i++) {
-            modelNode.Children.push_back(ProcessNode(node->mChildren[i], scene));
+            modelNode.Children.push_back(
+                ProcessNode(node->mChildren[i], scene, settings, /*isRoot=*/false));
         }
 
         return modelNode;

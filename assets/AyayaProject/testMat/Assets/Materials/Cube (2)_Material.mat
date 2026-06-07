@@ -1,6 +1,6 @@
-MaterialName: Built-in Default PBR
+MaterialName: Cube (2)_Material
 ShaderName: PBR
-BlendMode: 0
+BlendMode: 3
 AlphaCutoff: 0.5
 Properties:
   - UniformName: u_Albedo
@@ -69,29 +69,5 @@ Properties:
     BoolValue: false
   - UniformName: u_AlphaMap
     DisplayName: Alpha/Opacity Map
-    Type: 8
-    TextureHandle: 0
-  - UniformName: u_UseORMMap
-    DisplayName: Enable ORM Map
-    Type: 2
-    BoolValue: false
-  - UniformName: u_ORMMap
-    DisplayName: ORM Texture (R=AO G=Roughness B=Metallic)
-    Type: 8
-    TextureHandle: 0
-  - UniformName: u_UseHeightMap
-    DisplayName: Enable Height Map
-    Type: 2
-    BoolValue: false
-  - UniformName: u_HeightMap
-    DisplayName: Height/Displacement Map
-    Type: 8
-    TextureHandle: 0
-  - UniformName: u_UseEmissiveMap
-    DisplayName: Enable Emissive Map
-    Type: 2
-    BoolValue: false
-  - UniformName: u_EmissiveMap
-    DisplayName: Emissive Map
     Type: 8
     TextureHandle: 0

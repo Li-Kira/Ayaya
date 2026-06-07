@@ -128,8 +128,9 @@ namespace Ayaya {
         // 【核心新增】：定义材质分配闭包
         // ==========================================
         auto ApplyDefaultMaterial = [](MeshRendererComponent& mrc) {
-            // Each entity gets its own material instance so edits are independent
-            mrc.MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
+            // COW: share the read-only built-in material.  To customize, use the
+            // editor's "Create Instance to Edit" button in the Properties panel.
+            mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
         };
 
         // 4. 处理网格渲染组件
@@ -209,15 +210,6 @@ namespace Ayaya {
         // =========================================================
         CopyComponentIfExists<SpriteRendererComponent>(newEntity, entity);
         CopyComponentIfExists<MeshRendererComponent>(newEntity, entity);
-        // When duplicating an entity that uses the shared built-in material,
-        // give the clone its own material instance so edits are independent.
-        if (newEntity.HasComponent<MeshRendererComponent>()) {
-            auto& mrc = newEntity.GetComponent<MeshRendererComponent>();
-            static constexpr uint64_t BUILTIN_MAT = 16140901000000000004ull;
-            if (mrc.MaterialHandle == UUID(BUILTIN_MAT)) {
-                mrc.MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
-            }
-        }
         CopyComponentIfExists<DirectionalLightComponent>(newEntity, entity);
         CopyComponentIfExists<PointLightComponent>(newEntity, entity);
         CopyComponentIfExists<Rigidbody2DComponent>(newEntity, entity);
@@ -264,14 +256,6 @@ namespace Ayaya {
                 cam.Primary = false;
             }
             CopyComponentIfExists<MeshRendererComponent>(dst, src);
-            // Each prefab instance gets its own material clone
-            if (dst.HasComponent<MeshRendererComponent>()) {
-                auto& mrc = dst.GetComponent<MeshRendererComponent>();
-                static constexpr uint64_t BUILTIN_MAT = 16140901000000000004ull;
-                if (mrc.MaterialHandle == UUID(BUILTIN_MAT)) {
-                    mrc.MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
-                }
-            }
             CopyComponentIfExists<SpriteRendererComponent>(dst, src);
             CopyComponentIfExists<DirectionalLightComponent>(dst, src);
             CopyComponentIfExists<PointLightComponent>(dst, src);

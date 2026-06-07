@@ -52,8 +52,10 @@ namespace Ayaya {
                     auto current = AssetManager::GetAsset<Texture2D>(handle);
                     if (current && current.get() == it->second.get())
                         return it->second;
-                } else if (meta.Type == AssetType::Model) {
-                    // Model thumbnail is independently generated, safe to reuse
+                } else if (meta.Type == AssetType::Model ||
+                           meta.Type == AssetType::Prefab ||
+                           meta.Type == AssetType::Material) {
+                    // Generated thumbnail, safe to reuse
                     return it->second;
                 }
             }
@@ -78,16 +80,22 @@ namespace Ayaya {
             return thumbnail;
         }
 
-        // Model assets: generate thumbnail on first encounter, cache for reuse
-        if (meta.Type == AssetType::Model) {
-            auto thumbnail = AssetPreviewer::GenerateThumbnail(handle);
+        // Model / Prefab / Material: generate thumbnail, cache for reuse
+        if (meta.Type == AssetType::Model || meta.Type == AssetType::Prefab || meta.Type == AssetType::Material) {
+            std::shared_ptr<Texture2D> thumbnail;
+            if (meta.Type == AssetType::Model)
+                thumbnail = AssetPreviewer::GenerateThumbnail(handle);
+            else if (meta.Type == AssetType::Prefab)
+                thumbnail = AssetPreviewer::GenerateThumbnailForPrefab(handle);
+            else
+                thumbnail = AssetPreviewer::GenerateThumbnailForMaterial(handle);
+
             if (thumbnail) {
                 if (m_ThumbnailCache.size() >= kMaxThumbnailCache)
                     m_ThumbnailCache.erase(m_ThumbnailCache.begin());
                 m_ThumbnailCache[key] = thumbnail;
                 return thumbnail;
             }
-            // model not loaded yet — show file icon placeholder, retry next frame
             return m_FileIcon;
         }
 
@@ -213,7 +221,7 @@ namespace Ayaya {
                 std::shared_ptr<Texture2D> icon = m_FileIcon;
                 if (directoryEntry.is_directory()) {
                     icon = m_DirectoryIcon;
-                } else if (isImage || isModel) {
+                } else if (!directoryEntry.is_directory()) {
                     auto thumb = GetThumbnail(path);
                     icon = thumb ? thumb : m_FileIcon;
                 }

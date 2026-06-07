@@ -16,6 +16,7 @@ layout(set = 1, binding = 3) uniform sampler2D u_RoughnessMap;
 layout(set = 1, binding = 4) uniform sampler2D u_AOMap;
 layout(set = 1, binding = 5) uniform sampler2D u_NormalMap;
 layout(set = 1, binding = 6) uniform sampler2D u_AlphaMap;
+layout(set = 1, binding = 7) uniform sampler2D u_ORMMap;
 
 layout(push_constant) uniform PushConstants {
     mat4 u_Transform;
@@ -28,10 +29,11 @@ layout(push_constant) uniform PushConstants {
     float u_AlphaCutoff;
     int   u_BlendMode;       // 0=Opaque, 1=Masked
     int u_UseAlbedoMap;
+    int u_UseNormalMap;
+    int u_UseORMMap;
     int u_UseMetallicMap;
     int u_UseRoughnessMap;
     int u_UseAOMap;
-    int u_UseNormalMap;
     int u_UseAlphaMap;
     int u_IsSelected;
 } pc;
@@ -69,9 +71,18 @@ void main() {
     vec3 albedo = (pc.u_UseAlbedoMap == 1) ? texture(u_AlbedoMap, v_TexCoord).rgb : pc.u_Albedo;
     g_Albedo = vec4(albedo, 1.0);
 
-    float metallic  = (pc.u_UseMetallicMap  == 1) ? texture(u_MetallicMap,  v_TexCoord).r : pc.u_Metallic;
-    float roughness = (pc.u_UseRoughnessMap == 1) ? texture(u_RoughnessMap, v_TexCoord).r : pc.u_Roughness;
-    float ao        = (pc.u_UseAOMap       == 1) ? texture(u_AOMap,        v_TexCoord).r : pc.u_AO;
+    float metallic, roughness, ao;
+    // ORM packed texture (UE4: R=AO, G=Roughness, B=Metallic)
+    if (pc.u_UseORMMap == 1) {
+        vec3 orm = texture(u_ORMMap, v_TexCoord).rgb;
+        ao        = orm.r;
+        roughness = orm.g;
+        metallic  = orm.b;
+    } else {
+        metallic  = (pc.u_UseMetallicMap  == 1) ? texture(u_MetallicMap,  v_TexCoord).r : pc.u_Metallic;
+        roughness = (pc.u_UseRoughnessMap == 1) ? texture(u_RoughnessMap, v_TexCoord).r : pc.u_Roughness;
+        ao        = (pc.u_UseAOMap       == 1) ? texture(u_AOMap,        v_TexCoord).r : pc.u_AO;
+    }
     g_PBR = vec4(metallic, roughness, ao, 1.0);
 
     g_CustomData = vec4(pc.u_ReceiveShadows, float(pc.u_IsSelected), 0.0, 1.0);

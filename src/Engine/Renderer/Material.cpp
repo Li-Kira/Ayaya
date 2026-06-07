@@ -129,12 +129,25 @@ namespace Ayaya {
                     if (prop.UniformName == "u_AlbedoMap") {
                         m_BakedPC.UseAlbedoMap = 1;
                         m_BakedPC.Textures[0] = tex;
+                    } else if (prop.UniformName == "u_NormalMap") {
+                        m_BakedPC.UseNormalMap = 1;
+                        m_BakedPC.Textures[1] = tex;
+                    } else if (prop.UniformName == "u_ORMMap") {
+                        m_BakedPC.UseORMMap = 1;
+                        m_BakedPC.Textures[2] = tex;
+                        // ORM packs AO/Roughness/Metallic into RGB; disable individual maps
+                        m_BakedPC.UseAOMap = 0;
+                        m_BakedPC.UseRoughnessMap = 0;
+                        m_BakedPC.UseMetallicMap = 0;
                     } else if (prop.UniformName == "u_MetallicMap") {
                         m_BakedPC.UseMetallicMap = 1;
-                        m_BakedPC.Textures[1] = tex;
+                        m_BakedPC.Textures[3] = tex;
                     } else if (prop.UniformName == "u_RoughnessMap") {
                         m_BakedPC.UseRoughnessMap = 1;
-                        m_BakedPC.Textures[2] = tex;
+                        m_BakedPC.Textures[4] = tex;
+                    } else if (prop.UniformName == "u_AOMap") {
+                        m_BakedPC.UseAOMap = 1;
+                        m_BakedPC.Textures[5] = tex;
                     }
                 }
             }
@@ -145,5 +158,10 @@ namespace Ayaya {
     const Material::BakedPC& Material::GetBakedPC() {
         if (m_BakedPC.Dirty) BakeProperties();
         return m_BakedPC;
+    }
+
+    bool Material::IsBuiltIn() const {
+        // Built-in materials share the canonical handle and live under engine://
+        return AssetPath.empty() || AssetPath.find("assets/Editor/") != std::string::npos;
     }
 }

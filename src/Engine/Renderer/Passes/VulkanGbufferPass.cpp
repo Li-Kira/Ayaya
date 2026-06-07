@@ -76,6 +76,7 @@ namespace Ayaya {
                 cmd.BindTexture2D(m_Pipeline, "u_AOMap",        4, whiteTex);
                 cmd.BindTexture2D(m_Pipeline, "u_NormalMap",    5, whiteTex);
                 cmd.BindTexture2D(m_Pipeline, "u_AlphaMap",     6, whiteTex);
+                cmd.BindTexture2D(m_Pipeline, "u_ORMMap",       7, whiteTex);
             }
 
             GBufferPushConstants pc{};
@@ -111,10 +112,11 @@ namespace Ayaya {
                         bool hasTex = (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) || (prop.RuntimeTexture != nullptr);
                         if (hasTex) {
                             if (prop.UniformName == "u_AlbedoMap")       pc.UseAlbedoMap = 1;
+                            else if (prop.UniformName == "u_NormalMap")    pc.UseNormalMap = 1;
+                            else if (prop.UniformName == "u_ORMMap")       { pc.UseORMMap = 1; pc.UseMetallicMap = 0; pc.UseRoughnessMap = 0; pc.UseAOMap = 0; }
                             else if (prop.UniformName == "u_MetallicMap")  pc.UseMetallicMap = 1;
                             else if (prop.UniformName == "u_RoughnessMap") pc.UseRoughnessMap = 1;
                             else if (prop.UniformName == "u_AOMap")        pc.UseAOMap = 1;
-                            else if (prop.UniformName == "u_NormalMap")    pc.UseNormalMap = 1;
                             else if (prop.UniformName == "u_AlphaMap")     pc.UseAlphaMap = 1;
                         }
                     }
@@ -131,10 +133,11 @@ namespace Ayaya {
                             if (hasTex) {
                                 auto tex = prop.RuntimeTexture ? prop.RuntimeTexture : AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
                                 if (prop.UniformName == "u_AlbedoMap")    { cmd.BindTexture2D(m_Pipeline, "u_AlbedoMap", 1, tex); pc.UseAlbedoMap = 1; }
+                                else if (prop.UniformName == "u_NormalMap")    { cmd.BindTexture2D(m_Pipeline, "u_NormalMap", 5, tex); pc.UseNormalMap = 1; }
+                                else if (prop.UniformName == "u_ORMMap")       { cmd.BindTexture2D(m_Pipeline, "u_ORMMap", 7, tex); pc.UseORMMap = 1; pc.UseMetallicMap = 0; pc.UseRoughnessMap = 0; pc.UseAOMap = 0; }
                                 else if (prop.UniformName == "u_MetallicMap")  { cmd.BindTexture2D(m_Pipeline, "u_MetallicMap", 2, tex); pc.UseMetallicMap = 1; }
                                 else if (prop.UniformName == "u_RoughnessMap") { cmd.BindTexture2D(m_Pipeline, "u_RoughnessMap", 3, tex); pc.UseRoughnessMap = 1; }
                                 else if (prop.UniformName == "u_AOMap")        { cmd.BindTexture2D(m_Pipeline, "u_AOMap", 4, tex); pc.UseAOMap = 1; }
-                                else if (prop.UniformName == "u_NormalMap")    { cmd.BindTexture2D(m_Pipeline, "u_NormalMap", 5, tex); pc.UseNormalMap = 1; }
                                 else if (prop.UniformName == "u_AlphaMap")     { cmd.BindTexture2D(m_Pipeline, "u_AlphaMap", 6, tex); pc.UseAlphaMap = 1; }
                             }
                         }

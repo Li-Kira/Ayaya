@@ -9,6 +9,10 @@
 #include "Renderer/RendererAPI.hpp"
 #include "Renderer/RenderCommandBuffer.hpp"
 #include "Asset/AssetManager.hpp"
+#include "Asset/Prefab.hpp"
+#include "Renderer/Material.hpp"
+#include "Scene/Scene.hpp"
+#include "Scene/Components.hpp"
 #include "Core/Log.hpp"
 #include "Core/Application.hpp"
 
@@ -43,13 +47,14 @@ namespace Ayaya {
     // ---- Dedicated thumbnail Vulkan resources (isolated from frame loop) ----
     struct ThumbnailVkResources {
         VkDescriptorPool pool = VK_NULL_HANDLE;
-        VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+        VkDescriptorSet descriptorSet = VK_NULL_HANDLE;   // set=0: Camera UBO
         VkBuffer uboBuffer = VK_NULL_HANDLE;
         VmaAllocation uboAllocation = VK_NULL_HANDLE;
         void* mappedData = nullptr;
         bool initialized = false;
     };
     static ThumbnailVkResources s_ThumbnailVk;
+    static std::shared_ptr<Model> s_SphereModel;  // cached sphere for material thumbnails
 
     // ---- Push constant layout (must match shader, max 128 bytes) ----
     struct PreviewPushConstants {
@@ -58,8 +63,9 @@ namespace Ayaya {
         glm::vec4 LightDir;      // offset 80, size 16
         glm::vec4 LightColor;    // offset 96, size 16
         glm::vec4 Ambient;       // offset 112, size 16
+        int UseAlbedoMap;        // offset 128, size 4
     };
-    static_assert(sizeof(PreviewPushConstants) == 128, "Push constant size mismatch");
+    static_assert(sizeof(PreviewPushConstants) <= 256, "Push constant size exceeds limit");
 
     // ---- Camera UBO layout (matches set=0 binding=0 in shader) ----
     struct PreviewCameraUBO {
@@ -206,6 +212,51 @@ namespace Ayaya {
         if (!cmd) return;
 
         cmd->Begin();
+
+        // Transition FBO images to attachment layout before BeginRenderPass.
+        // The FBO starts in SHADER_READ_ONLY after previous renders.
+        {
+            auto vkMSAA = std::dynamic_pointer_cast<VulkanFramebuffer>(s_PreviewFBO_MSAA);
+            if (vkMSAA) {
+                VkCommandBuffer vkCmd = vkCtx->GetCurrentCommandBuffer();
+                VkImage colorImg = vkMSAA->GetColorAttachmentImage(0);
+                VkImage depthImg = vkMSAA->GetDepthAttachmentImage();
+
+                VkImageMemoryBarrier barriers[2]{};
+                uint32_t barrierCount = 0;
+
+                barriers[barrierCount].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                barriers[barrierCount].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                barriers[barrierCount].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                barriers[barrierCount].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                barriers[barrierCount].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                barriers[barrierCount].image = colorImg;
+                barriers[barrierCount].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                barriers[barrierCount].subresourceRange.levelCount = 1;
+                barriers[barrierCount].subresourceRange.layerCount = 1;
+                barrierCount++;
+
+                if (depthImg != VK_NULL_HANDLE) {
+                    barriers[barrierCount].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                    barriers[barrierCount].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                    barriers[barrierCount].newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                    barriers[barrierCount].srcAccessMask = 0;
+                    barriers[barrierCount].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                    barriers[barrierCount].image = depthImg;
+                    barriers[barrierCount].subresourceRange.aspectMask =
+                        VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+                    barriers[barrierCount].subresourceRange.levelCount = 1;
+                    barriers[barrierCount].subresourceRange.layerCount = 1;
+                    barrierCount++;
+                }
+
+                vkCmdPipelineBarrier(vkCmd,
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                    0, 0, nullptr, 0, nullptr, barrierCount, barriers);
+            }
+        }
+
         cmd->BeginRenderPass(AssetPreviewer::s_PreviewFBO_MSAA, true,
                              glm::vec4(0.11f, 0.11f, 0.12f, 1.0f));
         cmd->BindPipeline(AssetPreviewer::s_PreviewPipeline);
@@ -228,8 +279,9 @@ namespace Ayaya {
                 VkImage dstImage = vkResolve->GetColorAttachmentImage(0);
 
                 VkImageMemoryBarrier barriers[2]{};
+                // MSAA src: EndRenderPass leaves in COLOR_ATTACHMENT_OPTIMAL
                 barriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-                barriers[0].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                barriers[0].oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
                 barriers[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
                 barriers[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
                 barriers[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
@@ -238,6 +290,7 @@ namespace Ayaya {
                 barriers[0].subresourceRange.levelCount = 1;
                 barriers[0].subresourceRange.layerCount = 1;
 
+                // Resolve dst: still in SHADER_READ_ONLY (not yet rendered to in this pass)
                 barriers[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
                 barriers[1].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                 barriers[1].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -248,8 +301,11 @@ namespace Ayaya {
                 barriers[1].subresourceRange.levelCount = 1;
                 barriers[1].subresourceRange.layerCount = 1;
 
+                // srcStage must cover both barriers: COLOR_ATTACHMENT_WRITE (barrier[0])
+                // and SHADER_READ (barrier[1]) from the resolve-dst image.
                 vkCmdPipelineBarrier(cb,
-                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
                     0, 0, nullptr, 0, nullptr, 2, barriers);
 
                 VkImageResolve resolveRegion{};
@@ -262,19 +318,32 @@ namespace Ayaya {
                                   dstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                   1, &resolveRegion);
 
-                barriers[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-                barriers[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                barriers[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-                barriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                VkImageMemoryBarrier postResolve[2]{};
+                // MSAA src: back to SHADER_READ_ONLY
+                postResolve[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                postResolve[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                postResolve[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                postResolve[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                postResolve[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                postResolve[0].image = srcImage;
+                postResolve[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                postResolve[0].subresourceRange.levelCount = 1;
+                postResolve[0].subresourceRange.layerCount = 1;
 
-                barriers[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-                barriers[1].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                barriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                barriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                // Resolve dst: back to SHADER_READ_ONLY
+                postResolve[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                postResolve[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                postResolve[1].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                postResolve[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                postResolve[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                postResolve[1].image = dstImage;
+                postResolve[1].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                postResolve[1].subresourceRange.levelCount = 1;
+                postResolve[1].subresourceRange.layerCount = 1;
 
                 vkCmdPipelineBarrier(cb,
                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                    0, 0, nullptr, 0, nullptr, 2, barriers);
+                    0, 0, nullptr, 0, nullptr, 2, postResolve);
             }
         }
 
@@ -466,7 +535,7 @@ namespace Ayaya {
             pipeSpec.DepthWrite = true;
             pipeSpec.Blend = false;
             pipeSpec.BackfaceCulling = CullMode::None; // 双面渲染，避免模型绕序不一致导致漏面
-            pipeSpec.NoTextureDescriptors = true; // preview shader has no textures
+            pipeSpec.NoTextureDescriptors = true; // preview uses solid color only
             s_PreviewPipeline = Pipeline::Create(pipeSpec);
 
             // Create dedicated thumbnail UBO + descriptor set (isolated from frame loop)
@@ -494,7 +563,7 @@ namespace Ayaya {
 
                 VkDescriptorPoolSize poolSize{};
                 poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                poolSize.descriptorCount = 2; // Set 0 has 2 UBO bindings (0=Camera, 1=unused)
+                poolSize.descriptorCount = 2;
 
                 VkDescriptorPoolCreateInfo poolInfo{};
                 poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -557,6 +626,7 @@ namespace Ayaya {
         s_PreviewFBO_MSAA.reset();
         s_PreviewFBO.reset();
         s_PreviewShader.reset();
+        s_SphereModel.reset();
         s_LastModelHandle = 0;
         AYAYA_CORE_INFO("AssetPreviewer: Shutdown.");
     }
@@ -754,8 +824,10 @@ namespace Ayaya {
                 preBarriers[1].subresourceRange.levelCount = 1;
                 preBarriers[1].subresourceRange.layerCount = 1;
 
+                // srcStage: COLOR_ATTACHMENT_WRITE (barrier[0]) + SHADER_READ (barrier[1])
                 vkCmdPipelineBarrier(cmd,
-                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
                     0, 0, nullptr, 0, nullptr, 2, preBarriers);
 
                 VkImageResolve resolveRegion{};
@@ -788,8 +860,10 @@ namespace Ayaya {
                 // preBarriers[1] is replaced by postBarrier below
                 VkImageMemoryBarrier postBarriers[2] = { preBarriers[0], postBarrier };
 
+                // dstStage: TRANSFER_READ (barrier[1]) + SHADER_READ (barrier[0])
                 vkCmdPipelineBarrier(cmd,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                     0, 0, nullptr, 0, nullptr, 2, postBarriers);
             }
 
@@ -856,6 +930,253 @@ namespace Ayaya {
         AutoFrameCamera(model, cameraAngle, glm::radians(45.0f));
         RenderModel(model);
         return ReadbackRealtime();
+    }
+
+    // ---- Material thumbnail: render a sphere with the material applied ----
+    std::shared_ptr<Texture2D> AssetPreviewer::GenerateThumbnailForMaterial(UUID materialHandle, uint32_t size) {
+        (void)size;
+        auto material = AssetManager::GetAsset<Material>(materialHandle);
+        if (!material) return nullptr;
+
+        // Create a sphere mesh wrapped in a Model (cached globally)
+        if (!s_SphereModel) {
+            auto sphereMesh = Mesh::CreateSphere(0.5f, 64, 64);
+            s_SphereModel = std::make_shared<Model>(sphereMesh);
+        }
+        if (s_SphereModel->GetMeshes().empty()) return nullptr;
+
+        AutoFrameCamera(s_SphereModel, glm::vec2(0.3f, -0.6f), glm::radians(45.0f));
+
+        if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+            auto vkFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(s_PreviewFBO);
+            auto vkFBO_MSAA = std::dynamic_pointer_cast<VulkanFramebuffer>(s_PreviewFBO_MSAA);
+            auto vkPipeline = std::dynamic_pointer_cast<VulkanPipeline>(s_PreviewPipeline);
+            auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+                Application::Get().GetWindow().GetContext());
+            if (!vkFBO || !vkFBO_MSAA || !vkPipeline || !vkCtx) return nullptr;
+
+            // Camera UBO
+            PreviewCameraUBO camData;
+            camData.ViewProjection = s_ProjMatrix * s_ViewMatrix;
+            camData.CameraPosition = s_CameraPos;
+            memcpy(s_ThumbnailVk.mappedData, &camData, sizeof(PreviewCameraUBO));
+
+            // Push constants
+            PreviewPushConstants push{};
+            push.ModelMatrix = glm::translate(glm::mat4(1.0f), -ComputeModelCenter(s_SphereModel));
+            push.Albedo      = glm::vec4(0.6f, 0.6f, 0.6f, 1.0f);
+            push.LightDir    = glm::vec4(0.5f, 1.0f, 0.8f, 0.0f);
+            push.LightColor  = glm::vec4(1.0f, 0.98f, 0.95f, 1.0f);
+            push.Ambient     = glm::vec4(0.15f, 0.15f, 0.17f, 1.0f);
+            push.UseAlbedoMap = 0;
+
+            // Read material albedo color
+            for (auto& prop : material->Properties) {
+                if (prop.UniformName == "u_Albedo" && prop.Type == MaterialPropertyType::Vec3)
+                    push.Albedo = glm::vec4(prop.Vec3Value, 1.0f);
+            }
+
+            // Staging buffer
+            VmaAllocator allocator = vkCtx->GetAllocator();
+            uint32_t dataSize = kPreviewSize * kPreviewSize * 4;
+            VkBuffer stagingBuf; VmaAllocation stagingAlloc;
+            {
+                VkBufferCreateInfo bi{}; bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+                bi.size = dataSize; bi.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+                VmaAllocationCreateInfo ai{}; ai.usage = VMA_MEMORY_USAGE_AUTO;
+                ai.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT;
+                vmaCreateBuffer(allocator, &bi, &ai, &stagingBuf, &stagingAlloc, nullptr);
+            }
+
+            VkCommandBuffer cmd = vkCtx->BeginSingleTimeCommands();
+
+            // Transition FBO to COLOR_ATTACHMENT
+            {
+                VkImage colorImg = vkFBO_MSAA->GetColorAttachmentImage(0);
+                VkImage depthImg = vkFBO_MSAA->GetDepthAttachmentImage();
+                VkImageMemoryBarrier barriers[2]{}; uint32_t bc = 0;
+                barriers[bc].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                barriers[bc].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                barriers[bc].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                barriers[bc].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                barriers[bc].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                barriers[bc].image = colorImg;
+                barriers[bc].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                barriers[bc].subresourceRange.levelCount = 1;
+                barriers[bc].subresourceRange.layerCount = 1; bc++;
+                if (depthImg) {
+                    barriers[bc].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                    barriers[bc].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                    barriers[bc].newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                    barriers[bc].srcAccessMask = 0;
+                    barriers[bc].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                    barriers[bc].image = depthImg;
+                    barriers[bc].subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+                    barriers[bc].subresourceRange.levelCount = 1;
+                    barriers[bc].subresourceRange.layerCount = 1; bc++;
+                }
+                vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                    0, 0, nullptr, 0, nullptr, bc, barriers);
+            }
+
+            // Dynamic Rendering
+            {
+                VkRenderingAttachmentInfo colorAttach{};
+                colorAttach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+                colorAttach.imageView = vkFBO_MSAA->GetColorAttachmentImageView(0);
+                colorAttach.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                colorAttach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+                colorAttach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+                colorAttach.clearValue.color = {{ 0.11f, 0.11f, 0.12f, 1.0f }};
+                VkRenderingAttachmentInfo depthAttach{};
+                depthAttach.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+                depthAttach.imageView = vkFBO_MSAA->GetDepthAttachmentImageView();
+                depthAttach.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                depthAttach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+                depthAttach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+                depthAttach.clearValue.depthStencil = { 1.0f, 0 };
+                VkRenderingInfo ri{};
+                ri.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+                ri.renderArea = {{0,0},{kPreviewSize,kPreviewSize}};
+                ri.layerCount = 1; ri.colorAttachmentCount = 1;
+                ri.pColorAttachments = &colorAttach;
+                ri.pDepthAttachment = &depthAttach;
+                vkCmdBeginRendering(cmd, &ri);
+                VkViewport vp{}; vp.x=0; vp.y=(float)kPreviewSize;
+                vp.width=(float)kPreviewSize; vp.height=-(float)kPreviewSize;
+                vp.minDepth=0; vp.maxDepth=1;
+                vkCmdSetViewport(cmd,0,1,&vp);
+                VkRect2D scissor{}; scissor.extent={kPreviewSize,kPreviewSize};
+                vkCmdSetScissor(cmd,0,1,&scissor);
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline->GetVulkanPipeline());
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    vkPipeline->GetVulkanPipelineLayout(), 0, 1,
+                    &s_ThumbnailVk.descriptorSet, 0, nullptr);
+
+                for (auto& mesh : s_SphereModel->GetMeshes()) {
+                    vkCmdPushConstants(cmd, vkPipeline->GetVulkanPipelineLayout(),
+                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                        0, sizeof(PreviewPushConstants), &push);
+                    auto vkVB = std::dynamic_pointer_cast<VulkanVertexBuffer>(mesh->GetVertexBuffer());
+                    auto vkIB = std::dynamic_pointer_cast<VulkanIndexBuffer>(mesh->GetIndexBuffer());
+                    if (vkVB && vkIB) {
+                        VkBuffer vbs[]={vkVB->GetVulkanBuffer()};
+                        VkDeviceSize off[]={0};
+                        vkCmdBindVertexBuffers(cmd,0,1,vbs,off);
+                        vkCmdBindIndexBuffer(cmd, vkIB->GetVulkanBuffer(), 0, VK_INDEX_TYPE_UINT32);
+                        vkCmdDrawIndexed(cmd, mesh->GetIndexCount(), 1, 0, 0, 0);
+                    }
+                }
+                vkCmdEndRendering(cmd);
+            }
+
+            // MSAA resolve + readback (reuse same pattern as GenerateThumbnail)
+            {
+                VkImage srcImg = vkFBO_MSAA->GetColorAttachmentImage(0);
+                VkImage dstImg = vkFBO->GetColorAttachmentImage(0);
+                VkImageMemoryBarrier pre[2]{};
+                pre[0].sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                pre[0].oldLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                pre[0].newLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                pre[0].srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                pre[0].dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+                pre[0].image=srcImg;
+                pre[0].subresourceRange.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
+                pre[0].subresourceRange.levelCount=1;pre[0].subresourceRange.layerCount=1;
+                pre[1].sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                pre[1].oldLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                pre[1].newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                pre[1].srcAccessMask=VK_ACCESS_SHADER_READ_BIT;
+                pre[1].dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+                pre[1].image=dstImg;
+                pre[1].subresourceRange.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
+                pre[1].subresourceRange.levelCount=1;pre[1].subresourceRange.layerCount=1;
+                vkCmdPipelineBarrier(cmd,
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    0,0,nullptr,0,nullptr,2,pre);
+                VkImageResolve res{};
+                res.srcSubresource.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;res.srcSubresource.layerCount=1;
+                res.dstSubresource.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;res.dstSubresource.layerCount=1;
+                res.extent={kPreviewSize,kPreviewSize,1};
+                vkCmdResolveImage(cmd,srcImg,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    dstImg,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&res);
+                // Transition dst to TRANSFER_SRC for readback, src back to SHADER_READ_ONLY
+                VkImageMemoryBarrier post[2]{};
+                post[0].sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                post[0].oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                post[0].newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                post[0].srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+                post[0].dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
+                post[0].image=srcImg;
+                post[0].subresourceRange.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
+                post[0].subresourceRange.levelCount=1;post[0].subresourceRange.layerCount=1;
+                post[1].sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                post[1].oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                post[1].newLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                post[1].srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+                post[1].dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+                post[1].image=dstImg;
+                post[1].subresourceRange.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
+                post[1].subresourceRange.levelCount=1;post[1].subresourceRange.layerCount=1;
+                vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    0,0,nullptr,0,nullptr,2,post);
+                VkBufferImageCopy region{};
+                region.imageSubresource.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
+                region.imageSubresource.layerCount=1;
+                region.imageExtent={kPreviewSize,kPreviewSize,1};
+                vkCmdCopyImageToBuffer(cmd,dstImg,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,stagingBuf,1,&region);
+                VkImageMemoryBarrier back{};
+                back.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                back.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                back.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                back.image=dstImg;
+                back.subresourceRange.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
+                back.subresourceRange.levelCount=1;back.subresourceRange.layerCount=1;
+                back.srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+                back.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
+                vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    0,0,nullptr,0,nullptr,1,&back);
+            }
+
+            vkCtx->EndSingleTimeCommands(cmd);
+            void* mapped = nullptr;
+            vmaMapMemory(allocator, stagingAlloc, &mapped);
+            auto tex = Texture2D::Create(kPreviewSize, kPreviewSize);
+            if (tex && mapped) tex->SetData(mapped, dataSize);
+            if (auto vkTex = std::dynamic_pointer_cast<VulkanTexture2D>(tex))
+                vkTex->SetDataFlipped(false);
+            vmaUnmapMemory(allocator, stagingAlloc);
+            vmaDestroyBuffer(allocator, stagingBuf, stagingAlloc);
+            return tex;
+        }
+
+        // OpenGL fallback
+        RenderModel(s_SphereModel);
+        return ReadbackStandalone();
+    }
+
+    // ---- Prefab thumbnail: render the prefab's first mesh entity ----
+    std::shared_ptr<Texture2D> AssetPreviewer::GenerateThumbnailForPrefab(UUID prefabHandle, uint32_t size) {
+        auto prefab = AssetManager::GetAsset<Prefab>(prefabHandle);
+        if (!prefab) return nullptr;
+
+        Scene* scene = prefab->GetScene();
+        if (!scene) return nullptr;
+
+        // Find the first entity with a MeshRendererComponent that references a valid model
+        auto view = scene->Reg().view<MeshRendererComponent>();
+        for (auto entityID : view) {
+            auto& mrc = view.get<MeshRendererComponent>(entityID);
+            if (mrc.ModelHandle != 0) {
+                auto model = AssetManager::GetAsset<Model>(mrc.ModelHandle);
+                if (model && !model->GetMeshes().empty())
+                    return GenerateThumbnail(mrc.ModelHandle, size);
+            }
+        }
+        return nullptr;
     }
 
 }

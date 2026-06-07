@@ -294,6 +294,12 @@ namespace Ayaya {
         if (preMap)  cmd.BindTextureCube(m_InstancedPipeline, "u_PrefilteredMap", 4, preMap);
         if (brdfLUT) cmd.BindTexture2D(m_InstancedPipeline, "u_BRDFLUT", 5, brdfLUT);
         else if (wt2) cmd.BindTexture2D(m_InstancedPipeline, "u_BRDFLUT", 5, wt2);
+        // Fallback for new bindings 6-8 (NormalMap, ORMMap, AOMap) — must always have valid descriptors
+        if (wt2) {
+            cmd.BindTexture2D(m_InstancedPipeline, "u_NormalMap", 6, wt2);
+            cmd.BindTexture2D(m_InstancedPipeline, "u_ORMMap",    7, wt2);
+            cmd.BindTexture2D(m_InstancedPipeline, "u_AOMap",     8, wt2);
+        }
 
         // Bind SSBO descriptor set (set=2 — baked into pipeline layout at creation)
         {
@@ -318,8 +324,11 @@ namespace Ayaya {
                 pc.Roughness = baked.Roughness; pc.AO = baked.AO;
                 pc.Alpha = baked.Alpha;
                 pc.UseAlbedoMap = baked.UseAlbedoMap;
+                pc.UseNormalMap = baked.UseNormalMap;
+                pc.UseORMMap = baked.UseORMMap;
                 pc.UseMetallicMap = baked.UseMetallicMap;
                 pc.UseRoughnessMap = baked.UseRoughnessMap;
+                pc.UseAOMap = baked.UseAOMap;
             } else {
                 pc.Albedo = glm::vec4(1); pc.Metallic = 0;
                 pc.Roughness = 0.5f; pc.AO = 1; pc.Alpha = 0.5f;
@@ -330,16 +339,26 @@ namespace Ayaya {
                 currentMatHash = kv.first;
                 if (pkt->MaterialAsset) {
                     auto& baked = pkt->MaterialAsset->GetBakedPC();
+                    // BakedPC slots: 0=Albedo, 1=Normal, 2=ORM, 3=Metallic, 4=Roughness, 5=AO
                     cmd.BindTexture2D(m_InstancedPipeline, "u_AlbedoMap",    0,
                         baked.Textures[0] ? baked.Textures[0] : whiteTex);
                     cmd.BindTexture2D(m_InstancedPipeline, "u_MetallicMap",  1,
-                        baked.Textures[1] ? baked.Textures[1] : whiteTex);
+                        baked.Textures[3] ? baked.Textures[3] : whiteTex);
                     cmd.BindTexture2D(m_InstancedPipeline, "u_RoughnessMap", 2,
+                        baked.Textures[4] ? baked.Textures[4] : whiteTex);
+                    cmd.BindTexture2D(m_InstancedPipeline, "u_NormalMap",    6,
+                        baked.Textures[1] ? baked.Textures[1] : whiteTex);
+                    cmd.BindTexture2D(m_InstancedPipeline, "u_ORMMap",       7,
                         baked.Textures[2] ? baked.Textures[2] : whiteTex);
+                    cmd.BindTexture2D(m_InstancedPipeline, "u_AOMap",        8,
+                        baked.Textures[5] ? baked.Textures[5] : whiteTex);
                 } else if (whiteTex) {
                     cmd.BindTexture2D(m_InstancedPipeline, "u_AlbedoMap",    0, whiteTex);
                     cmd.BindTexture2D(m_InstancedPipeline, "u_MetallicMap",  1, whiteTex);
                     cmd.BindTexture2D(m_InstancedPipeline, "u_RoughnessMap", 2, whiteTex);
+                    cmd.BindTexture2D(m_InstancedPipeline, "u_NormalMap",    6, whiteTex);
+                    cmd.BindTexture2D(m_InstancedPipeline, "u_ORMMap",       7, whiteTex);
+                    cmd.BindTexture2D(m_InstancedPipeline, "u_AOMap",        8, whiteTex);
                 }
             }
 

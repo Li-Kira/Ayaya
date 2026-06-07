@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Mesh.hpp"
+#include "Asset/AssetSettings.hpp"
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
@@ -22,6 +23,7 @@ namespace Ayaya {
     class Model {
     public:
         Model(const std::string& path);
+        Model(const std::string& path, const ModelImportSettings& settings);
         Model(const std::shared_ptr<Mesh>& mesh); // 兼容单网格创建
 
         const std::vector<std::shared_ptr<Mesh>>& GetMeshes() const { return m_Meshes; }
@@ -30,9 +32,10 @@ namespace Ayaya {
         const ModelNode& GetRootNode() const { return m_RootNode; }
 
     private:
-        void LoadModel(const std::string& path);
+        void LoadModel(const std::string& path, const ModelImportSettings& settings);
         // 核心修复：递归处理节点层级
-        ModelNode ProcessNode(aiNode* node, const aiScene* scene);
+        ModelNode ProcessNode(aiNode* node, const aiScene* scene, const ModelImportSettings& settings,
+                              bool isRoot = false);
         std::shared_ptr<Mesh> ProcessMesh(aiMesh* mesh, const aiScene* scene);
 
     private:

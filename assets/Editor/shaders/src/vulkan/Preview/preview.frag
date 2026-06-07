@@ -4,6 +4,7 @@ layout(location = 0) out vec4 FragColor;
 
 layout(location = 0) in vec3 v_WorldPos;
 layout(location = 1) in vec3 v_Normal;
+layout(location = 2) in vec2 v_TexCoord;
 
 layout(set = 0, binding = 0) uniform CameraData {
     mat4 ViewProjection;
@@ -13,18 +14,14 @@ layout(set = 0, binding = 0) uniform CameraData {
 layout(push_constant) uniform PushData {
     mat4 ModelMatrix;
     vec4 Albedo;
-    vec4 LightDir;   // (已在内部硬编码影棚光，这些保留用于占位对齐 C++ 结构体)
+    vec4 LightDir;
     vec4 LightColor;
     vec4 Ambient;
+    int UseAlbedoMap;
 } u_Push;
 
-// ACES Filmic 电影级色调映射曲线
 vec3 ACESFilm(vec3 x) {
-    float a = 2.51f;
-    float b = 0.03f;
-    float c = 2.43f;
-    float d = 0.59f;
-    float e = 0.14f;
+    float a = 2.51f, b = 0.03f, c = 2.43f, d = 0.59f, e = 0.14f;
     return clamp((x*(a*x+b))/(x*(c*x+d)+e), 0.0, 1.0);
 }
 
@@ -33,9 +30,8 @@ void main() {
     vec3 V = normalize(u_Camera.CameraPosition - v_WorldPos);
     float NdotV = max(dot(N, V), 0.0001);
 
-    // 1. Clay (粘土/塑料) 材质基础
     vec3 albedo = u_Push.Albedo.rgb;
-    float roughness = 0.38; // 微微带点光泽的哑光质感
+    float roughness = 0.38;
 
     // 2. 影棚三点式布光 (Studio Lighting Rig)
     vec3 keyLightDir   = normalize(vec3(0.8, 1.0, 0.6));

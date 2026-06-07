@@ -80,44 +80,62 @@ namespace Ayaya {
         }
 
         // Step 2: Render selected/hovered entity geometry → fills occluded silhouette.
+        // Walk entity hierarchy: if the selected entity is a container node (no mesh),
+        // recursively render child meshes instead.
         Entity sel = ctx.Get<Entity>("SelectedEntity", Entity{});
         Entity hov = ctx.Get<Entity>("HoveredEntity", Entity{});
-        auto renderEntity = [&](Entity e) {
+
+        Scene* scene = sel ? sel.GetScene() : (hov ? hov.GetScene() : nullptr);
+
+        std::function<void(Entity, const glm::mat4&)> renderRecursive;
+        renderRecursive = [&](Entity e, const glm::mat4& worldTransform) {
             if (!e) return;
 
-            // Mesh silhouette
+            // Render this entity's mesh silhouette
             if (e.HasComponent<MeshRendererComponent>()) {
                 auto& mc = e.GetComponent<MeshRendererComponent>();
                 auto model = AssetManager::GetAsset<Model>(mc.ModelHandle);
-                if (!model) return;
-                cmd.BindPipeline(m_GeomPipeline);
-                struct alignas(16) { glm::mat4 Transform; alignas(16) glm::vec3 Color; } pc;
-                pc.Color = glm::vec3(1.0f);
-                pc.Transform = e.GetWorldTransform();
-                for (auto& mesh : model->GetMeshes()) {
-                    cmd.PushConstantData(m_GeomPipeline, &pc, sizeof pc);
-                    cmd.DrawIndexed(mesh, mesh->GetIndexCount());
+                if (model) {
+                    cmd.BindPipeline(m_GeomPipeline);
+                    struct alignas(16) { glm::mat4 Transform; alignas(16) glm::vec3 Color; } pc;
+                    pc.Color = glm::vec3(1.0f);
+                    pc.Transform = worldTransform;
+                    for (auto& mesh : model->GetMeshes()) {
+                        cmd.PushConstantData(m_GeomPipeline, &pc, sizeof pc);
+                        cmd.DrawIndexed(mesh, mesh->GetIndexCount());
+                    }
                 }
             }
-            // Sprite silhouette (white quad, no alpha discard)
             else if (e.HasComponent<SpriteRendererComponent>()) {
                 cmd.BindPipeline(m_SpritePipeline);
                 struct alignas(16) {
-                    glm::mat4 Transform;
-                    glm::vec4 Color;
-                    float ExposureInverse;
-                    int UseTexture;
+                    glm::mat4 Transform; glm::vec4 Color;
+                    float ExposureInverse; int UseTexture;
                 } pc;
-                pc.Transform = e.GetWorldTransform();
-                pc.Color = glm::vec4(1.0f);       // solid white
-                pc.ExposureInverse = 1.0f;         // no exposure correction
-                pc.UseTexture = 0;                  // skip texture (avoids alpha discard)
+                pc.Transform = worldTransform;
+                pc.Color = glm::vec4(1.0f);
+                pc.ExposureInverse = 1.0f;
+                pc.UseTexture = 0;
                 cmd.PushConstantData(m_SpritePipeline, &pc, sizeof pc);
                 cmd.DrawArrays(4);
             }
+
+            // Recurse into children
+            if (scene && e.HasComponent<RelationshipComponent>()) {
+                auto& rel = e.GetComponent<RelationshipComponent>();
+                for (auto childHandle : rel.Children) {
+                    Entity child{childHandle, scene};
+                    if (!child || !child.HasComponent<TransformComponent>()) continue;
+                    glm::mat4 childWorld = worldTransform *
+                        child.GetComponent<TransformComponent>().GetTransform();
+                    renderRecursive(child, childWorld);
+                }
+            }
         };
-        renderEntity(sel);
-        renderEntity(hov);
+
+        // Use GetWorldTransform() as starting point — includes all ancestor transforms
+        if (sel) renderRecursive(sel, sel.GetWorldTransform());
+        if (hov && hov != sel) renderRecursive(hov, hov.GetWorldTransform());
 
         cmd.EndRenderPass();
         ctx.Framebuffers["Selection"] = selFBO;

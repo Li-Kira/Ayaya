@@ -5,6 +5,7 @@
 #include "Scripting/ScriptEngine.hpp"
 #include "Engine/Core/EditorCommands.hpp"
 #include "Engine/Core/ImGuiBackend.hpp"
+#include "Engine/Core/Application.hpp"
 #include "Project/Project.hpp"
 #include "Core/VFS.hpp"
 
@@ -83,6 +84,19 @@ namespace Ayaya {
 
         // Asset hot-reload: process pending file changes
         m_AssetWatcher.Update();
+
+        // OS file drag-drop: open import modal for model files dropped onto the window
+        {
+            auto droppedPaths = Ayaya::Window::GetDroppedPaths();
+            for (auto& path : droppedPaths) {
+                std::string ext = std::filesystem::path(path).extension().string();
+                for (auto& c : ext) c = (char)std::tolower(c);
+                if (ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb") {
+                    m_ImportModelPanel.RequestOpen(path);
+                    break; // one modal at a time
+                }
+            }
+        }
 
         // ==========================================
         // 1. 处理输入
@@ -364,6 +378,7 @@ namespace Ayaya {
 
         UIRenderNewProjectPopup();
         UIRenderSaveAsPopup();
+        m_ImportModelPanel.Draw();
 
         ImGui::End(); // End DockSpace
     }
@@ -405,7 +420,7 @@ namespace Ayaya {
         cubeEntity.GetComponent<TransformComponent>().Translation = { 0.0f, 0.0f, 0.0f };
         auto& mrc = cubeEntity.AddComponent<MeshRendererComponent>();
         mrc.ModelHandle = AssetManager::GetBuiltInCube();
-        mrc.MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
+        mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
 
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
     }
@@ -441,17 +456,8 @@ namespace Ayaya {
             SetupScene();
             m_CurrentScenePath = VFS::ResolveString("project://Scenes/Default.ayaya");
 
-            UUID builtInMat = AssetManager::GetBuiltInMaterial();
-            std::string engineMatPath = AssetManager::GetAssetPhysicalPath(builtInMat);
-            if (!engineMatPath.empty()) {
-                try {
-                    auto projectMatPath = VFS::Resolve("project://Materials/DefaultPBR.mat");
-                    std::filesystem::copy_file(engineMatPath, projectMatPath,
-                        std::filesystem::copy_options::overwrite_existing);
-                    AssetManager::UpdateAssetPath(builtInMat, "project://Materials/DefaultPBR.mat");
-                    AssetManager::WriteMetaFile(projectMatPath, builtInMat, AssetType::Material);
-                } catch (...) {}
-            }
+            // COW: built-in DefaultPBR stays as engine reference.
+            // Users create project copies via PropertiesPanel "Create Material File".
 
             SaveScene();
             SaveProject();
@@ -889,22 +895,10 @@ namespace Ayaya {
                     NewScene();
                     m_CurrentScenePath = VFS::ResolveString("project://Scenes/Default.ayaya");
 
-                    // 将引擎内置默认材质克隆到项目 Materials 目录，使项目自包含
-                    UUID builtInMat = AssetManager::GetBuiltInMaterial();
-                    std::string engineMatPath = AssetManager::GetAssetPhysicalPath(builtInMat);
-                    if (!engineMatPath.empty()) {
-                        std::string projectMatPath = VFS::ResolveString("project://Materials/DefaultPBR.mat");
-                        try {
-                            std::filesystem::copy_file(engineMatPath, projectMatPath,
-                                std::filesystem::copy_options::overwrite_existing);
-                            AssetManager::UpdateAssetPath(builtInMat, "project://Materials/DefaultPBR.mat");
-                            AssetManager::WriteMetaFile(projectMatPath, builtInMat, AssetType::Material);
-                        } catch (const std::exception& e) {
-                            AYAYA_CORE_WARN("Failed to clone default material: {0}", e.what());
-                        }
-                    }
+                    // COW: built-in DefaultPBR stays as engine reference.
+                    // Users create project copies via PropertiesPanel "Create Material File".
 
-                    // 保存场景 + 所有材质 .mat 文件 + 资产注册表
+                    // 保存场景 + 资产注册表
                     SaveScene();
                     SaveProject();
 
@@ -942,31 +936,9 @@ namespace Ayaya {
         auto projectPath = Project::GetProjectDirectory() / (Project::GetActive()->GetConfig().Name + ".ayaproj");
         Project::SaveActive(projectPath);
 
-        // 2. 保存前：将仍引用引擎材质的实体自动克隆到项目目录
-        auto meshView = m_ActiveScene->Reg().view<MeshRendererComponent>();
-        for (auto entityID : meshView) {
-            auto& mrc = meshView.get<MeshRendererComponent>(entityID);
-            if (mrc.MaterialHandle == 0) continue;
-            std::string physPath = AssetManager::GetAssetPhysicalPath(mrc.MaterialHandle);
-            if (!physPath.empty() && physPath.find("assets/Editor/") != std::string::npos) {
-                auto mat = AssetManager::GetAsset<Material>(mrc.MaterialHandle);
-                if (!mat) continue;
-                std::string matDir = VFS::ResolveString("project://Materials");
-                if (!std::filesystem::exists(matDir))
-                    std::filesystem::create_directories(matDir);
-                std::string baseName = mat->Name;
-                if (baseName.empty() || baseName == "Built-in Default Material" || baseName.find("(Instance)") != std::string::npos)
-                    baseName = "NewMaterial";
-                std::string finalPath = matDir + "/" + baseName + ".mat";
-                int idx = 1;
-                while (std::filesystem::exists(finalPath))
-                    finalPath = matDir + "/" + baseName + " (" + std::to_string(++idx) + ").mat";
-                mat->Name = std::filesystem::path(finalPath).stem().string();
-                MaterialSerializer::Serialize(mat, finalPath);
-                UUID newHandle = AssetManager::ImportAsset(finalPath);
-                if (newHandle != 0) mrc.MaterialHandle = newHandle;
-            }
-        }
+        // 2. COW: built-in materials stay as shared references — no auto-clone.
+        //    Users explicitly create project copies via the "Create Material File"
+        //    button in the Properties panel.
 
         // 3. 保存当前场景 (.ayaya)
         if (!m_CurrentScenePath.empty()) {
@@ -1276,7 +1248,20 @@ namespace Ayaya {
                 if (ImGui::MenuItem("Save Project As...", "Ctrl+Shift+S")) SaveProjectAs();
                 if (ImGui::MenuItem("Open Project", "Ctrl+O")) OpenProject();
 
+                ImGui::Spacing();
                 ImGui::Separator();
+                ImGui::Spacing();
+
+                if (ImGui::MenuItem("Import Model...", "Ctrl+I")) {
+                    std::string filepath = FileDialogs::OpenFile(
+                        "3D Models (*.fbx *.obj *.gltf *.glb)|*.fbx;*.obj;*.gltf;*.glb");
+                    if (!filepath.empty())
+                        m_ImportModelPanel.RequestOpen(filepath);
+                }
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
                 if (ImGui::MenuItem("Exit")) Application::Get().Close(); 
                 
                 ImGui::EndMenu();
@@ -1291,8 +1276,17 @@ namespace Ayaya {
 
             if (ImGui::BeginMenu("View")) {
                 ImGui::MenuItem("Show Gizmos", nullptr, &m_ShowGizmosOverlay);
+                
+                ImGui::Spacing();
                 ImGui::Separator();
+                ImGui::Spacing();
+
                 ImGui::MenuItem("Show Statistics", nullptr, &m_ShowStatsPanel);
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+
                 ImGui::MenuItem("Show History", nullptr, &m_HistoryPanel.IsOpen);
                 ImGui::MenuItem("Frame Debugger", nullptr, &m_FrameDebuggerPanel.IsOpen);
 

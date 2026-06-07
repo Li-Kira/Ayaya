@@ -27,6 +27,9 @@ layout(set = 1, binding = 2) uniform sampler2D   u_RoughnessMap;
 layout(set = 1, binding = 3) uniform samplerCube u_IrradianceMap;
 layout(set = 1, binding = 4) uniform samplerCube u_PrefilteredMap;
 layout(set = 1, binding = 5) uniform sampler2D   u_BRDFLUT;
+layout(set = 1, binding = 6) uniform sampler2D   u_NormalMap;
+layout(set = 1, binding = 7) uniform sampler2D   u_ORMMap;
+layout(set = 1, binding = 8) uniform sampler2D   u_AOMap;
 
 layout(push_constant) uniform PC {
     mat4  u_Transform;
@@ -35,10 +38,11 @@ layout(push_constant) uniform PC {
     float u_Roughness;
     float u_AO;
     int   u_UseAlbedoMap;
+    int   u_UseNormalMap;
+    int   u_UseORMMap;
     int   u_UseMetallicMap;
     int   u_UseRoughnessMap;
     int   u_UseAOMap;
-    int   u_UseNormalMap;
     float u_Alpha;
 } pc;
 
@@ -75,6 +79,7 @@ void main() {
     // Material
     float alpha  = pc.u_Alpha;
     vec3  Albedo = pc.u_Albedo.rgb;
+    float AO        = pc.u_AO;
     float Metallic  = pc.u_Metallic;
     float Roughness = max(pc.u_Roughness, 0.04);
 
@@ -83,8 +88,19 @@ void main() {
         Albedo *= tex.rgb;
         alpha  *= tex.a;
     }
-    if (pc.u_UseMetallicMap  == 1) Metallic  *= texture(u_MetallicMap,  v_TexCoord).r;
-    if (pc.u_UseRoughnessMap == 1) Roughness *= texture(u_RoughnessMap, v_TexCoord).r;
+
+    // ORM packed texture (UE4 convention: R=AO, G=Roughness, B=Metallic)
+    if (pc.u_UseORMMap == 1) {
+        vec3 orm = texture(u_ORMMap, v_TexCoord).rgb;
+        AO        = orm.r;
+        Roughness = max(orm.g * pc.u_Roughness, 0.04);
+        Metallic  = orm.b * pc.u_Metallic;
+    } else {
+        if (pc.u_UseAOMap       == 1) AO        *= texture(u_AOMap,       v_TexCoord).r;
+        if (pc.u_UseMetallicMap  == 1) Metallic  *= texture(u_MetallicMap,  v_TexCoord).r;
+        if (pc.u_UseRoughnessMap == 1) Roughness *= texture(u_RoughnessMap, v_TexCoord).r;
+        Roughness = max(Roughness, 0.04);
+    }
 
     vec3 N = normalize(v_Normal);
     vec3 V = normalize(u_CameraPosition - v_WorldPos);

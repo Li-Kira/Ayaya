@@ -5,6 +5,17 @@
 
 namespace Ayaya {
 
+    // Static drop queue
+    std::vector<std::string> Window::s_DroppedPaths;
+    std::mutex Window::s_DropMutex;
+
+    std::vector<std::string> Window::GetDroppedPaths() {
+        std::lock_guard<std::mutex> lock(s_DropMutex);
+        std::vector<std::string> paths;
+        std::swap(paths, s_DroppedPaths);
+        return paths;
+    }
+
     Window::Window(int width, int height, const std::string& title) {
         m_Data.Title = title;
 
@@ -98,6 +109,14 @@ namespace Ayaya {
             WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
             MouseMovedEvent event((float)xPos, (float)yPos);
             data.EventCallback(event);
+        });
+
+        // 7. OS file drag-drop callback
+        glfwSetDropCallback(m_Window, [](GLFWwindow* window, int count, const char** paths) {
+            std::lock_guard<std::mutex> lock(s_DropMutex);
+            for (int i = 0; i < count; i++) {
+                s_DroppedPaths.push_back(paths[i]);
+            }
         });
 
         SetVSync(true);

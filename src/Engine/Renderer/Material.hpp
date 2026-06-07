@@ -69,6 +69,10 @@ namespace Ayaya {
         MaterialBlendMode GetBlendMode() const { return m_BlendMode; }
         uint8_t GetRenderBucket() const { return static_cast<uint8_t>(m_BlendMode); }
 
+        // Built-in materials are shared read-only templates (e.g. DefaultPBR).
+        // Editing them requires an explicit "Create Instance" via the editor.
+        bool IsBuiltIn() const;
+
         // Alpha cutoff for Masked blend mode (alpha-test threshold)
         void SetAlphaCutoff(float cutoff) { m_AlphaCutoff = cutoff; }
         float GetAlphaCutoff() const { return m_AlphaCutoff; }
@@ -117,15 +121,16 @@ namespace Ayaya {
         // Pre-baked push-constant cache (eliminates per-packet string parsing)
         // ==========================================
         struct BakedPC {
-            // Scalar values (directly memcpy-able to WBOITGatherPushConstants)
+            // Scalar values (directly memcpy-able to push constants)
             glm::vec4 Albedo{1.0f};
             float Metallic = 0.0f, Roughness = 0.5f, AO = 1.0f, Alpha = 0.5f;
-            int UseAlbedoMap = 0, UseMetallicMap = 0, UseRoughnessMap = 0;
-            int UseAOMap = 0, UseNormalMap = 0;
+            int UseAlbedoMap = 0, UseNormalMap = 0, UseORMMap = 0;
+            int UseMetallicMap = 0, UseRoughnessMap = 0, UseAOMap = 0;
             bool Dirty = true;
-            // Pre-resolved texture pointers (slot 0=Albedo, 1=Metallic, 2=Roughness).
-            // nullptr means "no texture, use white fallback".
-            std::shared_ptr<class Texture2D> Textures[3];
+            // Pre-resolved texture pointers:
+            //   slot 0=Albedo, 1=Normal, 2=ORM, 3=Metallic, 4=Roughness, 5=AO.
+            // nullptr means "no texture, use white/blue fallback".
+            std::shared_ptr<class Texture2D> Textures[6];
         };
         const BakedPC& GetBakedPC();
         void BakeProperties();  // rebuild BakedPC from Properties vector

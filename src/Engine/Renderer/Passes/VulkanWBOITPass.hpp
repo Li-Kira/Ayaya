@@ -19,10 +19,11 @@ namespace Ayaya {
         float Roughness;
         float AO;
         int UseAlbedoMap;
+        int UseNormalMap;
+        int UseORMMap;        // [NEW] UE4-style ORM packed texture (R=AO, G=Roughness, B=Metallic)
         int UseMetallicMap;
         int UseRoughnessMap;
         int UseAOMap;
-        int UseNormalMap;
         float Alpha;
     };
 

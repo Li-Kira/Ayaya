@@ -65,21 +65,21 @@ namespace Ayaya {
                         Entity entity = m_Context->CreateEntity("Cube");
                         auto& mrc = entity.AddComponent<MeshRendererComponent>();
                         mrc.ModelHandle = AssetManager::GetBuiltInCube();
-                        mrc.MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
+                        mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
                         SetSelectedEntity(entity);
                     }
                     if (ImGui::MenuItem("Sphere")) {
                         Entity entity = m_Context->CreateEntity("Sphere");
                         auto& mrc = entity.AddComponent<MeshRendererComponent>();
                         mrc.ModelHandle = AssetManager::GetBuiltInSphere();
-                        mrc.MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
+                        mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
                         SetSelectedEntity(entity);
                     }
                     if (ImGui::MenuItem("Plane")) {
                         Entity entity = m_Context->CreateEntity("Plane");
                         auto& mrc = entity.AddComponent<MeshRendererComponent>();
                         mrc.ModelHandle = AssetManager::GetBuiltInPlane();
-                        mrc.MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
+                        mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
                         SetSelectedEntity(entity);
                     }
                     ImGui::EndMenu();

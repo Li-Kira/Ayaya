@@ -1,4 +1,4 @@
-MaterialName: Built-in Default PBR
+MaterialName: Assimp Model_Material
 ShaderName: PBR
 BlendMode: 0
 AlphaCutoff: 0.5

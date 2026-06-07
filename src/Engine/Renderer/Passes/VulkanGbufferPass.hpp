@@ -19,10 +19,11 @@ namespace Ayaya {
         float AlphaCutoff;
         int   BlendMode;       // 0=Opaque, 1=Masked
         int UseAlbedoMap;
+        int UseNormalMap;
+        int UseORMMap;        // [NEW] UE4-style ORM packed texture
         int UseMetallicMap;
         int UseRoughnessMap;
         int UseAOMap;
-        int UseNormalMap;
         int UseAlphaMap;
         int IsSelected;
     };

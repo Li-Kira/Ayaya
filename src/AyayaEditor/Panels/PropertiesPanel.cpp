@@ -1236,76 +1236,120 @@ namespace Ayaya {
                 // ==========================================
                 ImGui::Spacing();
                 if (ImGui::TreeNodeEx("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
-                    
+
                     std::shared_ptr<Material> currentMat = nullptr;
                     if (refMrc.MaterialHandle != 0 && AssetManager::IsAssetHandleValid(refMrc.MaterialHandle)) {
                         currentMat = AssetManager::GetAsset<Material>(refMrc.MaterialHandle);
                     }
 
+                    // Get a nice display name for the material
+                    auto getMatDisplayName = [&]() -> std::string {
+                        if (!currentMat) return "No Material";
+                        if (currentMat->IsBuiltIn())
+                            return currentMat->Name.empty() ? "Built-in Default PBR" : currentMat->Name;
+                        // Project material: show filename from AssetPath
+                        if (!currentMat->AssetPath.empty()) {
+                            auto s = currentMat->AssetPath.find_last_of("/\\");
+                            return (s != std::string::npos)
+                                ? currentMat->AssetPath.substr(s + 1)
+                                : currentMat->AssetPath;
+                        }
+                        return currentMat->Name.empty() ? "Unnamed Material" : currentMat->Name;
+                    };
+
+                    bool isBuiltIn = currentMat && currentMat->IsBuiltIn();
+                    float btnH = ImGui::GetTextLineHeight() + ImGui::GetStyle().FramePadding.y * 2.0f + 4.0f;
+
+                    // ---- Material name (big button, drag-drop target, adapts to text) ----
+                    std::string btnLabel = getMatDisplayName();
+                    if (isBuiltIn)
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.55f, 0.55f, 1.0f));
+                    ImGui::Button(btnLabel.c_str(), ImVec2(-1.0f, btnH));
+                    if (isBuiltIn)
+                        ImGui::PopStyleColor();
+
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                            UUID droppedHandle = *(const UUID*)payload->Data;
+                            if (droppedHandle != 0 && AssetManager::GetMetadata(droppedHandle).Type == AssetType::Material) {
+                                std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
+                                for (auto e : m_SelectedEntities) e.GetComponent<MeshRendererComponent>().MaterialHandle = droppedHandle;
+                                commitInstantCommand("Assign Material", oldComps);
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
+
+                    // ---- Built-in banner (before action buttons) ----
+                    if (isBuiltIn) {
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.75f, 0.3f, 1.0f));
+                        ImGui::TextWrapped("Built-in material is read-only. Create a project copy to edit.");
+                        ImGui::PopStyleColor();
+                    }
+
+                    // ---- Action row: Save/Create + Remove (side by side) ----
                     if (currentMat) {
-                        ImGui::Text("Material Asset (.mat)");
-                        
-                        // 【优化 4】：直接读取材质的名称 (Name)，不显示长串 UUID
-                        std::string matDisplay = currentMat->Name.empty() ? "Material Assigned" : currentMat->Name;
-                        ImGui::Button(matDisplay.c_str(), ImVec2(-1.0f, 30.0f));
-
-                        if (ImGui::BeginDragDropTarget()) {
-                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                                UUID droppedHandle = *(const UUID*)payload->Data;
-                                if (droppedHandle != 0 && AssetManager::GetMetadata(droppedHandle).Type == AssetType::Material) {
-                                    std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
-                                    for (auto e : m_SelectedEntities) e.GetComponent<MeshRendererComponent>().MaterialHandle = droppedHandle;
-                                    commitInstantCommand("Assign Material", oldComps);
-                                }
-                            }
-                            ImGui::EndDragDropTarget();
-                        }
-
-                        if (ImGui::Button("Save to .mat")) {
+                        if (isBuiltIn) {
+                            // Built-in materials may still have a writable physical path
+                            // (e.g., DefaultPBR.mat under assets/Editor/). Try direct save first.
                             std::string physicalPath = AssetManager::GetAssetPhysicalPath(refMrc.MaterialHandle);
-                            
-                            if (physicalPath.empty() || physicalPath.find("assets/Editor/") != std::string::npos) {
-                                if (!std::filesystem::exists("assets/materials")) {
-                                    std::filesystem::create_directories("assets/materials");
+                            if (physicalPath.empty() && !currentMat->AssetPath.empty())
+                                physicalPath = currentMat->AssetPath;  // fallback: use AssetPath directly
+                            bool canSaveDirectly = !physicalPath.empty();
+
+                            if (canSaveDirectly) {
+                                if (ImGui::Button("Save to .mat", ImVec2(-1.0f, btnH))) {
+                                    MaterialSerializer::Serialize(currentMat, physicalPath);
                                 }
-                                std::string baseName = currentMat->Name;
-                                if (baseName == "Built-in Default Material" || baseName == "Empty Material" || baseName.empty() || baseName.find("(Instance)") != std::string::npos) {
-                                    baseName = "NewMaterial";
+                            }
+                            if (ImGui::Button("Create Material File", ImVec2(-1.0f, btnH))) {
+                                auto newMat = currentMat->Clone();
+                                newMat->Name = referenceEntity.GetComponent<TagComponent>().Tag + "_Material";
+                                std::string filepath = FileDialogs::SaveFile(
+                                    "Ayaya Material (*.mat)\0*.mat\0", newMat->Name + ".mat");
+                                if (!filepath.empty()) {
+                                    MaterialSerializer::Serialize(newMat, filepath);
+                                    UUID newHandle = AssetManager::ImportAsset(filepath);
+                                    if (newHandle != 0) {
+                                        std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
+                                        for (auto e : m_SelectedEntities)
+                                            e.GetComponent<MeshRendererComponent>().MaterialHandle = newHandle;
+                                        commitInstantCommand("Create Material File", oldComps);
+                                    }
                                 }
-                                std::string finalPath = "assets/materials/" + baseName + ".mat";
-                                int index = 1;
-                                while (std::filesystem::exists(finalPath)) {
-                                    finalPath = "assets/materials/" + baseName + " (" + std::to_string(index) + ").mat";
-                                    index++;
-                                }
-                                currentMat->Name = std::filesystem::path(finalPath).stem().string();
-                                
-                                MaterialSerializer::Serialize(currentMat, finalPath);
-                                
-                                UUID newMatHandle = AssetManager::ImportAsset(finalPath);
-                                if (newMatHandle != 0) {
-                                    std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
-                                    for (auto e : m_SelectedEntities) e.GetComponent<MeshRendererComponent>().MaterialHandle = newMatHandle;
-                                    commitInstantCommand("Save and Assign New Material", oldComps);
-                                }
-                            } else {
-                                MaterialSerializer::Serialize(currentMat, physicalPath);
+                            }
+                        } else {
+                            if (ImGui::Button("Save to .mat", ImVec2(-1.0f, btnH))) {
+                                std::string physicalPath = AssetManager::GetAssetPhysicalPath(refMrc.MaterialHandle);
+                                if (!physicalPath.empty())
+                                    MaterialSerializer::Serialize(currentMat, physicalPath);
                             }
                         }
-                        
-                        ImGui::SameLine();
-
-                        if (ImGui::Button("Remove Material")) {
+                        if (ImGui::Button("Remove Material", ImVec2(-1.0f, btnH))) {
                             std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
                             for (auto e : m_SelectedEntities) e.GetComponent<MeshRendererComponent>().MaterialHandle = 0;
                             commitInstantCommand("Remove Material", oldComps);
                         }
+                    } else {
+                        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+                        ImGui::TextColored(ImVec4(1.0f, 0.2f, 0.6f, 1.0f), "No Material Assigned");
+                        ImGui::PopFont();
+                        if (ImGui::Button("Add Default Material", ImVec2(-1.0f, btnH))) {
+                            std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
+                            for (auto e : m_SelectedEntities)
+                                e.GetComponent<MeshRendererComponent>().MaterialHandle = AssetManager::GetBuiltInMaterial();
+                            commitInstantCommand("Add Default Material", oldComps);
+                        }
+                    }
+
+                    // ---- Inline editor (grayed out for built-in) ----
+                    if (currentMat) {
+                        if (isBuiltIn) ImGui::BeginDisabled(true);
 
                         ImGui::Text("Shader: %s", currentMat->ShaderName.c_str());
 
-                        // Blend Mode dropdown (combo indices → enum values)
+                        // Blend Mode dropdown
                         static const char* kBlendNames[] = { "Opaque", "Masked", "Translucent" };
-                        // Map enum → combo index
                         int currentBlend = 0;
                         switch (currentMat->GetBlendMode()) {
                             case MaterialBlendMode::Opaque:      currentBlend = 0; break;
@@ -1317,7 +1361,6 @@ namespace Ayaya {
                         ImGui::SameLine();
                         ImGui::SetNextItemWidth(160.0f);
                         if (ImGui::Combo("##BlendMode", &currentBlend, kBlendNames, 3)) {
-                            // Map combo index → enum
                             MaterialBlendMode newBlend = MaterialBlendMode::Opaque;
                             switch (currentBlend) {
                                 case 0: newBlend = MaterialBlendMode::Opaque; break;
@@ -1338,8 +1381,6 @@ namespace Ayaya {
                         ImGui::Columns(2, "MaterialProperties", false);
                         ImGui::SetColumnWidth(0, 140.0f * uiScale);
                         std::string lastCategory = "";
-
-                        // Track whether an alpha texture is assigned
                         bool hasAlphaTex = false;
 
                         for (auto& prop : currentMat->Properties) {
@@ -1467,20 +1508,9 @@ namespace Ayaya {
                         }
 
                         ImGui::Columns(1);
+                        if (isBuiltIn)
+                            ImGui::EndDisabled();
                     }
-                    else {
-                        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
-                        ImGui::TextColored(ImVec4(1.0f, 0.2f, 0.6f, 1.0f), "Warning: No Material Assigned!");
-                        ImGui::PopFont();
-                        if (ImGui::Button("Add Default Material", ImVec2(-1.0f, 30.0f))) {
-                            std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
-                            for (auto e : m_SelectedEntities) {
-                                e.GetComponent<MeshRendererComponent>().MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
-                            }
-                            commitInstantCommand("Add Default Material", oldComps);
-                        }
-                    }
-
                     ImGui::Spacing();
                     ImGui::Separator();
                     ImGui::Spacing();
@@ -2354,7 +2384,7 @@ namespace Ayaya {
                         if (!e.HasComponent<MeshRendererComponent>() && !e.HasComponent<SpriteRendererComponent>()) {
                             auto& mrc = e.AddComponent<MeshRendererComponent>();
                             mrc.ModelHandle = AssetManager::GetBuiltInCube();
-                            mrc.MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
+                            mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
                         }
                     }
                     ImGui::CloseCurrentPopup();

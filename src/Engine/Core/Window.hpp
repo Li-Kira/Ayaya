@@ -3,6 +3,8 @@
 #include <GLFW/glfw3.h>
 
 #include <string>
+#include <vector>
+#include <mutex>
 #include <functional>
 #include <memory>
 
@@ -43,6 +45,10 @@ namespace Ayaya {
         // 【新增】：暴露图形上下文，方便上层系统（如 ImGui 和 Renderer）获取底层句柄
         inline std::shared_ptr<GraphicsContext> GetContext() const { return m_Context; }
 
+        // OS file drag-drop: drain and return all paths dropped since last call.
+        // Thread-safe — called from EditorLayer::OnUpdate on the main thread.
+        static std::vector<std::string> GetDroppedPaths();
+
     private:
         GLFWwindow* m_Window;
         
@@ -58,6 +64,10 @@ namespace Ayaya {
         };
 
         WindowData m_Data;
+
+        // OS file drag-drop queue
+        static std::vector<std::string> s_DroppedPaths;
+        static std::mutex s_DropMutex;
     };
 
 }

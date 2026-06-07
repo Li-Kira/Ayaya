@@ -20,6 +20,8 @@ namespace Ayaya {
 
         static std::shared_ptr<Texture2D> RenderRealtimePreview(UUID modelHandle, glm::vec2 cameraAngle, uint32_t size = 256);
         static std::shared_ptr<Texture2D> GenerateThumbnail(UUID modelHandle, uint32_t size = 128);
+        static std::shared_ptr<Texture2D> GenerateThumbnailForMaterial(UUID materialHandle, uint32_t size = 128);
+        static std::shared_ptr<Texture2D> GenerateThumbnailForPrefab(UUID prefabHandle, uint32_t size = 128);
 
     private:
         static void AutoFrameCamera(const std::shared_ptr<Model>& model, glm::vec2 orbitAngle, float fovY);

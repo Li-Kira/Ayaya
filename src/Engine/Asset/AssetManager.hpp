@@ -25,6 +25,24 @@ namespace Ayaya {
         ModelImportSettings   ModelSettings;
     };
 
+    // Result of a background-thread model import — plain data only, no GPU/registry state.
+    // The background thread fills this, then SubmitToMainThread hands it to FinalizeModelImport.
+    struct ImportResult {
+        bool Success = false;
+        std::string ErrorMsg;
+        UUID ModelHandle = 0;
+        std::string ModelVirtualPath;
+        // Sub-assets generated during import
+        struct MeshEntry { UUID Handle; std::string VirtualPath; std::string PhysicalPath; };
+        struct MatEntry  { UUID Handle; std::string VirtualPath; std::string PhysicalPath; };
+        struct TexEntry  { std::string PhysicalPath; };
+        std::vector<MeshEntry> SubMeshes;
+        std::vector<MatEntry>  Materials;
+        std::vector<TexEntry>  CopiedTextures;
+        UUID PrefabHandle = 0;
+        std::string PrefabPath;
+    };
+
     class AssetManager {
     public:
         static void Init();
@@ -75,6 +93,13 @@ namespace Ayaya {
         // 资产注册表 API
         // ==========================================
         static UUID ImportAsset(const std::filesystem::path& filepath);
+
+        // Enhanced model import with user-configurable settings.
+        // ImportModelAssetSync is CPU-heavy, background-thread safe — NO registry/GPU writes.
+        // FinalizeModelImport runs on main thread via SubmitToMainThread — writes .meta, registers assets.
+        static ImportResult ImportModelAssetSync(const std::filesystem::path& filepath,
+                                                  const ModelImportSettings& settings);
+        static void FinalizeModelImport(const ImportResult& result);
         static void SerializeRegistry(const std::string& path);
         static bool DeserializeRegistry(const std::string& path);
 
@@ -155,6 +180,15 @@ namespace Ayaya {
 
     private:
         // 【核心黑科技】：使用 void 擦除类型！完美接纳所有实体类，无需它们继承任何基类！
+        // Deferred GPU resource release: when ReloadAsset destroys a texture/model
+        // mid-frame, the old VkImage/VkBuffer may still be referenced by in-flight
+        // command buffers. Keep the old asset alive for 3 frames (matching frames-in-flight).
+        struct DeferredRelease {
+            std::shared_ptr<void> Asset;
+            int FramesRemaining = 3;
+        };
+        static std::vector<DeferredRelease> s_DeferredReleases;
+
         static std::unordered_map<UUID, std::shared_ptr<void>> s_Assets;
         static std::unordered_map<UUID, AssetMetadata> s_Registry;
 

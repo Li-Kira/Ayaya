@@ -54,6 +54,27 @@ Properties:
     DisplayName: AO Texture
     Type: 8
     TexturePath: ""
+  - UniformName: u_UseORMMap
+    DisplayName: Enable ORM Map
+    Type: 2
+  - UniformName: u_ORMMap
+    DisplayName: ORM Texture (R=AO G=Roughness B=Metallic)
+    Type: 8
+    TexturePath: ""
+  - UniformName: u_UseHeightMap
+    DisplayName: Enable Height Map
+    Type: 2
+  - UniformName: u_HeightMap
+    DisplayName: Height/Displacement Map
+    Type: 8
+    TexturePath: ""
+  - UniformName: u_UseEmissiveMap
+    DisplayName: Enable Emissive Map
+    Type: 2
+  - UniformName: u_EmissiveMap
+    DisplayName: Emissive Map
+    Type: 8
+    TexturePath: ""
   - UniformName: u_Alpha
     DisplayName: Alpha Multiplier
     Type: 0

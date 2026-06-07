@@ -6,6 +6,8 @@
 #include "Renderer/Model.hpp"
 #include "Renderer/Material.hpp"
 #include "Renderer/MaterialSerializer.hpp"
+#include "Scene/SceneSerializer.hpp"
+#include "Scene/Components.hpp"
 #include "Project/Project.hpp"
 #include "Core/VFS.hpp"
 #include "Core/Log.hpp"
@@ -17,6 +19,7 @@
 namespace Ayaya {
 
     // 静态成员初始化
+    std::vector<AssetManager::DeferredRelease> AssetManager::s_DeferredReleases;
     std::unordered_map<UUID, std::shared_ptr<void>> AssetManager::s_Assets;
     std::unordered_map<UUID, AssetMetadata> AssetManager::s_Registry;
 
@@ -67,9 +70,13 @@ namespace Ayaya {
         out << YAML::Key << "normals" << YAML::Value << (int)settings.Normals;
         out << YAML::Key << "tangents" << YAML::Value << (int)settings.Tangents;
         out << YAML::Key << "import_materials" << YAML::Value << settings.ImportMaterials;
+        out << YAML::Key << "optimize_mesh" << YAML::Value << settings.OptimizeMesh;
         out << YAML::Key << "weld_vertices" << YAML::Value << settings.WeldVertices;
         out << YAML::Key << "mesh_compression" << YAML::Value << settings.MeshCompression;
         out << YAML::Key << "swap_yz" << YAML::Value << settings.SwapYZ;
+        out << YAML::Key << "material_search_rule" << YAML::Value << (int)settings.MatSearchRule;
+        out << YAML::Key << "import_animations" << YAML::Value << settings.ImportAnimations;
+        out << YAML::Key << "combine_into_prefab" << YAML::Value << settings.CombineIntoPrefab;
         out << YAML::EndMap;
     }
 
@@ -80,9 +87,13 @@ namespace Ayaya {
             settings.Normals          = (NormalMode)s["normals"].as<int>(0);
             settings.Tangents         = (TangentMode)s["tangents"].as<int>(0);
             settings.ImportMaterials  = s["import_materials"].as<bool>(true);
+            settings.OptimizeMesh     = s["optimize_mesh"].as<bool>(true);
             settings.WeldVertices     = s["weld_vertices"].as<bool>(false);
             settings.MeshCompression  = s["mesh_compression"].as<bool>(false);
             settings.SwapYZ           = s["swap_yz"].as<bool>(false);
+            settings.MatSearchRule    = (MaterialSearchRule)s["material_search_rule"].as<int>(0);
+            settings.ImportAnimations = s["import_animations"].as<bool>(false);
+            settings.CombineIntoPrefab = s["combine_into_prefab"].as<bool>(true);
         }
         return settings;
     }
@@ -406,7 +417,16 @@ namespace Ayaya {
     // ReloadAsset — 强制同步重载资产（Apply 按钮专用，确保设置即时生效）
     // =====================================================================
     void AssetManager::ReloadAsset(UUID handle) {
-        s_Assets.erase(handle);
+        // Defer destruction of old asset: keep it alive for 3 frames so
+        // in-flight GPU command buffers can finish referencing its Vulkan resources.
+        auto it = s_Assets.find(handle);
+        if (it != s_Assets.end()) {
+            DeferredRelease dr;
+            dr.Asset = it->second;
+            dr.FramesRemaining = 3;
+            s_DeferredReleases.push_back(std::move(dr));
+            s_Assets.erase(it);
+        }
 
         {
             std::lock_guard<std::mutex> lock(s_LoadingMutex);
@@ -416,6 +436,384 @@ namespace Ayaya {
         if (s_Registry.count(handle)) {
             LoadAssetFromFile(handle);
         }
+    }
+
+    // =====================================================================
+    // ImportModelAssetSync — background-thread safe model import
+    // CPU-heavy: Assimp ReadFile + mesh processing + material generation.
+    // Does NOT touch s_Registry or any GPU state.
+    // =====================================================================
+    ImportResult AssetManager::ImportModelAssetSync(const std::filesystem::path& filepath,
+                                                      const ModelImportSettings& settings) {
+        ImportResult result;
+        result.ModelHandle = UUID();
+        result.Success = false;
+
+        std::string pathStr = filepath.string();
+
+        // 1. Determine the project asset directory
+        std::string assetDir;
+        if (Project::GetActive()) {
+            assetDir = Project::GetAssetDirectory().string();
+        } else {
+            assetDir = filepath.parent_path().string();
+        }
+        std::replace(assetDir.begin(), assetDir.end(), '\\', '/');
+
+        std::string baseName = filepath.stem().string();
+        std::string ext = filepath.extension().string();
+        // Normalize extension to lowercase
+        for (auto& c : ext) c = (char)std::tolower(c);
+
+        // 2. Copy the source model file into the project asset directory.
+        //    Deduplicate: if a file with the same name exists, append a suffix.
+        std::string destFilename = baseName + ext;
+        std::string destPath = assetDir + "/" + destFilename;
+        int suffix = 1;
+        while (std::filesystem::exists(destPath)) {
+            destFilename = baseName + "_" + std::to_string(suffix) + ext;
+            destPath = assetDir + "/" + destFilename;
+            suffix++;
+        }
+        try {
+            std::filesystem::copy_file(pathStr, destPath);
+        } catch (const std::exception& e) {
+            result.ErrorMsg = std::string("Failed to copy model file: ") + e.what();
+            return result;
+        }
+
+        // 3. Write .meta IMMEDIATELY so AssetWatcher/ImportAsset sees the same UUID
+        result.ModelVirtualPath = VFS::GetVirtualPath(destPath);
+        WriteMetaFile(destPath, result.ModelHandle, AssetType::Model);
+
+        // 4. Load the model from the project copy with settings
+        auto model = std::make_shared<Model>(destPath, settings);
+        if (model->GetMeshes().empty()) {
+            result.ErrorMsg = "Assimp failed to load model or model has no meshes";
+            // Clean up the copied file on failure
+            std::filesystem::remove(destPath);
+            return result;
+        }
+
+        result.Success = true;
+
+        // Recompute baseName from the actual destination file (may have suffix)
+        baseName = std::filesystem::path(destPath).stem().string();
+
+        // 5. Generate material entry handles (content created later on main thread)
+        if (settings.ImportMaterials) {
+            int matIdx = 0;
+            for (size_t i = 0; i < model->GetMeshes().size(); i++) {
+                ImportResult::MatEntry matEntry;
+                matEntry.Handle = UUID();
+                std::string matName = (model->GetMeshes().size() == 1)
+                    ? baseName + "_Material"
+                    : baseName + "_Material" + std::to_string(matIdx);
+                matEntry.PhysicalPath = assetDir + "/" + matName + ".mat";
+                matEntry.VirtualPath = "project://" + matName + ".mat";
+                result.Materials.push_back(matEntry);
+                matIdx++;
+            }
+        }
+
+        // 6. Copy selected texture files into the project asset directory
+        for (auto& texPath : settings.TextureFiles) {
+            if (!std::filesystem::exists(texPath)) continue;
+            std::string texFilename = texPath.filename().string();
+            std::string texDest = assetDir + "/" + texFilename;
+            // Deduplicate
+            int texSuffix = 1;
+            while (std::filesystem::exists(texDest)) {
+                std::string stem = texPath.stem().string();
+                std::string ext = texPath.extension().string();
+                texDest = assetDir + "/" + stem + "_" + std::to_string(texSuffix) + ext;
+                texSuffix++;
+            }
+            try {
+                std::filesystem::copy_file(texPath, texDest);
+                ImportResult::TexEntry texEntry;
+                texEntry.PhysicalPath = texDest;
+                result.CopiedTextures.push_back(texEntry);
+                // Write .meta immediately with a pre-generated UUID so AssetWatcher
+                // and ImportAsset see the same handle.
+                UUID texUUID = UUID();
+                WriteMetaFile(texDest, texUUID, AssetType::Texture2D);
+                // Store the UUID alongside the path for FinalizeModelImport
+                // (we'll re-derive via ImportAsset, which returns the same UUID).
+            } catch (const std::exception& e) {
+                AYAYA_CORE_WARN("AssetManager: Failed to copy texture '{0}': {1}",
+                    texPath.string(), e.what());
+            }
+        }
+
+        // 7. Build Prefab if requested — creates entity hierarchy in a Scene, saves to .prefab
+        if (settings.CombineIntoPrefab) {
+            result.PrefabHandle = UUID();
+            result.PrefabPath = assetDir + "/" + baseName + ".prefab";
+
+            auto prefab = std::make_shared<Prefab>();
+            Scene* prefabScene = prefab->GetScene();
+
+            // Recursive function to build entity hierarchy from ModelNode tree
+            std::function<Entity(const ModelNode&, Entity)> buildNode =
+                [&](const ModelNode& node, Entity parent) -> Entity {
+                Entity entity = prefabScene->CreateEntity(
+                    node.Name.empty() ? "ModelNode" : node.Name);
+
+                // Transform
+                auto& transform = entity.GetComponent<TransformComponent>();
+                glm::vec3 scale;
+                glm::quat rotation;
+                glm::vec3 translation;
+                glm::vec3 skew;
+                glm::vec4 perspective;
+                glm::decompose(node.LocalTransform, scale, rotation, translation, skew, perspective);
+                transform.Translation = translation;
+                transform.Rotation = glm::eulerAngles(rotation);
+                transform.Scale = scale;
+
+                // Hierarchy
+                if (parent) {
+                    auto& rel = entity.HasComponent<RelationshipComponent>()
+                        ? entity.GetComponent<RelationshipComponent>()
+                        : entity.AddComponent<RelationshipComponent>();
+                    rel.Parent = parent.GetEntityHandle();
+
+                    auto& pRel = parent.HasComponent<RelationshipComponent>()
+                        ? parent.GetComponent<RelationshipComponent>()
+                        : parent.AddComponent<RelationshipComponent>();
+                    pRel.Children.push_back(entity.GetEntityHandle());
+                }
+
+                // Mesh renderer — reference the main model UUID (persistent across restarts)
+                if (!node.Meshes.empty()) {
+                    auto& mrc = entity.AddComponent<MeshRendererComponent>();
+                    mrc.ModelHandle = result.ModelHandle;
+                    // Assign first material (or built-in if no materials imported).
+                    // Use hardcoded UUID — GetBuiltInMaterial() is not thread-safe.
+                    mrc.MaterialHandle = result.Materials.empty()
+                        ? UUID(16140901000000000004ull)   // built-in DefaultPBR
+                        : result.Materials[0].Handle;
+                }
+
+                // Recurse into children
+                for (const auto& childNode : node.Children) {
+                    buildNode(childNode, entity);
+                }
+
+                return entity;
+            };
+
+            Entity rootEntity = buildNode(model->GetRootNode(), Entity{});
+            // Override root entity name to the imported file's name
+            rootEntity.GetComponent<TagComponent>().Tag = baseName;
+            prefab->SetRootEntity(rootEntity);
+
+            // Serialize the prefab to disk
+            prefab->Save(result.PrefabPath);
+
+            AYAYA_CORE_INFO("AssetManager: Prefab saved to {0}", result.PrefabPath);
+        }
+
+        return result;
+    }
+
+    // =====================================================================
+    // FinalizeModelImport — main-thread only, called via SubmitToMainThread
+    // Writes .meta files, registers sub-assets in s_Registry, notifies watcher.
+    // =====================================================================
+    void AssetManager::FinalizeModelImport(const ImportResult& result) {
+        if (!result.Success) {
+            AYAYA_CORE_ERROR("AssetManager: Model import failed: {0}", result.ErrorMsg);
+            return;
+        }
+
+        // 1. Register the main model asset
+        AssetType modelType = AssetType::Model;
+        s_Registry[result.ModelHandle] = { modelType, result.ModelVirtualPath,
+                                           TextureImportSettings{}, ModelImportSettings{} };
+        std::string modelPhysPath = VFS::ResolveString(result.ModelVirtualPath);
+        if (!modelPhysPath.empty() && !std::filesystem::exists(modelPhysPath + ".meta")) {
+            WriteMetaFile(modelPhysPath, result.ModelHandle, modelType);
+        }
+
+        // 2. Import copied textures via ImportAsset (main-thread safe, generates
+        //    authoritative UUIDs and writes .meta files). Then build suffix→handle map.
+        struct TexMatch { UUID Handle; std::string Suffix; };
+        std::vector<TexMatch> texMatches;
+        for (auto& tex : result.CopiedTextures) {
+            UUID texHandle = ImportAsset(tex.PhysicalPath);
+            if (texHandle != 0) {
+                std::string stem = std::filesystem::path(tex.PhysicalPath).stem().string();
+                texMatches.push_back({texHandle, stem});
+            }
+        }
+
+        // ---- Advanced suffix-based fuzzy matching ----
+        // Priority-ordered suffix lists for each material slot.
+        // Earlier entries are checked first; first match wins.
+        // Match suffix at end-of-string. Suffixes like "_basecolor" have a built-in
+        // "_" boundary — no extra check needed. Raw suffixes like "basecolor" require
+        // a preceding "_" or "." to avoid matching inside another word.
+        auto WordEndsWith = [](const std::string& str, const std::string& sfx) -> bool {
+            if (str.length() < sfx.length()) return false;
+            if (str.compare(str.length() - sfx.length(), sfx.length(), sfx) != 0)
+                return false;
+            // If suffix starts with "_", the "_" is the boundary — accept any predecessor.
+            if (!sfx.empty() && sfx[0] == '_') return true;
+            // Raw suffix (no leading "_"): require word boundary before it.
+            size_t pos = str.length() - sfx.length();
+            if (pos > 0 && str[pos-1] != '_' && str[pos-1] != '.')
+                return false;
+            return true;
+        };
+
+        auto MatchBySuffix = [&](const std::vector<const char*>& suffixes) -> TexMatch* {
+            for (auto* suffix : suffixes) {
+                std::string sfx(suffix);
+                for (auto& c : sfx) c = (char)std::tolower(c);
+                for (auto& tm : texMatches) {
+                    std::string lower = tm.Suffix;
+                    for (auto& c : lower) c = (char)std::tolower(c);
+                    if (WordEndsWith(lower, sfx))
+                        return &tm;
+                }
+            }
+            return nullptr;
+        };
+
+        // 3. Register materials — clone DefaultPBR, assign textures, serialize .mat
+        for (auto& mat : result.Materials) {
+            if (!std::filesystem::exists(mat.PhysicalPath + ".meta")) {
+                auto baseMat = GetAsset<Material>(GetBuiltInMaterial());
+                auto material = baseMat ? baseMat->Clone() : std::make_shared<Material>();
+                material->Name = std::filesystem::path(mat.PhysicalPath).stem().string();
+                material->AssetPath = mat.PhysicalPath;
+                material->ShaderName = "PBR";
+
+                // Helper: assign texture + enable flag
+                auto AssignTex = [&](const std::string& mapProp, const std::string& useProp,
+                                     TexMatch* tm) {
+                    if (!tm) return;
+                    material->SetTexture(mapProp, tm->Handle);
+                    material->SetBool(useProp, true);
+                };
+
+                // --- 1. Albedo / BaseColor ---
+                TexMatch* albedo = MatchBySuffix({
+                    "_basecolor", "_albedo", "_bc", "_color", "_d", "_diffuse"
+                });
+                AssignTex("u_AlbedoMap", "u_UseAlbedoMap", albedo);
+
+                // --- 2. Normal ---
+                TexMatch* normal = MatchBySuffix({
+                    "_normal", "_nrm", "_nor", "_n"
+                });
+                AssignTex("u_NormalMap", "u_UseNormalMap", normal);
+
+                // --- 3. ORM (packed Occlusion-Roughness-Metallic) — check FIRST ---
+                TexMatch* orm = MatchBySuffix({
+                    "_occlusionroughnessmetallic", "_orm", "_arm"
+                });
+                if (orm) {
+                    // Set ORM as a combined texture property
+                    material->SetTexture("u_ORMMap", orm->Handle);
+                    material->SetBool("u_UseORMMap", true);
+                    // Disable individual maps to prevent conflicts
+                    material->SetBool("u_UseMetallicMap", false);
+                    material->SetBool("u_UseRoughnessMap", false);
+                    material->SetBool("u_UseAOMap", false);
+                } else {
+                    // --- 4a. Metallic (individual) ---
+                    TexMatch* metallic = MatchBySuffix({
+                        "_metallic", "_metalness", "_metal", "_mt", "_m"
+                    });
+                    AssignTex("u_MetallicMap", "u_UseMetallicMap", metallic);
+
+                    // --- 4b. Roughness (individual) ---
+                    TexMatch* roughness = MatchBySuffix({
+                        "_roughness", "_rough", "_r"
+                    });
+                    AssignTex("u_RoughnessMap", "u_UseRoughnessMap", roughness);
+
+                    // --- 4c. AO (individual) ---
+                    TexMatch* ao = MatchBySuffix({
+                        "_ambientocclusion", "_ao", "_ambient", "_o"
+                    });
+                    AssignTex("u_AOMap", "u_UseAOMap", ao);
+                }
+
+                // --- 5. Height / Displacement ---
+                TexMatch* height = MatchBySuffix({
+                    "_height", "_displacement", "_disp", "_h"
+                });
+                AssignTex("u_HeightMap", "u_UseHeightMap", height);
+
+                // --- 6. Emissive ---
+                TexMatch* emissive = MatchBySuffix({
+                    "_emissive", "_emission", "_emit", "_e"
+                });
+                AssignTex("u_EmissiveMap", "u_UseEmissiveMap", emissive);
+
+                // --- 7. Opacity / Alpha ---
+                TexMatch* opacity = MatchBySuffix({
+                    "_opacity", "_alpha", "_op"
+                });
+                AssignTex("u_AlphaMap", "u_UseAlphaMap", opacity);
+
+                // Write material to disk and register
+                MaterialSerializer::Serialize(material, mat.PhysicalPath);
+                s_Registry[mat.Handle] = { AssetType::Material, mat.VirtualPath,
+                                           TextureImportSettings{}, ModelImportSettings{} };
+                WriteMetaFile(mat.PhysicalPath, mat.Handle, AssetType::Material);
+                s_Assets[mat.Handle] = material;
+            }
+        }
+
+        // 3.5 Apply sRGB=false for linear data textures (ImportAsset auto-detects, but
+        //     ORM textures may be missed — ensure they're linear).
+        for (auto& tm : texMatches) {
+            if (!s_Registry.count(tm.Handle)) continue;
+            std::string lower = tm.Suffix;
+            for (auto& c : lower) c = (char)std::tolower(c);
+            bool isLinear = (lower.find("normal")   != std::string::npos ||
+                             lower.find("_nrm")      != std::string::npos ||
+                             lower.find("_nor")      != std::string::npos ||
+                             lower.find("metallic")  != std::string::npos ||
+                             lower.find("metalness") != std::string::npos ||
+                             lower.find("roughness") != std::string::npos ||
+                             lower.find("_orm")      != std::string::npos ||
+                             lower.find("_arm")      != std::string::npos ||
+                             lower.find("occlusion") != std::string::npos ||
+                             lower.find("_ao")       != std::string::npos ||
+                             lower.find("ambient")   != std::string::npos ||
+                             lower.find("height")    != std::string::npos ||
+                             lower.find("displace")  != std::string::npos);
+            if (isLinear) {
+                s_Registry[tm.Handle].TextureSettings.SRGB = false;
+                RewriteMetaFile(tm.Handle);
+            }
+        }
+
+        // 4. If prefab was generated, register and load it into in-memory cache
+        if (result.PrefabHandle != 0 && !result.PrefabPath.empty()) {
+            if (!std::filesystem::exists(result.PrefabPath + ".meta")) {
+                std::string prefabVPath = "project://" +
+                    std::filesystem::path(result.PrefabPath).filename().string();
+                s_Registry[result.PrefabHandle] = { AssetType::Prefab, prefabVPath,
+                                                     TextureImportSettings{}, ModelImportSettings{} };
+                WriteMetaFile(result.PrefabPath, result.PrefabHandle, AssetType::Prefab);
+            }
+            // Load the serialized prefab into in-memory cache
+            auto loadedPrefab = std::make_shared<Prefab>();
+            if (loadedPrefab->Load(result.PrefabPath)) {
+                s_Assets[result.PrefabHandle] = loadedPrefab;
+            }
+        }
+
+        AYAYA_CORE_INFO("AssetManager: Model import finalized — {0} materials, prefab={1}",
+            result.Materials.size(),
+            result.PrefabHandle != 0 ? "yes" : "no");
     }
 
     // =====================================================================
@@ -440,6 +838,17 @@ namespace Ayaya {
             executeQueue.front()();
             executeQueue.pop();
         }
+
+        // Drain deferred releases: old GPU resources are kept alive for 3 frames
+        // so in-flight command buffers can finish using them before destruction.
+        for (auto it = s_DeferredReleases.begin(); it != s_DeferredReleases.end(); ) {
+            it->FramesRemaining--;
+            if (it->FramesRemaining <= 0) {
+                it = s_DeferredReleases.erase(it);  // shared_ptr drops → destructor runs
+            } else {
+                ++it;
+            }
+        }
     }
 
     // =====================================================================
@@ -450,7 +859,17 @@ namespace Ayaya {
 
         // 检查是否已经导入过（通过查找是否存在 .meta 文件）
         if (std::filesystem::exists(filepath.string() + ".meta")) {
-            return FindHandleForPath(filepath);
+            UUID existing = FindHandleForPath(filepath);
+            if (existing != 0) return existing;
+            // .meta exists but not yet in s_Registry (e.g. written by background thread).
+            // Read UUID from .meta and register it now.
+            UUID metaHandle; AssetType metaType;
+            TextureImportSettings texSet;
+            if (ReadMetaFile(filepath.string() + ".meta", metaHandle, metaType, &texSet)) {
+                s_Registry[metaHandle] = { metaType, virtualPath, texSet, ModelImportSettings{} };
+                return metaHandle;
+            }
+            // Corrupt .meta — fall through to re-import
         }
 
         // 查重：防止同一个文件在内存账本中被分配多个 UUID
@@ -529,7 +948,7 @@ namespace Ayaya {
             }
             else {
                 // 只有真正的硬盘路径 (如 .obj, .fbx) 才调用 Model 构造函数交给 Assimp
-                asset = std::make_shared<Model>(physicalPath);
+                asset = std::make_shared<Model>(physicalPath, metadata.ModelSettings);
             }
         }
         else if (metadata.Type == AssetType::Material) {

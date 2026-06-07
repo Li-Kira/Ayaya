@@ -178,11 +178,13 @@ endif()
 # =========================================================================
 # 8. 定义 AyayaEditor (编辑器应用程序 - 面向开发者)
 # =========================================================================
-file(GLOB EDITOR_SOURCES 
-    "src/AyayaEditor/*.cpp" 
+file(GLOB EDITOR_SOURCES
+    "src/AyayaEditor/*.cpp"
     "src/AyayaEditor/*.hpp"
     "src/AyayaEditor/Panels/*.cpp"  # 确保面板代码被编译进编辑器
     "src/AyayaEditor/Panels/*.hpp"
+    "src/AyayaEditor/Panels/ImportModelPanel.cpp"
+    "src/AyayaEditor/Panels/ImportModelPanel.hpp"
 )
 add_executable(AyayaEditor ${EDITOR_SOURCES})
 target_link_libraries(AyayaEditor PRIVATE Ayaya)
