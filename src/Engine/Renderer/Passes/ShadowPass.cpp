@@ -4,6 +4,7 @@
 #include "Engine/Scene/Scene.hpp"
 #include "Engine/Scene/Entity.hpp"
 #include "Asset/AssetManager.hpp"
+#include "Renderer/Material.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace Ayaya {
@@ -66,8 +67,11 @@ namespace Ayaya {
             if (!entity.IsActiveInHierarchy()) continue;
             
             auto& meshComp = entity.GetComponent<MeshRendererComponent>();
+            if (!meshComp.CastShadows) continue;
+            auto material = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
+            if (material && material->GetBlendMode() == MaterialBlendMode::Translucent) continue;
             auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
-            if (!model || !meshComp.CastShadows) continue; 
+            if (!model) continue; 
 
             cmd.PushConstant(m_Pipeline, "u_Transform", entity.GetWorldTransform());
             

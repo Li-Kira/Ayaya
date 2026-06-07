@@ -33,6 +33,7 @@ namespace Ayaya {
         // 核心：复制一个实体及其所有的子节点和组件
         // ==============================================
         Entity DuplicateEntity(Entity entity);
+        Entity InstantiatePrefab(class Prefab* prefab);
 
         entt::registry& Reg() { return m_Registry; }
 

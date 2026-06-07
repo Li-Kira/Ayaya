@@ -1,5 +1,6 @@
 #include "ayapch.h"
 #include "AssetManager.hpp"
+#include "Prefab.hpp"
 #include "Renderer/Texture.hpp"
 #include "Renderer/TextureCube.hpp"
 #include "Renderer/Model.hpp"
@@ -29,6 +30,7 @@ namespace Ayaya {
     std::mutex AssetManager::s_LoadingMutex;
     std::queue<std::function<void()>> AssetManager::s_MainThreadQueue;
     std::mutex AssetManager::s_MainThreadQueueMutex;
+    std::unordered_map<UUID, std::unordered_set<UUID>> AssetManager::s_ReverseDeps;
 
     void AssetManager::Init() {
         AYAYA_CORE_INFO("AssetManager Initialized.");
@@ -167,7 +169,8 @@ namespace Ayaya {
         return ext == ".png"  || ext == ".jpg" || ext == ".jpeg" ||
                ext == ".bmp"  || ext == ".hdr" ||
                ext == ".obj"  || ext == ".fbx" || ext == ".gltf" || ext == ".glb" ||
-               ext == ".mat"  || ext == ".lua" || ext == ".cube";
+               ext == ".mat"  || ext == ".lua" || ext == ".cube" ||
+               ext == ".prefab";
     }
 
     void AssetManager::RefreshRegistry() {
@@ -461,6 +464,7 @@ namespace Ayaya {
         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".hdr" || ext == ".bmp") type = AssetType::Texture2D;
         else if (ext == ".obj" || ext == ".fbx" || ext == ".gltf" || ext == ".glb") type = AssetType::Model;
         else if (ext == ".mat")                              type = AssetType::Material;
+        else if (ext == ".prefab")                           type = AssetType::Prefab;
         else if (ext == ".lua")                              type = AssetType::LuaScript;
         else if (ext == ".cube")                             type = AssetType::TextureCube;
 
@@ -534,8 +538,13 @@ namespace Ayaya {
                 asset = material;
             }
         }
+        else if (metadata.Type == AssetType::Prefab) {
+            auto prefab = std::make_shared<Prefab>();
+            if (prefab->Load(physicalPath)) {
+                asset = prefab;
+            }
+        }
         else if (metadata.Type == AssetType::TextureCube) {
-            // 调用我们接下来要写的单文件重载函数
             asset = TextureCube::Create(physicalPath);
         }
 
@@ -681,6 +690,17 @@ namespace Ayaya {
         return handle;
     }
 
+    UUID AssetManager::GetBuiltInMaterialInstance() {
+        // Clone the built-in material so each entity owns an independent copy.
+        // Edits to one entity's material never leak to another.
+        auto baseMat = GetAsset<Material>(GetBuiltInMaterial());
+        auto clone = baseMat ? baseMat->Clone() : std::make_shared<Material>();
+        clone->Name = "Material";  // clean name — user can rename via "Save to .mat"
+        UUID newHandle = UUID();
+        AddAsset(newHandle, clone);
+        return newHandle;
+    }
+
     // =====================================================================
     // 根据物理路径查找已注册资产的 UUID
     // =====================================================================
@@ -810,6 +830,17 @@ namespace Ayaya {
         else
             AYAYA_CORE_INFO("AssetManager: Successfully loaded {0} assets from registry.", loadedCount);
         return true;
+    }
+
+    void AssetManager::RegisterDependency(UUID dependent, UUID dependency) {
+        s_ReverseDeps[dependency].insert(dependent);
+    }
+
+    const std::unordered_set<UUID>& AssetManager::GetDependents(UUID handle) {
+        static std::unordered_set<UUID> empty;
+        auto it = s_ReverseDeps.find(handle);
+        if (it != s_ReverseDeps.end()) return it->second;
+        return empty;
     }
 
 }

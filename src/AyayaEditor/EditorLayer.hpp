@@ -8,6 +8,7 @@
 #include "Panels/ScreenshotPanel.hpp"
 #include "Panels/HistoryPanel.hpp"
 #include "Panels/FrameDebuggerPanel.hpp"
+#include "Asset/AssetWatcher.hpp"
 #include "Renderer/SceneRenderer.hpp"
 #include "Renderer/Framebuffer.hpp"
 #include <Renderer/Renderer.hpp>
@@ -110,6 +111,7 @@ namespace Ayaya {
         ScreenshotPanel m_ScreenshotPanel;
         HistoryPanel m_HistoryPanel;
         FrameDebuggerPanel m_FrameDebuggerPanel;
+        AssetWatcher m_AssetWatcher;
 
         bool m_ViewportFocused = false;
         bool m_ViewportHovered = false;

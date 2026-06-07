@@ -81,6 +81,9 @@ namespace Ayaya {
             m_ProjectToLoad = "";         // 清空标记
         }
 
+        // Asset hot-reload: process pending file changes
+        m_AssetWatcher.Update();
+
         // ==========================================
         // 1. 处理输入
         // ==========================================
@@ -138,6 +141,8 @@ namespace Ayaya {
         // 上帝相机只在 Edit 模式响应输入
         if (m_SceneState == SceneState::Edit) {
             m_EditorCamera.OnUpdate(ts, m_ViewportFocused);
+            // Editor-mode Lua scripts (lazy-init env + call OnEditorUpdate)
+            ScriptEngine::OnEditorUpdate(m_ActiveScene.get(), ts);
         }
         // 如果处于 Play 模式且没有暂停，则推进物理运算，兼容 m_TimeStepScale
         else if (m_SceneState == SceneState::Play && !m_IsPaused) {
@@ -400,7 +405,7 @@ namespace Ayaya {
         cubeEntity.GetComponent<TransformComponent>().Translation = { 0.0f, 0.0f, 0.0f };
         auto& mrc = cubeEntity.AddComponent<MeshRendererComponent>();
         mrc.ModelHandle = AssetManager::GetBuiltInCube();
-        mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
+        mrc.MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
 
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
     }
@@ -1094,6 +1099,13 @@ namespace Ayaya {
 
                 renderProgressFrame(1.0f, "Done!");
                 AYAYA_CORE_INFO("Project loaded: {0}", Project::GetActive()->GetConfig().Name);
+
+                // Start asset watcher on the new project
+                auto assetDir = Project::GetAssetDirectory();
+                if (!assetDir.empty() && std::filesystem::exists(assetDir)) {
+                    m_AssetWatcher.Shutdown();
+                    m_AssetWatcher.Initialize(assetDir);
+                }
             }
         } else {
             SetupScene();

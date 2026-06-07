@@ -132,13 +132,6 @@ namespace Ayaya {
             // Only handle Translucent bucket (bucket 3)
             if (bucket != 3) continue;
 
-            // Fallback white textures
-            if (whiteTex) {
-                cmd.BindTexture2D(m_GatherPipeline, "u_AlbedoMap",    0, whiteTex);
-                cmd.BindTexture2D(m_GatherPipeline, "u_MetallicMap",  1, whiteTex);
-                cmd.BindTexture2D(m_GatherPipeline, "u_RoughnessMap", 2, whiteTex);
-            }
-
             WBOITGatherPushConstants pc{};
             pc.Transform = packet.Transform;
             pc.Albedo = glm::vec4(1.0f);
@@ -147,9 +140,13 @@ namespace Ayaya {
             pc.AO = 1.0f;
             pc.Alpha = 0.5f;
 
-            // Read material properties
+            // Read material properties (always, per-packet)
+            // Scalars AND Use*Map flags must be set for every packet,
+            // not just on material change — otherwise objects sharing
+            // a material get Use*Map=0 and sample nothing.
             if (packet.MaterialAsset) {
                 for (auto& prop : packet.MaterialAsset->Properties) {
+                    // Scalars
                     if (prop.Type == MaterialPropertyType::Vec3 && prop.UniformName == "u_Albedo")
                         pc.Albedo = glm::vec4(prop.Vec3Value, 1.0f);
                     else if (prop.Type == MaterialPropertyType::Float && prop.UniformName == "u_Metallic")
@@ -160,12 +157,32 @@ namespace Ayaya {
                         pc.AO = prop.FloatValue;
                     else if (prop.Type == MaterialPropertyType::Float && prop.UniformName == "u_Alpha")
                         pc.Alpha = prop.FloatValue;
+                    // Texture Use*Map flags (always, per-packet)
+                    else if (prop.Type == MaterialPropertyType::Texture2D) {
+                        bool hasTex = (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle))
+                                   || (prop.RuntimeTexture != nullptr);
+                        if (hasTex) {
+                            if (prop.UniformName == "u_AlbedoMap")        pc.UseAlbedoMap = 1;
+                            else if (prop.UniformName == "u_MetallicMap")  pc.UseMetallicMap = 1;
+                            else if (prop.UniformName == "u_RoughnessMap") pc.UseRoughnessMap = 1;
+                        }
+                    }
                 }
             }
 
-            // State-sorted texture binding
+            // Texture binding: only rebind on material change.
+            // White fallbacks go first so slots without a texture
+            // don't leak the previous material's binding.
             if (key.Bits.MaterialHash != currentMaterialHash) {
                 currentMaterialHash = key.Bits.MaterialHash;
+
+                // Reset to white fallbacks
+                if (whiteTex) {
+                    cmd.BindTexture2D(m_GatherPipeline, "u_AlbedoMap",    0, whiteTex);
+                    cmd.BindTexture2D(m_GatherPipeline, "u_MetallicMap",  1, whiteTex);
+                    cmd.BindTexture2D(m_GatherPipeline, "u_RoughnessMap", 2, whiteTex);
+                }
+
                 if (packet.MaterialAsset) {
                     for (auto& prop : packet.MaterialAsset->Properties) {
                         if (prop.Type == MaterialPropertyType::Texture2D) {
@@ -175,9 +192,9 @@ namespace Ayaya {
                                 std::shared_ptr<Texture2D> tex = prop.RuntimeTexture
                                     ? prop.RuntimeTexture
                                     : AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
-                                if (prop.UniformName == "u_AlbedoMap")    { cmd.BindTexture2D(m_GatherPipeline, "u_AlbedoMap", 0, tex); pc.UseAlbedoMap = 1; }
-                                else if (prop.UniformName == "u_MetallicMap")  { cmd.BindTexture2D(m_GatherPipeline, "u_MetallicMap", 1, tex); pc.UseMetallicMap = 1; }
-                                else if (prop.UniformName == "u_RoughnessMap") { cmd.BindTexture2D(m_GatherPipeline, "u_RoughnessMap", 2, tex); pc.UseRoughnessMap = 1; }
+                                if (prop.UniformName == "u_AlbedoMap")    cmd.BindTexture2D(m_GatherPipeline, "u_AlbedoMap", 0, tex);
+                                else if (prop.UniformName == "u_MetallicMap")  cmd.BindTexture2D(m_GatherPipeline, "u_MetallicMap", 1, tex);
+                                else if (prop.UniformName == "u_RoughnessMap") cmd.BindTexture2D(m_GatherPipeline, "u_RoughnessMap", 2, tex);
                             }
                         }
                     }
@@ -209,15 +226,13 @@ namespace Ayaya {
         }
         if (!hasTranslucent) return;
 
-        // Composite onto HDR with LOAD (preserves existing Lighting content)
-        // Use only ExposureCompensation — PhysicalExposure is applied later by PostProcess
-        float exposure = context.Get<float>("ExposureCompensation", 1.0f);
-
+        // Composite onto Lighting HDR with LOAD (preserves existing deferred content).
+        // Output is raw HDR — PostProcess handles exposure + tone-mapping uniformly
+        // for both opaque deferred and transparent WBOIT layers.
         cmd.BeginRenderPass(hdrFBO, false);  // LOAD
         cmd.BindPipeline(m_ResolvePipeline);
         cmd.BindTexture2D(m_ResolvePipeline, "u_Accumulation", 0, gatherFBO, 0);
         cmd.BindTexture2D(m_ResolvePipeline, "u_Revealage",    1, gatherFBO, 1);
-        cmd.PushConstantData(m_ResolvePipeline, &exposure, sizeof(float));
         cmd.DrawArrays(3);
         cmd.EndRenderPass();
 

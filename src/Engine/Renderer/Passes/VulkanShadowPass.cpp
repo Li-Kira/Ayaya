@@ -4,6 +4,7 @@
 #include "Engine/Scene/Scene.hpp"
 #include "Engine/Scene/Entity.hpp"
 #include "Asset/AssetManager.hpp"
+#include "Renderer/Material.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace Ayaya {
@@ -80,8 +81,12 @@ namespace Ayaya {
                 Entity entity{ entityID, context.ActiveScene.get() };
                 if (!entity.IsActiveInHierarchy()) continue;
                 auto& meshComp = entity.GetComponent<MeshRendererComponent>();
+                if (!meshComp.CastShadows) continue;
+                // Translucent (WBOIT) objects never cast shadows
+                auto material = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
+                if (material && material->GetBlendMode() == MaterialBlendMode::Translucent) continue;
                 auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
-                if (!model || !meshComp.CastShadows) continue;
+                if (!model) continue;
 
                 VulkanShadowPushConstants constants{};
                 constants.LightSpaceMatrix = lightSpaceMatrix;

@@ -3,7 +3,9 @@
 #include "../EditorLayer.hpp"
 #include "Engine/Scene/Components.hpp"
 #include "Asset/AssetManager.hpp"
+#include "Asset/Prefab.hpp"
 #include "Renderer/Model.hpp"
+#include "Utils/PlatformUtils.hpp"
 
 #include <imgui.h>
 #include <cstring>
@@ -63,21 +65,21 @@ namespace Ayaya {
                         Entity entity = m_Context->CreateEntity("Cube");
                         auto& mrc = entity.AddComponent<MeshRendererComponent>();
                         mrc.ModelHandle = AssetManager::GetBuiltInCube();
-                        mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
+                        mrc.MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
                         SetSelectedEntity(entity);
                     }
                     if (ImGui::MenuItem("Sphere")) {
                         Entity entity = m_Context->CreateEntity("Sphere");
                         auto& mrc = entity.AddComponent<MeshRendererComponent>();
                         mrc.ModelHandle = AssetManager::GetBuiltInSphere();
-                        mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
+                        mrc.MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
                         SetSelectedEntity(entity);
                     }
                     if (ImGui::MenuItem("Plane")) {
                         Entity entity = m_Context->CreateEntity("Plane");
                         auto& mrc = entity.AddComponent<MeshRendererComponent>();
                         mrc.ModelHandle = AssetManager::GetBuiltInPlane();
-                        mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
+                        mrc.MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
                         SetSelectedEntity(entity);
                     }
                     ImGui::EndMenu();
@@ -187,9 +189,17 @@ namespace Ayaya {
                         if (meta.Type == AssetType::Model) {
                             auto loadedModel = AssetManager::GetAsset<Model>(droppedHandle);
                             if (loadedModel) {
-                                AYAYA_CORE_INFO("Instantiating Model to Scene via UUID: {0}", (uint64_t)droppedHandle);
+                                AYAYA_CORE_INFO("Instantiating Model via UUID: {0}", (uint64_t)droppedHandle);
                                 Entity rootEntity = m_Context->InstantiateModel(loadedModel);
                                 if (rootEntity) SetSelectedEntity(rootEntity);
+                            }
+                        }
+                        else if (meta.Type == AssetType::Prefab) {
+                            auto prefab = AssetManager::GetAsset<Prefab>(droppedHandle);
+                            if (prefab) {
+                                AYAYA_CORE_INFO("Instantiating Prefab via UUID: {0}", (uint64_t)droppedHandle);
+                                Entity inst = m_Context->InstantiatePrefab(prefab.get());
+                                if (inst) SetSelectedEntity(inst);
                             }
                         }
                     }
@@ -256,6 +266,73 @@ namespace Ayaya {
                 entity.SetParent({});
             }
             m_EntitiesToUnparent.clear();
+        }
+
+        // Process Create Prefab
+        if (m_PrefabEntity && m_Context) {
+            std::string defaultName = m_PrefabEntity.GetComponent<TagComponent>().Tag;
+            std::string filepath = FileDialogs::SaveFile(
+                "Ayaya Prefab (*.prefab)\0*.prefab\0",
+                defaultName + ".prefab");
+            if (!filepath.empty()) {
+                // Strip any existing extension (.ayaya, etc.) and force .prefab
+                auto dot = filepath.rfind('.');
+                auto slash = filepath.rfind('/');
+#ifdef AYAYA_PLATFORM_WINDOWS
+                auto bslash = filepath.rfind('\\');
+                if (bslash != std::string::npos && bslash > slash) slash = bslash;
+#endif
+                if (dot != std::string::npos && (slash == std::string::npos || dot > slash))
+                    filepath = filepath.substr(0, dot);
+                filepath += ".prefab";
+                auto prefab = std::make_shared<Prefab>();
+
+                // Clone entity tree into prefab's mini scene
+                Scene* pfScene = prefab->GetScene();
+                std::function<Entity(Entity, Scene*)> cloneRecursive = [&](Entity src, Scene* srcScene) -> Entity {
+                    Entity dst = pfScene->CreateEntity(src.GetComponent<TagComponent>().Tag);
+                    dst.GetComponent<TransformComponent>() = src.GetComponent<TransformComponent>();
+                    auto copy = [&](auto& dstEnt, auto& srcEnt) {
+                        using T = std::decay_t<decltype(srcEnt)>;
+                        if (srcEnt.HasComponent<T>()) dstEnt.AddComponent<T>(srcEnt.GetComponent<T>());
+                    };
+                    // Copy common components
+                    if (src.HasComponent<MeshRendererComponent>())
+                        pfScene->Reg().emplace<MeshRendererComponent>(dst.GetEntityHandle(), src.GetComponent<MeshRendererComponent>());
+                    if (src.HasComponent<CameraComponent>())
+                        pfScene->Reg().emplace<CameraComponent>(dst.GetEntityHandle(), src.GetComponent<CameraComponent>());
+                    if (src.HasComponent<SpriteRendererComponent>())
+                        pfScene->Reg().emplace<SpriteRendererComponent>(dst.GetEntityHandle(), src.GetComponent<SpriteRendererComponent>());
+                    if (src.HasComponent<DirectionalLightComponent>())
+                        pfScene->Reg().emplace<DirectionalLightComponent>(dst.GetEntityHandle(), src.GetComponent<DirectionalLightComponent>());
+                    if (src.HasComponent<PointLightComponent>())
+                        pfScene->Reg().emplace<PointLightComponent>(dst.GetEntityHandle(), src.GetComponent<PointLightComponent>());
+
+                    auto& srcRel = src.GetComponent<RelationshipComponent>();
+                    for (auto childID : srcRel.Children) {
+                        Entity srcChild{ childID, srcScene };
+                        Entity dstChild = cloneRecursive(srcChild, srcScene);
+                        auto& dstRel = dstChild.GetComponent<RelationshipComponent>();
+                        dstRel.Parent = dst.GetEntityHandle();
+                        auto& dstParentRel = dst.GetComponent<RelationshipComponent>();
+                        dstParentRel.Children.push_back(dstChild.GetEntityHandle());
+                    }
+                    return dst;
+                };
+
+                Entity root = cloneRecursive(m_PrefabEntity, m_Context.get());
+                prefab->SetRootEntity(root);
+                prefab->Save(filepath);
+
+                // Register in AssetManager — writes .meta and adds to registry
+                UUID prefabHandle = AssetManager::ImportAsset(filepath);
+                // Force immediate load so the asset is available without waiting
+                // for the FileWatcher poll cycle
+                if (prefabHandle != 0) {
+                    AssetManager::GetAsset<Prefab>(prefabHandle);
+                }
+            }
+            m_PrefabEntity = {};
         }
     }
 
@@ -369,6 +446,11 @@ namespace Ayaya {
             if (ImGui::MenuItem("Unparent")) {
                 if (IsEntitySelected(entity)) m_EntitiesToUnparent = m_SelectedEntities;
                 else m_EntitiesToUnparent.push_back(entity);
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Create Prefab")) {
+                Entity target = IsEntitySelected(entity) ? *m_SelectedEntities.begin() : entity;
+                m_PrefabEntity = target;
             }
             ImGui::EndPopup();
         }

@@ -7,6 +7,7 @@
 #include "Renderer/MaterialSerializer.hpp"
 #include "Renderer/AssetPreviewer.hpp"
 #include "Renderer/Model.hpp"
+#include "Engine/Scripting/ScriptEngine.hpp"
 #include "Core/VFS.hpp"
 #include "Project/Project.hpp"
 #include "Core/Application.hpp"
@@ -1474,7 +1475,7 @@ namespace Ayaya {
                         if (ImGui::Button("Add Default Material", ImVec2(-1.0f, 30.0f))) {
                             std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
                             for (auto e : m_SelectedEntities) {
-                                e.GetComponent<MeshRendererComponent>().MaterialHandle = AssetManager::GetBuiltInMaterial();
+                                e.GetComponent<MeshRendererComponent>().MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
                             }
                             commitInstantCommand("Add Default Material", oldComps);
                         }
@@ -1727,14 +1728,24 @@ namespace Ayaya {
                 std::vector<LuaScriptComponent> pureOldLscs;
                 for (auto e : m_SelectedEntities) pureOldLscs.push_back(e.GetComponent<LuaScriptComponent>());
 
+                auto getScriptDisplayName = [&](UUID handle) -> std::string {
+                    auto meta = AssetManager::GetMetadata(handle);
+                    if (!meta.VirtualPath.empty()) {
+                        auto slash = meta.VirtualPath.find_last_of("/\\");
+                        return (slash != std::string::npos)
+                            ? meta.VirtualPath.substr(slash + 1)
+                            : meta.VirtualPath;
+                    }
+                    return "Script (ID: " + std::to_string((uint64_t)handle) + ")";
+                };
+
                 ImGui::Text("Script Source");
                 std::string pathDisplay = "Drop .lua file here";
-                
-                // 【改造】：检查 UUID 是否存在
                 if (refLsc.ScriptHandle != 0) {
-                    pathDisplay = "Script Loaded (ID: " + std::to_string((uint64_t)refLsc.ScriptHandle) + ")";
+                    pathDisplay = ICON_FA_FILE_CODE " " + getScriptDisplayName(refLsc.ScriptHandle);
                 }
-                ImGui::Button(pathDisplay.c_str(), ImVec2(-1.0f, 30.0f));
+                float btnH = ImGui::GetTextLineHeight() + ImGui::GetStyle().FramePadding.y * 2.0f + 4.0f;
+                ImGui::Button(pathDisplay.c_str(), ImVec2(-1.0f, btnH));
 
                 // ==========================================
                 // 交互 1：支持拖拽 .lua 文件绑定脚本 (极简 UUID 转换)
@@ -1745,7 +1756,11 @@ namespace Ayaya {
                         if (droppedHandle != 0 && AssetManager::GetMetadata(droppedHandle).Type == AssetType::LuaScript) {
                             std::vector<LuaScriptComponent> oldComps = pureOldLscs;
                             for (auto e : m_SelectedEntities) {
+                                ScriptEngine::ReleaseScriptEnv(e);
                                 e.GetComponent<LuaScriptComponent>().ScriptHandle = droppedHandle;
+                                // Immediately init + rebuild so default params take effect
+                                ScriptEngine::InitEditorScript(e, m_Context.get());
+                                ScriptEngine::TriggerRebuild(e, m_Context.get());
                             }
                             auto macroCmd = std::make_shared<MacroCommand>("Assign Lua Script to " + getTargetName());
                             for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
@@ -1765,11 +1780,25 @@ namespace Ayaya {
                 // 交互 2：一键移除脚本 (替代原本容易越界的字符串修改)
                 // ==========================================
                 if (refLsc.ScriptHandle != 0) {
-                    if (ImGui::Button("Remove Script", ImVec2(-1.0f, 24.0f))) {
+                    if (ImGui::Button(ICON_FA_TRASH " Remove Script", ImVec2(-1.0f, btnH))) {
                         std::vector<LuaScriptComponent> oldComps = pureOldLscs;
-                        
-                        // 清空句柄
+
+                        // Destroy all children (spawned by the script)
                         for (auto e : m_SelectedEntities) {
+                            if (e.HasComponent<RelationshipComponent>()) {
+                                auto& rel = e.GetComponent<RelationshipComponent>();
+                                auto children = rel.Children;  // copy
+                                for (auto childID : children) {
+                                    if (m_Context->Reg().valid(childID))
+                                        m_Context->DestroyEntity(Entity{childID, m_Context.get()});
+                                }
+                                rel.Children.clear();
+                            }
+                        }
+
+                        // Release Lua env + clear handle
+                        for (auto e : m_SelectedEntities) {
+                            ScriptEngine::ReleaseScriptEnv(e);
                             e.GetComponent<LuaScriptComponent>().ScriptHandle = 0;
                         }
 
@@ -1781,6 +1810,87 @@ namespace Ayaya {
                             ));
                         }
                         EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
+                    }
+                }
+
+                // ==========================================
+                // CONFIG parameters — auto-generated from Lua CONFIG table
+                // ==========================================
+                if (refLsc.ScriptHandle != 0) {
+                    // Ensure the Lua env is created for editor mode (idempotent)
+                    ScriptEngine::InitEditorScript(referenceEntity, m_Context.get());
+
+                    const auto& params = ScriptEngine::GetScriptParams(referenceEntity);
+                    if (!params.empty()) {
+                        ImGui::Spacing();
+                        ImGui::Separator();
+                        ImGui::TextDisabled("Script Parameters");
+
+                        float uiScale = ImGui::GetIO().FontGlobalScale;
+                        float avail = ImGui::GetContentRegionAvail().x;
+                        float labelW = 100.0f * uiScale;
+                        float valW = std::max(60.0f, avail - labelW - 12.0f);
+
+                        for (const auto& p : params) {
+                            ImGui::PushID(p.Name.c_str());
+
+                            if (p.Type == "int") {
+                                int v = ScriptEngine::GetConfigInt(referenceEntity, p.Name, 0);
+                                ImGui::Text("%s", p.Label.c_str()); ImGui::SameLine(labelW);
+                                ImGui::SetNextItemWidth(valW);
+                                if (ImGui::DragInt(("##" + p.Name).c_str(), &v, 1.0f, (int)p.Min, (int)p.Max))
+                                    ScriptEngine::SetConfigInt(referenceEntity, p.Name, v);
+                            }
+                            else if (p.Type == "float") {
+                                float v = ScriptEngine::GetConfigFloat(referenceEntity, p.Name, 0.0f);
+                                ImGui::Text("%s", p.Label.c_str()); ImGui::SameLine(labelW);
+                                ImGui::SetNextItemWidth(valW);
+                                if (ImGui::DragFloat(("##" + p.Name).c_str(), &v, 0.1f, p.Min, p.Max, "%.2f"))
+                                    ScriptEngine::SetConfigFloat(referenceEntity, p.Name, v);
+                            }
+                            else if (p.Type == "combo") {
+                                int v = ScriptEngine::GetConfigInt(referenceEntity, p.Name, 0);
+                                ImGui::Text("%s", p.Label.c_str()); ImGui::SameLine(labelW);
+                                ImGui::SetNextItemWidth(valW);
+                                std::vector<const char*> items;
+                                for (auto& opt : p.ComboOpts) items.push_back(opt.c_str());
+                                if (ImGui::Combo(("##" + p.Name).c_str(), &v, items.data(), (int)items.size()))
+                                    ScriptEngine::SetConfigInt(referenceEntity, p.Name, v);
+                            }
+                            else if (p.Type == "file") {
+                                std::string handleStr = ScriptEngine::GetConfigStr(referenceEntity, p.Name, "0");
+                                uint64_t handle = 0;
+                                try { handle = std::stoull(handleStr); } catch (...) {}
+                                std::string btnLabel = "Drop " + p.FileExt + " here";
+                                if (handle != 0) {
+                                    auto meta = AssetManager::GetMetadata(UUID(handle));
+                                    btnLabel = meta.VirtualPath.empty()
+                                        ? ("Asset: " + std::to_string(handle))
+                                        : meta.VirtualPath;
+                                    auto slash = btnLabel.find_last_of("/\\");
+                                    if (slash != std::string::npos) btnLabel = btnLabel.substr(slash + 1);
+                                }
+                                ImGui::Text("%s", p.Label.c_str()); ImGui::SameLine(labelW);
+                                ImGui::Button(btnLabel.c_str(), ImVec2(valW, 0));
+
+                                if (ImGui::BeginDragDropTarget()) {
+                                    if (const ImGuiPayload* pl = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                                        UUID dropped = *(const UUID*)pl->Data;
+                                        if (dropped != 0)
+                                            ScriptEngine::SetConfigStr(referenceEntity, p.Name, std::to_string((uint64_t)dropped));
+                                    }
+                                    ImGui::EndDragDropTarget();
+                                }
+                            }
+                            else if (p.Type == "bool") {
+                                int v = ScriptEngine::GetConfigInt(referenceEntity, p.Name, 0);
+                                bool bv = (v != 0);
+                                if (ImGui::Checkbox(p.Label.c_str(), &bv))
+                                    ScriptEngine::SetConfigInt(referenceEntity, p.Name, bv ? 1 : 0);
+                            }
+
+                            ImGui::PopID();
+                        }
                     }
                 }
 
@@ -2244,7 +2354,7 @@ namespace Ayaya {
                         if (!e.HasComponent<MeshRendererComponent>() && !e.HasComponent<SpriteRendererComponent>()) {
                             auto& mrc = e.AddComponent<MeshRendererComponent>();
                             mrc.ModelHandle = AssetManager::GetBuiltInCube();
-                            mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
+                            mrc.MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
                         }
                     }
                     ImGui::CloseCurrentPopup();

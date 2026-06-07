@@ -382,6 +382,7 @@ namespace Ayaya {
 
                     DrawPacket packet;
                     packet.Transform = transform;
+                    packet.CastShadows = meshComp.CastShadows;
                     packet.ReceiveShadows = meshComp.ReceiveShadows;
                     packet.MeshAsset = mesh;
                     packet.MaterialAsset = material;

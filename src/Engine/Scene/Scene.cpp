@@ -6,6 +6,7 @@
 #include "UILayoutSystem.hpp"
 #include "Core/Application.hpp"
 #include "Asset/AssetManager.hpp"
+#include "Asset/Prefab.hpp"
 
 #include <box2d/b2_world.h>
 #include <box2d/b2_body.h>
@@ -127,8 +128,8 @@ namespace Ayaya {
         // 【核心新增】：定义材质分配闭包
         // ==========================================
         auto ApplyDefaultMaterial = [](MeshRendererComponent& mrc) {
-            // 极简！直接借用全局内置的默认材质 Handle
-            mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
+            // Each entity gets its own material instance so edits are independent
+            mrc.MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
         };
 
         // 4. 处理网格渲染组件
@@ -208,6 +209,15 @@ namespace Ayaya {
         // =========================================================
         CopyComponentIfExists<SpriteRendererComponent>(newEntity, entity);
         CopyComponentIfExists<MeshRendererComponent>(newEntity, entity);
+        // When duplicating an entity that uses the shared built-in material,
+        // give the clone its own material instance so edits are independent.
+        if (newEntity.HasComponent<MeshRendererComponent>()) {
+            auto& mrc = newEntity.GetComponent<MeshRendererComponent>();
+            static constexpr uint64_t BUILTIN_MAT = 16140901000000000004ull;
+            if (mrc.MaterialHandle == UUID(BUILTIN_MAT)) {
+                mrc.MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
+            }
+        }
         CopyComponentIfExists<DirectionalLightComponent>(newEntity, entity);
         CopyComponentIfExists<PointLightComponent>(newEntity, entity);
         CopyComponentIfExists<Rigidbody2DComponent>(newEntity, entity);
@@ -236,6 +246,55 @@ namespace Ayaya {
         return newEntity;
     }
 
+    Entity Scene::InstantiatePrefab(Prefab* prefab) {
+        if (!prefab || !prefab->GetScene()) return Entity{};
+        Entity srcRoot = prefab->GetRootEntity();
+        if (!srcRoot) return Entity{};
+
+        Scene* srcScene = prefab->GetScene();
+
+        // Recursive deep-clone from srcScene into this Scene
+        std::function<Entity(Entity, Scene*)> cloneRecursive = [&](Entity src, Scene* source) -> Entity {
+            std::string name = src.GetComponent<TagComponent>().Tag;
+            Entity dst = CreateEntity(name);
+
+            dst.GetComponent<TransformComponent>() = src.GetComponent<TransformComponent>();
+            if (src.HasComponent<CameraComponent>()) {
+                auto& cam = dst.AddComponent<CameraComponent>(src.GetComponent<CameraComponent>());
+                cam.Primary = false;
+            }
+            CopyComponentIfExists<MeshRendererComponent>(dst, src);
+            // Each prefab instance gets its own material clone
+            if (dst.HasComponent<MeshRendererComponent>()) {
+                auto& mrc = dst.GetComponent<MeshRendererComponent>();
+                static constexpr uint64_t BUILTIN_MAT = 16140901000000000004ull;
+                if (mrc.MaterialHandle == UUID(BUILTIN_MAT)) {
+                    mrc.MaterialHandle = AssetManager::GetBuiltInMaterialInstance();
+                }
+            }
+            CopyComponentIfExists<SpriteRendererComponent>(dst, src);
+            CopyComponentIfExists<DirectionalLightComponent>(dst, src);
+            CopyComponentIfExists<PointLightComponent>(dst, src);
+            CopyComponentIfExists<Rigidbody2DComponent>(dst, src);
+            CopyComponentIfExists<BoxCollider2DComponent>(dst, src);
+            CopyComponentIfExists<LuaScriptComponent>(dst, src);
+            CopyComponentIfExists<PostProcessVolumeComponent>(dst, src);
+            CopyComponentIfExists<EnvironmentComponent>(dst, src);
+
+            // Clone children recursively
+            auto& srcRel = src.GetComponent<RelationshipComponent>();
+            for (auto childID : srcRel.Children) {
+                Entity srcChild{ childID, source };
+                Entity dstChild = cloneRecursive(srcChild, source);
+                dstChild.SetParent(dst, false);
+            }
+
+            return dst;
+        };
+
+        return cloneRecursive(srcRoot, srcScene);
+    }
+
     // ==========================================
     // 游戏开始：按顺序唤醒所有运行时系统！
     // ==========================================
@@ -245,7 +304,7 @@ namespace Ayaya {
 
         // 2. 唤醒所有的 Lua 脚本，为它们分配独立的沙盒环境
         m_Registry.view<LuaScriptComponent>().each([=](auto entityID, auto& lsc) {
-            ScriptEngine::OnCreateEntity({ entityID, this });
+            ScriptEngine::OnCreateEntity({ entityID, this }, this);
         });
 
         // (未来如果有音频系统、粒子系统，统统加在这里！)

@@ -9,9 +9,10 @@ namespace Ayaya {
         Scene,
         Texture2D,
         TextureCube,
-        Model,       // 新增：3D模型
-        Material,    // 新增：材质属性
-        LuaScript    // 新增：Lua脚本文件
+        Model,
+        Material,
+        LuaScript,
+        Prefab      // entity tree template
     };
 
     class Asset {

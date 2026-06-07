@@ -1,4 +1,4 @@
-MaterialName: Built-in Default PBR (2)
+MaterialName: Built-in Default PBR
 ShaderName: PBR
 BlendMode: 3
 AlphaCutoff: 0.5
@@ -62,7 +62,7 @@ Properties:
   - UniformName: u_Alpha
     DisplayName: Alpha Multiplier
     Type: 0
-    FloatValue: 0.955
+    FloatValue: 0.967
   - UniformName: u_UseAlphaMap
     DisplayName: Enable Alpha Map
     Type: 2

@@ -252,6 +252,13 @@ namespace Ayaya {
             out << YAML::BeginMap;
             auto& lsc = entity.GetComponent<LuaScriptComponent>();
             out << YAML::Key << "ScriptHandle" << YAML::Value << (uint64_t)lsc.ScriptHandle;
+            // Persist user-modified CONFIG values
+            if (!lsc.ConfigOverrides.empty()) {
+                out << YAML::Key << "ConfigOverrides" << YAML::Value << YAML::BeginMap;
+                for (auto& kv : lsc.ConfigOverrides)
+                    out << YAML::Key << kv.first << YAML::Value << kv.second;
+                out << YAML::EndMap;
+            }
             out << YAML::EndMap;
         }
 
@@ -573,6 +580,15 @@ namespace Ayaya {
                 auto& lsc = deserializedEntity.AddComponent<LuaScriptComponent>();
                 if (luaScriptComponent["ScriptHandle"]) {
                     lsc.ScriptHandle = luaScriptComponent["ScriptHandle"].as<uint64_t>();
+                }
+                // Restore user-modified CONFIG values
+                auto overrides = luaScriptComponent["ConfigOverrides"];
+                if (overrides && overrides.IsMap()) {
+                    for (auto it = overrides.begin(); it != overrides.end(); ++it) {
+                        std::string key = it->first.as<std::string>();
+                        std::string val = it->second.as<std::string>();
+                        lsc.ConfigOverrides[key] = val;
+                    }
                 }
             }
 

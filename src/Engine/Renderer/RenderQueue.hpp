@@ -41,6 +41,7 @@ namespace Ayaya {
         uint64_t   SortKey = 0;
         glm::mat4  Transform{1.0f};
         uint64_t   EntityHandle = 0;       // raw entt::entity ID for selection checks
+        bool       CastShadows = true;
         bool       ReceiveShadows = false;
         std::shared_ptr<Mesh>     MeshAsset;
         std::shared_ptr<Material> MaterialAsset;

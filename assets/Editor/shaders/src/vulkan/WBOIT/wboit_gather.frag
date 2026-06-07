@@ -44,6 +44,12 @@ layout(push_constant) uniform PC {
 
 const float PI = 3.14159265359;
 
+// Pre-exposure scale to keep HDR accumulation within FP16 range.
+// PBR litColor can reach ~60k+ with 100klux sunlight; weight ~10x near camera.
+// 60k * 10 = 600k > 65504 (FP16 max) → overflow.  0.01 scale → safe up to 6.5M.
+// The resolve pass divides by the same factor to recover the original HDR value.
+const float WBOIT_PRE_EXPOSURE = 0.01;
+
 float DistributionGGX(vec3 N, vec3 H, float r) {
     float a=r*r, a2=a*a; float NdH=max(dot(N,H),0.0);
     float d=(NdH*NdH*(a2-1.0)+1.0); return a2/(PI*d*d);
@@ -120,10 +126,10 @@ void main() {
 
     vec3 litColor = ambient + Lo;
 
-    // WBOIT accumulation
+    // WBOIT accumulation — pre-exposure scaled to avoid FP16 overflow
     vec3 premulColor = litColor * alpha;
     float weight = CalcWeight(gl_FragCoord.z, alpha);
 
-    out_Accumulation = vec4(premulColor * weight, alpha * weight);
+    out_Accumulation = vec4(premulColor * weight * WBOIT_PRE_EXPOSURE, alpha * weight);
     out_Revealage = alpha;
 }

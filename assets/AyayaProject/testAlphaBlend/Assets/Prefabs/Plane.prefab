@@ -1,0 +1,25 @@
+Scene: Untitled
+EditorState:
+  ShowGrid: true
+  ShowSkybox: true
+  CameraPosition: [0, 0, 0]
+  CameraDistance: 10
+  CameraPitch: 0
+  CameraYaw: 0
+  CameraFocalPoint: [0, 0, 0]
+Entities:
+  - Entity: 6500379099592948844
+    TagComponent:
+      Tag: Plane
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 1.7867102e-22, 6.6613387e-16]
+      Rotation: [1.570796, -0, 0]
+      Scale: [1, 0.9999985, 0.9999985]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000003
+      MaterialHandle: 2877837325534738788
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0

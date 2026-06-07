@@ -196,10 +196,13 @@ namespace Ayaya {
                     blendAttachments[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
                     blendAttachments[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
                 } else if (attBlend == BlendModeType::Additive) {
+                    // Fully additive for both color AND alpha.
+                    // Alpha must also accumulate (ONE,ONE) — WBOIT resolve divides
+                    // accum.rgb / accum.a to recover the weighted-average color.
                     blendAttachments[i].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
                     blendAttachments[i].dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
                     blendAttachments[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-                    blendAttachments[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+                    blendAttachments[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
                 } else if (attBlend == BlendModeType::WBOITRevealage) {
                     // WBOIT revealage: src*0 + dst*(1-srcColor) = multiply-attenuation
                     blendAttachments[i].srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;

@@ -114,9 +114,16 @@ namespace Ayaya {
         static UUID GetBuiltInSphere();
         static UUID GetBuiltInPlane();
         static UUID GetBuiltInMaterial();
+        // Clone the built-in material into a per-object instance with a fresh UUID.
+        // Each entity gets its own copy so edits don't leak across objects.
+        static UUID GetBuiltInMaterialInstance();
 
         // 根据物理文件路径查找已注册的资产 UUID（未注册返回 0）
         static UUID FindHandleForPath(const std::filesystem::path& filepath);
+
+        // Asset dependency graph (for cascade hot-reload)
+        static void RegisterDependency(UUID dependent, UUID dependency);
+        static const std::unordered_set<UUID>& GetDependents(UUID handle);
 
         // ==========================================
         // 实用工具接口
@@ -161,6 +168,9 @@ namespace Ayaya {
         // 异步加载控制系统
         // ==========================================
         static std::unordered_set<UUID> s_LoadingAssets;   // 防重入：记录正在后台加载的资产
+
+        // Reverse dependency graph: asset UUID → assets that depend on it
+        static std::unordered_map<UUID, std::unordered_set<UUID>> s_ReverseDeps;
         static std::mutex s_LoadingMutex;                   // 保护 s_LoadingAssets 的互斥锁
         static std::queue<std::function<void()>> s_MainThreadQueue; // 主线程 GPU 上传任务队列
         static std::mutex s_MainThreadQueueMutex;           // 保护任务队列的互斥锁

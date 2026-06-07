@@ -230,7 +230,13 @@ namespace Ayaya {
         UUID ScriptHandle = 0; // 脚本资产的唯一 ID
 
         // 仅在运行时有效，用于存储当前实体的专属 Lua 环境 (沙盒)
-        void* RuntimeEnvironment = nullptr; 
+        void* RuntimeEnvironment = nullptr;
+
+        // Persisted: user-modified CONFIG values (name → stringified value)
+        std::unordered_map<std::string, std::string> ConfigOverrides;
+
+        // Transient: last-known mtime of the .lua file for hot-reload detection
+        uint64_t ScriptFileMtime = 0;
 
         LuaScriptComponent() = default;
         LuaScriptComponent(const LuaScriptComponent&) = default;

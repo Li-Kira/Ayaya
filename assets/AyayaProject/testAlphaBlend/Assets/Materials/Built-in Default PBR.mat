@@ -1,7 +1,7 @@
 MaterialName: Built-in Default PBR
 ShaderName: PBR
 BlendMode: 3
-AlphaCutoff: 0.183
+AlphaCutoff: 0.5
 Properties:
   - UniformName: u_Albedo
     DisplayName: Albedo Color
@@ -10,7 +10,7 @@ Properties:
   - UniformName: u_UseAlbedoMap
     DisplayName: Enable Albedo Map
     Type: 2
-    BoolValue: true
+    BoolValue: false
   - UniformName: u_AlbedoMap
     DisplayName: Albedo Texture
     Type: 8
@@ -62,7 +62,7 @@ Properties:
   - UniformName: u_Alpha
     DisplayName: Alpha Multiplier
     Type: 0
-    FloatValue: 0.994
+    FloatValue: 0.886
   - UniformName: u_UseAlphaMap
     DisplayName: Enable Alpha Map
     Type: 2
