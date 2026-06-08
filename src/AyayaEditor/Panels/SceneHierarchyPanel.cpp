@@ -294,7 +294,7 @@ namespace Ayaya {
                     dst.GetComponent<TransformComponent>() = src.GetComponent<TransformComponent>();
                     auto copy = [&](auto& dstEnt, auto& srcEnt) {
                         using T = std::decay_t<decltype(srcEnt)>;
-                        if (srcEnt.HasComponent<T>()) dstEnt.AddComponent<T>(srcEnt.GetComponent<T>());
+                        if (srcEnt.template HasComponent<T>()) dstEnt.template AddComponent<T>(srcEnt.template GetComponent<T>());
                     };
                     // Copy common components
                     if (src.HasComponent<MeshRendererComponent>())

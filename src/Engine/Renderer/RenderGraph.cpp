@@ -413,6 +413,7 @@ namespace Ayaya {
                 prof.CPUTime   = std::chrono::duration<float, std::milli>(cpuEnd - cpuStart).count();
                 prof.DrawCalls = dc;
                 prof.Triangles = tris;
+                prof.GPUTime   = 0.0f;  // reset before availability check — prevents stale accumulation
 
                 // Compute GPU time from persisted N-1 frame timestamp slots.
                 // Results are interleaved: [ts0, avail0, ts1, avail1, ...] (stride=16).
@@ -425,14 +426,24 @@ namespace Ayaya {
                     // Each pass uses 2 queries → 4 result slots (ts0, avail0, ts1, avail1)
                     uint32_t idx0 = slot * 2;      // ts0,  idx0+1 = avail0
                     uint32_t idx1 = (slot + 1) * 2; // ts1,  idx1+1 = avail1
-                    if (idx1 < results.size()) {
+                    if (idx1 + 1 < results.size()) {
                         uint64_t t0 = results[idx0] & mask;
                         uint64_t t1 = results[idx1] & mask;
                         bool avail = (results[idx0 + 1] & 1) && (results[idx1 + 1] & 1);
-                        if (avail && t1 > 0) {
+                        if (avail) {
                             uint64_t delta = (t1 >= t0) ? (t1 - t0)
                                 : ((mask - t0) + t1 + 1);
-                            prof.GPUTime = static_cast<float>(delta) * period / 1e6f;
+                            float gpuMs = static_cast<float>(delta) * period / 1e6f;
+                            // Sanity check: a single pass exceeding 1000ms is
+                            // physically implausible for real-time rendering.
+                            if (gpuMs < 1000.0f) {
+                                prof.GPUTime = gpuMs;
+                            } else {
+                                // AYAYA_CORE_WARN("[DBG] Abnormal GPU time {:.2f}ms for pass '{}': "
+                                //     "slot={} t0={} t1={} delta={} period={:.1f}ns",
+                                //     gpuMs, pass->Name, slot, t0, t1, delta, period);
+                                prof.GPUTime = 0.0f;
+                            }
                         }
                     }
                 }

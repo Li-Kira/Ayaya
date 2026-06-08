@@ -35,11 +35,14 @@ namespace Ayaya {
 
         // Clamp stored physical size to current monitor so cross-machine YAML
         // (e.g. 2560x1600 from a Mac) fits the actual screen on this machine.
+        // CRITICAL: glfwGetVideoMode returns screen-coordinate dimensions, which on
+        // macOS Retina are LOGICAL points (e.g. 1920×1080 for a "looks like 1920×1080"
+        // 4K display). Multiply by the content scale to get true physical pixel limits.
         GLFWmonitor* monitor = glfwGetPrimaryMonitor();
         if (monitor) {
             const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-            int maxPhysW = mode->width;
-            int maxPhysH = mode->height;
+            int maxPhysW = (int)(mode->width * m_ContentScale);
+            int maxPhysH = (int)(mode->height * m_ContentScale);
             if (m_WindowWidth > maxPhysW || m_WindowHeight > maxPhysH) {
                 AYAYA_CORE_WARN("Preferences stored size {0}x{1} exceeds monitor {2}x{3}, clamping.",
                     m_WindowWidth, m_WindowHeight, maxPhysW, maxPhysH);
@@ -76,9 +79,10 @@ namespace Ayaya {
                 }
                 if (m_ContentScale < 1.0f) m_ContentScale = 1.0f;
             }
-            // ImGui viewport returns logical points; convert to physical framebuffer size
-            m_WindowWidth  = (int)(ImGui::GetMainViewport()->Size.x * m_ContentScale);
-            m_WindowHeight = (int)(ImGui::GetMainViewport()->Size.y * m_ContentScale);
+            // ImGui viewport is already in physical framebuffer pixels via GLFW backend;
+            // do NOT multiply by m_ContentScale again (would double-count on Retina).
+            m_WindowWidth  = (int)(ImGui::GetMainViewport()->Size.x);
+            m_WindowHeight = (int)(ImGui::GetMainViewport()->Size.y);
             m_UIScale = ImGui::GetIO().FontGlobalScale;
         }
     }
@@ -322,8 +326,9 @@ namespace Ayaya {
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.12f, 0.40f, 0.80f, 1.0f));
         
         if (ImGui::Button("Save Preferences", ImVec2(btnWidth, buttonHeight))) {
-            m_WindowWidth  = (int)(ImGui::GetMainViewport()->Size.x * m_ContentScale);
-            m_WindowHeight = (int)(ImGui::GetMainViewport()->Size.y * m_ContentScale);
+            // ImGui viewport is already in physical framebuffer pixels; no scale multiply needed.
+            m_WindowWidth  = (int)(ImGui::GetMainViewport()->Size.x);
+            m_WindowHeight = (int)(ImGui::GetMainViewport()->Size.y);
             m_UIScale = ImGui::GetIO().FontGlobalScale;
             SavePreferences();
         }

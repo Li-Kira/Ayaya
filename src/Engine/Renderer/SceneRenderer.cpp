@@ -113,6 +113,7 @@ namespace Ayaya {
         uint32_t EmptyVAO;
 
         SceneRenderer::Statistics Stats;
+        float LastGPUTime = 0.0f;           // fallback when no timestamps available
         uint32_t GPUTimeQuery = 0;
     };
 
@@ -313,6 +314,7 @@ namespace Ayaya {
         m_RenderContext.Stats.TriangleCount = 0;
 
         m_RenderContext.FrameSteps.clear(); // 【新增】：每帧清空流水账本！
+        m_RenderContext.PassProfiles.clear();  // 每帧清空性能统计，防止累积陈旧路径条目
         
         memset(&m_Data->LightData, 0, sizeof(struct_LightData));
         
@@ -531,6 +533,12 @@ namespace Ayaya {
         float totalGPUTime = 0.0f;
         for (const auto& [name, profile] : m_RenderContext.PassProfiles) {
             totalGPUTime += profile.GPUTime;
+        }
+        // 若当前帧无有效时间戳，回退到上一帧的已知值（GPU 压力下可能出现）
+        if (totalGPUTime == 0.0f && m_Data->LastGPUTime > 0.0f) {
+            totalGPUTime = m_Data->LastGPUTime;
+        } else if (totalGPUTime > 0.0f) {
+            m_Data->LastGPUTime = totalGPUTime;
         }
         m_Data->Stats.GPUTime = totalGPUTime;
 

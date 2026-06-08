@@ -125,6 +125,7 @@ namespace Ayaya {
         uint64_t m_TimestampMask      = 0;
         uint32_t m_TimestampSlotsUsed = 0;
         uint32_t m_LastFrameSlotCount = 0;
+        uint32_t m_TimestampNotReadyCount = 0;  // throttled VK_NOT_READY logging
 
         void CreateSurface();
         void PickPhysicalDevice();

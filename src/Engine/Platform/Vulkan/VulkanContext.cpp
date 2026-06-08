@@ -569,11 +569,38 @@ namespace Ayaya {
             m_TimestampResults.resize(dataSize / sizeof(uint64_t));
         }
 
+        // CRITICAL: Zero ALL availability bits in the buffer BEFORE reading.
+        // Without this, stale avail=1 bits from a previous successful read leak
+        // through when vkGetQueryPoolResults returns VK_NOT_READY. After zeroing,
+        // only genuinely available GPU queries will have their avail bits set by
+        // the driver.  (odd indices = availability slots in the interleaved layout)
+        for (size_t i = 1; i < m_TimestampResults.size(); i += 2) {
+            m_TimestampResults[i] = 0;
+        }
+
         VkResult result = vkGetQueryPoolResults(m_Device, m_TimestampPool, 0, count,
             dataSize, m_TimestampResults.data(), stride,
             VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
 
-        if (result == VK_NOT_READY) return;
+        if (result == VK_NOT_READY) {
+            // DO NOT early-return. Partial results for available queries have
+            // been written to the buffer (with avail=1). Queries that were not
+            // ready retain avail=0 from our pre-zeroing above. Per-pass consumer
+            // code checks availability bits as gate.
+            m_TimestampNotReadyCount++;
+            if (m_TimestampNotReadyCount % 60 == 1) {
+                // AYAYA_CORE_WARN("[DBG] ReadTimestampResults: VK_NOT_READY x{} — "
+                //     "partial results kept, consumers use avail bits as gate",
+                //     m_TimestampNotReadyCount);
+            }
+        } else if (result == VK_SUCCESS) {
+            m_TimestampNotReadyCount = 0;
+        } else {
+            // Unexpected error — zero the entire buffer so consumers get nothing
+            AYAYA_CORE_ERROR("[DBG] ReadTimestampResults: vkGetQueryPoolResults "
+                "FAILED! result={} ({})", (int)result, VkResultStr(result));
+            std::fill(m_TimestampResults.begin(), m_TimestampResults.end(), 0);
+        }
         // Results layout: [ts0, avail0, ts1, avail1, ...]
     }
 

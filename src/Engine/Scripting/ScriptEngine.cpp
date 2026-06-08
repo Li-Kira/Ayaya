@@ -141,7 +141,7 @@ namespace Ayaya {
                 sol::object def = entry["value"];
                 if (def.valid()) {
                     sol::object cur = (*env)[m.Name];
-                    if (cur == sol::nil) (*env)[m.Name] = def;
+                    if (cur == sol::lua_nil) (*env)[m.Name] = def;
                 }
             }
 
@@ -341,7 +341,7 @@ namespace Ayaya {
                 if (obj.is<Entity>()) {
                     Entity e = obj.as<Entity>();
                     if (!e || !scene->Reg().valid(e.GetEntityHandle())) {
-                        spawned[i] = sol::nil;
+                        spawned[i] = sol::lua_nil;
                     }
                 }
             }
