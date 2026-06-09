@@ -4,6 +4,7 @@
 #include "Engine/Scene/Components.hpp"
 #include "Engine/Core/EditorCommands.hpp"
 #include "Asset/AssetManager.hpp"
+#include "Asset/Prefab.hpp"
 #include "Renderer/MaterialSerializer.hpp"
 #include "Renderer/AssetPreviewer.hpp"
 #include "Renderer/Model.hpp"
@@ -2515,6 +2516,13 @@ namespace Ayaya {
     void PropertiesPanel::DrawAssetInspector() {
         AssetMetadata meta = AssetManager::GetMetadata(m_SelectedAsset);
 
+        // Resolve SubMesh → parent Model so mesh info and import settings always display
+        UUID inspectHandle = m_SelectedAsset;
+        if (meta.Type == AssetType::SubMesh && meta.ParentHandle != 0) {
+            inspectHandle = meta.ParentHandle;
+            meta = AssetManager::GetMetadata(inspectHandle);
+        }
+
         ImGui::Text("Asset: %s", meta.VirtualPath.c_str());
         ImGui::Separator();
 
@@ -2559,16 +2567,16 @@ namespace Ayaya {
             }
         } else if (meta.Type == AssetType::Model) {
             float uiScale = ImGui::GetIO().FontGlobalScale;
-            auto model = AssetManager::GetAsset<Model>(m_SelectedAsset);
+            auto model = AssetManager::GetAsset<Model>(inspectHandle);
 
             // ==========================================
             // Editing state — snapshot settings on first frame
             // ==========================================
             static ModelImportSettings s_EditingModelSettings;
             static UUID s_EditingModelHandle = 0;
-            if (s_EditingModelHandle != m_SelectedAsset) {
+            if (s_EditingModelHandle != inspectHandle) {
                 s_EditingModelSettings = meta.ModelSettings;
-                s_EditingModelHandle = m_SelectedAsset;
+                s_EditingModelHandle = inspectHandle;
             }
 
             // ==========================================
@@ -2681,7 +2689,7 @@ namespace Ayaya {
 
                 ImGui::Spacing();
                 if (ImGui::Button("Apply", ImVec2(-1, 0))) {
-                    AssetManager::UpdateMetadataSettings(m_SelectedAsset, s_EditingModelSettings);
+                    AssetManager::UpdateMetadataSettings(inspectHandle, s_EditingModelSettings);
                 }
             }
 
@@ -2697,30 +2705,180 @@ namespace Ayaya {
 
             static glm::vec2 s_PreviewRotation(0.3f, -0.6f);
             static UUID s_LastPreviewAsset = 0;
-            if (s_LastPreviewAsset != m_SelectedAsset) {
+            if (s_LastPreviewAsset != inspectHandle) {
                 s_PreviewRotation = glm::vec2(0.3f, -0.6f);
-                s_LastPreviewAsset = m_SelectedAsset;
+                s_LastPreviewAsset = inspectHandle;
             }
 
-            auto previewTex = AssetPreviewer::RenderRealtimePreview(m_SelectedAsset, s_PreviewRotation, 256);
+            // Single preview — realtime rendering cost is negligible.
+            // Cached thumbnails are for the Content Browser (many icons).
+            auto previewTex = AssetPreviewer::RenderRealtimePreview(inspectHandle, s_PreviewRotation, 256);
+
             if (previewTex) {
                 bool isVulkan = RendererAPI::GetAPI() == RendererAPI::API::Vulkan;
                 ImVec2 uv0 = isVulkan ? ImVec2(0, 0) : ImVec2(0, 1);
                 ImVec2 uv1 = isVulkan ? ImVec2(1, 1) : ImVec2(1, 0);
+                ImGui::Image((ImTextureID)previewTex->GetImGuiTextureID(), previewSize, uv0, uv1);
 
-                ImGui::Image((ImTextureID)previewTex->GetImGuiTextureID(),
-                    previewSize, uv0, uv1);
-
-                // InvisibleButton overlay for robust drag-to-rotate interaction.
-                // ImageButton's IsItemActive() can lose tracking when the cursor
-                // leaves the item rect, so we separate display from interaction.
                 ImVec2 imgPos = ImGui::GetItemRectMin();
                 ImGui::SetCursorScreenPos(imgPos);
                 ImGui::InvisibleButton("##ModelPreviewDrag", previewSize, ImGuiButtonFlags_MouseButtonLeft);
+                // Reset rotation + drag delta on activation (new click) and on deactivation (release),
+                // so each drag session starts from default and snaps back on release.
+                if (ImGui::IsItemActivated() || ImGui::IsItemDeactivated()) {
+                    s_PreviewRotation = glm::vec2(0.3f, -0.6f);
+                    ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
+                }
                 if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
                     ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left);
                     s_PreviewRotation.x += delta.y * 0.01f;
                     s_PreviewRotation.y -= delta.x * 0.01f;
+                    ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
+                }
+            } else {
+                ImVec2 cursor = ImGui::GetCursorPos();
+                ImGui::Dummy(previewSize);
+                ImGui::SetCursorPos(cursor);
+                ImGui::TextDisabled("Loading...");
+            }
+        } else if (meta.Type == AssetType::Prefab) {
+            float uiScale = ImGui::GetIO().FontGlobalScale;
+            auto prefab = AssetManager::GetAsset<Prefab>(inspectHandle);
+            Scene* prefabScene = prefab ? prefab->GetScene() : nullptr;
+
+            // ==========================================
+            // ▼ Prefab Info
+            // ==========================================
+            if (ImGui::CollapsingHeader("Prefab Info", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (prefabScene) {
+                    // Count entities and components
+                    uint32_t entityCount = 0;
+                    uint32_t meshCount = 0, cameraCount = 0;
+                    uint32_t lightCount = 0, spriteCount = 0;
+                    uint32_t scriptCount = 0, physicsCount = 0;
+
+                    auto& reg = prefabScene->Reg();
+
+                    // Count root + recursively traverse hierarchy
+                    std::function<void(entt::entity)> countRecursive;
+                    countRecursive = [&](entt::entity e) {
+                        entityCount++;
+                        Entity ent{ e, prefabScene };
+                        if (ent.HasComponent<MeshRendererComponent>()) meshCount++;
+                        if (ent.HasComponent<CameraComponent>()) cameraCount++;
+                        if (ent.HasComponent<DirectionalLightComponent>() ||
+                            ent.HasComponent<PointLightComponent>()) lightCount++;
+                        if (ent.HasComponent<SpriteRendererComponent>()) spriteCount++;
+                        if (ent.HasComponent<LuaScriptComponent>()) scriptCount++;
+                        if (ent.HasComponent<Rigidbody2DComponent>()) physicsCount++;
+
+                        if (ent.HasComponent<RelationshipComponent>()) {
+                            for (auto child : ent.GetComponent<RelationshipComponent>().Children)
+                                countRecursive(child);
+                        }
+                    };
+
+                    for (auto rootHandle : prefabScene->GetRootEntities())
+                        countRecursive(rootHandle);
+
+                    float labelW = ImGui::CalcTextSize("Components").x + 16.0f * uiScale;
+                    float maxValX = ImGui::GetWindowContentRegionMax().x - 4.0f * uiScale;
+
+                    auto Row = [&](const char* label, const char* val) {
+                        ImGui::Text("%s", label);
+                        ImGui::SameLine(labelW);
+                        ImGui::PushTextWrapPos(maxValX);
+                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.8f, 1.0f), "%s", val);
+                        ImGui::PopTextWrapPos();
+                    };
+
+                    Row("Entities",   std::to_string(entityCount).c_str());
+                    Row("Meshes",     std::to_string(meshCount).c_str());
+                    Row("Cameras",    std::to_string(cameraCount).c_str());
+                    Row("Lights",     std::to_string(lightCount).c_str());
+                    Row("Sprites",    std::to_string(spriteCount).c_str());
+                    Row("Scripts",    std::to_string(scriptCount).c_str());
+                    Row("Physics 2D", std::to_string(physicsCount).c_str());
+
+                    ImGui::Spacing();
+
+                    // Component breakdown
+                    if (ImGui::TreeNodeEx("Components", ImGuiTreeNodeFlags_DefaultOpen)) {
+                        std::vector<std::string> compNames;
+                        if (meshCount > 0)   compNames.push_back(fmt::format("{} MeshRenderer", meshCount));
+                        if (cameraCount > 0) compNames.push_back(fmt::format("{} Camera", cameraCount));
+                        if (lightCount > 0)  compNames.push_back(fmt::format("{} Light", lightCount));
+                        if (spriteCount > 0) compNames.push_back(fmt::format("{} Sprite", spriteCount));
+                        if (scriptCount > 0) compNames.push_back(fmt::format("{} LuaScript", scriptCount));
+                        if (physicsCount > 0)compNames.push_back(fmt::format("{} Rigidbody2D", physicsCount));
+
+                        for (auto& name : compNames) {
+                            ImGui::BulletText("%s", name.c_str());
+                        }
+                        ImGui::TreePop();
+                    }
+                } else {
+                    ImGui::TextDisabled("Prefab not loaded");
+                }
+            }
+
+            // ==========================================
+            // ▼ File Info
+            // ==========================================
+            ImGui::Spacing();
+            if (ImGui::CollapsingHeader("File Info", ImGuiTreeNodeFlags_DefaultOpen)) {
+                float labelW = ImGui::CalcTextSize("Virtual Path").x + 16.0f * uiScale;
+                float maxValX = ImGui::GetWindowContentRegionMax().x - 4.0f * uiScale;
+                auto Row = [&](const char* label, const char* val) {
+                    ImGui::Text("%s", label);
+                    ImGui::SameLine(labelW);
+                    ImGui::PushTextWrapPos(maxValX);
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.8f, 1.0f), "%s", val);
+                    ImGui::PopTextWrapPos();
+                };
+                Row("Virtual Path", meta.VirtualPath.c_str());
+
+                std::string physPath = AssetManager::GetAssetPhysicalPath(inspectHandle);
+                if (!physPath.empty()) Row("Physical Path", physPath.c_str());
+                else Row("Physical Path", "(virtual / embedded)");
+            }
+
+            // ==========================================
+            // ▼ Preview — optimized: cached thumbnail by default, realtime only during drag
+            // ==========================================
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            float availWidth = ImGui::GetContentRegionAvail().x;
+            ImVec2 previewSize(availWidth, availWidth);
+
+            static glm::vec2 s_PrefabPreviewRotation(0.3f, -0.6f);
+            static UUID s_LastPrefabAsset = 0;
+            if (s_LastPrefabAsset != inspectHandle) {
+                s_PrefabPreviewRotation = glm::vec2(0.3f, -0.6f);
+                s_LastPrefabAsset = inspectHandle;
+            }
+
+            auto previewTex = AssetPreviewer::RenderRealtimePreviewForPrefab(inspectHandle, s_PrefabPreviewRotation, 256);
+
+            if (previewTex) {
+                bool isVulkan = RendererAPI::GetAPI() == RendererAPI::API::Vulkan;
+                ImVec2 uv0 = isVulkan ? ImVec2(0, 0) : ImVec2(0, 1);
+                ImVec2 uv1 = isVulkan ? ImVec2(1, 1) : ImVec2(1, 0);
+                ImGui::Image((ImTextureID)previewTex->GetImGuiTextureID(), previewSize, uv0, uv1);
+
+                ImVec2 imgPos = ImGui::GetItemRectMin();
+                ImGui::SetCursorScreenPos(imgPos);
+                ImGui::InvisibleButton("##PrefabPreviewDrag", previewSize, ImGuiButtonFlags_MouseButtonLeft);
+                if (ImGui::IsItemActivated() || ImGui::IsItemDeactivated()) {
+                    s_PrefabPreviewRotation = glm::vec2(0.3f, -0.6f);
+                    ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
+                }
+                if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                    ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left);
+                    s_PrefabPreviewRotation.x += delta.y * 0.01f;
+                    s_PrefabPreviewRotation.y -= delta.x * 0.01f;
                     ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
                 }
             } else {

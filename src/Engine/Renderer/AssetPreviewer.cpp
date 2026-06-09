@@ -1298,6 +1298,280 @@ namespace Ayaya {
         return nullptr;
     }
 
+    // ---- Prefab realtime preview: render ALL mesh entities with their transforms ----
+    std::shared_ptr<Texture2D> AssetPreviewer::RenderRealtimePreviewForPrefab(UUID prefabHandle, glm::vec2 cameraAngle, uint32_t size) {
+        (void)size;
+        auto prefab = AssetManager::GetAsset<Prefab>(prefabHandle);
+        if (!prefab) return nullptr;
+
+        Scene* scene = prefab->GetScene();
+        if (!scene) return nullptr;
+
+        // Collect all (worldTransform, Mesh) pairs from all mesh entities
+        struct DrawItem {
+            glm::mat4 Transform;
+            std::shared_ptr<Mesh> MeshAsset;
+        };
+        std::vector<DrawItem> drawList;
+
+        glm::vec3 combinedMin( FLT_MAX), combinedMax(-FLT_MAX);
+        bool hasAny = false;
+
+        std::function<void(entt::entity, const glm::mat4&)> collectRecursive;
+        collectRecursive = [&collectRecursive, &drawList, &combinedMin, &combinedMax, &hasAny, scene](entt::entity e, const glm::mat4& parentWorld) {
+            Entity ent{ e, scene };
+            if (!ent) return;
+
+            glm::mat4 world = parentWorld;
+            if (ent.HasComponent<TransformComponent>())
+                world = parentWorld * ent.GetComponent<TransformComponent>().GetTransform();
+
+            if (ent.HasComponent<MeshRendererComponent>()) {
+                auto& mrc = ent.GetComponent<MeshRendererComponent>();
+                if (mrc.ModelHandle != 0) {
+                    auto model = AssetManager::GetAsset<Model>(mrc.ModelHandle);
+                    if (model) {
+                        for (auto& mesh : model->GetMeshes()) {
+                            if (mesh->GetIndexCount() == 0) continue;
+                            drawList.push_back({ world, mesh });
+                            const AABB& box = mesh->GetAABB();
+                            // Transform AABB corners to world space for combined bounds
+                            glm::vec4 corners[8] = {
+                                world * glm::vec4(box.Min.x, box.Min.y, box.Min.z, 1.0f),
+                                world * glm::vec4(box.Max.x, box.Min.y, box.Min.z, 1.0f),
+                                world * glm::vec4(box.Min.x, box.Max.y, box.Min.z, 1.0f),
+                                world * glm::vec4(box.Max.x, box.Max.y, box.Min.z, 1.0f),
+                                world * glm::vec4(box.Min.x, box.Min.y, box.Max.z, 1.0f),
+                                world * glm::vec4(box.Max.x, box.Min.y, box.Max.z, 1.0f),
+                                world * glm::vec4(box.Min.x, box.Max.y, box.Max.z, 1.0f),
+                                world * glm::vec4(box.Max.x, box.Max.y, box.Max.z, 1.0f),
+                            };
+                            for (auto& c : corners) {
+                                combinedMin = glm::min(combinedMin, glm::vec3(c));
+                                combinedMax = glm::max(combinedMax, glm::vec3(c));
+                            }
+                            hasAny = true;
+                        }
+                    }
+                }
+            }
+
+            if (ent.HasComponent<RelationshipComponent>()) {
+                for (auto child : ent.GetComponent<RelationshipComponent>().Children)
+                    collectRecursive(child, world);
+            }
+        };
+
+        for (auto rootHandle : scene->GetRootEntities())
+            collectRecursive(rootHandle, glm::mat4(1.0f));
+
+        if (!hasAny || drawList.empty()) return nullptr;
+
+        // Compute combined center and bounding radius for auto-framing
+        glm::vec3 center = (combinedMin + combinedMax) * 0.5f;
+        float radius = glm::length(combinedMax - combinedMin) * 0.5f;
+        if (radius < 0.001f) radius = 0.5f;
+
+        // Auto-frame camera using combined bounds
+        float fovY = glm::radians(45.0f);
+        float distance = radius / glm::sin(fovY * 0.5f);
+        if (distance < radius * 1.2f) distance = radius * 1.5f;
+
+        float pitch = glm::clamp(cameraAngle.x, -glm::half_pi<float>() + 0.01f, glm::half_pi<float>() - 0.01f);
+        float yaw   = cameraAngle.y;
+
+        glm::vec3 camPos;
+        camPos.x = distance * glm::cos(pitch) * glm::sin(yaw);
+        camPos.y = distance * glm::sin(pitch);
+        camPos.z = distance * glm::cos(pitch) * glm::cos(yaw);
+        camPos += center;
+
+        glm::mat4 viewMat = glm::lookAt(camPos, center, glm::vec3(0.0f, 1.0f, 0.0f));
+        float nearClip = glm::max(distance * 0.001f, 0.01f);
+        float farClip  = glm::max(distance * 10.0f, 100.0f);
+        glm::mat4 projMat = glm::perspective(fovY, 1.0f, nearClip, farClip);
+
+        s_CameraPos = camPos;
+        s_ViewMatrix = viewMat;
+        s_ProjMatrix = projMat;
+
+        // --- Vulkan path ---
+        if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+            auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+                Application::Get().GetWindow().GetContext());
+            if (!vkCtx) return nullptr;
+
+            PreviewCameraUBO camData;
+            camData.ViewProjection = s_ProjMatrix * s_ViewMatrix;
+            camData.CameraPosition = s_CameraPos;
+            s_CameraUBO->SetData(&camData, sizeof(PreviewCameraUBO));
+
+            PreviewPushConstants push;
+            push.Albedo      = glm::vec4(0.6f, 0.6f, 0.6f, 1.0f);
+            push.LightDir    = glm::vec4(glm::normalize(glm::vec3(0.5f, 1.0f, 0.8f)), 0.0f);
+            push.LightColor  = glm::vec4(1.0f, 0.98f, 0.95f, 1.0f);
+            push.Ambient     = glm::vec4(0.15f, 0.15f, 0.17f, 1.0f);
+
+            auto cmd = RenderCommandBuffer::Create();
+            if (!cmd) return nullptr;
+            cmd->Begin();
+
+            // FBO transition to attachment
+            {
+                auto vkMSAA = std::dynamic_pointer_cast<VulkanFramebuffer>(s_PreviewFBO_MSAA);
+                if (vkMSAA) {
+                    VkCommandBuffer vkCmd = vkCtx->GetCurrentCommandBuffer();
+                    VkImage colorImg = vkMSAA->GetColorAttachmentImage(0);
+                    VkImage depthImg = vkMSAA->GetDepthAttachmentImage();
+                    VkImageMemoryBarrier barriers[2]{}; uint32_t bc = 0;
+                    barriers[bc].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                    barriers[bc].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    barriers[bc].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                    barriers[bc].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                    barriers[bc].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                    barriers[bc].image = colorImg;
+                    barriers[bc].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    barriers[bc].subresourceRange.levelCount = 1;
+                    barriers[bc].subresourceRange.layerCount = 1; bc++;
+                    if (depthImg != VK_NULL_HANDLE) {
+                        barriers[bc].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                        barriers[bc].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                        barriers[bc].newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                        barriers[bc].srcAccessMask = 0;
+                        barriers[bc].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                        barriers[bc].image = depthImg;
+                        barriers[bc].subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+                        barriers[bc].subresourceRange.levelCount = 1;
+                        barriers[bc].subresourceRange.layerCount = 1; bc++;
+                    }
+                    vkCmdPipelineBarrier(vkCmd,
+                        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                        0, 0, nullptr, 0, nullptr, bc, barriers);
+                }
+            }
+
+            cmd->BeginRenderPass(s_PreviewFBO_MSAA, true, glm::vec4(0.11f, 0.11f, 0.12f, 1.0f));
+            cmd->BindPipeline(s_PreviewPipeline);
+
+            // Render ALL meshes with per-entity transforms
+            for (auto& item : drawList) {
+                push.ModelMatrix = item.Transform;
+                cmd->PushConstantData(s_PreviewPipeline, &push, sizeof(push));
+                cmd->DrawIndexed(item.MeshAsset, item.MeshAsset->GetIndexCount());
+            }
+
+            cmd->EndRenderPass();
+
+            // MSAA resolve
+            {
+                auto vkMSAA = std::dynamic_pointer_cast<VulkanFramebuffer>(s_PreviewFBO_MSAA);
+                auto vkResolve = std::dynamic_pointer_cast<VulkanFramebuffer>(s_PreviewFBO);
+                if (vkMSAA && vkResolve) {
+                    VkCommandBuffer cb = vkCtx->GetCurrentCommandBuffer();
+                    VkImage srcImg = vkMSAA->GetColorAttachmentImage(0);
+                    VkImage dstImg = vkResolve->GetColorAttachmentImage(0);
+                    VkImageMemoryBarrier pre[2]{};
+                    pre[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                    pre[0].oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                    pre[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                    pre[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                    pre[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                    pre[0].image = srcImg;
+                    pre[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    pre[0].subresourceRange.levelCount = 1;
+                    pre[0].subresourceRange.layerCount = 1;
+                    pre[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                    pre[1].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    pre[1].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                    pre[1].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                    pre[1].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                    pre[1].image = dstImg;
+                    pre[1].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    pre[1].subresourceRange.levelCount = 1;
+                    pre[1].subresourceRange.layerCount = 1;
+                    vkCmdPipelineBarrier(cb,
+                        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        0, 0, nullptr, 0, nullptr, 2, pre);
+                    VkImageResolve res{};
+                    res.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    res.srcSubresource.layerCount = 1;
+                    res.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    res.dstSubresource.layerCount = 1;
+                    res.extent = { kPreviewSize, kPreviewSize, 1 };
+                    vkCmdResolveImage(cb, srcImg, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                      dstImg, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &res);
+                    VkImageMemoryBarrier post[2]{};
+                    post[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                    post[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                    post[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    post[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                    post[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                    post[0].image = srcImg;
+                    post[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    post[0].subresourceRange.levelCount = 1;
+                    post[0].subresourceRange.layerCount = 1;
+                    post[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                    post[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                    post[1].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    post[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                    post[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                    post[1].image = dstImg;
+                    post[1].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    post[1].subresourceRange.levelCount = 1;
+                    post[1].subresourceRange.layerCount = 1;
+                    vkCmdPipelineBarrier(cb,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                        0, 0, nullptr, 0, nullptr, 2, post);
+                }
+            }
+            cmd->End();
+            return ReadbackRealtime();
+        }
+
+        // --- OpenGL path ---
+        GLuint fboMSAA  = (GLuint)(uintptr_t)s_PreviewFBO_MSAA->GetRendererID();
+        GLuint fboResolve = (GLuint)(uintptr_t)s_PreviewFBO->GetRendererID();
+        GLint prevFBO = 0, prevVP[4];
+        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prevFBO);
+        glGetIntegerv(GL_VIEWPORT, prevVP);
+        GLboolean prevDepth = glIsEnabled(GL_DEPTH_TEST);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, fboMSAA);
+        glViewport(0, 0, kPreviewSize, kPreviewSize);
+        glClearColor(0.11f, 0.11f, 0.12f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glEnable(GL_DEPTH_TEST);
+
+        s_PreviewShader->Bind();
+        glm::mat4 viewProj = s_ProjMatrix * s_ViewMatrix;
+        s_PreviewShader->SetMat4("u_ViewProjection", viewProj);
+        s_PreviewShader->SetFloat3("u_CameraPos", s_CameraPos);
+
+        for (auto& item : drawList) {
+            glm::mat4 normalMat = glm::transpose(glm::inverse(glm::mat3(item.Transform)));
+            s_PreviewShader->SetMat4("u_Transform", item.Transform);
+            s_PreviewShader->SetMat4("u_NormalMatrix", glm::mat4(normalMat));
+            auto va = item.MeshAsset->GetVertexArray();
+            if (!va) continue;
+            va->Bind();
+            glDrawElements(GL_TRIANGLES, (GLsizei)item.MeshAsset->GetIndexCount(), GL_UNSIGNED_INT, nullptr);
+        }
+
+        glBindVertexArray(0);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, fboMSAA);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fboResolve);
+        glBlitFramebuffer(0, 0, kPreviewSize, kPreviewSize, 0, 0, kPreviewSize, kPreviewSize,
+                          GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        glBindFramebuffer(GL_FRAMEBUFFER, prevFBO);
+        glViewport(prevVP[0], prevVP[1], prevVP[2], prevVP[3]);
+        if (!prevDepth) glDisable(GL_DEPTH_TEST);
+
+        return ReadbackRealtime();
+    }
+
     // ---- GPU-resident thumbnail API (zero CPU blocking, zero readback) ----
 
     void AssetPreviewer::RequestThumbnail(UUID handle, int assetType) {
@@ -1424,20 +1698,46 @@ namespace Ayaya {
             if(!vkRenderFbo){s_ThumbQueue.erase(s_ThumbQueue.begin());return;}
             VkImage renderImg=vkRenderFbo->GetColorAttachmentImage(0);
 
-            // Transition render target to COLOR_ATTACHMENT
-            VkImageMemoryBarrier rb{};
-            rb.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            rb.oldLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            rb.newLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            rb.srcAccessMask=VK_ACCESS_SHADER_READ_BIT; rb.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-            rb.image=renderImg; rb.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
-            vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,0,0,nullptr,0,nullptr,1,&rb);
+            // Transition render target to COLOR_ATTACHMENT + DEPTH_ATTACHMENT
+            VkImage depthImg=vkRenderFbo->GetDepthAttachmentImage();
+            VkImageMemoryBarrier barriers[2]{};
+            uint32_t barrierCount=0;
+            barriers[barrierCount].sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barriers[barrierCount].oldLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barriers[barrierCount].newLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            barriers[barrierCount].srcAccessMask=VK_ACCESS_SHADER_READ_BIT;
+            barriers[barrierCount].dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            barriers[barrierCount].image=renderImg;
+            barriers[barrierCount].subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+            barrierCount++;
+            if(depthImg!=VK_NULL_HANDLE){
+                barriers[barrierCount].sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                barriers[barrierCount].oldLayout=VK_IMAGE_LAYOUT_UNDEFINED;
+                barriers[barrierCount].newLayout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                barriers[barrierCount].srcAccessMask=0;
+                barriers[barrierCount].dstAccessMask=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                barriers[barrierCount].image=depthImg;
+                barriers[barrierCount].subresourceRange={VK_IMAGE_ASPECT_DEPTH_BIT|VK_IMAGE_ASPECT_STENCIL_BIT,0,1,0,1};
+                barrierCount++;
+            }
+            vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,0,0,nullptr,0,nullptr,barrierCount,barriers);
 
             VkRenderingAttachmentInfo ca{}; ca.sType=VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
             ca.imageView=vkRenderFbo->GetColorAttachmentImageView(0); ca.imageLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             ca.loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR; ca.storeOp=VK_ATTACHMENT_STORE_OP_STORE;
             ca.clearValue.color={{0.11f,0.11f,0.12f,1.0f}};
-            VkRenderingInfo ri{VK_STRUCTURE_TYPE_RENDERING_INFO,nullptr,0,{{0,0},{kPreviewSize,kPreviewSize}},1,0,1,&ca,nullptr};
+
+            VkRenderingAttachmentInfo da{};
+            bool hasDepth=depthImg!=VK_NULL_HANDLE;
+            if(hasDepth){
+                da.sType=VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+                da.imageView=vkRenderFbo->GetDepthAttachmentImageView();
+                da.imageLayout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                da.loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;
+                da.storeOp=VK_ATTACHMENT_STORE_OP_STORE;
+                da.clearValue.depthStencil={1.0f,0};
+            }
+            VkRenderingInfo ri{VK_STRUCTURE_TYPE_RENDERING_INFO,nullptr,0,{{0,0},{kPreviewSize,kPreviewSize}},1,0,1,&ca,hasDepth?&da:nullptr};
             vkCmdBeginRendering(cb,&ri);
             VkViewport vp{0,(float)kPreviewSize,(float)kPreviewSize,-(float)kPreviewSize,0,1}; vkCmdSetViewport(cb,0,1,&vp);
             VkRect2D sc{{0,0},{kPreviewSize,kPreviewSize}}; vkCmdSetScissor(cb,0,1,&sc);

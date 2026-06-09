@@ -49,11 +49,34 @@ namespace Ayaya {
         if (!fbo) return;
 
         auto* queue = context.RenderQueue;
-        if (!queue || queue->Packets.empty()) return;
+        bool hasPackets = queue && !queue->Packets.empty();
 
+        // ALWAYS clear G-Buffer — even when no opaque packets exist.
+        // If we skip the clear, stale geometry from the previous frame leaks
+        // into the Lighting pass, causing ghosting when all opaque objects are hidden.
         cmd.BeginRenderPass(fbo, true, glm::vec4(0.0f));
+
+        if (!hasPackets) {
+            cmd.EndRenderPass();
+            return;
+        }
         cmd.BindPipeline(m_Pipeline);
         auto whiteTex = context.GetTexture("WhiteTexture");
+
+        // Bind white fallback textures ONCE before the draw loop.
+        // Real textures overwrite specific slots on material-hash change.
+        // Per the descriptor-set contract, m_PendingImageInfos persists across
+        // draws — rebinding white every packet would clobber real textures for
+        // same-material packets that follow.
+        if (whiteTex) {
+            cmd.BindTexture2D(m_Pipeline, "u_AlbedoMap",    1, whiteTex);
+            cmd.BindTexture2D(m_Pipeline, "u_MetallicMap",  2, whiteTex);
+            cmd.BindTexture2D(m_Pipeline, "u_RoughnessMap", 3, whiteTex);
+            cmd.BindTexture2D(m_Pipeline, "u_AOMap",        4, whiteTex);
+            cmd.BindTexture2D(m_Pipeline, "u_NormalMap",    5, whiteTex);
+            cmd.BindTexture2D(m_Pipeline, "u_AlphaMap",     6, whiteTex);
+            cmd.BindTexture2D(m_Pipeline, "u_ORMMap",       7, whiteTex);
+        }
 
         Entity selected = context.Get<Entity>("SelectedEntity", Entity{});
         Entity hovered  = context.Get<Entity>("HoveredEntity", Entity{});
@@ -67,17 +90,6 @@ namespace Ayaya {
 
             // GBuffer only handles Opaque + Masked
             if (bucket > 1) continue;  // skip Translucent, Skybox, Overlay
-
-            // ---- Fallback white textures (reset per draw) ----
-            if (whiteTex) {
-                cmd.BindTexture2D(m_Pipeline, "u_AlbedoMap",    1, whiteTex);
-                cmd.BindTexture2D(m_Pipeline, "u_MetallicMap",  2, whiteTex);
-                cmd.BindTexture2D(m_Pipeline, "u_RoughnessMap", 3, whiteTex);
-                cmd.BindTexture2D(m_Pipeline, "u_AOMap",        4, whiteTex);
-                cmd.BindTexture2D(m_Pipeline, "u_NormalMap",    5, whiteTex);
-                cmd.BindTexture2D(m_Pipeline, "u_AlphaMap",     6, whiteTex);
-                cmd.BindTexture2D(m_Pipeline, "u_ORMMap",       7, whiteTex);
-            }
 
             GBufferPushConstants pc{};
             pc.Transform = packet.Transform;

@@ -22,6 +22,7 @@ namespace Ayaya {
         static std::shared_ptr<Texture2D> GenerateThumbnail(UUID modelHandle, uint32_t size = 128);
         static std::shared_ptr<Texture2D> GenerateThumbnailForMaterial(UUID materialHandle, uint32_t size = 128);
         static std::shared_ptr<Texture2D> GenerateThumbnailForPrefab(UUID prefabHandle, uint32_t size = 128);
+        static std::shared_ptr<Texture2D> RenderRealtimePreviewForPrefab(UUID prefabHandle, glm::vec2 cameraAngle, uint32_t size = 256);
 
         // GPU-resident thumbnail pipeline — renders one per frame using main frame CB
         static void RequestThumbnail(UUID handle, int assetType);

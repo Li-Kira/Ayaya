@@ -64,12 +64,26 @@ namespace Ayaya {
 
         // ==========================================
         // 环形缓冲，每次索要都给一个全新的描述符集！(Set 1)
+        // Per-frame-in-flight isolation: each frame gets its own sub-pool.
+        // ResetTextureDescriptorIndex() is called from BeginFrame() after the
+        // fence guarantees the current frame's previous submission is complete.
         // ==========================================
         VkDescriptorSet GetNextTextureDescriptorSet() {
-            if (m_TextureDescriptorSets.empty()) return VK_NULL_HANDLE;
-            uint32_t index = m_CurrentTextureSetIndex;
-            m_CurrentTextureSetIndex = (m_CurrentTextureSetIndex + 1) % m_TextureDescriptorSets.size();
-            return m_TextureDescriptorSets[index];
+            uint32_t fi = GetCurrentFrameIndex();
+            auto& pool = m_TextureDescriptorSets[fi];
+            if (pool.empty()) return VK_NULL_HANDLE;
+            uint32_t index = m_CurrentTextureSetIndex[fi];
+            m_CurrentTextureSetIndex[fi] = (m_CurrentTextureSetIndex[fi] + 1) % pool.size();
+            return pool[index];
+        }
+
+        void ResetTextureDescriptorIndex() {
+            uint32_t fi = GetCurrentFrameIndex();
+            m_CurrentTextureSetIndex[fi] = 0;
+        }
+
+        static void ResetAllDescriptorIndices() {
+            for (auto* p : s_AllPipelines) p->ResetTextureDescriptorIndex();
         }
 
     private:
@@ -87,11 +101,14 @@ namespace Ayaya {
         // 【核心修改】：Set 0 变为数组，为每一帧保存一份专属的描述符
         std::vector<VkDescriptorSet> m_GlobalDescriptorSets; 
 
-        // 专属池与环形缓冲
+        // 专属池与环形缓冲 (per-frame-in-flight isolation)
         VkDescriptorPool m_PipelineDescriptorPool = VK_NULL_HANDLE;
-        std::vector<VkDescriptorSet> m_TextureDescriptorSets;
-        uint32_t m_CurrentTextureSetIndex = 0;
+        std::array<std::vector<VkDescriptorSet>, 3> m_TextureDescriptorSets;
+        std::array<uint32_t, 3> m_CurrentTextureSetIndex = {0, 0, 0};
         uint32_t m_TextureSetIndex = 1;
+
+        static uint32_t GetCurrentFrameIndex();
+        static std::vector<VulkanPipeline*> s_AllPipelines;
     };
 
 }

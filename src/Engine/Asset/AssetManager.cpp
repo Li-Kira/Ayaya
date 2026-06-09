@@ -1244,10 +1244,19 @@ namespace Ayaya {
     // =====================================================================
     UUID AssetManager::FindHandleForPath(const std::filesystem::path& filepath) {
         std::string virtualPath = VFS::GetVirtualPath(filepath);
+        UUID subMeshFallback = 0;
         for (const auto& [handle, metadata] : s_Registry) {
-            if (metadata.VirtualPath == virtualPath) return handle;
+            if (metadata.VirtualPath == virtualPath) {
+                // Prefer parent Model over SubMesh — SubMesh entries share the same VirtualPath
+                // as their parent, but only the parent has the actual file and import settings.
+                if (metadata.Type == AssetType::SubMesh) {
+                    if (subMeshFallback == 0) subMeshFallback = handle;
+                    continue;
+                }
+                return handle;
+            }
         }
-        return 0;
+        return subMeshFallback;  // only SubMesh entries found — return first one as fallback
     }
 
     // =====================================================================

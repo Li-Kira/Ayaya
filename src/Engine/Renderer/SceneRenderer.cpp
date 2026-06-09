@@ -313,8 +313,9 @@ namespace Ayaya {
         m_RenderContext.Stats.VertexCount = 0;
         m_RenderContext.Stats.TriangleCount = 0;
 
-        m_RenderContext.FrameSteps.clear(); // 【新增】：每帧清空流水账本！
-        m_RenderContext.PassProfiles.clear();  // 每帧清空性能统计，防止累积陈旧路径条目
+        m_RenderContext.FrameSteps.clear(); // 每帧清空流水账本！
+        m_RenderContext.PassProfiles.clear();  // 每帧清空性能统计
+        m_RenderContext.Framebuffers.clear();  // 每帧清空 FBO 黑板，防止跨帧残留
         
         memset(&m_Data->LightData, 0, sizeof(struct_LightData));
         

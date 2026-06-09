@@ -9,6 +9,13 @@
 namespace Ayaya {
     std::unordered_map<uint32_t, std::array<VkDescriptorBufferInfo, 3>> VulkanPipeline::s_GlobalUBOs;
     std::vector<VkDescriptorSetLayout> VulkanPipeline::s_ExtraSetLayouts;
+    std::vector<VulkanPipeline*> VulkanPipeline::s_AllPipelines;
+
+    uint32_t VulkanPipeline::GetCurrentFrameIndex() {
+        auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+            Application::Get().GetWindow().GetContext());
+        return vkCtx ? (vkCtx->GetCurrentFrameIndex() % 3) : 0;
+    }
 
     // 记录 UBO 缓冲区信息 (增加 frameIndex 参数)
     void VulkanPipeline::SetGlobalUniformBuffer(uint32_t binding, uint32_t frameIndex, VkBuffer buffer, uint32_t size) {
@@ -17,6 +24,8 @@ namespace Ayaya {
 
     VulkanPipeline::VulkanPipeline(const PipelineSpecification& spec)
         : m_Specification(spec) {
+
+        s_AllPipelines.push_back(this);
         
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         VkDevice device = context->GetDevice();
@@ -387,7 +396,7 @@ namespace Ayaya {
             poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
             poolInfo.poolSizeCount = 2;
             poolInfo.pPoolSizes = poolSizes;
-            poolInfo.maxSets = 3010;
+            poolInfo.maxSets = 3100;
             if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_PipelineDescriptorPool) != VK_SUCCESS)
                 AYAYA_CORE_ERROR("Failed to create custom Descriptor Pool for Pipeline!");
         }
@@ -433,22 +442,23 @@ namespace Ayaya {
         }
 
         // ==========================================
-        // 12. 分配 Set 1 (纹理) 作为环形缓冲 — Bindless 跳过
+        // 12. 分配 Set 1 (纹理) 按帧隔离环形缓冲 — Bindless 跳过
         // ==========================================
         if (!noTextures && !spec.UseBindlessTextures) {
-            uint32_t texSetCount = noGlobalUBOs ? 48u : 3000u;
+            uint32_t perFrameCount = 1000u;  // per-frame pool, ~10x headroom
             uint32_t texSlot = noGlobalUBOs ? 0u : 1u;
-            std::vector<VkDescriptorSetLayout> layouts(texSetCount, m_DescriptorSetLayouts[texSlot]);
-            m_TextureDescriptorSets.resize(texSetCount);
-            VkDescriptorSetAllocateInfo allocInfo1{};
-            allocInfo1.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-            allocInfo1.descriptorPool = m_PipelineDescriptorPool;
-            allocInfo1.descriptorSetCount = texSetCount;
-            allocInfo1.pSetLayouts = layouts.data();
-            VkResult result = vkAllocateDescriptorSets(device, &allocInfo1, m_TextureDescriptorSets.data());
-            if (result != VK_SUCCESS) {
-                AYAYA_CORE_ERROR("VulkanPipeline: Failed to allocate {0} texture descriptor sets! Result={1}", texSetCount, (int)result);
-                m_TextureDescriptorSets.clear();
+            for (uint32_t fi = 0; fi < framesInFlight; fi++) {
+                m_TextureDescriptorSets[fi].resize(perFrameCount);
+                std::vector<VkDescriptorSetLayout> layouts(perFrameCount, m_DescriptorSetLayouts[texSlot]);
+                VkDescriptorSetAllocateInfo allocInfo1{};
+                allocInfo1.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+                allocInfo1.descriptorPool = m_PipelineDescriptorPool;
+                allocInfo1.descriptorSetCount = perFrameCount;
+                allocInfo1.pSetLayouts = layouts.data();
+                VkResult result = vkAllocateDescriptorSets(device, &allocInfo1, m_TextureDescriptorSets[fi].data());
+                if (result != VK_SUCCESS) {
+                    AYAYA_CORE_ERROR("VulkanPipeline: Failed to allocate per-frame[{0}] texture descriptor sets (count={1})! Result={2}", fi, perFrameCount, (int)result);
+                }
             }
         }
     }
@@ -474,6 +484,10 @@ namespace Ayaya {
     }
 
     VulkanPipeline::~VulkanPipeline() {
+        // Remove from static registry
+        auto it = std::find(s_AllPipelines.begin(), s_AllPipelines.end(), this);
+        if (it != s_AllPipelines.end()) s_AllPipelines.erase(it);
+
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         if (context) {
             VkDevice device = context->GetDevice();

@@ -1,5 +1,6 @@
 #include "ayapch.h"
 #include "VulkanContext.hpp"
+#include "Platform/Vulkan/VulkanPipeline.hpp"
 #include "Core/Log.hpp"
 #include <GLFW/glfw3.h>
 #include <vector>
@@ -529,6 +530,9 @@ namespace Ayaya {
             AYAYA_CORE_ERROR("[DBG] BeginFrame: vkResetCommandBuffer FAILED! m_CurrentFrame={0}, result={1} ({2})",
                 m_CurrentFrame, (int)resetResult, VkResultStr(resetResult));
         }
+
+        // Reset per-frame descriptor set indices after fence guarantees GPU is done
+        VulkanPipeline::ResetAllDescriptorIndices();
 
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;

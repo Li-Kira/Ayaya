@@ -2,11 +2,11 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition: [0.14081787, 2.2697773, 6.776623]
+  CameraPosition: [0.6563606, 2.1361492, 6.4737253]
   CameraDistance: 1.0404494
-  CameraPitch: -0.16989864
-  CameraYaw: 0.041262053
-  CameraFocalPoint: [0.09851692, 2.0938556, 5.7520266]
+  CameraPitch: -0.19689868
+  CameraYaw: -0.08173789
+  CameraFocalPoint: [0.7396687, 1.9326072, 5.456786]
 Entities:
   - Entity: 9207422813788464392
     TagComponent:
@@ -43,6 +43,22 @@ Entities:
     DirectionalLightComponent:
       Color: [1, 1, 1]
       Illuminance: 100000
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 2717292969850671077
+    TagComponent:
+      Tag: SkyBox
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    EnvironmentComponent:
+      Type: 3
+      Intensity: 30000
+      AmbientColor: [0.1, 0.1, 0.1]
+      EquirectangularHandle: 0
+      CubemapHandle: 16140901000000000006
     RelationshipComponent:
       Parent: 0
   - Entity: 941355425607113630
@@ -85,94 +101,18 @@ Entities:
       ReceiveShadows: false
     RelationshipComponent:
       Parent: 0
-  - Entity: 2717292969850671077
+  - Entity: 1730080830510939774
     TagComponent:
-      Tag: SkyBox
-      IsActive: true
-    TransformComponent:
-      Translation: [0, 0, 0]
-      Rotation: [0, 0, 0]
-      Scale: [1, 1, 1]
-    EnvironmentComponent:
-      Type: 3
-      Intensity: 30000
-      AmbientColor: [0.1, 0.1, 0.1]
-      EquirectangularHandle: 0
-      CubemapHandle: 16140901000000000006
-    RelationshipComponent:
-      Parent: 0
-  - Entity: 4609143037702534513
-    TagComponent:
-      Tag: AxeLowPoly
-      IsActive: true
-    TransformComponent:
-      Translation: [0, -2.5338411, 0]
-      Rotation: [0, -0, 0]
-      Scale: [0.1, 0.1, 0.1]
-    RelationshipComponent:
-      Parent: 0
-  - Entity: 7598959764427763440
-    TagComponent:
-      Tag: MK_Axe_020_$AssimpFbx$_PreRotation
-      IsActive: true
-    TransformComponent:
-      Translation: [0, 0, 0]
-      Rotation: [-1.5707964, 0, 0]
-      Scale: [1, 1, 1]
-    RelationshipComponent:
-      Parent: 4609143037702534513
-  - Entity: 7943452868131004578
-    TagComponent:
-      Tag: MK_Axe_020_$AssimpFbx$_PreRotation (1)
-      IsActive: true
-    TransformComponent:
-      Translation: [0, 0, 0]
-      Rotation: [-1.5707964, 0, 0]
-      Scale: [1, 1, 1]
-    RelationshipComponent:
-      Parent: 4609143037702534513
-  - Entity: 13213925798533720120
-    TagComponent:
-      Tag: MK_Axe_020
-      IsActive: true
-    TransformComponent:
-      Translation: [0, 0, 0]
-      Rotation: [0, -0, 0]
-      Scale: [1, 1, 1]
-    MeshRendererComponent:
-      ModelHandle: 12019679979691173478
-      MaterialHandle: 10943098746576294158
-      CastShadows: true
-      ReceiveShadows: true
-    RelationshipComponent:
-      Parent: 7943452868131004578
-  - Entity: 15699838843837796064
-    TagComponent:
-      Tag: MK_Axe_020 (1)
+      Tag: Plane
       IsActive: false
     TransformComponent:
       Translation: [0, 0, 0]
-      Rotation: [0, -0, 0]
-      Scale: [1, 1, 1]
+      Rotation: [1.8250183, -0, 0]
+      Scale: [1, 1, 1.0000002]
     MeshRendererComponent:
-      ModelHandle: 12019679979691173478
-      MaterialHandle: 10943098746576294158
+      ModelHandle: 16140901000000000003
+      MaterialHandle: 17188363202453606863
       CastShadows: true
       ReceiveShadows: true
     RelationshipComponent:
-      Parent: 7943452868131004578
-  - Entity: 1842420059061193112
-    TagComponent:
-      Tag: MK_Axe_020 (2)
-      IsActive: false
-    TransformComponent:
-      Translation: [0, 0, 0]
-      Rotation: [0, -0, 0]
-      Scale: [1, 1, 1]
-    MeshRendererComponent:
-      ModelHandle: 12019679979691173478
-      MaterialHandle: 10943098746576294158
-      CastShadows: true
-      ReceiveShadows: true
-    RelationshipComponent:
-      Parent: 7943452868131004578
+      Parent: 0

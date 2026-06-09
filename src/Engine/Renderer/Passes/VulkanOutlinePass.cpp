@@ -90,6 +90,7 @@ namespace Ayaya {
         std::function<void(Entity, const glm::mat4&)> renderRecursive;
         renderRecursive = [&](Entity e, const glm::mat4& worldTransform) {
             if (!e) return;
+            if (!e.IsActiveInHierarchy()) return;  // skip hidden entities (matches render-queue behaviour)
 
             // Render this entity's mesh silhouette
             if (e.HasComponent<MeshRendererComponent>()) {
