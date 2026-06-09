@@ -31,10 +31,13 @@ namespace Ayaya {
     
     class Mesh {
     public:
-        Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
+        Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices,
+             int materialIndex = -1);
         ~Mesh() = default;
 
         const AABB& GetAABB() const { return m_BoundingBox; }
+        int GetMaterialIndex() const { return m_MaterialIndex; }
+        void SetMaterialIndex(int idx) { m_MaterialIndex = idx; }
 
         uint32_t GetVertexCount() const { return m_VertexCount; }
         uint32_t GetIndexCount() const { return m_IndexCount; }
@@ -51,10 +54,12 @@ namespace Ayaya {
         static std::shared_ptr<Mesh> CreateCube(float size = 1.0f);
         static std::shared_ptr<Mesh> CreatePlane(float width = 1.0f, float height = 1.0f);
         static std::shared_ptr<Mesh> CreateSphere(float radius = 1.0f, uint32_t xSegments = 32, uint32_t ySegments = 32);
+        static std::shared_ptr<Mesh> Merge(const std::vector<std::shared_ptr<Mesh>>& meshes);
 
     private:
         uint32_t m_VertexCount = 0;
         uint32_t m_IndexCount = 0;
+        int m_MaterialIndex = -1;
 
         AABB m_BoundingBox;
 

@@ -76,6 +76,7 @@ namespace Ayaya {
         out << YAML::Key << "swap_yz" << YAML::Value << settings.SwapYZ;
         out << YAML::Key << "material_search_rule" << YAML::Value << (int)settings.MatSearchRule;
         out << YAML::Key << "import_animations" << YAML::Value << settings.ImportAnimations;
+        out << YAML::Key << "merge_meshes" << YAML::Value << settings.MergeMeshes;
         out << YAML::Key << "combine_into_prefab" << YAML::Value << settings.CombineIntoPrefab;
         out << YAML::EndMap;
     }
@@ -93,6 +94,7 @@ namespace Ayaya {
             settings.SwapYZ           = s["swap_yz"].as<bool>(false);
             settings.MatSearchRule    = (MaterialSearchRule)s["material_search_rule"].as<int>(0);
             settings.ImportAnimations = s["import_animations"].as<bool>(false);
+            settings.MergeMeshes       = s["merge_meshes"].as<bool>(false);
             settings.CombineIntoPrefab = s["combine_into_prefab"].as<bool>(true);
         }
         return settings;
@@ -161,6 +163,26 @@ namespace Ayaya {
             }
             if (outSettings) *outSettings = DeserializeTextureSettings(data);
             if (outModelSettings) *outModelSettings = DeserializeModelSettings(data);
+            // Parse SubAssets for Model-type assets
+            if (outType == AssetType::Model && data["sub_assets"]) {
+                for (auto subNode : data["sub_assets"]) {
+                    if (subNode["uuid"] && subNode["name"] && subNode["sub_mesh_index"].as<int>() >= 0) {
+                        UUID subHandle(subNode["uuid"].as<uint64_t>());
+                        std::string subName = subNode["name"].as<std::string>();
+                        int subIdx = subNode["sub_mesh_index"].as<int>();
+                        if (!s_Registry.count(subHandle)) {
+                            AssetMetadata subMeta;
+                            subMeta.Type = AssetType::SubMesh;
+                            // Route through parent: VirtualPath = parent's, ParentHandle = parent UUID
+                            subMeta.VirtualPath = data["virtual_path"]
+                                ? data["virtual_path"].as<std::string>() : "";
+                            subMeta.ParentHandle = outHandle;
+                            subMeta.SubMeshIndex = subIdx;
+                            s_Registry[subHandle] = subMeta;
+                        }
+                    }
+                }
+            }
             return true;
         } catch (const YAML::ParserException& e) {
             AYAYA_CORE_ERROR("AssetManager: Failed to parse .meta file {0}: {1}", metaPath.string(), e.what());
@@ -500,19 +522,22 @@ namespace Ayaya {
         // Recompute baseName from the actual destination file (may have suffix)
         baseName = std::filesystem::path(destPath).stem().string();
 
-        // 5. Generate material entry handles (content created later on main thread)
+        // 5. Generate material entries — one per UNIQUE Assimp material index
         if (settings.ImportMaterials) {
-            int matIdx = 0;
-            for (size_t i = 0; i < model->GetMeshes().size(); i++) {
+            std::set<int> uniqueMatIndices;
+            for (auto& mesh : model->GetMeshes())
+                uniqueMatIndices.insert(mesh->GetMaterialIndex());
+
+            for (int matIdx : uniqueMatIndices) {
                 ImportResult::MatEntry matEntry;
                 matEntry.Handle = UUID();
-                std::string matName = (model->GetMeshes().size() == 1)
+                matEntry.AssimpMaterialIndex = matIdx;
+                std::string matName = (uniqueMatIndices.size() == 1)
                     ? baseName + "_Material"
                     : baseName + "_Material" + std::to_string(matIdx);
                 matEntry.PhysicalPath = assetDir + "/" + matName + ".mat";
                 matEntry.VirtualPath = "project://" + matName + ".mat";
                 result.Materials.push_back(matEntry);
-                matIdx++;
             }
         }
 
@@ -533,16 +558,29 @@ namespace Ayaya {
                 std::filesystem::copy_file(texPath, texDest);
                 ImportResult::TexEntry texEntry;
                 texEntry.PhysicalPath = texDest;
+                texEntry.Handle = UUID();
                 result.CopiedTextures.push_back(texEntry);
-                // Write .meta immediately with a pre-generated UUID so AssetWatcher
-                // and ImportAsset see the same handle.
-                UUID texUUID = UUID();
-                WriteMetaFile(texDest, texUUID, AssetType::Texture2D);
-                // Store the UUID alongside the path for FinalizeModelImport
-                // (we'll re-derive via ImportAsset, which returns the same UUID).
+                WriteMetaFile(texDest, texEntry.Handle, AssetType::Texture2D, TextureImportSettings{});
             } catch (const std::exception& e) {
                 AYAYA_CORE_WARN("AssetManager: Failed to copy texture '{0}': {1}",
                     texPath.string(), e.what());
+            }
+        }
+
+        // 6. Generate SubAsset entries — one per mesh, each with its own UUID.
+        //    Stores the UUID→mesh mapping for the prefab builder to use per-entity.
+        //    MergeMeshes=true skips this (only one merged mesh → uses result.ModelHandle).
+        if (!settings.MergeMeshes) {
+            int meshIdx = 0;
+            for (auto& mesh : model->GetMeshes()) {
+                ImportResult::MeshEntry entry;
+                entry.Handle = UUID();
+                entry.SubMeshIndex = meshIdx;
+                entry.Name = baseName + "_Mesh" + std::to_string(meshIdx);
+                entry.VirtualPath = "project://" + entry.Name;
+                entry.PhysicalPath = ""; // virtual sub-asset, no separate file
+                result.SubMeshes.push_back(entry);
+                meshIdx++;
             }
         }
 
@@ -554,7 +592,10 @@ namespace Ayaya {
             auto prefab = std::make_shared<Prefab>();
             Scene* prefabScene = prefab->GetScene();
 
-            // Recursive function to build entity hierarchy from ModelNode tree
+            // Recursive function to build entity hierarchy from ModelNode tree.
+            // meshIdx tracks the global mesh index across all nodes for SubMesh UUID lookup.
+            int globalMeshIdx = 0;
+
             std::function<Entity(const ModelNode&, Entity)> buildNode =
                 [&](const ModelNode& node, Entity parent) -> Entity {
                 Entity entity = prefabScene->CreateEntity(
@@ -585,15 +626,23 @@ namespace Ayaya {
                     pRel.Children.push_back(entity.GetEntityHandle());
                 }
 
-                // Mesh renderer — reference the main model UUID (persistent across restarts)
+                // Mesh renderer — reference the correct SubAsset UUID (or parent for merged)
                 if (!node.Meshes.empty()) {
                     auto& mrc = entity.AddComponent<MeshRendererComponent>();
-                    mrc.ModelHandle = result.ModelHandle;
-                    // Assign first material (or built-in if no materials imported).
-                    // Use hardcoded UUID — GetBuiltInMaterial() is not thread-safe.
-                    mrc.MaterialHandle = result.Materials.empty()
-                        ? UUID(16140901000000000004ull)   // built-in DefaultPBR
-                        : result.Materials[0].Handle;
+                    // Use SubMesh UUID if available, otherwise parent ModelHandle (merged)
+                    mrc.ModelHandle = (globalMeshIdx < (int)result.SubMeshes.size())
+                        ? result.SubMeshes[globalMeshIdx].Handle
+                        : result.ModelHandle;
+                    // Match mesh's Assimp material index to the deduplicated material entry
+                    int meshMatIdx = node.Meshes[0]->GetMaterialIndex();
+                    UUID matHandle = UUID(16140901000000000004ull); // built-in DefaultPBR
+                    for (auto& mat : result.Materials) {
+                        if (mat.AssimpMaterialIndex == meshMatIdx) {
+                            matHandle = mat.Handle; break;
+                        }
+                    }
+                    mrc.MaterialHandle = matHandle;
+                    globalMeshIdx++;
                 }
 
                 // Recurse into children
@@ -637,8 +686,56 @@ namespace Ayaya {
             WriteMetaFile(modelPhysPath, result.ModelHandle, modelType);
         }
 
-        // 2. Import copied textures via ImportAsset (main-thread safe, generates
-        //    authoritative UUIDs and writes .meta files). Then build suffix→handle map.
+        // 1b. Register SubAssets (per-mesh standalone Models) and write .meta
+        if (!result.SubMeshes.empty()) {
+            auto parentModel = AssetManager::GetAsset<Model>(result.ModelHandle);
+            if (parentModel) {
+                int idx = 0;
+                for (auto& sub : result.SubMeshes) {
+                    auto meshes = parentModel->GetMeshes();
+                    if (idx < (int)meshes.size()) {
+                        auto subModel = std::make_shared<Model>(meshes[idx]);
+                        subModel->GetRootNode().LocalTransform = parentModel->GetRootNode().LocalTransform;
+                        AssetManager::AddAsset<Model>(sub.Handle, subModel);
+                        AssetMetadata subMeta;
+                        subMeta.Type = AssetType::SubMesh;
+                        subMeta.VirtualPath = result.ModelVirtualPath;  // parent's path for routing
+                        subMeta.ParentHandle = result.ModelHandle;
+                        subMeta.SubMeshIndex = idx;
+                        s_Registry[sub.Handle] = subMeta;
+                    }
+                    idx++;
+                }
+            }
+            // Re-write .meta with SubAsset UUIDs included
+            if (!modelPhysPath.empty()) {
+                std::filesystem::path metaPath = modelPhysPath + ".meta";
+                try {
+                    YAML::Emitter out;
+                    out << YAML::BeginMap;
+                    out << YAML::Key << "uuid" << YAML::Value << static_cast<uint64_t>(result.ModelHandle);
+                    out << YAML::Key << "type" << YAML::Value << static_cast<int>(AssetType::Model);
+                    SerializeModelSettings(out, s_Registry[result.ModelHandle].ModelSettings);
+                    out << YAML::Key << "virtual_path" << YAML::Value << result.ModelVirtualPath;
+                    out << YAML::Key << "sub_assets" << YAML::Value << YAML::BeginSeq;
+                    for (auto& sub : result.SubMeshes) {
+                        out << YAML::BeginMap;
+                        out << YAML::Key << "uuid" << YAML::Value << static_cast<uint64_t>(sub.Handle);
+                        out << YAML::Key << "name" << YAML::Value << sub.Name;
+                        out << YAML::Key << "sub_mesh_index" << YAML::Value << sub.SubMeshIndex;
+                        out << YAML::Key << "type" << YAML::Value << static_cast<int>(AssetType::SubMesh);
+                        out << YAML::EndMap;
+                    }
+                    out << YAML::EndSeq;
+                    out << YAML::EndMap;
+                    std::ofstream fout(metaPath);
+                    if (fout.is_open()) fout << out.c_str();
+                } catch (...) {}
+            }
+        }
+
+        // 2. Import copied textures via ImportAsset (registers UUID in s_Registry,
+        //    creates GPU texture). The function reads the pre-generated UUID from .meta.
         struct TexMatch { UUID Handle; std::string Suffix; };
         std::vector<TexMatch> texMatches;
         for (auto& tex : result.CopiedTextures) {
@@ -656,16 +753,18 @@ namespace Ayaya {
         // "_" boundary — no extra check needed. Raw suffixes like "basecolor" require
         // a preceding "_" or "." to avoid matching inside another word.
         auto WordEndsWith = [](const std::string& str, const std::string& sfx) -> bool {
-            if (str.length() < sfx.length()) return false;
-            if (str.compare(str.length() - sfx.length(), sfx.length(), sfx) != 0)
-                return false;
-            // If suffix starts with "_", the "_" is the boundary — accept any predecessor.
-            if (!sfx.empty() && sfx[0] == '_') return true;
-            // Raw suffix (no leading "_"): require word boundary before it.
-            size_t pos = str.length() - sfx.length();
-            if (pos > 0 && str[pos-1] != '_' && str[pos-1] != '.')
-                return false;
-            return true;
+            if (str.length() >= sfx.length()) {
+                if (str.compare(str.length() - sfx.length(), sfx.length(), sfx) == 0) {
+                    if (!sfx.empty() && sfx[0] == '_') return true;
+                    size_t pos = str.length() - sfx.length();
+                    if (pos > 0 && str[pos-1] != '_' && str[pos-1] != '.') return false;
+                    return true;
+                }
+            }
+            // Bare filename match: "diffuse" matches "_diffuse" (sfx minus leading "_")
+            if (!sfx.empty() && sfx[0] == '_' && str == sfx.substr(1))
+                return true;
+            return false;
         };
 
         auto MatchBySuffix = [&](const std::vector<const char*>& suffixes) -> TexMatch* {
@@ -726,7 +825,7 @@ namespace Ayaya {
                 } else {
                     // --- 4a. Metallic (individual) ---
                     TexMatch* metallic = MatchBySuffix({
-                        "_metallic", "_metalness", "_metal", "_mt", "_m"
+                        "_metallic", "_metalness", "_metal", "_specular", "_spec", "_mt", "_m"
                     });
                     AssignTex("u_MetallicMap", "u_UseMetallicMap", metallic);
 
@@ -934,6 +1033,26 @@ namespace Ayaya {
 
         if (metadata.Type == AssetType::Texture2D) {
             asset = Texture2D::Create(physicalPath);
+        }
+        else if (metadata.Type == AssetType::SubMesh) {
+            // SubMesh: route through parent Model
+            if (metadata.ParentHandle != 0 && metadata.SubMeshIndex >= 0) {
+                auto parent = AssetManager::GetAsset<Model>(metadata.ParentHandle);
+                if (!parent) {
+                    parent = std::static_pointer_cast<Model>(LoadAssetFromFile(metadata.ParentHandle));
+                    if (parent) s_Assets[metadata.ParentHandle] = parent;
+                }
+                if (parent) {
+                    auto meshes = parent->GetMeshes();
+                    if (metadata.SubMeshIndex < (int)meshes.size()) {
+                        auto sm = std::make_shared<Model>(meshes[metadata.SubMeshIndex]);
+                        // Propagate parent's root transform (SwapYZ, GlobalScale) for correct preview orientation
+                        sm->GetRootNode().LocalTransform = parent->GetRootNode().LocalTransform;
+                        asset = sm;
+                    }
+                }
+            }
+            return asset;
         }
         else if (metadata.Type == AssetType::Model) {
             // 【核心修复】：拦截内置几何体，防止传入 Assimp

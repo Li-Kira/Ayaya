@@ -17,6 +17,21 @@
 namespace Ayaya {
 
     Application* Application::s_Instance = nullptr;
+    static std::vector<std::function<void()>> s_DeferredActions;
+    static std::function<void()> s_PreFrameCallback;
+
+    void Application::SetPreFrameCallback(std::function<void()> cb) {
+        s_PreFrameCallback = std::move(cb);
+    }
+
+    void Application::SubmitDeferredAction(std::function<void()> action) {
+        s_DeferredActions.push_back(std::move(action));
+    }
+
+    void Application::ProcessDeferredActions() {
+        for (auto& a : s_DeferredActions) a();
+        s_DeferredActions.clear();
+    }
 
     Application::Application() {
         s_Instance = this; 
@@ -156,6 +171,11 @@ Hi, welcome to Ayaya engine♪
 
             // 处理异步加载的 GPU 上传回调（后台线程完成 stbi_load 后在此提交纹理）
             AssetManager::Update();
+
+            // Process deferred UI actions (prefab drops, etc.) before CB recording.
+            // Must run here — no CB is recording and previous frame's CB has completed.
+            ProcessDeferredActions();
+            if (s_PreFrameCallback) s_PreFrameCallback();
 
             // ==========================================
             // 【核心架构升级】：在所有业务与渲染管线执行前，开启 Vulkan 帧录制！

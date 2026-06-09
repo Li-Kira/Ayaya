@@ -1,5 +1,6 @@
 #include "ayapch.h"
 #include "Model.hpp"
+#include <functional>
 
 namespace Ayaya {
 
@@ -77,18 +78,68 @@ namespace Ayaya {
             modelNode.LocalTransform = scaleMat * modelNode.LocalTransform;
         }
 
-        // 处理当前节点的所有网格
-        for (unsigned int i = 0; i < node->mNumMeshes; i++) {
-            aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-            auto processedMesh = ProcessMesh(mesh, scene);
-            modelNode.Meshes.push_back(processedMesh);
-            m_Meshes.push_back(processedMesh); // 兼容旧逻辑
-        }
+        // If MergeMeshes is enabled at the root, collect ALL vertices/indices
+        // from the entire sub-tree into ONE mesh. Children get no meshes and
+        // no further recursion — their transforms are flattened into vertices.
+        if (isRoot && settings.MergeMeshes) {
+            std::vector<Vertex> allVerts;
+            std::vector<uint32_t> allIndices;
 
-        // 递归处理子节点
-        for (unsigned int i = 0; i < node->mNumChildren; i++) {
-            modelNode.Children.push_back(
-                ProcessNode(node->mChildren[i], scene, settings, /*isRoot=*/false));
+            std::function<void(aiNode*, const glm::mat4&)> collectAll =
+                [&](aiNode* n, const glm::mat4& parentTransform) {
+                glm::mat4 local = AssimpMatToGlm(n->mTransformation);
+                glm::mat4 world = parentTransform * local;
+
+                for (unsigned int i = 0; i < n->mNumMeshes; i++) {
+                    aiMesh* m = scene->mMeshes[n->mMeshes[i]];
+                    uint32_t vertOffset = (uint32_t)allVerts.size();
+                    for (unsigned int v = 0; v < m->mNumVertices; v++) {
+                        Vertex vert;
+                        // Apply world transform to position
+                        glm::vec4 wp = world * glm::vec4(m->mVertices[v].x, m->mVertices[v].y, m->mVertices[v].z, 1.0f);
+                        vert.Position = glm::vec3(wp);
+                        // Apply world transform to normal (inverse transpose, simplified as mat3)
+                        glm::mat3 normalMat = glm::transpose(glm::inverse(glm::mat3(world)));
+                        vert.Normal = m->HasNormals()
+                            ? glm::normalize(normalMat * glm::vec3(m->mNormals[v].x, m->mNormals[v].y, m->mNormals[v].z))
+                            : glm::vec3{0,0,1};
+                        vert.TexCoord = m->mTextureCoords[0]
+                            ? glm::vec2{m->mTextureCoords[0][v].x, m->mTextureCoords[0][v].y}
+                            : glm::vec2{0,0};
+                        vert.Tangent = m->HasTangentsAndBitangents()
+                            ? glm::normalize(normalMat * glm::vec3(m->mTangents[v].x, m->mTangents[v].y, m->mTangents[v].z))
+                            : glm::vec3{1,0,0};
+                        allVerts.push_back(vert);
+                    }
+                    for (unsigned int f = 0; f < m->mNumFaces; f++) {
+                        aiFace face = m->mFaces[f];
+                        for (unsigned int j = 0; j < face.mNumIndices; j++)
+                            allIndices.push_back(face.mIndices[j] + vertOffset);
+                    }
+                }
+                for (unsigned int c = 0; c < n->mNumChildren; c++)
+                    collectAll(n->mChildren[c], world);
+            };
+            collectAll(node, glm::mat4(1.0f));
+
+            auto mergedMesh = std::make_shared<Mesh>(allVerts, allIndices);
+            modelNode.Meshes.push_back(mergedMesh);
+            m_Meshes.push_back(mergedMesh);
+            // Do NOT recurse into children — all geometry is already merged
+        } else {
+            // 处理当前节点的所有网格
+            for (unsigned int i = 0; i < node->mNumMeshes; i++) {
+                aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
+                auto processedMesh = ProcessMesh(mesh, scene);
+                modelNode.Meshes.push_back(processedMesh);
+                m_Meshes.push_back(processedMesh); // 兼容旧逻辑
+            }
+
+            // 递归处理子节点
+            for (unsigned int i = 0; i < node->mNumChildren; i++) {
+                modelNode.Children.push_back(
+                    ProcessNode(node->mChildren[i], scene, settings, /*isRoot=*/false));
+            }
         }
 
         return modelNode;
@@ -138,6 +189,6 @@ namespace Ayaya {
         }
 
         // 把提取出的纯数据交给我们的 Mesh 类生成 OpenGL 缓冲区！
-        return std::make_shared<Mesh>(vertices, indices);
+        return std::make_shared<Mesh>(vertices, indices, (int)mesh->mMaterialIndex);
     }
 }

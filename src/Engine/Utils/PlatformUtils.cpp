@@ -1,6 +1,7 @@
 #include "ayapch.h"
 #include "PlatformUtils.hpp"
 #include <stdio.h>
+#include <cstdio>
 
 // ==========================================
 // 引入 Windows 原生对话框头文件
@@ -48,6 +49,62 @@ namespace Ayaya {
         if (!result.empty() && result[result.length()-1] == '\n') result.erase(result.length()-1);
         return result;
 #endif
+    }
+
+    std::vector<std::string> FileDialogs::OpenFiles(const char* filter) {
+        std::vector<std::string> results;
+#ifdef _WIN32
+        OPENFILENAMEA ofn;
+        CHAR szFile[4096] = { 0 };
+        std::string filterStr(filter);
+        for (char& c : filterStr) if (c == '|') c = '\0';
+        ZeroMemory(&ofn, sizeof(OPENFILENAME));
+        ofn.lStructSize = sizeof(OPENFILENAME);
+        ofn.hwndOwner = NULL;
+        ofn.lpstrFile = szFile;
+        ofn.nMaxFile = sizeof(szFile);
+        ofn.lpstrFilter = filterStr.c_str();
+        ofn.nFilterIndex = 1;
+        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_ALLOWMULTISELECT | OFN_EXPLORER | OFN_NOCHANGEDIR;
+        if (GetOpenFileNameA(&ofn) == TRUE) {
+            const char* p = ofn.lpstrFile;
+            std::string dir(p);
+            p += dir.length() + 1;
+            if (*p == 0) { results.push_back(dir); }  // single file
+            else { while (*p) { std::string f(p); results.push_back(dir + "\\" + f); p += f.length() + 1; } }
+        }
+#else
+        // macOS: write AppleScript to temp file to avoid quote-escaping nightmare
+        char tmppath[] = "/tmp/ayaya_multiselect.scpt";
+        {
+            FILE* f = fopen(tmppath, "w");
+            if (f) {
+                fprintf(f, "set theFiles to choose file with multiple selections allowed with prompt \"Select Texture Files:\"\n");
+                fprintf(f, "set out to \"\"\n");
+                fprintf(f, "repeat with f in theFiles\n");
+                fprintf(f, "  set out to out & POSIX path of f & \"\\n\"\n");
+                fprintf(f, "end repeat\n");
+                fprintf(f, "return out\n");
+                fclose(f);
+            }
+        }
+        char buffer[8192];
+        std::string raw;
+        FILE* pipe = popen("osascript /tmp/ayaya_multiselect.scpt 2>/dev/null", "r");
+        if (!pipe) return results;
+        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) raw += buffer;
+        pclose(pipe);
+        size_t pos = 0;
+        while (pos < raw.length()) {
+            size_t nl = raw.find('\n', pos);
+            std::string line = (nl == std::string::npos) ? raw.substr(pos) : raw.substr(pos, nl - pos);
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+            if (!line.empty()) results.push_back(line);
+            if (nl == std::string::npos) break;
+            pos = nl + 1;
+        }
+#endif
+        return results;
     }
 
     std::string FileDialogs::SaveFile(const char* filter, const std::string& defaultName) {

@@ -44,6 +44,7 @@ namespace Ayaya {
         // Textures
         std::vector<std::filesystem::path> TextureFiles;  // paths to texture files to import
         // Output
+        bool MergeMeshes = false;       // combine all sub-meshes into single mesh
         bool CombineIntoPrefab = true;
     };
 

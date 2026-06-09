@@ -23,6 +23,8 @@ namespace Ayaya {
         std::string VirtualPath; // 存储跨平台的虚拟路径 (如 project://... 或 engine://...)
         TextureImportSettings TextureSettings;
         ModelImportSettings   ModelSettings;
+        UUID ParentHandle = 0;            // for SubAssets: points to the parent ModelSource
+        int  SubMeshIndex   = -1;         // for SubAssets: which mesh in the parent
     };
 
     // Result of a background-thread model import — plain data only, no GPU/registry state.
@@ -33,9 +35,9 @@ namespace Ayaya {
         UUID ModelHandle = 0;
         std::string ModelVirtualPath;
         // Sub-assets generated during import
-        struct MeshEntry { UUID Handle; std::string VirtualPath; std::string PhysicalPath; };
-        struct MatEntry  { UUID Handle; std::string VirtualPath; std::string PhysicalPath; };
-        struct TexEntry  { std::string PhysicalPath; };
+        struct MeshEntry { UUID Handle; std::string VirtualPath; std::string PhysicalPath; int SubMeshIndex = -1; std::string Name; };
+        struct MatEntry  { UUID Handle; std::string VirtualPath; std::string PhysicalPath; int AssimpMaterialIndex = -1; };
+        struct TexEntry  { std::string PhysicalPath; UUID Handle = 0; };
         std::vector<MeshEntry> SubMeshes;
         std::vector<MatEntry>  Materials;
         std::vector<TexEntry>  CopiedTextures;

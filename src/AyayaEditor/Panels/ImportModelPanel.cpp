@@ -80,17 +80,19 @@ namespace Ayaya {
     }
 
     void ImportModelPanel::AddTextureManual() {
-        std::string filepath = FileDialogs::OpenFile(
+        auto files = FileDialogs::OpenFiles(
             "Images (*.png *.jpg *.jpeg *.hdr *.bmp *.tga)|*.png;*.jpg;*.jpeg;*.hdr;*.bmp;*.tga");
-        if (filepath.empty()) return;
-        for (auto& entry : m_TextureEntries) {
-            if (entry.SourcePath == filepath) return;
+        for (auto& filepath : files) {
+            if (filepath.empty()) continue;
+            bool dup = false;
+            for (auto& entry : m_TextureEntries) { if (entry.SourcePath == filepath) { dup = true; break; } }
+            if (dup) continue;
+            TextureImportEntry entry;
+            entry.SourcePath = filepath;
+            entry.Label = GuessTextureLabel(std::filesystem::path(filepath).stem().string());
+            entry.Selected = true;
+            m_TextureEntries.push_back(entry);
         }
-        TextureImportEntry entry;
-        entry.SourcePath = filepath;
-        entry.Label = GuessTextureLabel(std::filesystem::path(filepath).stem().string());
-        entry.Selected = true;
-        m_TextureEntries.push_back(entry);
     }
 
     void ImportModelPanel::RequestOpen(const std::filesystem::path& filePath) {
@@ -161,6 +163,7 @@ namespace Ayaya {
                 ImGui::Spacing();
                 ImGui::Checkbox("Optimize Mesh", &m_Settings.OptimizeMesh);
                 ImGui::Checkbox("Swap YZ  (Maya Y-up  ->  Engine Z-up)", &m_Settings.SwapYZ);
+                ImGui::Checkbox("Merge Meshes (single mesh, one material)", &m_Settings.MergeMeshes);
                 ImGui::Spacing();
             }
 

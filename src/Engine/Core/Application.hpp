@@ -28,6 +28,10 @@ namespace Ayaya {
         inline static Application& Get() { return *s_Instance; }
         inline Window& GetWindow() { return *m_Window; }
 
+        static void SubmitDeferredAction(std::function<void()> action);
+        static void ProcessDeferredActions();
+        static void SetPreFrameCallback(std::function<void()> cb);
+
     private:
         bool OnWindowClose(WindowCloseEvent& e);
         bool OnWindowResize(WindowResizeEvent& e);

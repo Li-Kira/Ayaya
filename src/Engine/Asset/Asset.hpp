@@ -12,7 +12,8 @@ namespace Ayaya {
         Model,
         Material,
         LuaScript,
-        Prefab      // entity tree template
+        Prefab,      // entity tree template
+        SubMesh      // lightweight: ParentHandle + SubMeshIndex, no own buffers
     };
 
     class Asset {

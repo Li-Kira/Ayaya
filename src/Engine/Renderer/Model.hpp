@@ -30,6 +30,7 @@ namespace Ayaya {
         const std::string& GetPath() const { return m_Path; }
         void SetPath(const std::string& path) { m_Path = path; }
         const ModelNode& GetRootNode() const { return m_RootNode; }
+        ModelNode& GetRootNode() { return m_RootNode; }
 
     private:
         void LoadModel(const std::string& path, const ModelImportSettings& settings);

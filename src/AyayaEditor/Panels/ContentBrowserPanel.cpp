@@ -40,66 +40,28 @@ namespace Ayaya {
     }
 
     std::shared_ptr<Texture2D> ContentBrowserPanel::GetThumbnail(const std::filesystem::path& path) {
-        std::string key = path.string();
-        auto it = m_ThumbnailCache.find(key);
-
-        if (it != m_ThumbnailCache.end()) {
-            UUID handle = AssetManager::FindHandleForPath(path);
-            if (handle != 0) {
-                AssetMetadata meta = AssetManager::GetMetadata(handle);
-                if (meta.Type == AssetType::Texture2D) {
-                    // Texture: check if source asset was reloaded (e.g. Apply import settings)
-                    auto current = AssetManager::GetAsset<Texture2D>(handle);
-                    if (current && current.get() == it->second.get())
-                        return it->second;
-                } else if (meta.Type == AssetType::Model ||
-                           meta.Type == AssetType::Prefab ||
-                           meta.Type == AssetType::Material) {
-                    // Generated thumbnail, safe to reuse
-                    return it->second;
-                }
-            }
-            m_ThumbnailCache.erase(it);
-        }
-
         UUID handle = AssetManager::FindHandleForPath(path);
         if (handle == 0) return nullptr;
 
         AssetMetadata meta = AssetManager::GetMetadata(handle);
 
-        // Image assets: return the texture directly
+        // Image assets: return the texture directly (no caching needed)
         std::string ext = path.extension().string();
         for (auto& c : ext) c = (char)std::tolower(c);
         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".hdr" || ext == ".bmp") {
-            std::shared_ptr<Texture2D> thumbnail = AssetManager::GetAsset<Texture2D>(handle);
-            if (thumbnail) {
-                if (m_ThumbnailCache.size() >= kMaxThumbnailCache)
-                    m_ThumbnailCache.erase(m_ThumbnailCache.begin());
-                m_ThumbnailCache[key] = thumbnail;
-            }
-            return thumbnail;
+            return AssetManager::GetAsset<Texture2D>(handle);
         }
 
-        // Model / Prefab / Material: generate thumbnail, cache for reuse
-        if (meta.Type == AssetType::Model || meta.Type == AssetType::Prefab || meta.Type == AssetType::Material) {
-            std::shared_ptr<Texture2D> thumbnail;
-            if (meta.Type == AssetType::Model)
-                thumbnail = AssetPreviewer::GenerateThumbnail(handle);
-            else if (meta.Type == AssetType::Prefab)
-                thumbnail = AssetPreviewer::GenerateThumbnailForPrefab(handle);
-            else
-                thumbnail = AssetPreviewer::GenerateThumbnailForMaterial(handle);
-
-            if (thumbnail) {
-                if (m_ThumbnailCache.size() >= kMaxThumbnailCache)
-                    m_ThumbnailCache.erase(m_ThumbnailCache.begin());
-                m_ThumbnailCache[key] = thumbnail;
-                return thumbnail;
-            }
+        // Model / Prefab / Material / SubMesh: lookup from cache, request if missing
+        if (meta.Type == AssetType::Model || meta.Type == AssetType::Prefab ||
+            meta.Type == AssetType::Material || meta.Type == AssetType::SubMesh) {
+            auto cached = AssetPreviewer::GetCachedThumbnail(handle);
+            if (cached) return cached;
+            int at = (meta.Type==AssetType::Model||meta.Type==AssetType::SubMesh)?0:(meta.Type==AssetType::Prefab)?1:2;
+            AssetPreviewer::RequestThumbnail(handle, at);
             return m_FileIcon;
         }
-
-        AYAYA_CORE_WARN("CB: Unknown/unhandled asset type={0} for {1}", (int)meta.Type, path.string());
+        return m_FileIcon;
         return nullptr;
     }
 
@@ -181,7 +143,20 @@ namespace Ayaya {
         std::transform(searchStr.begin(), searchStr.end(), searchStr.begin(), ::tolower);
 
         if (ImGui::BeginTable("ContentBrowserTable", columnCount, ImGuiTableFlags_SizingFixedFit)) {
-            for (auto& directoryEntry : std::filesystem::directory_iterator(m_CurrentDirectory)) {
+            // Collect and sort: directories first, then alphabetical
+            std::vector<std::filesystem::directory_entry> sortedEntries;
+            for (auto& e : std::filesystem::directory_iterator(m_CurrentDirectory))
+                sortedEntries.push_back(e);
+            std::sort(sortedEntries.begin(), sortedEntries.end(), [](auto& a, auto& b) {
+                bool aDir = a.is_directory(), bDir = b.is_directory();
+                if (aDir != bDir) return aDir;
+                std::string aExt = a.path().extension().string();
+                std::string bExt = b.path().extension().string();
+                if (aExt != bExt) return aExt < bExt;
+                return a.path().filename() < b.path().filename();
+            });
+
+            for (auto& directoryEntry : sortedEntries) {
                 const auto& path = directoryEntry.path();
                 std::string filenameString = path.filename().string();
 

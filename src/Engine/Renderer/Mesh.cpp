@@ -7,9 +7,11 @@ namespace Ayaya {
     // 防御性断言：确保结构体没有被编译器恶意填充
     static_assert(sizeof(Vertex) == 44, "Vertex struct size mismatch! Expecting exactly 44 bytes.");
 
-    Mesh::Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices) {
+    Mesh::Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices,
+               int materialIndex) {
         m_VertexCount = (uint32_t)vertices.size();
         m_IndexCount = (uint32_t)indices.size();
+        m_MaterialIndex = materialIndex;
 
         // ==========================================
         // 1. OpenGL 状态机陷阱：严格按照能够成功执行的老顺序！
@@ -204,5 +206,13 @@ namespace Ayaya {
         }
 
         return std::make_shared<Mesh>(vertices, indices);
+    }
+
+    std::shared_ptr<Mesh> Mesh::Merge(const std::vector<std::shared_ptr<Mesh>>& meshes) {
+        if (meshes.empty()) return nullptr;
+        if (meshes.size() == 1) return meshes[0];
+        // Meshes are GPU-only after construction — no CPU data retained.
+        // Merging must happen at the Assimp-load level (Model::LoadModel).
+        return meshes[0];
     }
 }

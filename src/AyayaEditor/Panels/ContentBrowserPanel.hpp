@@ -25,9 +25,6 @@ namespace Ayaya {
         std::shared_ptr<Texture2D> m_FileIcon;
         std::shared_ptr<Texture2D> m_PngIcon;
 
-        std::unordered_map<std::string, std::shared_ptr<Texture2D>> m_ThumbnailCache;
-        static constexpr size_t kMaxThumbnailCache = 64;
-
         float m_ThumbnailSize = 96.0f;
         char m_SearchFilter[256] = "";
     };

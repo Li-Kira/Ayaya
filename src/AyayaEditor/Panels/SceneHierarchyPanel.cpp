@@ -189,17 +189,21 @@ namespace Ayaya {
                         if (meta.Type == AssetType::Model) {
                             auto loadedModel = AssetManager::GetAsset<Model>(droppedHandle);
                             if (loadedModel) {
-                                AYAYA_CORE_INFO("Instantiating Model via UUID: {0}", (uint64_t)droppedHandle);
-                                Entity rootEntity = m_Context->InstantiateModel(loadedModel);
-                                if (rootEntity) SetSelectedEntity(rootEntity);
+                                UUID h = droppedHandle; auto ctx = m_Context; auto* self = this;
+                                Application::SubmitDeferredAction([ctx, self, h]() {
+                                    auto m = AssetManager::GetAsset<Model>(h);
+                                    if (m) { Entity e = ctx->InstantiateModel(m); if (e) self->SetSelectedEntity(e); }
+                                });
                             }
                         }
                         else if (meta.Type == AssetType::Prefab) {
                             auto prefab = AssetManager::GetAsset<Prefab>(droppedHandle);
                             if (prefab) {
-                                AYAYA_CORE_INFO("Instantiating Prefab via UUID: {0}", (uint64_t)droppedHandle);
-                                Entity inst = m_Context->InstantiatePrefab(prefab.get());
-                                if (inst) SetSelectedEntity(inst);
+                                UUID h = droppedHandle; auto ctx = m_Context; auto* self = this;
+                                Application::SubmitDeferredAction([ctx, self, h]() {
+                                    auto p = AssetManager::GetAsset<Prefab>(h);
+                                    if (p) { Entity e = ctx->InstantiatePrefab(p.get()); if (e) self->SetSelectedEntity(e); }
+                                });
                             }
                         }
                     }

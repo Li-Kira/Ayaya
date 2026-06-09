@@ -18,12 +18,14 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <unordered_map>
 
 // Vulkan-specific
 #include "Platform/Vulkan/VulkanFramebuffer.hpp"
 #include "Platform/Vulkan/VulkanTexture2D.hpp"
 #include "Platform/Vulkan/VulkanContext.hpp"
 #include "Platform/Vulkan/VulkanBuffer.hpp"
+#include "Platform/Vulkan/VulkanShader.hpp"
 #include "Platform/Vulkan/VulkanPipeline.hpp"
 #include "Platform/Vulkan/VulkanUniformBuffer.hpp"
 
@@ -55,6 +57,36 @@ namespace Ayaya {
     };
     static ThumbnailVkResources s_ThumbnailVk;
     static std::shared_ptr<Model> s_SphereModel;  // cached sphere for material thumbnails
+
+    // ---- PBR pipeline (manual Vulkan, zero main-pipeline interaction) ----
+    struct ThumbnailPbrVk {
+        VkDescriptorSetLayout set0Layout = VK_NULL_HANDLE;
+        VkDescriptorSetLayout set1Layout = VK_NULL_HANDLE;
+        VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        VkDescriptorPool pool = VK_NULL_HANDLE;
+        VkDescriptorSet set0 = VK_NULL_HANDLE;
+        VkDescriptorSet set1[3] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
+        VkBuffer uboBuffer = VK_NULL_HANDLE;
+        VmaAllocation uboAlloc = VK_NULL_HANDLE;
+        void* mappedData = nullptr;
+        bool initialized = false;
+    };
+    static ThumbnailPbrVk s_PbrVk;
+    static std::shared_ptr<Texture2D> s_PbrBlackTex;
+
+    // ---- Queue for pre-frame batch processing ----
+    struct ThumbRequest { UUID handle; int assetType; };
+    static std::vector<ThumbRequest> s_ThumbQueue;
+    static std::unordered_map<UUID, std::shared_ptr<Texture2D>> s_ThumbCache;
+
+    // ---- PBR push constants (matches preview_pbr shader) ----
+    struct PBRPush {
+        glm::mat4 ModelMatrix; glm::vec4 Albedo;
+        float Metallic, Roughness, AO, Alpha, AlphaCutoff;
+        int BlendMode, UseAlbedoMap, UseNormalMap, UseORMMap, UseMetallicMap, UseRoughnessMap, UseAOMap;
+    };
+    static_assert(sizeof(PBRPush) <= 256, "PBR push too large");
 
     // ---- Push constant layout (must match shader, max 128 bytes) ----
     struct PreviewPushConstants {
@@ -599,6 +631,79 @@ namespace Ayaya {
                 s_ThumbnailVk.initialized = true;
                 AYAYA_CORE_INFO("AssetPreviewer: Thumbnail Vulkan resources created");
             }
+
+            // === PBR pipeline (manual Vulkan) ===
+            s_PbrBlackTex = Texture2D::Create(1, 1);
+            if (s_PbrBlackTex) { uint32_t bv=0; s_PbrBlackTex->SetData(&bv, 4); }
+            {
+                auto vkCtx2 = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+                auto pbrShader = Shader::Create("Preview/preview_pbr.vert", "Preview/preview_pbr.frag");
+                auto vkShader2 = std::dynamic_pointer_cast<VulkanShader>(pbrShader);
+                if (vkCtx2 && vkShader2 && s_PreviewFBO_MSAA) {
+                    VkDevice dev = vkCtx2->GetDevice();
+                    // Set 0: 1 UBO
+                    VkDescriptorSetLayoutBinding b0{0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
+                    VkDescriptorSetLayoutCreateInfo s0ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,nullptr,0,1,&b0};
+                    vkCreateDescriptorSetLayout(dev, &s0ci, nullptr, &s_PbrVk.set0Layout);
+                    // Set 1: 5 texture samplers
+                    VkDescriptorSetLayoutBinding b1[5]{};
+                    for(int i=0;i<5;i++) b1[i]={(uint32_t)i,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
+                    VkDescriptorSetLayoutCreateInfo s1ci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,nullptr,0,5,b1};
+                    vkCreateDescriptorSetLayout(dev, &s1ci, nullptr, &s_PbrVk.set1Layout);
+                    // Pipeline layout
+                    VkDescriptorSetLayout sl[]={s_PbrVk.set0Layout,s_PbrVk.set1Layout};
+                    VkPushConstantRange pr{VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,256};
+                    VkPipelineLayoutCreateInfo plci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,nullptr,0,2,sl,1,&pr};
+                    vkCreatePipelineLayout(dev, &plci, nullptr, &s_PbrVk.pipelineLayout);
+                    // Pipeline
+                    VkPipelineShaderStageCreateInfo ss[2]{{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,nullptr,0,VK_SHADER_STAGE_VERTEX_BIT,vkShader2->GetVertexShaderModule(),"main",nullptr},{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,nullptr,0,VK_SHADER_STAGE_FRAGMENT_BIT,vkShader2->GetFragmentShaderModule(),"main",nullptr}};
+                    VkVertexInputBindingDescription vib{0,44,VK_VERTEX_INPUT_RATE_VERTEX};
+                    VkVertexInputAttributeDescription via[4]{{0,0,VK_FORMAT_R32G32B32_SFLOAT,0},{1,0,VK_FORMAT_R32G32B32_SFLOAT,12},{2,0,VK_FORMAT_R32G32_SFLOAT,24},{3,0,VK_FORMAT_R32G32B32_SFLOAT,32}};
+                    VkPipelineVertexInputStateCreateInfo vi{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,nullptr,0,1,&vib,4,via};
+                    VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,nullptr,0,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,VK_FALSE};
+                    VkPipelineViewportStateCreateInfo vp{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,nullptr,0,1,nullptr,1,nullptr};
+                    VkPipelineRasterizationStateCreateInfo rs{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,nullptr,0,VK_FALSE,VK_FALSE,VK_POLYGON_MODE_FILL,VK_CULL_MODE_NONE,VK_FRONT_FACE_COUNTER_CLOCKWISE,VK_FALSE,0,0,0,1.0f};
+                    VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,nullptr,0,VK_SAMPLE_COUNT_1_BIT,VK_FALSE,0,nullptr,VK_FALSE,VK_FALSE};
+                    VkPipelineDepthStencilStateCreateInfo ds{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,nullptr,0,VK_TRUE,VK_TRUE,VK_COMPARE_OP_LESS,VK_FALSE,VK_FALSE,{},{},0,0};
+                    VkPipelineColorBlendAttachmentState cba{VK_FALSE,VK_BLEND_FACTOR_ONE,VK_BLEND_FACTOR_ZERO,VK_BLEND_OP_ADD,VK_BLEND_FACTOR_ONE,VK_BLEND_FACTOR_ZERO,VK_BLEND_OP_ADD,VK_COLOR_COMPONENT_R_BIT|VK_COLOR_COMPONENT_G_BIT|VK_COLOR_COMPONENT_B_BIT|VK_COLOR_COMPONENT_A_BIT};
+                    VkPipelineColorBlendStateCreateInfo cb{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,nullptr,0,VK_FALSE,VK_LOGIC_OP_COPY,1,&cba,{0,0,0,0}};
+                    VkDynamicState dyn[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};
+                    VkPipelineDynamicStateCreateInfo dyns{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,nullptr,0,2,dyn};
+                    VkFormat cf=VK_FORMAT_R8G8B8A8_UNORM, df=VK_FORMAT_D32_SFLOAT_S8_UINT;
+                    VkPipelineRenderingCreateInfo dr{VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,nullptr,0,1,&cf,df};
+                    VkGraphicsPipelineCreateInfo pci{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,&dr,0,2,ss,&vi,&ia,nullptr,&vp,&rs,&ms,&ds,&cb,&dyns,s_PbrVk.pipelineLayout,nullptr,0,nullptr,0};
+                    if(vkCreateGraphicsPipelines(dev,VK_NULL_HANDLE,1,&pci,nullptr,&s_PbrVk.pipeline)==VK_SUCCESS){
+                        VkDescriptorPoolSize ps[2]{{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,2},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,20}};
+                        VkDescriptorPoolCreateInfo pci2{};
+                        pci2.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+                        pci2.maxSets=5; pci2.poolSizeCount=2; pci2.pPoolSizes=ps;
+                        vkCreateDescriptorPool(dev,&pci2,nullptr,&s_PbrVk.pool);
+                        VkBufferCreateInfo bi{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,nullptr,0,sizeof(PreviewCameraUBO),VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT};
+                        VmaAllocationCreateInfo ai{}; ai.usage=VMA_MEMORY_USAGE_AUTO; ai.flags=VMA_ALLOCATION_CREATE_MAPPED_BIT|VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT; ai.requiredFlags=VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+                        VmaAllocationInfo ar{};
+                        vmaCreateBuffer(vkCtx2->GetAllocator(),&bi,&ai,&s_PbrVk.uboBuffer,&s_PbrVk.uboAlloc,&ar);
+                        s_PbrVk.mappedData=ar.pMappedData;
+                        VkDescriptorSetAllocateInfo ai0{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,nullptr,s_PbrVk.pool,1,&s_PbrVk.set0Layout};
+                        vkAllocateDescriptorSets(dev,&ai0,&s_PbrVk.set0);
+                        VkDescriptorBufferInfo cbi{s_PbrVk.uboBuffer,0,sizeof(PreviewCameraUBO)};
+                        VkWriteDescriptorSet w0{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,nullptr,s_PbrVk.set0,0,0,1,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,nullptr,&cbi,nullptr};
+                        vkUpdateDescriptorSets(dev,1,&w0,0,nullptr);
+                        // Allocate 3 Set 1 copies (triple-buffered per frame-in-flight)
+                        for(int f=0;f<3;f++){
+                            VkDescriptorSetAllocateInfo ai1{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,nullptr,s_PbrVk.pool,1,&s_PbrVk.set1Layout};
+                            vkAllocateDescriptorSets(dev,&ai1,&s_PbrVk.set1[f]);
+                            auto vkBlack=std::dynamic_pointer_cast<VulkanTexture2D>(s_PbrBlackTex);
+                            if(vkBlack&&vkBlack->GetImageView()&&vkBlack->GetSampler()){
+                                VkWriteDescriptorSet w[5]{}; VkDescriptorImageInfo im[5]{};
+                                for(int b=0;b<5;b++){im[b].sampler=vkBlack->GetSampler();im[b].imageView=vkBlack->GetImageView();im[b].imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; w[b].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;w[b].dstSet=s_PbrVk.set1[f];w[b].dstBinding=(uint32_t)b;w[b].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;w[b].descriptorCount=1;w[b].pImageInfo=&im[b];}
+                                vkUpdateDescriptorSets(dev,5,w,0,nullptr);
+                            }
+                        }
+                        s_PbrVk.initialized=true;
+                        AYAYA_CORE_INFO("AssetPreviewer: PBR pipeline created (manual, zero-interference)");
+                    }
+                }
+            }
         }
 
         AYAYA_CORE_INFO("AssetPreviewer: Ready ({0}), {1}x{1}",
@@ -628,6 +733,20 @@ namespace Ayaya {
         s_PreviewShader.reset();
         s_SphereModel.reset();
         s_LastModelHandle = 0;
+        s_ThumbCache.clear();
+        if(s_PbrVk.initialized){
+            auto vkCtx3=std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+            if(vkCtx3){VkDevice d=vkCtx3->GetDevice();VmaAllocator a=vkCtx3->GetAllocator();
+                vkDeviceWaitIdle(d);
+                if(s_PbrVk.pipeline)vkDestroyPipeline(d,s_PbrVk.pipeline,nullptr);
+                if(s_PbrVk.pipelineLayout)vkDestroyPipelineLayout(d,s_PbrVk.pipelineLayout,nullptr);
+                if(s_PbrVk.set0Layout)vkDestroyDescriptorSetLayout(d,s_PbrVk.set0Layout,nullptr);
+                if(s_PbrVk.set1Layout)vkDestroyDescriptorSetLayout(d,s_PbrVk.set1Layout,nullptr);
+                if(s_PbrVk.pool)vkDestroyDescriptorPool(d,s_PbrVk.pool,nullptr);
+                if(s_PbrVk.uboBuffer)vmaDestroyBuffer(a,s_PbrVk.uboBuffer,s_PbrVk.uboAlloc);
+            }s_PbrVk={};
+        }
+        s_PbrBlackTex.reset();
         AYAYA_CORE_INFO("AssetPreviewer: Shutdown.");
     }
 
@@ -1177,6 +1296,254 @@ namespace Ayaya {
             }
         }
         return nullptr;
+    }
+
+    // ---- GPU-resident thumbnail API (zero CPU blocking, zero readback) ----
+
+    void AssetPreviewer::RequestThumbnail(UUID handle, int assetType) {
+        if(s_ThumbCache.count(handle)) return;
+        for(auto& r:s_ThumbQueue) if(r.handle==handle) return;
+        s_ThumbQueue.push_back({handle,assetType});
+    }
+
+    void AssetPreviewer::ProcessOneThumbnail() {
+        if(s_ThumbQueue.empty()||RendererAPI::GetAPI()!=RendererAPI::API::Vulkan) return;
+        auto vkCtx=std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        auto vkPipe=std::dynamic_pointer_cast<VulkanPipeline>(s_PreviewPipeline);
+        if(!vkCtx||!vkPipe) return;
+        VkCommandBuffer cb=vkCtx->GetCurrentCommandBuffer();
+
+        auto& r=s_ThumbQueue.front();
+        uint32_t fi = vkCtx->GetCurrentFrameIndex() % 3;
+        std::shared_ptr<Model> mdl; bool usePBR=false;
+        PBRPush pbr{}; PreviewPushConstants wm{};
+
+        // Prepare model + camera + push constants.
+        // For SubAsset UUIDs (single mesh), resolve to parent Model with ALL meshes.
+        UUID modelHandle = r.handle;
+        std::shared_ptr<Material> prefabMat;  // material for Prefab PBR preview
+        if(r.assetType==1){
+            auto pf=AssetManager::GetAsset<Prefab>(r.handle);
+            if(pf&&pf->GetScene()){auto v=pf->GetScene()->Reg().view<MeshRendererComponent>();for(auto e:v){auto&mc=v.get<MeshRendererComponent>(e);if(mc.ModelHandle){modelHandle=mc.ModelHandle;prefabMat=(mc.MaterialHandle!=0)?AssetManager::GetAsset<Material>(mc.MaterialHandle):nullptr;break;}}}
+        }
+        // Check if this is a SubAsset → use parent for full mesh rendering
+        {
+            auto meta = AssetManager::GetMetadata(modelHandle);
+            if (meta.Type == AssetType::SubMesh && meta.ParentHandle != 0)
+                modelHandle = meta.ParentHandle;
+        }
+        if(r.assetType==0||r.assetType==1){
+            mdl=AssetManager::GetAsset<Model>(modelHandle);
+            if(!mdl||mdl->GetMeshes().empty()){s_ThumbQueue.erase(s_ThumbQueue.begin());return;}
+            AutoFrameCamera(mdl,glm::vec2(0.3f,-0.6f),glm::radians(45.0f));
+            glm::mat4 modelMat=glm::translate(glm::mat4(1.0f),-ComputeModelCenter(mdl))
+                             * mdl->GetRootNode().LocalTransform;
+            // Prefab PBR path: only if material textures are already GPU-resident.
+            // Force-loading during CB recording would corrupt state.
+            if(r.assetType==1 && s_PbrVk.initialized && prefabMat){
+                prefabMat->BakeProperties(); auto& pBpc=prefabMat->GetBakedPC();
+                // Check if at least Albedo texture is loaded (indicates textures are GPU-ready)
+                bool texReady = pBpc.UseAlbedoMap && pBpc.Textures[0] && pBpc.Textures[0]->GetRendererID();
+                if(texReady){
+                    usePBR=true;
+                    pbr.ModelMatrix=modelMat; pbr.Albedo=glm::vec4(0.6f,0.6f,0.6f,1.0f); pbr.Roughness=0.5f; pbr.AO=1.0f; pbr.Alpha=1.0f; pbr.AlphaCutoff=0.5f;
+                    for(auto& p:prefabMat->Properties){if(p.UniformName=="u_Albedo"&&p.Type==MaterialPropertyType::Vec3)pbr.Albedo=glm::vec4(p.Vec3Value,1.0f); else if(p.UniformName=="u_Metallic"&&p.Type==MaterialPropertyType::Float)pbr.Metallic=p.FloatValue; else if(p.UniformName=="u_Roughness"&&p.Type==MaterialPropertyType::Float)pbr.Roughness=p.FloatValue; else if(p.UniformName=="u_AO"&&p.Type==MaterialPropertyType::Float)pbr.AO=p.FloatValue; else if(p.UniformName=="u_Alpha"&&p.Type==MaterialPropertyType::Float)pbr.Alpha=p.FloatValue; else if(p.UniformName=="u_AlphaCutoff"&&p.Type==MaterialPropertyType::Float)pbr.AlphaCutoff=p.FloatValue; else if(p.UniformName=="u_BlendMode"&&p.Type==MaterialPropertyType::Int)pbr.BlendMode=p.IntValue;}
+                    pbr.UseAlbedoMap=pBpc.UseAlbedoMap?1:0; pbr.UseNormalMap=pBpc.UseNormalMap?1:0; pbr.UseORMMap=pBpc.UseORMMap?1:0; pbr.UseMetallicMap=pBpc.UseMetallicMap?1:0; pbr.UseRoughnessMap=pBpc.UseRoughnessMap?1:0; pbr.UseAOMap=pBpc.UseAOMap?1:0;
+                    auto& bpc=pBpc;
+                    auto getTex=[&](int sl){return(sl>=0&&sl<6)?bpc.Textures[sl]:nullptr;};
+                    VkWriteDescriptorSet w[5]{}; VkDescriptorImageInfo im[5]{}; int wc=0;
+                    auto addT=[&](int b,std::shared_ptr<Texture2D> t,std::shared_ptr<Texture2D> fb){
+                        auto u=t&&t->GetRendererID()?t:fb; if(!u)return; auto vk=std::dynamic_pointer_cast<VulkanTexture2D>(u); if(!vk||!vk->GetImageView()||!vk->GetSampler())return;
+                        im[wc].sampler=vk->GetSampler();im[wc].imageView=vk->GetImageView();im[wc].imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                        w[wc].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;w[wc].dstSet=s_PbrVk.set1[fi];w[wc].dstBinding=(uint32_t)b;w[wc].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;w[wc].descriptorCount=1;w[wc].pImageInfo=&im[wc]; wc++;
+                    };
+                    addT(0,getTex(0),s_PbrBlackTex);addT(1,getTex(1),s_PbrBlackTex);addT(2,getTex(2),s_PbrBlackTex);addT(3,getTex(3),s_PbrBlackTex);addT(4,getTex(4),s_PbrBlackTex);
+                    if(wc)vkUpdateDescriptorSets(vkCtx->GetDevice(),wc,w,0,nullptr);
+                }
+            }
+            if(!usePBR){
+                wm.ModelMatrix=modelMat;
+                wm.Albedo=glm::vec4(0.6f,0.6f,0.6f,1.0f);
+            }
+        }else{
+            auto mat=AssetManager::GetAsset<Material>(r.handle); if(!mat){s_ThumbQueue.erase(s_ThumbQueue.begin());return;}
+            if(!s_SphereModel){auto sm=Mesh::CreateSphere(0.5f,64,64);s_SphereModel=std::make_shared<Model>(sm);}
+            AutoFrameCamera(s_SphereModel,glm::vec2(0.3f,-0.6f),glm::radians(45.0f)); mdl=s_SphereModel;
+            if(s_PbrVk.initialized){usePBR=true;
+                pbr.ModelMatrix=glm::translate(glm::mat4(1.0f),-ComputeModelCenter(s_SphereModel))
+                              * s_SphereModel->GetRootNode().LocalTransform;
+                pbr.Albedo=glm::vec4(0.6f,0.6f,0.6f,1.0f); pbr.Roughness=0.5f; pbr.AO=1.0f; pbr.Alpha=1.0f; pbr.AlphaCutoff=0.5f;
+                mat->BakeProperties(); auto&bpc=mat->GetBakedPC();
+                for(auto&p:mat->Properties){if(p.UniformName=="u_Albedo"&&p.Type==MaterialPropertyType::Vec3)pbr.Albedo=glm::vec4(p.Vec3Value,1.0f); else if(p.UniformName=="u_Metallic"&&p.Type==MaterialPropertyType::Float)pbr.Metallic=p.FloatValue; else if(p.UniformName=="u_Roughness"&&p.Type==MaterialPropertyType::Float)pbr.Roughness=p.FloatValue; else if(p.UniformName=="u_AO"&&p.Type==MaterialPropertyType::Float)pbr.AO=p.FloatValue; else if(p.UniformName=="u_Alpha"&&p.Type==MaterialPropertyType::Float)pbr.Alpha=p.FloatValue; else if(p.UniformName=="u_AlphaCutoff"&&p.Type==MaterialPropertyType::Float)pbr.AlphaCutoff=p.FloatValue; else if(p.UniformName=="u_BlendMode"&&p.Type==MaterialPropertyType::Int)pbr.BlendMode=p.IntValue;}
+                pbr.UseAlbedoMap=bpc.UseAlbedoMap?1:0; pbr.UseNormalMap=bpc.UseNormalMap?1:0; pbr.UseORMMap=bpc.UseORMMap?1:0; pbr.UseMetallicMap=bpc.UseMetallicMap?1:0; pbr.UseRoughnessMap=bpc.UseRoughnessMap?1:0; pbr.UseAOMap=bpc.UseAOMap?1:0;
+                // Update Set 1 from material (triple-buffered copy)
+                auto getTex=[&](int sl){return(sl>=0&&sl<6)?bpc.Textures[sl]:nullptr;};
+                VkWriteDescriptorSet w[5]{}; VkDescriptorImageInfo im[5]{}; int wc=0;
+                auto addT=[&](int b,std::shared_ptr<Texture2D> t,std::shared_ptr<Texture2D> fb){
+                    auto u=t&&t->GetRendererID()?t:fb; if(!u)return; auto vk=std::dynamic_pointer_cast<VulkanTexture2D>(u); if(!vk||!vk->GetImageView()||!vk->GetSampler())return;
+                    im[wc].sampler=vk->GetSampler();im[wc].imageView=vk->GetImageView();im[wc].imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    w[wc].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;w[wc].dstSet=s_PbrVk.set1[fi];w[wc].dstBinding=(uint32_t)b;w[wc].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;w[wc].descriptorCount=1;w[wc].pImageInfo=&im[wc]; wc++;
+                };
+                addT(0,getTex(0),s_PbrBlackTex);addT(1,getTex(1),s_PbrBlackTex);addT(2,getTex(2),s_PbrBlackTex);addT(3,getTex(3),s_PbrBlackTex);addT(4,getTex(4),s_PbrBlackTex);
+                if(wc)vkUpdateDescriptorSets(vkCtx->GetDevice(),wc,w,0,nullptr);
+            }else{
+                wm.ModelMatrix=glm::translate(glm::mat4(1.0f),-ComputeModelCenter(s_SphereModel))
+                             * s_SphereModel->GetRootNode().LocalTransform;
+                wm.Albedo=glm::vec4(0.6f,0.6f,0.6f,1.0f);
+                for(auto&p:mat->Properties)if(p.UniformName=="u_Albedo"&&p.Type==MaterialPropertyType::Vec3)wm.Albedo=glm::vec4(p.Vec3Value,1.0f);
+            }
+        }
+        wm.LightDir=glm::vec4(0.5f,1.0f,0.8f,0.0f);wm.LightColor=glm::vec4(1.0f,0.98f,0.95f,1.0f);wm.Ambient=glm::vec4(0.15f,0.15f,0.17f,1.0f);
+        PreviewCameraUBO cam; cam.ViewProjection=s_ProjMatrix*s_ViewMatrix; cam.CameraPosition=s_CameraPos;
+        if(usePBR)memcpy(s_PbrVk.mappedData,&cam,sizeof(cam)); else memcpy(s_ThumbnailVk.mappedData,&cam,sizeof(cam));
+
+        // Create per-thumbnail texture. Texture2D::Create just allocates VkImage —
+        // no EndSingleTimeCommands, safe to call during frame recording.
+        auto dstTex=Texture2D::Create(kPreviewSize,kPreviewSize);
+        auto vkDst=std::dynamic_pointer_cast<VulkanTexture2D>(dstTex);
+        // Viewport Y-flip already produces upright image; tell ImGui not to flip UVs again
+        if(vkDst) vkDst->SetDataFlipped(false);
+        if(!vkDst||!vkDst->GetImageView()||!vkDst->GetImage()){s_ThumbQueue.erase(s_ThumbQueue.begin());return;}
+        VkImage dstImg=vkDst->GetImage();
+
+        // Transition destination to TRANSFER_DST
+        {
+            VkImageMemoryBarrier b{};
+            b.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            b.oldLayout=VK_IMAGE_LAYOUT_UNDEFINED;
+            b.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            b.srcAccessMask=0; b.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+            b.image=dstImg; b.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+            vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,1,&b);
+        }
+
+        // Render into appropriate FBO (PBR=1-sample, white-model=4-sample MSAA)
+        {
+            auto renderFbo = usePBR ? s_PreviewFBO : s_PreviewFBO_MSAA;
+            auto vkRenderFbo = std::dynamic_pointer_cast<VulkanFramebuffer>(renderFbo);
+            if(!vkRenderFbo){s_ThumbQueue.erase(s_ThumbQueue.begin());return;}
+            VkImage renderImg=vkRenderFbo->GetColorAttachmentImage(0);
+
+            // Transition render target to COLOR_ATTACHMENT
+            VkImageMemoryBarrier rb{};
+            rb.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            rb.oldLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            rb.newLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            rb.srcAccessMask=VK_ACCESS_SHADER_READ_BIT; rb.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            rb.image=renderImg; rb.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+            vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,0,0,nullptr,0,nullptr,1,&rb);
+
+            VkRenderingAttachmentInfo ca{}; ca.sType=VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            ca.imageView=vkRenderFbo->GetColorAttachmentImageView(0); ca.imageLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            ca.loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR; ca.storeOp=VK_ATTACHMENT_STORE_OP_STORE;
+            ca.clearValue.color={{0.11f,0.11f,0.12f,1.0f}};
+            VkRenderingInfo ri{VK_STRUCTURE_TYPE_RENDERING_INFO,nullptr,0,{{0,0},{kPreviewSize,kPreviewSize}},1,0,1,&ca,nullptr};
+            vkCmdBeginRendering(cb,&ri);
+            VkViewport vp{0,(float)kPreviewSize,(float)kPreviewSize,-(float)kPreviewSize,0,1}; vkCmdSetViewport(cb,0,1,&vp);
+            VkRect2D sc{{0,0},{kPreviewSize,kPreviewSize}}; vkCmdSetScissor(cb,0,1,&sc);
+
+            if(usePBR){
+                vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,s_PbrVk.pipeline);
+                VkDescriptorSet ssets[2]={s_PbrVk.set0,s_PbrVk.set1[fi]}; vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,s_PbrVk.pipelineLayout,0,2,ssets,0,nullptr);
+                for(auto&m:mdl->GetMeshes()){if(!m->GetIndexCount())continue; vkCmdPushConstants(cb,s_PbrVk.pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(PBRPush),&pbr);
+                    auto vB=std::dynamic_pointer_cast<VulkanVertexBuffer>(m->GetVertexBuffer());auto vI=std::dynamic_pointer_cast<VulkanIndexBuffer>(m->GetIndexBuffer());
+                    if(vB&&vI){VkBuffer vbs[]={vB->GetVulkanBuffer()};VkDeviceSize off[]={0};vkCmdBindVertexBuffers(cb,0,1,vbs,off);vkCmdBindIndexBuffer(cb,vI->GetVulkanBuffer(),0,VK_INDEX_TYPE_UINT32);vkCmdDrawIndexed(cb,m->GetIndexCount(),1,0,0,0);}
+                }
+            }else{
+                vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,vkPipe->GetVulkanPipeline());
+                vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,vkPipe->GetVulkanPipelineLayout(),0,1,&s_ThumbnailVk.descriptorSet,0,nullptr);
+                for(auto&m:mdl->GetMeshes()){if(!m->GetIndexCount())continue; vkCmdPushConstants(cb,vkPipe->GetVulkanPipelineLayout(),VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(PreviewPushConstants),&wm);
+                    auto vB=std::dynamic_pointer_cast<VulkanVertexBuffer>(m->GetVertexBuffer());auto vI=std::dynamic_pointer_cast<VulkanIndexBuffer>(m->GetIndexBuffer());
+                    if(vB&&vI){VkBuffer vbs[]={vB->GetVulkanBuffer()};VkDeviceSize off[]={0};vkCmdBindVertexBuffers(cb,0,1,vbs,off);vkCmdBindIndexBuffer(cb,vI->GetVulkanBuffer(),0,VK_INDEX_TYPE_UINT32);vkCmdDrawIndexed(cb,m->GetIndexCount(),1,0,0,0);}
+                }
+            }
+            vkCmdEndRendering(cb);
+
+            // If rendered to MSAA FBO, resolve to non-MSAA FBO for copy
+            if(!usePBR){
+                auto vkMSAA = vkRenderFbo;
+                auto vkResolve = std::dynamic_pointer_cast<VulkanFramebuffer>(s_PreviewFBO);
+                VkImage msaaImg=vkMSAA->GetColorAttachmentImage(0), resImg=vkResolve->GetColorAttachmentImage(0);
+
+                VkImageMemoryBarrier pre[2]{};
+                pre[0].sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER; pre[0].oldLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; pre[0].newLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                pre[0].srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT; pre[0].dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+                pre[0].image=msaaImg; pre[0].subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+                pre[1].sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER; pre[1].oldLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; pre[1].newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                pre[1].srcAccessMask=VK_ACCESS_SHADER_READ_BIT; pre[1].dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+                pre[1].image=resImg; pre[1].subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+                vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,2,pre);
+                VkImageResolve res{}; res.srcSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1}; res.dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1}; res.extent={kPreviewSize,kPreviewSize,1};
+                vkCmdResolveImage(cb,msaaImg,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,resImg,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&res);
+                VkImageMemoryBarrier post[2]{};
+                post[0].sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER; post[0].oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL; post[0].newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                post[0].srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT; post[0].dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
+                post[0].image=msaaImg; post[0].subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+                post[1].sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER; post[1].oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL; post[1].newLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                post[1].srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT; post[1].dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+                post[1].image=resImg; post[1].subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+                vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,2,post);
+            }
+        }
+
+        // Copy rendered result to destination texture + transition both back
+        {
+            auto vkSrcFbo=std::dynamic_pointer_cast<VulkanFramebuffer>(s_PreviewFBO);
+            VkImage srcImg=vkSrcFbo->GetColorAttachmentImage(0);
+
+            // src may be COLOR_ATTACHMENT (PBR) or TRANSFER_SRC (white-model after resolve)
+            VkImageLayout srcLayout = usePBR ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            VkAccessFlags srcAccess = usePBR ? VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT : VK_ACCESS_TRANSFER_READ_BIT;
+            VkPipelineStageFlags srcStage = usePBR ? VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT : VK_PIPELINE_STAGE_TRANSFER_BIT;
+
+            if (usePBR) {
+                VkImageMemoryBarrier b{};
+                b.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                b.oldLayout=srcLayout; b.newLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                b.srcAccessMask=srcAccess; b.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+                b.image=srcImg; b.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+                vkCmdPipelineBarrier(cb,srcStage,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,1,&b);
+                srcLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            }
+
+            VkImageCopy region{};
+            region.srcSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};
+            region.dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};
+            region.extent={kPreviewSize,kPreviewSize,1};
+            vkCmdCopyImage(cb,srcImg,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,dstImg,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&region);
+
+            VkImageMemoryBarrier post[2]{}; uint32_t n=0;
+            // src: back to SHADER_READ_ONLY
+            post[n].sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            post[n].oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            post[n].newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            post[n].srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+            post[n].dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
+            post[n].image=srcImg;
+            post[n].subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}; n++;
+            // dst: TRANSFER_DST → SHADER_READ_ONLY
+            post[n].sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            post[n].oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            post[n].newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            post[n].srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+            post[n].dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
+            post[n].image=dstImg;
+            post[n].subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}; n++;
+            vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,n,post);
+        }
+
+        s_ThumbCache[r.handle]=dstTex;
+        s_ThumbQueue.erase(s_ThumbQueue.begin());
+    }
+
+    std::shared_ptr<Texture2D> AssetPreviewer::GetCachedThumbnail(UUID handle) {
+        auto it=s_ThumbCache.find(handle);
+        return it!=s_ThumbCache.end()?it->second:nullptr;
+    }
+
+    void AssetPreviewer::InvalidateThumbnail(UUID handle) {
+        s_ThumbCache.erase(handle);
     }
 
 }

@@ -55,6 +55,20 @@ namespace Ayaya {
         AssetPreviewer::Init();
         m_FrameDebuggerPanel.SetContext(m_GameRenderer);
 
+        // Pre-frame material pre-bake: ensures textures are GPU-resident before
+        // BeginFrame, preventing SetData→EndSingleTimeCommands during CB recording.
+        Application::SetPreFrameCallback([this]() {
+            if (!m_ActiveScene) return;
+            auto view = m_ActiveScene->Reg().view<MeshRendererComponent>();
+            for (auto e : view) {
+                auto& mrc = view.get<MeshRendererComponent>(e);
+                if (mrc.MaterialHandle) {
+                    auto mat = AssetManager::GetAsset<Material>(mrc.MaterialHandle);
+                    if (mat) { mat->BakeProperties(); }
+                }
+            }
+        });
+
         InitDefaultProject();
 
         // 清理临时文件
@@ -84,6 +98,9 @@ namespace Ayaya {
 
         // Asset hot-reload: process pending file changes
         m_AssetWatcher.Update();
+
+        // GPU-resident thumbnail generation: one per frame, zero CPU blocking
+        AssetPreviewer::ProcessOneThumbnail();
 
         // OS file drag-drop: open import modal for model files dropped onto the window
         {
@@ -922,6 +939,10 @@ namespace Ayaya {
     }
 
     bool EditorLayer::OpenProject(const std::filesystem::path& path) {
+        if (path.extension() != ".ayaproj" && path.extension() != ".ayaproject") {
+            AYAYA_CORE_ERROR("Not a valid Ayaya project file: {0}", path.string());
+            return false;
+        }
         if (std::filesystem::exists(path)) {
             LoadProjectWithProgress(path.string());
             return true;
