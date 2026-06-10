@@ -732,6 +732,31 @@ namespace Ayaya {
         }
     }
 
+    void EditorLayer::OpenSceneFile(const std::filesystem::path& filepath) {
+        if (filepath.empty() || !std::filesystem::exists(filepath)) return;
+
+        if (m_SceneState == SceneState::Play) OnSceneStop();
+        m_FrameDebuggerPanel.Reset();
+
+        std::shared_ptr<Scene> newScene = std::make_shared<Scene>();
+        SceneSerializer serializer(newScene);
+        EditorState editorState;
+        if (serializer.Deserialize(filepath.string(), editorState)) {
+            m_ActiveScene = newScene;
+            m_EditorScene = m_ActiveScene;
+            m_CurrentScenePath = filepath.string();
+            m_SceneHierarchyPanel.SetContext(m_ActiveScene);
+            m_HoveredEntity = {};
+            m_SceneHierarchyPanel.SetSelectedEntity({});
+            m_CommandHistory.Clear();
+
+            auto activeHandles = m_ActiveScene->GetActiveAssetHandles();
+            AssetManager::UnloadUnusedAssets(activeHandles);
+
+            AYAYA_CORE_INFO("Scene opened from ContentBrowser: {0}", filepath.string());
+        }
+    }
+
     // =====================================================================
     // 项目管理系统 (Project Management)
     // =====================================================================

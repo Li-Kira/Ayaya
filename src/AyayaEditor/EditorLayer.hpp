@@ -50,6 +50,11 @@ namespace Ayaya {
         CommandHistory& GetCommandHistory() { return m_CommandHistory; }
         SceneHierarchyPanel& GetSceneHierarchyPanel() { return m_SceneHierarchyPanel; }
 
+        // Public file operations for ContentBrowser integration
+        void OpenSceneFile(const std::filesystem::path& filepath);
+        AssetWatcher& GetAssetWatcher() { return m_AssetWatcher; }
+        ImportModelPanel& GetImportModelPanel() { return m_ImportModelPanel; }
+
     private:
         void SetupScene();
         void InitDefaultProject();

@@ -1,5 +1,6 @@
 uuid: 409720215039591649
 type: 2
+virtual_path: project://Textures/backpack/diffuse.jpg
 import_settings:
   filter: 0
   wrap: 0

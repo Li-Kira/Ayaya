@@ -215,6 +215,8 @@ namespace Ayaya {
         CopyComponentIfExists<Rigidbody2DComponent>(newEntity, entity);
         CopyComponentIfExists<BoxCollider2DComponent>(newEntity, entity);
         CopyComponentIfExists<LuaScriptComponent>(newEntity, entity);
+        CopyComponentIfExists<PostProcessVolumeComponent>(newEntity, entity);
+        CopyComponentIfExists<EnvironmentComponent>(newEntity, entity);
 
         // =========================================================
         // 【核心修复】：必须预先拷贝被复制物体的父节点和子节点数组！
@@ -453,6 +455,22 @@ namespace Ayaya {
                 for (const auto& prop : mat->Properties) {
                     if (prop.TextureHandle) handles.insert(prop.TextureHandle);
                 }
+            }
+        }
+
+        // 6. SubMesh → include parent Model UUID so parent is not GC'd
+        {
+            std::vector<UUID> subMeshHandles;
+            for (UUID h : handles) {
+                auto it = registry.find(h);
+                if (it != registry.end() && it->second.Type == AssetType::SubMesh
+                    && it->second.ParentHandle != 0)
+                    subMeshHandles.push_back(h);
+            }
+            for (UUID smHandle : subMeshHandles) {
+                auto it = registry.find(smHandle);
+                if (it != registry.end())
+                    handles.insert(it->second.ParentHandle);
             }
         }
 

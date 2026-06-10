@@ -1,5 +1,6 @@
 uuid: 13731058858046846449
 type: 2
+virtual_path: project://Textures/backpack/normal.png
 import_settings:
   filter: 0
   wrap: 0

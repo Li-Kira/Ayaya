@@ -1,2 +1,18 @@
 uuid: 12279238825151638930
 type: 4
+virtual_path: project://Models/backpack/backpack.obj
+model_settings:
+  global_scale: 1
+  normals: 0
+  tangents: 0
+  import_materials: true
+  optimize_mesh: true
+  weld_vertices: false
+  mesh_compression: false
+  swap_yz: false
+  material_search_rule: 0
+  import_animations: false
+  merge_meshes: false
+  combine_into_prefab: true
+sub_assets:
+  []

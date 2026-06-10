@@ -1,5 +1,6 @@
 uuid: 9474477140366850679
 type: 2
+virtual_path: project://Textures/backpack/ao.jpg
 import_settings:
   filter: 0
   wrap: 0

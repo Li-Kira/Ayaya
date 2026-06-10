@@ -1,5 +1,6 @@
 uuid: 9269055279227325805
 type: 2
+virtual_path: project://Textures/backpack/specular.jpg
 import_settings:
   filter: 0
   wrap: 0

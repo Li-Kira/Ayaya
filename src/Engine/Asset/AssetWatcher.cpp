@@ -43,7 +43,7 @@ namespace Ayaya {
     }
 
     void AssetWatcher::OnFileEvent(const FileEvent& event) {
-        if (!m_Enabled) return;
+        if (!m_Enabled || m_Paused) return;
         auto pathStr = event.Path.string();
 
         if (pathStr.find(".meta") != std::string::npos) return;
@@ -114,7 +114,7 @@ namespace Ayaya {
     }
 
     void AssetWatcher::Update() {
-        if (!m_Enabled) return;
+        if (!m_Enabled || m_Paused) return;
         ProcessPendingReloads();
     }
 

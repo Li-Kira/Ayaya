@@ -174,6 +174,30 @@ namespace Ayaya {
             return {};
         }
 
+        // ==========================================
+        // File system mutation APIs (ContentBrowser)
+        // ==========================================
+
+        // Move source file + .meta into <ProjectDir>/.Trash/
+        static bool DeleteAsset(UUID handle);
+
+        // Rename source file + .meta on disk, update VirtualPath in registry
+        static bool RenameAsset(UUID handle, const std::string& newName);
+
+        // Move source file + .meta to a new directory
+        static bool MoveAsset(UUID handle, const std::filesystem::path& destDir);
+
+        // Create an empty .ayaya scene file with default entities, .meta, and registry entry
+        static bool CreateSceneAsset(const std::filesystem::path& destDir,
+                                     const std::string& sceneName);
+
+        // Create a physical folder (no UUID, no .meta)
+        static bool CreateFolder(const std::filesystem::path& parentDir,
+                                 const std::string& folderName);
+
+        // Remove from registry & memory (no disk changes) — used when .meta is deleted externally
+        static void UnregisterAsset(UUID handle);
+
     private:
         // 内部专用：真正执行硬盘读取的函数，返回擦除了类型的 void 指针
         static std::shared_ptr<void> LoadAssetFromFile(UUID handle);

@@ -2887,6 +2887,86 @@ namespace Ayaya {
                 ImGui::SetCursorPos(cursor);
                 ImGui::TextDisabled("Loading...");
             }
+        } else if (meta.Type == AssetType::Material) {
+            auto mat = AssetManager::GetAsset<Material>(m_SelectedAsset);
+            if (!mat) {
+                ImGui::TextDisabled("Material not loaded");
+            } else {
+                float uiScale = ImGui::GetIO().FontGlobalScale;
+                ImGui::Text("Shader: %s", mat->ShaderName.c_str());
+                const char* blendNames[] = { "Opaque", "Masked", "Translucent" };
+                int blendIdx = (int)mat->GetBlendMode();
+                ImGui::Text("Blend: %s", blendIdx < 3 ? blendNames[blendIdx] : "Unknown");
+                if (mat->GetBlendMode() == MaterialBlendMode::Masked)
+                    ImGui::Text("Alpha Cutoff: %.2f", mat->GetAlphaCutoff());
+                ImGui::Separator();
+
+                // Group properties by category
+                std::string currentCategory;
+                auto beginCategory = [&](const std::string& cat) {
+                    if (currentCategory != cat) {
+                        currentCategory = cat;
+                        ImGui::Spacing();
+                        ImGui::TextColored(ImVec4(0.5f, 0.7f, 1.0f, 1.0f), "%s", cat.c_str());
+                    }
+                };
+                auto categorize = [](const std::string& name) -> std::string {
+                    if (name.find("Albedo") != std::string::npos) return "Albedo";
+                    if (name.find("Normal") != std::string::npos) return "Normal";
+                    if (name.find("ORM") != std::string::npos) return "ORM (Packed)";
+                    if (name.find("Metallic") != std::string::npos) return "Metallic";
+                    if (name.find("Roughness") != std::string::npos) return "Roughness";
+                    if (name.find("AO") != std::string::npos || name.find("Ambient") != std::string::npos) return "AO";
+                    if (name.find("Height") != std::string::npos || name.find("Displace") != std::string::npos) return "Height";
+                    if (name.find("Emissive") != std::string::npos || name.find("Emission") != std::string::npos) return "Emissive";
+                    if (name.find("Alpha") != std::string::npos || name.find("Opacity") != std::string::npos) return "Alpha / Opacity";
+                    return "Other";
+                };
+
+                currentCategory.clear();
+                for (auto& prop : mat->Properties) {
+                    beginCategory(categorize(prop.UniformName));
+
+                    ImGui::PushID(prop.UniformName.c_str());
+                    std::string label = prop.DisplayName.empty() ? prop.UniformName : prop.DisplayName;
+                    switch (prop.Type) {
+                    case MaterialPropertyType::Texture2D: {
+                        auto tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
+                        if (tex) {
+                            ImVec2 uv0(0, 0), uv1(1, 1);
+                            if (tex->IsDataFlipped()) { uv0.y = 1; uv1.y = 0; }
+                            float s = 48.0f * uiScale;
+                            ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), {s, s}, uv0, uv1);
+                            ImGui::SameLine();
+                            ImGui::Text("%s", label.c_str());
+                            ImGui::SameLine();
+                            ImGui::TextDisabled("(Texture)");
+                        } else {
+                            ImGui::Text("%s: (not loaded)", label.c_str());
+                        }
+                        break;
+                    }
+                    case MaterialPropertyType::Float:
+                        ImGui::Text("%s: %.3f", label.c_str(), prop.FloatValue);
+                        break;
+                    case MaterialPropertyType::Bool:
+                        ImGui::Text("%s: %s", label.c_str(), prop.BoolValue ? "On" : "Off");
+                        break;
+                    case MaterialPropertyType::Vec3:
+                        ImGui::Text("%s: (%.2f, %.2f, %.2f)", label.c_str(),
+                                    prop.Vec3Value.x, prop.Vec3Value.y, prop.Vec3Value.z);
+                        break;
+                    case MaterialPropertyType::Vec4:
+                        ImGui::Text("%s: (%.2f, %.2f, %.2f, %.2f)", label.c_str(),
+                                    prop.Vec4Value.x, prop.Vec4Value.y, prop.Vec4Value.z, prop.Vec4Value.w);
+                        break;
+                    default:
+                        ImGui::Text("%s", label.c_str());
+                        break;
+                    }
+                    ImGui::PopID();
+                }
+            }
         } else {
             ImGui::TextDisabled("No import settings available for this asset type");
         }

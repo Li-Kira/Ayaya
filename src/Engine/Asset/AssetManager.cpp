@@ -41,6 +41,13 @@ namespace Ayaya {
 
     void AssetManager::Shutdown() {
         Clear();
+        // Clean up .Trash folder on exit
+        auto trashDir = Project::GetProjectDirectory() / ".Trash";
+        if (std::filesystem::exists(trashDir)) {
+            std::error_code ec;
+            std::filesystem::remove_all(trashDir, ec);
+            if (!ec) AYAYA_CORE_INFO("AssetManager: Cleaned up .Trash/");
+        }
         AYAYA_CORE_INFO("AssetManager Shutdown.");
     }
 
@@ -121,13 +128,22 @@ namespace Ayaya {
     bool AssetManager::WriteMetaFile(const std::filesystem::path& assetPhysicalPath, UUID handle, AssetType type, const TextureImportSettings& settings) {
         std::filesystem::path metaPath = assetPhysicalPath.string() + ".meta";
         try {
+            std::string virtualPath = VFS::GetVirtualPath(assetPhysicalPath);
+
             YAML::Emitter out;
             out << YAML::BeginMap;
             out << YAML::Key << "uuid" << YAML::Value << static_cast<uint64_t>(handle);
             out << YAML::Key << "type" << YAML::Value << static_cast<int>(type);
-            SerializeTextureSettings(out, settings);
-            if (type == AssetType::Model && s_Registry.count(handle))
-                SerializeModelSettings(out, s_Registry[handle].ModelSettings);
+            out << YAML::Key << "virtual_path" << YAML::Value << virtualPath;
+
+            // Type-specific import settings
+            if (type == AssetType::Texture2D)
+                SerializeTextureSettings(out, settings);
+            else if (type == AssetType::Model) {
+                SerializeModelSettings(out, s_Registry.count(handle)
+                    ? s_Registry[handle].ModelSettings : ModelImportSettings{});
+            }
+
             out << YAML::EndMap;
 
             std::ofstream fout(metaPath);
@@ -166,9 +182,8 @@ namespace Ayaya {
             // Parse SubAssets for Model-type assets
             if (outType == AssetType::Model && data["sub_assets"]) {
                 for (auto subNode : data["sub_assets"]) {
-                    if (subNode["uuid"] && subNode["name"] && subNode["sub_mesh_index"].as<int>() >= 0) {
+                    if (subNode["uuid"] && subNode["sub_mesh_index"].IsDefined()) {
                         UUID subHandle(subNode["uuid"].as<uint64_t>());
-                        std::string subName = subNode["name"].as<std::string>();
                         int subIdx = subNode["sub_mesh_index"].as<int>();
                         if (!s_Registry.count(subHandle)) {
                             AssetMetadata subMeta;
@@ -203,7 +218,7 @@ namespace Ayaya {
                ext == ".bmp"  || ext == ".hdr" ||
                ext == ".obj"  || ext == ".fbx" || ext == ".gltf" || ext == ".glb" ||
                ext == ".mat"  || ext == ".lua" || ext == ".cube" ||
-               ext == ".prefab";
+               ext == ".prefab" || ext == ".ayaya";
     }
 
     void AssetManager::RefreshRegistry() {
@@ -217,6 +232,7 @@ namespace Ayaya {
                     if (entry.is_directory()) continue;
                     if (entry.path().extension() == ".meta") continue;
                     if (!IsSupportedAssetFile(entry.path())) continue;
+                    if (entry.path().string().find("/.Trash/") != std::string::npos) continue;
 
                     // 跳过已有 .meta 的文件
                     if (std::filesystem::exists(entry.path().string() + ".meta")) continue;
@@ -233,6 +249,7 @@ namespace Ayaya {
         if (std::filesystem::exists(assetDir)) {
             try {
                 for (auto& entry : std::filesystem::recursive_directory_iterator(assetDir)) {
+                    if (entry.path().string().find("/.Trash/") != std::string::npos) continue;
                     if (entry.path().extension() == ".meta") {
                         std::string metaPath = entry.path().string();
                         std::string sourcePath = metaPath.substr(0, metaPath.size() - 5);
@@ -253,6 +270,15 @@ namespace Ayaya {
 
                         std::string vPath = VFS::GetVirtualPath(sourcePath);
                         s_Registry[handle] = { type, vPath, texSettings, modelSettings };
+
+                        // Backfill .meta: rewrite if missing virtual_path (old-format .meta)
+                        {
+                            try {
+                                YAML::Node data = YAML::LoadFile(metaPath);
+                                if (!data["virtual_path"])
+                                    RewriteMetaFile(handle);
+                            } catch (...) {}
+                        }
 
                         if (type == AssetType::Texture2D) {
                             RequestAsyncLoad(handle);
@@ -390,7 +416,15 @@ namespace Ayaya {
         }
 
         for (UUID handle : toErase) {
-            s_Assets.erase(handle);
+            // Deferred release: keep GPU resources alive for 3 frames
+            auto it = s_Assets.find(handle);
+            if (it != s_Assets.end()) {
+                DeferredRelease dr;
+                dr.Asset = it->second;
+                dr.FramesRemaining = 3;
+                s_DeferredReleases.push_back(std::move(dr));
+                s_Assets.erase(it);
+            }
             AYAYA_CORE_INFO("GC: Unloaded unused asset {0}", (uint64_t)handle);
         }
 
@@ -408,16 +442,40 @@ namespace Ayaya {
             out << YAML::BeginMap;
             out << YAML::Key << "uuid" << YAML::Value << static_cast<uint64_t>(handle);
             out << YAML::Key << "type" << YAML::Value << static_cast<int>(meta.Type);
+            out << YAML::Key << "virtual_path" << YAML::Value << meta.VirtualPath;
+
             if (meta.Type == AssetType::Texture2D)
                 SerializeTextureSettings(out, meta.TextureSettings);
-            if (meta.Type == AssetType::Model)
+            else if (meta.Type == AssetType::Model)
                 SerializeModelSettings(out, meta.ModelSettings);
+
+            // Re-serialize sub_assets for Model types — preserve SubMesh UUIDs
+            if (meta.Type == AssetType::Model) {
+                out << YAML::Key << "sub_assets" << YAML::Value << YAML::BeginSeq;
+                for (const auto& [subHandle, subMeta] : s_Registry) {
+                    if (subMeta.Type == AssetType::SubMesh && subMeta.ParentHandle == handle) {
+                        out << YAML::BeginMap;
+                        out << YAML::Key << "uuid" << YAML::Value << static_cast<uint64_t>(subHandle);
+                        out << YAML::Key << "sub_mesh_index" << YAML::Value << subMeta.SubMeshIndex;
+                        out << YAML::Key << "type" << YAML::Value << static_cast<int>(AssetType::SubMesh);
+                        out << YAML::EndMap;
+                    }
+                }
+                out << YAML::EndSeq;
+            }
+
             out << YAML::EndMap;
 
             std::ofstream fout(metaPath);
+            if (!fout.is_open()) {
+                AYAYA_CORE_ERROR("AssetManager: Failed to rewrite .meta: {0}", metaPath.string());
+                return;
+            }
             fout << out.c_str();
             fout.close();
-        } catch (...) {}
+        } catch (const std::exception& e) {
+            AYAYA_CORE_ERROR("AssetManager: Exception rewriting .meta {0}: {1}", metaPath.string(), e.what());
+        }
     }
 
     // =====================================================================
@@ -613,36 +671,49 @@ namespace Ayaya {
                 transform.Rotation = glm::eulerAngles(rotation);
                 transform.Scale = scale;
 
-                // Hierarchy
+                // Hierarchy — use SetParent to properly manage m_RootEntities
                 if (parent) {
-                    auto& rel = entity.HasComponent<RelationshipComponent>()
-                        ? entity.GetComponent<RelationshipComponent>()
-                        : entity.AddComponent<RelationshipComponent>();
-                    rel.Parent = parent.GetEntityHandle();
-
-                    auto& pRel = parent.HasComponent<RelationshipComponent>()
-                        ? parent.GetComponent<RelationshipComponent>()
-                        : parent.AddComponent<RelationshipComponent>();
-                    pRel.Children.push_back(entity.GetEntityHandle());
+                    entity.SetParent(parent, false);
                 }
 
-                // Mesh renderer — reference the correct SubAsset UUID (or parent for merged)
+                // Mesh renderer — reference the correct SubAsset UUID (or parent for merged).
+                // Mirror InstantiateModelNode behavior: single mesh → attach to node entity;
+                // multiple meshes → create sub-entities (one per mesh).
                 if (!node.Meshes.empty()) {
-                    auto& mrc = entity.AddComponent<MeshRendererComponent>();
-                    // Use SubMesh UUID if available, otherwise parent ModelHandle (merged)
-                    mrc.ModelHandle = (globalMeshIdx < (int)result.SubMeshes.size())
-                        ? result.SubMeshes[globalMeshIdx].Handle
-                        : result.ModelHandle;
-                    // Match mesh's Assimp material index to the deduplicated material entry
-                    int meshMatIdx = node.Meshes[0]->GetMaterialIndex();
-                    UUID matHandle = UUID(16140901000000000004ull); // built-in DefaultPBR
-                    for (auto& mat : result.Materials) {
-                        if (mat.AssimpMaterialIndex == meshMatIdx) {
-                            matHandle = mat.Handle; break;
+                    // Helper: assign ModelHandle + MaterialHandle for one mesh
+                    auto assignMeshRenderer = [&](MeshRendererComponent& mrc, int localMeshIdx) {
+                        mrc.ModelHandle = (globalMeshIdx < (int)result.SubMeshes.size())
+                            ? result.SubMeshes[globalMeshIdx].Handle
+                            : result.ModelHandle;
+                        int meshMatIdx = node.Meshes[localMeshIdx]->GetMaterialIndex();
+                        UUID matHandle = UUID(16140901000000000004ull); // built-in DefaultPBR
+                        for (auto& mat : result.Materials) {
+                            if (mat.AssimpMaterialIndex == meshMatIdx) {
+                                matHandle = mat.Handle; break;
+                            }
+                        }
+                        mrc.MaterialHandle = matHandle;
+                        globalMeshIdx++;
+                    };
+
+                    if (node.Meshes.size() == 1) {
+                        // Single mesh: attach renderer directly to the node entity
+                        auto& mrc = entity.AddComponent<MeshRendererComponent>();
+                        assignMeshRenderer(mrc, 0);
+                    } else {
+                        // Multiple meshes: create one sub-entity per mesh, matching
+                        // InstantiateModelNode behavior (Scene.cpp lines 153-171).
+                        for (size_t i = 0; i < node.Meshes.size(); i++) {
+                            std::string subName = node.Name.empty()
+                                ? "SubMesh_" + std::to_string(i)
+                                : node.Name + "_SubMesh_" + std::to_string(i);
+                            Entity subEntity = prefabScene->CreateEntity(subName);
+                            subEntity.SetParent(entity, false);
+
+                            auto& mrc = subEntity.AddComponent<MeshRendererComponent>();
+                            assignMeshRenderer(mrc, (int)i);
                         }
                     }
-                    mrc.MaterialHandle = matHandle;
-                    globalMeshIdx++;
                 }
 
                 // Recurse into children
@@ -880,6 +951,8 @@ namespace Ayaya {
                              lower.find("_nor")      != std::string::npos ||
                              lower.find("metallic")  != std::string::npos ||
                              lower.find("metalness") != std::string::npos ||
+                             lower.find("specular")  != std::string::npos ||
+                             lower.find("_spec")     != std::string::npos ||
                              lower.find("roughness") != std::string::npos ||
                              lower.find("_orm")      != std::string::npos ||
                              lower.find("_arm")      != std::string::npos ||
@@ -985,6 +1058,7 @@ namespace Ayaya {
         else if (ext == ".prefab")                           type = AssetType::Prefab;
         else if (ext == ".lua")                              type = AssetType::LuaScript;
         else if (ext == ".cube")                             type = AssetType::TextureCube;
+        else if (ext == ".ayaya")                            type = AssetType::Scene;
 
         if (type == AssetType::None) {
             AYAYA_CORE_WARN("AssetManager: Unsupported asset format '{0}'", ext);
@@ -1052,6 +1126,8 @@ namespace Ayaya {
                     }
                 }
             }
+            // Cache SubMesh in s_Assets so repeated GetAsset calls don't reload parent
+            if (asset) s_Assets[handle] = asset;
             return asset;
         }
         else if (metadata.Type == AssetType::Model) {
@@ -1084,6 +1160,11 @@ namespace Ayaya {
         }
         else if (metadata.Type == AssetType::TextureCube) {
             asset = TextureCube::Create(physicalPath);
+        }
+        else if (metadata.Type == AssetType::Scene) {
+            // Scenes are not loaded as GPU/memory objects.
+            // They are deserialized directly by EditorLayer::OpenSceneFile().
+            return nullptr;
         }
 
         // LuaScript 类型的资源实际上不需要"加载到内存生成 C++ 对象"，
@@ -1388,6 +1469,258 @@ namespace Ayaya {
         auto it = s_ReverseDeps.find(handle);
         if (it != s_ReverseDeps.end()) return it->second;
         return empty;
+    }
+
+    // =====================================================================
+    // File system mutation APIs
+    // =====================================================================
+
+    bool AssetManager::DeleteAsset(UUID handle) {
+        auto it = s_Registry.find(handle);
+        if (it == s_Registry.end()) return false;
+
+        AssetType delType = it->second.Type;
+
+        // SubMesh assets share the parent Model's file — never move physical files
+        if (delType != AssetType::SubMesh) {
+            std::string physPath = VFS::ResolveString(it->second.VirtualPath);
+            std::filesystem::path srcPath(physPath);
+            std::filesystem::path metaPath(physPath + ".meta");
+
+            if (!std::filesystem::exists(srcPath)) {
+                if (std::filesystem::exists(metaPath))
+                    std::filesystem::remove(metaPath);
+            } else {
+                auto trashDir = Project::GetProjectDirectory() / ".Trash";
+                std::filesystem::create_directories(trashDir);
+
+                auto destPath = trashDir / srcPath.filename();
+                auto destMeta = trashDir / srcPath.filename().concat(".meta");
+
+                int counter = 1;
+                while (std::filesystem::exists(destPath)) {
+                    auto numbered = srcPath.stem().string() + "_" + std::to_string(++counter) + srcPath.extension().string();
+                    destPath = trashDir / numbered;
+                    destMeta = trashDir / (numbered + ".meta");
+                }
+
+                std::error_code ec;
+                std::filesystem::rename(srcPath, destPath, ec);
+                if (std::filesystem::exists(metaPath))
+                    std::filesystem::rename(metaPath, destMeta, ec);
+            }
+        }
+
+        // If deleting a Model, also clean up all SubMesh children
+        if (delType == AssetType::Model) {
+            std::vector<UUID> children;
+            for (auto& [subHandle, subMeta] : s_Registry)
+                if (subMeta.Type == AssetType::SubMesh && subMeta.ParentHandle == handle)
+                    children.push_back(subHandle);
+            for (UUID child : children) {
+                s_Registry.erase(child);
+                auto ca = s_Assets.find(child);
+                if (ca != s_Assets.end()) {
+                    DeferredRelease dr;
+                    dr.Asset = ca->second;
+                    dr.FramesRemaining = 3;
+                    s_DeferredReleases.push_back(std::move(dr));
+                    s_Assets.erase(ca);
+                }
+            }
+        }
+
+        // Remove from registry; defer GPU resource destruction
+        s_Registry.erase(it);
+        auto itAsset = s_Assets.find(handle);
+        if (itAsset != s_Assets.end()) {
+            DeferredRelease dr;
+            dr.Asset = itAsset->second;
+            dr.FramesRemaining = 3;
+            s_DeferredReleases.push_back(std::move(dr));
+            s_Assets.erase(itAsset);
+        }
+
+        AYAYA_CORE_INFO("AssetManager: Deleted asset ({0})", (uint64_t)handle);
+        return true;
+    }
+
+    bool AssetManager::RenameAsset(UUID handle, const std::string& newName) {
+        auto it = s_Registry.find(handle);
+        if (it == s_Registry.end()) return false;
+
+        std::string oldPhys = VFS::ResolveString(it->second.VirtualPath);
+        std::filesystem::path oldPath(oldPhys);
+        std::filesystem::path oldMeta(oldPhys + ".meta");
+
+        auto ext = oldPath.extension();
+        std::filesystem::path newPath = oldPath.parent_path() / (newName + ext.string());
+        std::filesystem::path newMeta = oldPath.parent_path() / (newName + ext.string() + ".meta");
+
+        if (std::filesystem::exists(newPath)) {
+            AYAYA_CORE_WARN("AssetManager: Rename failed — target exists: {0}", newPath.string());
+            return false;
+        }
+
+        std::error_code ec;
+        std::filesystem::rename(oldPath, newPath, ec);
+        if (ec) {
+            AYAYA_CORE_ERROR("AssetManager: Rename failed: {0}", ec.message());
+            return false;
+        }
+        if (std::filesystem::exists(oldMeta)) {
+            std::filesystem::rename(oldMeta, newMeta, ec);
+        }
+
+        // Update virtual path in registry
+        std::string newVPath = VFS::GetVirtualPath(newPath);
+        it->second.VirtualPath = newVPath;
+
+        // Sync SubMesh children's VirtualPath
+        for (auto& [subHandle, subMeta] : s_Registry) {
+            if (subMeta.Type == AssetType::SubMesh && subMeta.ParentHandle == handle)
+                subMeta.VirtualPath = newVPath;
+        }
+
+        // Rewrite .meta with new UUID→path binding
+        RewriteMetaFile(handle);
+
+        AYAYA_CORE_INFO("AssetManager: Renamed asset to {0}", newPath.filename().string());
+        return true;
+    }
+
+    bool AssetManager::MoveAsset(UUID handle, const std::filesystem::path& destDir) {
+        auto it = s_Registry.find(handle);
+        if (it == s_Registry.end()) return false;
+
+        std::string oldPhys = VFS::ResolveString(it->second.VirtualPath);
+        std::filesystem::path oldPath(oldPhys);
+        std::filesystem::path oldMeta(oldPhys + ".meta");
+
+        std::filesystem::path newPath = destDir / oldPath.filename();
+        std::filesystem::path newMeta = destDir / (oldPath.filename().string() + ".meta");
+
+        if (std::filesystem::equivalent(oldPath.parent_path(), destDir))
+            return true; // same directory, no-op
+
+        if (std::filesystem::exists(newPath)) {
+            AYAYA_CORE_WARN("AssetManager: Move failed — target exists: {0}", newPath.string());
+            return false;
+        }
+
+        std::filesystem::create_directories(destDir);
+        std::error_code ec;
+        std::filesystem::rename(oldPath, newPath, ec);
+        if (ec) {
+            AYAYA_CORE_ERROR("AssetManager: Move failed: {0}", ec.message());
+            return false;
+        }
+        if (std::filesystem::exists(oldMeta)) {
+            std::filesystem::rename(oldMeta, newMeta, ec);
+        }
+
+        std::string newVPath = VFS::GetVirtualPath(newPath);
+        it->second.VirtualPath = newVPath;
+
+        // Sync SubMesh children's VirtualPath so they stay consistent with parent
+        for (auto& [subHandle, subMeta] : s_Registry) {
+            if (subMeta.Type == AssetType::SubMesh && subMeta.ParentHandle == handle)
+                subMeta.VirtualPath = newVPath;
+        }
+
+        RewriteMetaFile(handle);
+
+        AYAYA_CORE_INFO("AssetManager: Moved asset to {0}", newPath.string());
+        return true;
+    }
+
+    bool AssetManager::CreateSceneAsset(const std::filesystem::path& destDir,
+                                         const std::string& sceneName) {
+        std::string name = sceneName;
+        if (name.find(".ayaya") == std::string::npos)
+            name += ".ayaya";
+
+        std::string base = name.substr(0, name.size() - 6);  // strip ".ayaya"
+        std::filesystem::path fullPath = destDir / name;
+
+        // Deduplicate: append " 2", " 3", ...
+        int suffix = 2;
+        while (std::filesystem::exists(fullPath) && suffix < 100) {
+            fullPath = destDir / (base + " " + std::to_string(suffix) + ".ayaya");
+            suffix++;
+        }
+        if (std::filesystem::exists(fullPath)) {
+            AYAYA_CORE_WARN("AssetManager: Scene already exists — too many duplicates: {0}", fullPath.string());
+            return false;
+        }
+
+        std::filesystem::create_directories(destDir);
+
+        // Create a default scene
+        auto scene = std::make_shared<Scene>();
+        {
+            Entity cam = scene->CreateEntity("Main Camera");
+            auto& cc = cam.AddComponent<CameraComponent>();
+            cc.Camera.SetProjectionType(SceneCamera::ProjectionType::Perspective);
+            cc.Camera.SetViewportSize(1280, 720);
+            cam.GetComponent<TransformComponent>().Translation = {0.0f, 0.0f, 5.0f};
+        }
+        {
+            Entity light = scene->CreateEntity("Directional Light");
+            auto& dl = light.AddComponent<DirectionalLightComponent>();
+            dl.Color = glm::vec3(1.0f);
+            dl.Illuminance = 100000.0f;
+            auto& lt = light.GetComponent<TransformComponent>();
+            lt.Rotation = glm::vec3(glm::radians(45.0f), glm::radians(-45.0f), 0.0f);
+        }
+
+        // Serialize
+        SceneSerializer serializer(scene);
+        EditorState editorState;
+        editorState.ShowGrid = true;
+        editorState.CameraPosition = {0.0f, 0.0f, 5.0f};
+        editorState.CameraDistance = 5.0f;
+        editorState.CameraPitch = 0.0f;
+        editorState.CameraYaw = 0.0f;
+        editorState.CameraFocalPoint = {0.0f, 0.0f, 0.0f};
+        serializer.Serialize(fullPath.string(), editorState);
+
+        // Register as asset
+        UUID handle = UUID();
+        std::string vpath = VFS::GetVirtualPath(fullPath);
+        WriteMetaFile(fullPath, handle, AssetType::Scene);
+        s_Registry[handle] = {AssetType::Scene, vpath};
+
+        AYAYA_CORE_INFO("AssetManager: Created scene asset {0}", fullPath.string());
+        return true;
+    }
+
+    bool AssetManager::CreateFolder(const std::filesystem::path& parentDir,
+                                     const std::string& folderName) {
+        std::filesystem::path fullPath = parentDir / folderName;
+        // Deduplicate: if already exists, append " 2", " 3", ...
+        int suffix = 2;
+        while (std::filesystem::exists(fullPath) && suffix < 100) {
+            fullPath = parentDir / (folderName + " " + std::to_string(suffix));
+            suffix++;
+        }
+        if (std::filesystem::exists(fullPath)) {
+            AYAYA_CORE_WARN("AssetManager: CreateFolder failed — too many duplicates: {0}", fullPath.string());
+            return false;
+        }
+        std::error_code ec;
+        std::filesystem::create_directories(fullPath, ec);
+        if (ec) {
+            AYAYA_CORE_ERROR("AssetManager: CreateFolder failed: {0}", ec.message());
+            return false;
+        }
+        AYAYA_CORE_INFO("AssetManager: Created folder {0}", fullPath.string());
+        return true;
+    }
+
+    void AssetManager::UnregisterAsset(UUID handle) {
+        s_Registry.erase(handle);
+        s_Assets.erase(handle);
     }
 
 }

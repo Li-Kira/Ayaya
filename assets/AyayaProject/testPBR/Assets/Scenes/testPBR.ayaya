@@ -2,11 +2,11 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition: [0.6563606, 2.1361492, 6.4737253]
-  CameraDistance: 1.0404494
+  CameraPosition: [-0.35850438, 0.8759137, 4.376252]
+  CameraDistance: 4.477425
   CameraPitch: -0.19689868
   CameraYaw: -0.08173789
-  CameraFocalPoint: [0.7396687, 1.9326072, 5.456786]
+  CameraFocalPoint: [0, 0, 0]
 Entities:
   - Entity: 9207422813788464392
     TagComponent:
@@ -64,7 +64,7 @@ Entities:
   - Entity: 941355425607113630
     TagComponent:
       Tag: Parent Empty Node
-      IsActive: true
+      IsActive: false
     TransformComponent:
       Translation: [0, 0, 0]
       Rotation: [0, 0, 0]
@@ -89,7 +89,7 @@ Entities:
   - Entity: 2260445115966781348
     TagComponent:
       Tag: Assimp Model
-      IsActive: true
+      IsActive: false
     TransformComponent:
       Translation: [1.5, 0, -1.4901161e-08]
       Rotation: [0, 0, 0]

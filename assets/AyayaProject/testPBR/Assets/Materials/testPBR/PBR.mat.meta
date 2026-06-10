@@ -1,8 +1,3 @@
 uuid: 17298284397007192344
 type: 5
-import_settings:
-  filter: 0
-  wrap: 0
-  srgb: true
-  mipmaps: true
-  flip_y: true
+virtual_path: project://Materials/testPBR/PBR.mat

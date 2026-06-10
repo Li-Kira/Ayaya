@@ -27,6 +27,11 @@ namespace Ayaya {
         bool IsEnabled() const { return m_Enabled; }
         void SetEnabled(bool enabled) { m_Enabled = enabled; }
 
+        // Pause: suppress all event processing during intentional file mutations
+        // (rename/move/delete via AssetManager). Caller MUST re-enable.
+        bool IsPaused() const { return m_Paused; }
+        void SetPaused(bool paused) { m_Paused = paused; }
+
     private:
         void OnFileEvent(const FileEvent& event);
         void EnqueueReload(UUID handle, const std::filesystem::path& path);
@@ -45,6 +50,7 @@ namespace Ayaya {
         std::unique_ptr<FileWatcher> m_Watcher;
         std::filesystem::path m_AssetRoot;
         bool m_Enabled = false;
+        bool m_Paused = false;
         bool m_Initialized = false;
 
         // Debounce

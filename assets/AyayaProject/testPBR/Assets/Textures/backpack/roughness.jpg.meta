@@ -1,5 +1,6 @@
 uuid: 17525142522252290110
 type: 2
+virtual_path: project://Textures/backpack/roughness.jpg
 import_settings:
   filter: 0
   wrap: 0
