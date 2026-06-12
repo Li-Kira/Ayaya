@@ -1,5 +1,6 @@
 uuid: 5733503243408443556
 type: 2
+virtual_path: project://Textures/wall/ao.png
 import_settings:
   filter: 0
   wrap: 0

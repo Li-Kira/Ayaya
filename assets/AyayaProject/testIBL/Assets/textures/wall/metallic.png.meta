@@ -1,5 +1,6 @@
 uuid: 9541127929940663277
 type: 2
+virtual_path: project://Textures/wall/metallic.png
 import_settings:
   filter: 0
   wrap: 0

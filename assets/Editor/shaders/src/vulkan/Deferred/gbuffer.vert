@@ -6,6 +6,7 @@ layout(location = 2) in vec2 a_TexCoord;
 
 layout(set = 0, binding = 0) uniform Camera {
     mat4 u_ViewProjection;
+    mat4 u_View;              // world→view
     vec3 u_CameraPosition;
 };
 

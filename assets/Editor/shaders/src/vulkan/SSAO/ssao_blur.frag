@@ -3,41 +3,40 @@ layout(location = 0) out float o_AO;
 layout(location = 0) in vec2 v_TexCoord;
 
 layout(set = 1, binding = 0) uniform sampler2D u_AO;
-layout(set = 1, binding = 1) uniform sampler2D u_Position;
-layout(set = 1, binding = 2) uniform sampler2D u_Normal;
+layout(set = 1, binding = 1) uniform sampler2D u_DepthMap;
+layout(set = 1, binding = 2) uniform sampler2D g_Normal;
 
 layout(push_constant) uniform PC {
-    vec2  u_BlurDir;
-    vec2  u_TexelSize;
-    float u_DepthThreshold;  // world-space distance threshold (meters, ~5.0)
+    mat4  u_InverseViewProj;
+    vec2  u_BlurDir; vec2  u_TexelSize; float u_DepthThreshold; float _pad;
 } pc;
 
+vec3 WorldPosFromDepth(float d, vec2 uv) {
+    vec4 ndc = vec4(uv.x * 2.0 - 1.0, uv.y * 2.0 - 1.0, d, 1.0);
+    vec4 wp = pc.u_InverseViewProj * ndc;
+    return wp.xyz / wp.w;
+}
+
 void main() {
-    vec3 centerPos = texture(u_Position, v_TexCoord).xyz;
-    vec3 centerNormal = texture(u_Normal, v_TexCoord).xyz;
+    float depth = texture(u_DepthMap, v_TexCoord).r;
+    if (depth >= 1.0) { o_AO = 1.0; return; }
+    vec3 cp = WorldPosFromDepth(depth, v_TexCoord);
+    vec3 cn = texture(g_Normal, v_TexCoord).xyz;
+    if (length(cn) < 0.1) { o_AO = 1.0; return; }
 
-    // Background / skybox — no blur, output clean white
-    if (length(centerNormal) < 0.1) { o_AO = 1.0; return; }
-
-    float total = 0.0;
-    float wsum = 0.0;
-    int kernel = 4;
-
-    for (int i = -kernel; i <= kernel; i++) {
+    float total = 0.0, wsum = 0.0;
+    for (int i = -4; i <= 4; i++) {
         vec2 uv = v_TexCoord + pc.u_BlurDir * pc.u_TexelSize * float(i);
-
-        vec3 p = texture(u_Position, uv).xyz;
-        vec3 n = texture(u_Normal, uv).xyz;
-
-        // Bilateral weight: exponential position falloff + sharp normal cutoff
-        float dist = distance(centerPos, p);
-        float posWeight    = exp(-dist * dist * pc.u_DepthThreshold);
-        float normalWeight = pow(max(dot(centerNormal, n), 0.0), 4.0);
-        float weight = posWeight * normalWeight;
-
-        total += texture(u_AO, uv).r * weight;
-        wsum  += weight;
+        float d = texture(u_DepthMap, uv).r;
+        if (d >= 1.0) continue;
+        vec3 p = WorldPosFromDepth(d, uv);
+        vec3 n = texture(g_Normal, uv).xyz;
+        float dist = distance(cp, p);
+        float pw = exp(-dist * dist * pc.u_DepthThreshold);
+        float nw = pow(max(dot(cn, n), 0.0), 4.0);
+        float w = pw * nw;
+        total += texture(u_AO, uv).r * w;
+        wsum += w;
     }
-
     o_AO = (wsum > 0.001) ? total / wsum : 1.0;
 }

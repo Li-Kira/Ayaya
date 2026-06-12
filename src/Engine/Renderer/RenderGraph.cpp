@@ -119,8 +119,7 @@ namespace Ayaya {
             if (!vkFBO || !vkFBO->HasDepthAttachment()) return;
 
             ImageLayout depthCur = tex.DepthLayout[idx];
-            if (depthCur == ImageLayout::DepthStencilReadOnlyOptimal ||
-                depthCur == ImageLayout::DepthStencilAttachmentOptimal) return;
+            if (depthCur == ImageLayout::DepthStencilReadOnlyOptimal) return;  // already readable
 
             auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
                 Application::Get().GetWindow().GetContext());
@@ -129,7 +128,7 @@ namespace Ayaya {
             VkImageMemoryBarrier b{};
             b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
             b.oldLayout = (depthCur == ImageLayout::Undefined)
-                ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
             b.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
             b.srcAccessMask = (depthCur == ImageLayout::Undefined) ? 0 : VK_ACCESS_SHADER_READ_BIT;
             b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;

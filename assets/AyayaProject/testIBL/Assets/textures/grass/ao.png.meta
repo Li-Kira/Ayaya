@@ -1,5 +1,6 @@
 uuid: 7107234707708541594
 type: 2
+virtual_path: project://Textures/grass/ao.png
 import_settings:
   filter: 0
   wrap: 0

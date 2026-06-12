@@ -75,7 +75,7 @@ namespace Ayaya {
         cmd.BeginRenderPass(selFBO, true, glm::vec4(0.0f));
         if (gbufferFBO) {
             cmd.BindPipeline(m_MaskPipeline);
-            cmd.BindTexture2D(m_MaskPipeline, "u_CustomData", 0, gbufferFBO, 4);
+            cmd.BindTexture2D(m_MaskPipeline, "u_CustomData", 0, gbufferFBO, 3);
             cmd.DrawArrays(m_EmptyVAO, 3);
         }
 

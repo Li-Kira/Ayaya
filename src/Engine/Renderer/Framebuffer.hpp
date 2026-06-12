@@ -13,7 +13,8 @@ namespace Ayaya {
     enum class FramebufferTextureFormat {
         None = 0,
         // 颜色通道
-        R8,          // 单通道 8-bit (SSAO, 遮罩等)
+        R8,          // single-channel 8-bit (SSAO, masks)
+        R32F,        // single-channel 32-bit float (linear view-space depth)
         RGBA8,
         RG16F,       // <--- 【新增】：双通道 16 位浮点数，专为 BRDF LUT 等算法准备
         RGBA16F,     // HDR 颜色 / 法线

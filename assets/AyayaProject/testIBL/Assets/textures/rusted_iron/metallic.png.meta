@@ -1,2 +1,9 @@
 uuid: 17636062698109624207
 type: 2
+virtual_path: project://Textures/rusted_iron/metallic.png
+import_settings:
+  filter: 0
+  wrap: 0
+  srgb: true
+  mipmaps: true
+  flip_y: true

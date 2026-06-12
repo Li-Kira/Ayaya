@@ -1,6 +1,7 @@
 #pragma once
 #include "Renderer/GraphicsContext.hpp"
 #include "VulkanBindlessManager.hpp"
+#include "VulkanGeometryPool.hpp"
 #include <vulkan/vulkan.h>
 #include <vk_mem_alloc.h>
 #include <optional>
@@ -77,6 +78,7 @@ namespace Ayaya {
         inline VulkanBindlessManager& GetBindlessManager() { return m_BindlessManager; }
         inline VkDescriptorSetLayout GetBindlessLayout() const { return m_BindlessManager.GetLayout(); }
         inline VkDescriptorSet GetBindlessSet() const { return m_BindlessManager.GetSet(); }
+        inline GlobalGeometryPool& GetGeometryPool() { return m_GeometryPool; }
 
     private:
         GLFWwindow* m_WindowHandle;
@@ -113,6 +115,7 @@ namespace Ayaya {
         uint32_t m_GraphicsQueueFamily = 0;
 
         VulkanBindlessManager m_BindlessManager;
+        GlobalGeometryPool    m_GeometryPool;
 
         // GPU timestamp queries (16 passes × 2 slots × 3 frames-in-flight)
         static constexpr uint32_t kMaxTimestampQueries = 96;

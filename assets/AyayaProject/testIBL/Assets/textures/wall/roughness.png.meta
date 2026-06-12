@@ -1,5 +1,6 @@
 uuid: 4903804322900367232
 type: 2
+virtual_path: project://Textures/wall/roughness.png
 import_settings:
   filter: 0
   wrap: 0

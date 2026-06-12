@@ -1,2 +1,9 @@
 uuid: 5922846508314193453
 type: 2
+virtual_path: project://Textures/plastic/albedo.png
+import_settings:
+  filter: 0
+  wrap: 0
+  srgb: true
+  mipmaps: true
+  flip_y: true

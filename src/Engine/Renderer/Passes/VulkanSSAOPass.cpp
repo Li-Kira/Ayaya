@@ -102,14 +102,16 @@ namespace Ayaya {
             ImageLayout::ShaderReadOnlyOptimal, ImageLayout::ColorAttachmentOptimal);
         cmd.BeginRenderPass(m_RawFBO, true, glm::vec4(1.0f));
         cmd.BindPipeline(m_GenPipeline);
-        // World-space SSAO: read GBuffer position (attachment 0, RGBA32F) instead of depth
-        cmd.BindTexture2D(m_GenPipeline, "u_Position", 0, gbufferFBO, 0);
-        cmd.BindTexture2D(m_GenPipeline, "u_Normal",   1, gbufferFBO, 1);
+        // World-space SSAO: reconstruct position from linear depth
+        cmd.BindTexture2D(m_GenPipeline, "u_DepthMap", 0, gbufferFBO, 0, true);
+        cmd.BindTexture2D(m_GenPipeline, "g_Normal",   1, gbufferFBO, 0);
         cmd.BindTexture2D(m_GenPipeline, "u_Noise",    2, noiseTex);
 
         struct GenPC {
+            alignas(16) glm::mat4 InverseViewProj;
             glm::vec2 NoiseScale; float Radius; float Bias; float Power; int SampleCount; int _pad;
         } gen;
+        gen.InverseViewProj = context.Get<glm::mat4>("InverseViewProj", glm::mat4(1.0f));
         gen.NoiseScale = glm::vec2((float)vpW / 4.0f, (float)vpH / 4.0f);
         gen.Radius = context.Get<float>("SSAORadius", 0.15f);
         gen.Bias   = context.Get<float>("SSAOBias", 0.05f);
@@ -128,12 +130,14 @@ namespace Ayaya {
         cmd.BeginRenderPass(m_BlurXFBO, true, glm::vec4(1.0f));
         cmd.BindPipeline(m_BlurXPipeline);
         cmd.BindTexture2D(m_BlurXPipeline, "u_AO",       0, m_RawFBO, 0);
-        cmd.BindTexture2D(m_BlurXPipeline, "u_Position", 1, gbufferFBO, 0);
-        cmd.BindTexture2D(m_BlurXPipeline, "u_Normal",   2, gbufferFBO, 1);
+        cmd.BindTexture2D(m_BlurXPipeline, "u_DepthMap", 1, gbufferFBO, 0, true);
+        cmd.BindTexture2D(m_BlurXPipeline, "g_Normal",   2, gbufferFBO, 0);
         struct BlurPC {
+            alignas(16) glm::mat4 InverseViewProj;
             alignas(8) glm::vec2 BlurDir; alignas(8) glm::vec2 TexelSize;
             float DepthThresh; float _pad;
         } bx;
+        bx.InverseViewProj = context.Get<glm::mat4>("InverseViewProj", glm::mat4(1.0f));
         bx.BlurDir = {1,0};
         bx.TexelSize = { 1.0f/(float)(vpW/2), 1.0f/(float)(vpH/2) };
         bx.DepthThresh = 20.0f;  // exponential falloff sharpness
@@ -148,9 +152,10 @@ namespace Ayaya {
         cmd.BeginRenderPass(finalFBO, true, glm::vec4(1.0f));
         cmd.BindPipeline(m_BlurYPipeline);
         cmd.BindTexture2D(m_BlurYPipeline, "u_AO",       0, m_BlurXFBO, 0);
-        cmd.BindTexture2D(m_BlurYPipeline, "u_Position", 1, gbufferFBO, 0);
-        cmd.BindTexture2D(m_BlurYPipeline, "u_Normal",   2, gbufferFBO, 1);
+        cmd.BindTexture2D(m_BlurYPipeline, "u_DepthMap", 1, gbufferFBO, 0, true);
+        cmd.BindTexture2D(m_BlurYPipeline, "g_Normal",   2, gbufferFBO, 0);
         BlurPC by;
+        by.InverseViewProj = context.Get<glm::mat4>("InverseViewProj", glm::mat4(1.0f));
         by.BlurDir = {0,1};
         by.TexelSize = bx.TexelSize;
         by.DepthThresh = 20.0f;  // exponential falloff sharpness

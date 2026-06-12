@@ -13,16 +13,17 @@ namespace Ayaya {
     }
 
     VulkanContext::~VulkanContext() {
-        if (m_Allocator != VK_NULL_HANDLE) {
-            vmaDestroyAllocator(m_Allocator);
-            AYAYA_CORE_INFO("VMA Allocator destroyed.");
-        }
-
         if (m_Device != VK_NULL_HANDLE) {
             vkDeviceWaitIdle(m_Device);
         }
 
+        m_GeometryPool.Shutdown();
         m_BindlessManager.Shutdown(m_Device);
+
+        if (m_Allocator != VK_NULL_HANDLE) {
+            vmaDestroyAllocator(m_Allocator);
+            AYAYA_CORE_INFO("VMA Allocator destroyed.");
+        }
 
         if (m_DescriptorPool != VK_NULL_HANDLE) {
             vkDestroyDescriptorPool(m_Device, m_DescriptorPool, nullptr);
@@ -137,6 +138,7 @@ namespace Ayaya {
         AYAYA_CORE_INFO("Bindless texture array capacity: {0}", maxBindless);
 
         m_BindlessManager.Init(m_Device, maxBindless);
+        m_GeometryPool.Init(m_Device, m_Allocator);
     }
 
     void VulkanContext::CreateSurface() {

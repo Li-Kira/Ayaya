@@ -1,2 +1,9 @@
 uuid: 16840923429999924695
 type: 2
+virtual_path: project://Textures/rusted_iron/albedo.png
+import_settings:
+  filter: 0
+  wrap: 0
+  srgb: true
+  mipmaps: true
+  flip_y: true

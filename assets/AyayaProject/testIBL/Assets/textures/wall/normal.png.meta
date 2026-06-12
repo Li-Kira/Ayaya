@@ -1,5 +1,6 @@
 uuid: 15587153503004010377
 type: 2
+virtual_path: project://Textures/wall/normal.png
 import_settings:
   filter: 0
   wrap: 0

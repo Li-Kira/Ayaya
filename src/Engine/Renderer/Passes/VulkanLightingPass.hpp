@@ -8,11 +8,13 @@
 namespace Ayaya {
 
     struct alignas(16) DeferredLightingPushConstants {
-        glm::mat4 LightSpaceMatrix;
-        alignas(16) glm::vec3 AmbientColor;
-        float Intensity;
-        int EnvMapEnabled;
-        int EnableSSAO;
+        glm::mat4 LightSpaceMatrix;        // 64B @ 0
+        alignas(16) glm::vec3 AmbientColor; // 16B @ 64
+        float Intensity;                   // 4B @ 80
+        int EnvMapEnabled;                 // 4B @ 84
+        int EnableSSAO;                    // 4B @ 88
+        // 8B padding → 96
+        glm::mat4 InverseViewProj;         // 64B @ 96
     };
 
     class VulkanLightingPass : public RenderPass {

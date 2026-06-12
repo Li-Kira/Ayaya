@@ -1,2 +1,9 @@
 uuid: 16159455308519504395
 type: 2
+virtual_path: project://Textures/grass/albedo.png
+import_settings:
+  filter: 0
+  wrap: 0
+  srgb: true
+  mipmaps: true
+  flip_y: true

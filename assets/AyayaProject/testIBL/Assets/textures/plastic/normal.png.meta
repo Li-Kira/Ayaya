@@ -1,5 +1,6 @@
 uuid: 13275780580976378705
 type: 2
+virtual_path: project://Textures/plastic/normal.png
 import_settings:
   filter: 0
   wrap: 0

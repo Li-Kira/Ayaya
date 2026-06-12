@@ -56,9 +56,10 @@
 
 namespace Ayaya {
     struct struct_CameraData {
-        glm::mat4 ViewProjection; // 64 bytes
-        glm::vec3 CameraPosition; // 12 bytes
-        float _padding;           // 4 bytes
+        glm::mat4 ViewProjection;   // 64 bytes
+        glm::mat4 View;             // 64 bytes (world→view)
+        glm::vec3 CameraPosition;   // 12 bytes
+        float _padding;             // 4 bytes
     };
 
     struct struct_PointLight {
@@ -286,10 +287,14 @@ namespace Ayaya {
         // ==========================================
         // 2. 【核心修复】：计算 ViewProjection 必须用校正后的 Projection！
         // ==========================================
-        m_Data->ViewProjectionMatrix = m_RenderContext.ProjectionMatrix * viewMatrix; 
+        m_Data->ViewProjectionMatrix = m_RenderContext.ProjectionMatrix * viewMatrix;
+        m_RenderContext.Set("InverseProj", glm::inverse(m_RenderContext.ProjectionMatrix));
+        m_RenderContext.Set("InverseView", glm::inverse(viewMatrix));
+        m_RenderContext.Set("InverseViewProj", glm::inverse(m_Data->ViewProjectionMatrix));
 
         // 3. 填充数据结构
         m_Data->CameraData.ViewProjection = m_Data->ViewProjectionMatrix;
+        m_Data->CameraData.View = viewMatrix;
         m_Data->CameraData.CameraPosition = m_Data->CameraPosition;
         
         // ==========================================

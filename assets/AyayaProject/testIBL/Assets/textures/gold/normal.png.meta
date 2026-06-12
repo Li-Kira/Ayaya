@@ -1,5 +1,6 @@
 uuid: 10838048528107095979
 type: 2
+virtual_path: project://Textures/gold/normal.png
 import_settings:
   filter: 0
   wrap: 0

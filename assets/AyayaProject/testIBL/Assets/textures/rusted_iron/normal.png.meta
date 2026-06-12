@@ -1,5 +1,6 @@
 uuid: 4761356711737382985
 type: 2
+virtual_path: project://Textures/rusted_iron/normal.png
 import_settings:
   filter: 0
   wrap: 0

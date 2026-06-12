@@ -1,5 +1,6 @@
 uuid: 9445529993207598244
 type: 2
+virtual_path: project://Textures/rusted_iron/roughness.png
 import_settings:
   filter: 0
   wrap: 0

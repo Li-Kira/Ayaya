@@ -1,5 +1,6 @@
 uuid: 6309370633670162567
 type: 2
+virtual_path: project://Textures/wall/albedo.png
 import_settings:
   filter: 0
   wrap: 0

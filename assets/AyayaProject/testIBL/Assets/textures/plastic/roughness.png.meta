@@ -1,5 +1,6 @@
 uuid: 17787362413051557971
 type: 2
+virtual_path: project://Textures/plastic/roughness.png
 import_settings:
   filter: 0
   wrap: 0

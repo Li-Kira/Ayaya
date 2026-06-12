@@ -1,5 +1,6 @@
 uuid: 11952428337756061720
 type: 2
+virtual_path: project://Textures/gold/metallic.png
 import_settings:
   filter: 0
   wrap: 0

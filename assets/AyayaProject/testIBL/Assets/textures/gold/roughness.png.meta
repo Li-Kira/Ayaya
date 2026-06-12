@@ -1,5 +1,6 @@
 uuid: 5169689634235946272
 type: 2
+virtual_path: project://Textures/gold/roughness.png
 import_settings:
   filter: 0
   wrap: 0

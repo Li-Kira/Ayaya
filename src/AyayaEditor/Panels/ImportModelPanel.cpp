@@ -39,7 +39,8 @@ namespace Ayaya {
             return "ORM";
         if (lower.find("albedo")   != std::string::npos || lower.find("diffuse")   != std::string::npos || lower.find("basecolor") != std::string::npos) return "Albedo";
         if (lower.find("normal")   != std::string::npos || lower.find("bump")      != std::string::npos || lower.find("_nrm") != std::string::npos || lower.find("_nor") != std::string::npos) return "Normal";
-        if (lower.find("metallic") != std::string::npos || lower.find("metalness") != std::string::npos) return "Metallic";
+        if (lower.find("metallic") != std::string::npos || lower.find("metalness") != std::string::npos ||
+            lower.find("specular") != std::string::npos || lower.find("_spec")    != std::string::npos) return "Metallic";
         if (lower.find("roughness")!= std::string::npos) return "Roughness";
         if (lower.find("ao")       != std::string::npos || lower.find("ambient")   != std::string::npos || lower.find("_ao") != std::string::npos) return "AO";
         if (lower.find("height")   != std::string::npos || lower.find("displace")  != std::string::npos || lower.find("_disp") != std::string::npos) return "Height";

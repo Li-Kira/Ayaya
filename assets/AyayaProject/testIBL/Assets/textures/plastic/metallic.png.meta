@@ -1,5 +1,6 @@
 uuid: 9141752323759020403
 type: 2
+virtual_path: project://Textures/plastic/metallic.png
 import_settings:
   filter: 0
   wrap: 0

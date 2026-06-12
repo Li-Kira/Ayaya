@@ -39,11 +39,11 @@ namespace Ayaya {
 
         // PBR Deferred Shading
         cmd.BindPipeline(m_DeferredPipeline);
-        cmd.BindTexture2D(m_DeferredPipeline, "g_Position", 0, gbufferFBO, 0);
-        cmd.BindTexture2D(m_DeferredPipeline, "g_Normal", 1, gbufferFBO, 1);
-        cmd.BindTexture2D(m_DeferredPipeline, "g_Albedo", 2, gbufferFBO, 2);
-        cmd.BindTexture2D(m_DeferredPipeline, "g_PBR", 3, gbufferFBO, 3);
-        cmd.BindTexture2D(m_DeferredPipeline, "g_CustomData", 4, gbufferFBO, 4);
+        cmd.BindTexture2D(m_DeferredPipeline, "g_Normal",     0, gbufferFBO, 0);
+        cmd.BindTexture2D(m_DeferredPipeline, "g_Albedo",     1, gbufferFBO, 1);
+        cmd.BindTexture2D(m_DeferredPipeline, "g_PBR",        2, gbufferFBO, 2);
+        cmd.BindTexture2D(m_DeferredPipeline, "g_CustomData", 3, gbufferFBO, 3);
+        cmd.BindTexture2D(m_DeferredPipeline, "u_DepthMap",   4, gbufferFBO, 0, true);  // hw depth
 
         auto irrMap = context.Get<std::shared_ptr<TextureCube>>("IrradianceMap");
         auto preMap = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap");
@@ -74,6 +74,8 @@ namespace Ayaya {
         defPC.Intensity = context.Get<float>("EnvironmentIntensity", 1.0f);
         defPC.EnvMapEnabled = (irrMap && preMap) ? 1 : 0;
         defPC.EnableSSAO = (enableSSAO && ssaoFBO != nullptr) ? 1 : 0;
+        defPC.InverseViewProj = context.Get<glm::mat4>("InverseViewProj", glm::mat4(1.0f));
+        static_assert(sizeof(DeferredLightingPushConstants) == 160, "PC size mismatch with GLSL");
         cmd.PushConstantData(m_DeferredPipeline, &defPC, sizeof(DeferredLightingPushConstants));
         cmd.DrawArrays(3);
 

@@ -1,2 +1,9 @@
 uuid: 12814967349563861021
 type: 2
+virtual_path: project://Textures/gold/albedo.png
+import_settings:
+  filter: 0
+  wrap: 0
+  srgb: true
+  mipmaps: true
+  flip_y: true

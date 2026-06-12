@@ -1,5 +1,6 @@
 uuid: 5743487640436738366
 type: 2
+virtual_path: project://Textures/plastic/ao.png
 import_settings:
   filter: 0
   wrap: 0
