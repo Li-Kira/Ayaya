@@ -151,7 +151,15 @@ namespace Ayaya {
             VmaAllocationCreateInfo allocInfo{};
             allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
-            vmaCreateImage(allocator, &imageInfo, &allocInfo, &m_DepthImage, &m_DepthAllocation, nullptr);
+            VkResult depthResult = vmaCreateImage(allocator, &imageInfo, &allocInfo, &m_DepthImage, &m_DepthAllocation, nullptr);
+            if (depthResult != VK_SUCCESS) {
+                AYAYA_CORE_ERROR("Failed to create depth image with SAMPLED_BIT! Try without it...");
+                imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+                depthResult = vmaCreateImage(allocator, &imageInfo, &allocInfo, &m_DepthImage, &m_DepthAllocation, nullptr);
+                if (depthResult != VK_SUCCESS) {
+                    AYAYA_CORE_ERROR("Failed to create depth image entirely! Depth will be unavailable.");
+                }
+            }
 
             VkImageViewCreateInfo viewInfo{};
             viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;

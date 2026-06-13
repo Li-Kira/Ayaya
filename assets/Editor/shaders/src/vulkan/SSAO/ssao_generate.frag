@@ -12,8 +12,17 @@ layout(push_constant) uniform PC {
     vec2  u_NoiseScale; float u_Radius; float u_Bias; float u_Power; int u_SampleCount; int _pad;
 } pc;
 
+vec3 OctDecode(vec2 f) {
+    f = f * 2.0 - 1.0;
+    vec3 n = vec3(f, 1.0 - abs(f.x) - abs(f.y));
+    float t = clamp(-n.z, 0.0, 1.0);
+    n.x += (n.x >= 0.0) ? -t : t;
+    n.y += (n.y >= 0.0) ? -t : t;
+    return normalize(n);
+}
+
 vec3 WorldPosFromDepth(float d, vec2 uv) {
-    vec4 ndc = vec4(uv.x * 2.0 - 1.0, uv.y * 2.0 - 1.0, d, 1.0);
+    vec4 ndc = vec4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, d, 1.0);
     vec4 wp = pc.u_InverseViewProj * ndc;
     return wp.xyz / wp.w;
 }
@@ -22,7 +31,7 @@ void main() {
     float depth = texture(u_DepthMap, v_TexCoord).r;
     if (depth >= 1.0) { o_AO = 1.0; return; }
     vec3 worldPos = WorldPosFromDepth(depth, v_TexCoord);
-    vec3 normal = texture(g_Normal, v_TexCoord).xyz;
+    vec3 normal = OctDecode(texture(g_Normal, v_TexCoord).rg);
     if (length(normal) < 0.1) { o_AO = 1.0; return; }
     normal = normalize(normal);
 

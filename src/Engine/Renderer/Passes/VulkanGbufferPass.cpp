@@ -13,7 +13,7 @@ namespace Ayaya {
         FramebufferSpecification spec;
         spec.Width = width; spec.Height = height; spec.Samples = 1;
         spec.Attachments = {
-            FramebufferTextureFormat::RGBA16F, FramebufferTextureFormat::RGBA8,
+            FramebufferTextureFormat::RG16F, FramebufferTextureFormat::RGBA8,
             FramebufferTextureFormat::RGBA8,   FramebufferTextureFormat::RGBA8,
             FramebufferTextureFormat::Depth
         };
@@ -46,7 +46,7 @@ namespace Ayaya {
         FramebufferSpecification refSpec;
         refSpec.Width = 1280; refSpec.Height = 720; refSpec.Samples = 1;
         refSpec.Attachments = {
-            FramebufferTextureFormat::RGBA16F, FramebufferTextureFormat::RGBA8,
+            FramebufferTextureFormat::RG16F, FramebufferTextureFormat::RGBA8,
             FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::RGBA8,
             FramebufferTextureFormat::Depth
         };

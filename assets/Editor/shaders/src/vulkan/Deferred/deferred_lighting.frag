@@ -2,11 +2,11 @@
 layout(location = 0) out vec4 FragColor;
 layout(location = 0) in vec2 v_TexCoord;
 
-layout(set = 1, binding = 0) uniform sampler2D g_Normal;
+layout(set = 1, binding = 0) uniform sampler2D u_DepthMap;
 layout(set = 1, binding = 1) uniform sampler2D g_Albedo;
 layout(set = 1, binding = 2) uniform sampler2D g_PBR;
 layout(set = 1, binding = 3) uniform sampler2D g_CustomData;
-layout(set = 1, binding = 4) uniform sampler2D u_DepthMap;
+layout(set = 1, binding = 4) uniform sampler2D g_Normal;
 layout(set = 1, binding = 5) uniform sampler2D u_ShadowMap;
 layout(set = 1, binding = 8) uniform samplerCube u_IrradianceMap;
 layout(set = 1, binding = 9) uniform samplerCube u_PrefilteredMap;
@@ -24,6 +24,19 @@ layout(push_constant) uniform PC {
     int u_EnvMapEnabled; int u_EnableSSAO;
     mat4 u_InverseViewProj;
 } pc;
+
+// ─── Debug mode: 0=normal, 1=depth, 2=normal, 3=albedo, 4=PBR, 5=worldPos, 6=FragPos+dpeth, 7=ambientOnly, 8=directOnly, 9=iblOnly ───
+#define DEBUG_MODE 0
+
+// Octahedral decode: 2-component [0,1] → unit vec3
+vec3 OctDecode(vec2 f) {
+    f = f * 2.0 - 1.0;
+    vec3 n = vec3(f, 1.0 - abs(f.x) - abs(f.y));
+    float t = clamp(-n.z, 0.0, 1.0);
+    n.x += (n.x >= 0.0) ? -t : t;
+    n.y += (n.y >= 0.0) ? -t : t;
+    return normalize(n);
+}
 
 const float PI = 3.14159265359;
 float D_GGX(vec3 N, vec3 H, float r){float a=r*r,a2=a*a;float NdH=max(dot(N,H),0.0);float d=NdH*NdH*(a2-1.0)+1.0;return a2/(PI*d*d);}
@@ -47,16 +60,13 @@ void main() {
     float depth = texture(u_DepthMap, v_TexCoord).r;
     if (depth >= 1.0) discard;
 
-    // Reconstruct world position from Vulkan depth.
-    // NDC: x = u*2-1 (standard), y = v*2-1 (OpenGL convention — negative viewport
-    // already handles the Y-flip for Vulkan), z = depth (Vulkan [0,1]).
-    vec4 ndc = vec4(v_TexCoord.x * 2.0 - 1.0, v_TexCoord.y * 2.0 - 1.0, depth, 1.0);
+    vec4 ndc = vec4(v_TexCoord.x * 2.0 - 1.0, 1.0 - v_TexCoord.y * 2.0, depth, 1.0);
     vec4 wp = pc.u_InverseViewProj * ndc;
     vec3 FragPos = wp.xyz / wp.w;
     vec4 cp = u_ViewProjection * vec4(FragPos, 1.0);
     gl_FragDepth = (cp.z / cp.w) * 0.5 + 0.5;
 
-    vec3 N = normalize(texture(g_Normal, v_TexCoord).rgb);
+    vec3 N = OctDecode(texture(g_Normal, v_TexCoord).rg);
     vec3 Albedo = texture(g_Albedo, v_TexCoord).rgb;
     vec4 pbr = texture(g_PBR, v_TexCoord);
     float Metallic = pbr.r, Roughness = max(pbr.g, 0.04), AO = pbr.b;
@@ -64,8 +74,34 @@ void main() {
 
     vec3 V = normalize(u_CameraPosition - FragPos);
     vec3 F0 = mix(vec3(0.04), Albedo, Metallic);
+
+#if DEBUG_MODE == 1
+    // Depth map (hw depth from GBuffer)
+    FragColor = vec4(depth, depth, depth, 1.0); return;
+#elif DEBUG_MODE == 2
+    // World-space normals
+    FragColor = vec4(N * 0.5 + 0.5, 1.0); return;
+#elif DEBUG_MODE == 3
+    // Albedo
+    FragColor = vec4(Albedo, 1.0); return;
+#elif DEBUG_MODE == 4
+    // PBR: R=Metallic, G=Roughness, B=AO
+    FragColor = vec4(Metallic, Roughness, AO, 1.0); return;
+#elif DEBUG_MODE == 5
+    // World position as color
+    FragColor = vec4(fract(FragPos * 0.5), 1.0); return;
+#elif DEBUG_MODE == 6
+    // Compare: R=hwDepth, G=CustomData.b (gl_FragCoord.z from GBuffer)
+    float gbZ = texture(g_CustomData, v_TexCoord).b;
+    FragColor = vec4(depth, gbZ, 0.0, 1.0); return;
+#endif
+
+    // =================================================================
+    //  PBR Lighting
+    // =================================================================
     vec3 Lo = vec3(0.0);
 
+    // Directional Light
     vec3 L = normalize(-DirLightDir.xyz);
     vec3 H = normalize(V+L);
     float NdotL = max(dot(N,L),0.0);
@@ -76,6 +112,7 @@ void main() {
     float shadow = ShadowCalc(pc.u_LightSpaceMatrix*vec4(FragPos,1.0), NdotL) * RcvShadow;
     Lo += (kD*Albedo/PI+spec)*DirLightColor.rgb*NdotL*(1.0-shadow);
 
+    // Point Lights
     for(int i=0;i<PointLightCount&&i<4;i++){
         vec3 lp=PointLights[i].Position.xyz; float lr=PointLights[i].Position.w;
         vec3 lc=PointLights[i].Color.rgb; float lf=PointLights[i].Color.w;
@@ -92,6 +129,7 @@ void main() {
         Lo+=(kDp*Albedo/PI+sp)*rad*NdotLp;
     }
 
+    // IBL
     float NdV=max(dot(N,V),0.0);
     vec3 F_ibl=F_SchlickR(NdV,F0,Roughness);
     vec3 kSi=F_ibl,kDi=(1.0-kSi)*(1.0-Metallic);
@@ -105,5 +143,14 @@ void main() {
     }
     float ssao=(pc.u_EnableSSAO==1)?texture(u_SSAO,v_TexCoord).r:1.0;
     vec3 amb=(kDi*irr*Albedo+spI)*AO*ssao;
-    FragColor=vec4(amb+Lo,1.0);
+
+#if DEBUG_MODE == 7
+    FragColor = vec4(amb, 1.0); return;
+#elif DEBUG_MODE == 8
+    FragColor = vec4(Lo, 1.0); return;
+#elif DEBUG_MODE == 9
+    FragColor = vec4(spI, 1.0); return;
+#endif
+
+    FragColor = vec4(amb + Lo, 1.0);
 }

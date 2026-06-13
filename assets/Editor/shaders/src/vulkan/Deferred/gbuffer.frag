@@ -1,6 +1,6 @@
 #version 450 core
 
-layout(location = 0) out vec4 g_Normal;
+layout(location = 0) out vec2 g_Normal;  // octahedral-encoded world-space normal
 layout(location = 1) out vec4 g_Albedo;
 layout(location = 2) out vec4 g_PBR;
 layout(location = 3) out vec4 g_CustomData;
@@ -38,6 +38,13 @@ vec3 GetNormalFromMap() {
     return normalize(mat3(T, B, N) * tN);
 }
 
+// Octahedral encode: unit vec3 → 2-component in [0,1] for RG16F storage
+vec2 OctEncode(vec3 n) {
+    n /= (abs(n.x) + abs(n.y) + abs(n.z));
+    vec2 e = (n.z >= 0.0) ? n.xy : (vec2(1.0) - abs(n.yx)) * sign(n.xy);
+    return e * 0.5 + 0.5;
+}
+
 void main() {
     float a = pc.u_AlphaMultiplier;
     if (pc.u_UseAlbedoMap == 1) a *= texture(u_AlbedoMap, v_TexCoord).a;
@@ -45,7 +52,7 @@ void main() {
     if (pc.u_BlendMode == 1 && a < pc.u_AlphaCutoff) discard;
 
     vec3 N = (pc.u_UseNormalMap == 1) ? GetNormalFromMap() : normalize(v_Normal);
-    g_Normal = vec4(N, 1.0);
+    g_Normal = OctEncode(N);
 
     vec3 albedo = (pc.u_UseAlbedoMap == 1) ? texture(u_AlbedoMap, v_TexCoord).rgb : pc.u_Albedo;
     g_Albedo = vec4(albedo, 1.0);
@@ -57,5 +64,5 @@ void main() {
         if(pc.u_UseRoughnessMap==1) roughness=texture(u_RoughnessMap,v_TexCoord).r;
         if(pc.u_UseAOMap==1) ao=texture(u_AOMap,v_TexCoord).r; }
     g_PBR = vec4(metallic, roughness, ao, 1.0);
-    g_CustomData = vec4(pc.u_ReceiveShadows, float(pc.u_IsSelected), 0.0, 1.0);
+    g_CustomData = vec4(pc.u_ReceiveShadows, float(pc.u_IsSelected), gl_FragCoord.z, 1.0);
 }
