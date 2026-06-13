@@ -9,72 +9,88 @@ namespace Ayaya {
     }
 
     // ==========================================
-    // Static map of all RenderGraph texture keys → human-readable pass/attachment info.
-    // This is the single source of truth for what the FrameDebugger can display.
-    // When a new pass is added to the RenderGraph, add its outputs here.
+    // Human-readable attachment name per pass / attachment index.
+    // Formats are queried dynamically from the live FBO spec.
+    // ==========================================
+    static const char* AttachmentName(const std::string& pass, int idx) {
+        // GBuffer (Vulkan: 4-color; OpenGL: 5-color — handled dynamically)
+        if (pass == "GBufferPass") {
+            static const char* n[] = {"Normal", "Albedo", "PBR", "CustomData", "???"};
+            return (idx < 5) ? n[idx] : "???";
+        }
+        if (pass == "ShadowPass")  return "Depth";
+        if (pass == "SSAOPass")    return "AO";
+        if (pass == "LightingPass") {
+            return (idx == 0) ? "HDR Color" : "???";
+        }
+        if (pass == "WBOIT_Gather") {
+            return (idx == 0) ? "Accumulation" : (idx == 1 ? "Revealage" : "???");
+        }
+        if (pass == "OutlinePass") return "Mask";
+        if (pass == "BloomPass")   return "Bloom";
+        if (pass == "PostProcessPass") return "ToneMapped";
+        if (pass == "FXAAPass")    return "Anti-Aliased";
+        return "???";
+    }
+
+    static const char* FormatName(FramebufferTextureFormat f) {
+        switch (f) {
+            case FramebufferTextureFormat::RGBA8:    return "RGBA8";
+            case FramebufferTextureFormat::RGBA16F:  return "RGBA16F";
+            case FramebufferTextureFormat::RGBA32F:  return "RGBA32F";
+            case FramebufferTextureFormat::RG16F:    return "RG16F";
+            case FramebufferTextureFormat::R8:       return "R8";
+            case FramebufferTextureFormat::R32F:     return "R32F";
+            case FramebufferTextureFormat::Depth:    return "D24S8";
+            case FramebufferTextureFormat::RED_INTEGER: return "R32I";
+            default: return "?";
+        }
+    }
+
+    std::vector<AttachmentInfo> FrameDebuggerPanel::GetAttachmentInfo(
+            const std::shared_ptr<Framebuffer>& fbo,
+            const std::string& passName) {
+        std::vector<AttachmentInfo> result;
+        if (!fbo) return result;
+
+        auto& spec = fbo->GetSpecification();
+        bool hasDepth = false;
+        int colorIdx = 0;
+        for (auto& att : spec.Attachments.Attachments) {
+            if (att.TextureFormat == FramebufferTextureFormat::None) continue;
+            bool isDepth = (att.TextureFormat == FramebufferTextureFormat::Depth ||
+                           att.TextureFormat == FramebufferTextureFormat::DEPTH24STENCIL8);
+            if (isDepth) {
+                hasDepth = true;
+            } else {
+                int idx = colorIdx++;
+                std::string label = std::string(AttachmentName(passName, idx))
+                    + " (" + FormatName(att.TextureFormat) + ")";
+                result.push_back({idx, label, false});
+            }
+        }
+        // Depth attachment shown last
+        if (hasDepth) {
+            result.push_back({-1, "Depth", true});
+        }
+        return result;
+    }
+
+    // ==========================================
+    // Pass→texture registry. Attachment details are read from live FBO specs.
+    // Add new RenderGraph outputs here when adding passes.
     // ==========================================
     void FrameDebuggerPanel::BuildPassTextureMap() {
         m_PassTextures.clear();
-
-        // --- Shadow ---
-        m_PassTextures.push_back({"Shadow", "ShadowMap", {
-            {0, "Shadow Depth", true}
-        }});
-
-        // --- GBuffer ---
-        m_PassTextures.push_back({"GBuffer", "GBuffer", {
-            {0, "Position (RGBA32F)"},
-            {1, "Normal (RGBA16F)"},
-            {2, "Albedo (RGBA8)"},
-            {3, "PBR: M/R/AO/Unused (RGBA8)"},
-            {4, "CustomData (RGBA8)"}
-        }});
-
-        // --- SSAO ---
-        m_PassTextures.push_back({"SSAO", "SSAO_Final", {
-            {0, "AO (R8)"}
-        }});
-
-        // --- WBOIT (Transparency) ---
-        m_PassTextures.push_back({"WBOIT_Gather", "WBOIT_Gather", {
-            {0, "Accumulation (RGBA16F)"},
-            {1, "Revealage (RG16F)"}
-        }});
-
-        // --- Lighting (Deferred PBR) ---
-        m_PassTextures.push_back({"Lighting", "Lighting", {
-            {0, "HDR Color (RGBA16F)"}
-        }});
-
-        // --- Forward Blend (Skybox + Grid overlay) ---
-        m_PassTextures.push_back({"ForwardBlend", "Lighting", {
-            {0, "+Skybox/Grid (RGBA16F)"}
-        }});
-
-        // --- Outline / Selection Mask ---
-        m_PassTextures.push_back({"Outline", "Selection", {
-            {0, "Mask (RGBA8)"}
-        }});
-
-        // --- Bloom ---
-        m_PassTextures.push_back({"Bloom", "Bloom", {
-            {0, "Bloom (RGBA16F)"}
-        }});
-
-        // --- Post Process (ToneMapping + Bloom composite + Outline) ---
-        m_PassTextures.push_back({"PostProcess", "PostProcess", {
-            {0, "ToneMapped (RGBA8)"}
-        }});
-
-        // --- FXAA ---
-        m_PassTextures.push_back({"FXAA", "FXAA", {
-            {0, "Anti-Aliased (RGBA8)"}
-        }});
-
-        // --- UI ---
-        m_PassTextures.push_back({"UI", "FXAA", {
-            {0, "+UI (RGBA8)"}
-        }});
+        m_PassTextures.push_back({"ShadowPass",      "ShadowMap"});
+        m_PassTextures.push_back({"GBufferPass",     "GBuffer"});
+        m_PassTextures.push_back({"SSAOPass",        "SSAO_Final"});
+        m_PassTextures.push_back({"WBOIT_Gather",    "WBOIT_Gather"});
+        m_PassTextures.push_back({"LightingPass",    "Lighting"});
+        m_PassTextures.push_back({"OutlinePass",     "Selection"});
+        m_PassTextures.push_back({"BloomPass",       "Bloom"});
+        m_PassTextures.push_back({"PostProcessPass", "FinalOutput"});
+        m_PassTextures.push_back({"FXAAPass",        "FXAA"});
     }
 
     void FrameDebuggerPanel::ShowTexturePreview(void* texID, const char* label) {
@@ -185,7 +201,7 @@ namespace Ayaya {
 
                 // Skip runtime-disabled passes (e.g. SSAO when EnableSSAO=false)
                 bool runtimeActive = true;
-                if (info.PassName == "SSAO")
+                if (info.PassName == "SSAOPass")
                     runtimeActive = ctx.Get<bool>("EnableSSAO", false);
 
                 if (!exists || !runtimeActive) continue;
@@ -216,8 +232,10 @@ namespace Ayaya {
                 if (open) {
                     ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 16.0f);
 
-                    for (int a = 0; a < (int)info.Attachments.size(); a++) {
-                        auto& att = info.Attachments[a];
+                    auto& fbo = it->second;
+                    auto dynAtt = GetAttachmentInfo(fbo, info.PassName);
+                    for (int a = 0; a < (int)dynAtt.size(); a++) {
+                        auto& att = dynAtt[a];
                         char buf[96];
                         snprintf(buf, sizeof(buf), "[%d] %s%s", att.Index,
                             att.Label.c_str(), att.IsDepth ? " (D)" : "");
@@ -265,7 +283,7 @@ namespace Ayaya {
             auto it = snapFBs.find(info.TextureKey);
             if (it == snapFBs.end() || !it->second) continue;
             // Runtime check: skip disabled passes (e.g. SSAO when EnableSSAO=false)
-            if (info.PassName == "SSAO" && !ctx.Get<bool>("EnableSSAO", false)) continue;
+            if (info.PassName == "SSAOPass" && !ctx.Get<bool>("EnableSSAO", false)) continue;
             visiblePasses.push_back(p);
         }
 
@@ -275,8 +293,11 @@ namespace Ayaya {
             if (fboIt != snapFBs.end() && fboIt->second) {
                 auto& fbo = fboIt->second;
                 auto& spec = fbo->GetSpecification();
-                int attIdx = info.Attachments[m_SelectedAttach].Index;
-                bool isDepth = info.Attachments[m_SelectedAttach].IsDepth;
+                auto dynAtt = GetAttachmentInfo(fbo, info.PassName);
+                if (m_SelectedAttach >= (int)dynAtt.size()) m_SelectedAttach = 0;
+                if (dynAtt.empty()) { ImGui::TextDisabled("No attachments."); ImGui::EndChild(); return; }
+                int attIdx = dynAtt[m_SelectedAttach].Index;
+                bool isDepth = dynAtt[m_SelectedAttach].IsDepth;
 
                 void* texID = isDepth
                     ? fbo->GetDepthAttachmentRendererID()
@@ -320,7 +341,7 @@ namespace Ayaya {
                 ImGui::Separator();
 
                 ImGui::Text("Attachment:  [%d] %s%s",
-                    attIdx, info.Attachments[m_SelectedAttach].Label.c_str(),
+                    attIdx, dynAtt[m_SelectedAttach].Label.c_str(),
                     isDepth ? " (Depth)" : "");
 
                 auto dbgIt = snapDB.find(info.PassName);
@@ -342,12 +363,12 @@ namespace Ayaya {
                 ImGui::Separator();
                 ShowTexturePreview(texID, nullptr);
 
-                if (info.Attachments.size() > 1) {
+                if (dynAtt.size() > 1) {
                     ImGui::Spacing(); ImGui::Separator();
                     ImGui::Text("Attachment:");
                     ImGui::SameLine();
                     std::vector<const char*> attNames;
-                    for (auto& a : info.Attachments) attNames.push_back(a.Label.c_str());
+                    for (auto& a : dynAtt) attNames.push_back(a.Label.c_str());
                     ImGui::SetNextItemWidth(280.0f);
                     ImGui::Combo("##AttachCombo", &m_SelectedAttach,
                         attNames.data(), (int)attNames.size());

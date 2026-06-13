@@ -6,6 +6,7 @@ layout(location = 2) in vec2 a_TexCoord;
 // 使用我们之前配置好的相机 UBO
 layout(std140) uniform Camera {
     mat4 u_ViewProjection;
+    mat4 u_View;            // world→view (must match C++ struct_CameraData layout)
     vec3 u_CameraPosition;
 };
 

@@ -447,7 +447,7 @@ namespace Ayaya {
         m_RenderContext.Set("ShowSkybox", config.EnableSkybox);
         m_RenderContext.Set("ShowGrid", config.EnableGrid && config.IsEditorView);
         m_RenderContext.Set("HoveredEntity", config.HoveredEntity);
-        m_RenderContext.Set("SelectedEntity", config.SelectedEntity);
+        m_RenderContext.Set("SelectedEntities", config.SelectedEntities);
         m_RenderContext.Set("EnvironmentIntensity", m_Data->EnvironmentIntensity);
         m_RenderContext.Set("EnvironmentAmbientColor", m_Data->EnvironmentAmbientColor);
 

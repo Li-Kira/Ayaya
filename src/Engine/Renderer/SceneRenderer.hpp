@@ -29,8 +29,8 @@ namespace Ayaya {
         bool EnableFXAA    = true;    // 抗锯齿
         bool EnableSSAO    = false;   // 屏幕空间环境光遮蔽 (需 PostProcessVolume)
         bool EnableSprites = true;    // 2D 精灵
-        Entity SelectedEntity{};      // 选中实体 (Outline + Gizmo)
-        Entity HoveredEntity{};       // 悬停实体 (Outline)
+        std::vector<Entity> SelectedEntities{};  // 多选实体 (Outline)
+        Entity HoveredEntity{};                  // 悬停实体
         glm::vec4 ClearColor{0.12f, 0.12f, 0.14f, 1.0f};
     };
 

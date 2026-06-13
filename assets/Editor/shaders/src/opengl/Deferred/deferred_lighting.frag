@@ -29,6 +29,7 @@ uniform mat4 u_LightSpaceMatrix;     // 太阳视角的矩阵
 // ==========================================
 layout(std140) uniform Camera {
     mat4 u_ViewProjection;
+    mat4 u_View;            // world→view (must match C++ struct_CameraData layout)
     vec3 u_CameraPosition;
 };
 

@@ -18,16 +18,6 @@ namespace Ayaya {
     }
 
     void VulkanOutlinePass::OnAttach() {
-        // Full-screen mask extraction from GBuffer (visible parts)
-        m_EmptyVAO = VertexArray::Create();
-        m_MaskShader = Shader::Create("PostProcess/postprocess.vert", "UI/selection_mask.frag");
-        m_MaskPipeSpec.Shader = m_MaskShader;
-        m_MaskPipeSpec.Layout = {};
-        m_MaskPipeSpec.DepthTest = false;
-        m_MaskPipeSpec.DepthWrite = false;
-        m_MaskPipeSpec.Blend = false;
-        m_MaskPipeSpec.BackfaceCulling = CullMode::None;
-
         FramebufferSpecification ref;
         ref.Width = 1280; ref.Height = 720; ref.Samples = 1;
         ref.Attachments = {FramebufferTextureFormat::RGBA8};
@@ -57,35 +47,27 @@ namespace Ayaya {
     }
 
     void VulkanOutlinePass::Execute(RenderContext& ctx, RenderCommandBuffer& cmd) {
-        auto gbufferFBO = ctx.GetFramebuffer("GBuffer");
         auto selFBO = ctx.GetFramebuffer("Selection");
         if (!selFBO) return;
 
         // Lazy pipeline init
-        if (!m_MaskPipeline) {
-            m_MaskPipeSpec.TargetFramebuffer = selFBO;
-            m_MaskPipeline = Pipeline::Create(m_MaskPipeSpec);
+        if (!m_GeomPipeline) {
             m_GeomPipeSpec.TargetFramebuffer = selFBO;
             m_GeomPipeline = Pipeline::Create(m_GeomPipeSpec);
             m_SpritePipeSpec.TargetFramebuffer = selFBO;
             m_SpritePipeline = Pipeline::Create(m_SpritePipeSpec);
         }
 
-        // Step 1: Extract visible mask from GBuffer (only pixels where selected entity is visible)
+        // Render selected entity geometry as white mask for outline edge detection.
+        // DepthTest is off → full silhouette (including occluded parts) gets outlined.
         cmd.BeginRenderPass(selFBO, true, glm::vec4(0.0f));
-        if (gbufferFBO) {
-            cmd.BindPipeline(m_MaskPipeline);
-            cmd.BindTexture2D(m_MaskPipeline, "u_CustomData", 0, gbufferFBO, 3);
-            cmd.DrawArrays(m_EmptyVAO, 3);
-        }
 
-        // Step 2: Render selected/hovered entity geometry → fills occluded silhouette.
         // Walk entity hierarchy: if the selected entity is a container node (no mesh),
         // recursively render child meshes instead.
-        Entity sel = ctx.Get<Entity>("SelectedEntity", Entity{});
-        Entity hov = ctx.Get<Entity>("HoveredEntity", Entity{});
+        auto selectedEntities = ctx.Get<std::vector<Entity>>("SelectedEntities", {});
+        if (selectedEntities.empty()) { cmd.EndRenderPass(); return; }
 
-        Scene* scene = sel ? sel.GetScene() : (hov ? hov.GetScene() : nullptr);
+        Scene* scene = selectedEntities[0].GetScene();
 
         std::function<void(Entity, const glm::mat4&)> renderRecursive;
         renderRecursive = [&](Entity e, const glm::mat4& worldTransform) {
@@ -134,9 +116,11 @@ namespace Ayaya {
             }
         };
 
-        // Use GetWorldTransform() as starting point — includes all ancestor transforms
-        if (sel) renderRecursive(sel, sel.GetWorldTransform());
-        if (hov && hov != sel) renderRecursive(hov, hov.GetWorldTransform());
+        // Render all selected entities
+        for (auto& e : selectedEntities) {
+            if (e && e.HasComponent<TransformComponent>())
+                renderRecursive(e, e.GetWorldTransform());
+        }
 
         cmd.EndRenderPass();
         ctx.Framebuffers["Selection"] = selFBO;

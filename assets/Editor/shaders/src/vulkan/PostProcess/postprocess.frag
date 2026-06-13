@@ -56,8 +56,6 @@ void main() {
 
     if (maskCenter < 0.1 && edge > 0.1) {
         finalColor = outlineColor;
-    } else if (maskCenter > 0.5) {
-        finalColor = mix(finalColor, outlineColor, 0.15);
     }
 
     FragColor = vec4(finalColor, 1.0);

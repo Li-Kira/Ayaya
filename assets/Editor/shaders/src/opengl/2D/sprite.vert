@@ -2,6 +2,7 @@
 
 layout(std140) uniform Camera {
     mat4 u_ViewProjection;
+    mat4 u_View;            // world→view
     vec3 u_CameraPosition;
 };
 

@@ -9,14 +9,13 @@ namespace Ayaya {
     // Human-readable metadata for each RenderGraph attachment.
     struct AttachmentInfo {
         int         Index;
-        std::string Label;       // e.g. "World Normal (RGBA16F)"
+        std::string Label;       // e.g. "Normal (RG16F)"
         bool        IsDepth = false;
     };
 
     struct PassTextureInfo {
-        std::string PassName;          // e.g. "SSAO"
+        std::string PassName;          // e.g. "SSAOPass"
         std::string TextureKey;        // RenderGraph key, e.g. "SSAO_Final"
-        std::vector<AttachmentInfo> Attachments;
     };
 
     class FrameDebuggerPanel {
@@ -26,7 +25,6 @@ namespace Ayaya {
         void SetContext(const std::shared_ptr<SceneRenderer>& renderer) { m_Renderer = renderer; }
         void OnImGuiRender();
 
-        // Clear all snapshot state and unpause capture (call on scene / project switch)
         void Reset() {
             m_Captured = false;
             m_HasSnapshot = false;
@@ -34,7 +32,6 @@ namespace Ayaya {
             m_SnapshotDebugInfos.clear();
             m_SelectedPass = -1;
             m_SelectedAttach = 0;
-            // Force render graph rebuild so old FBOs are replaced
             if (m_Renderer) m_Renderer->MarkViewportDirty();
         }
 
@@ -45,8 +42,12 @@ namespace Ayaya {
         void DrawProfilerTab();
         void DrawAllTexturesTab();
 
-        // Build the pass→texture→attachment map from known RenderGraph keys.
+        // Build the pass→texture mapping (static keys, runtime attachments).
         void BuildPassTextureMap();
+        // Return dynamic attachment info for a framebuffer texture.
+        static std::vector<AttachmentInfo> GetAttachmentInfo(
+            const std::shared_ptr<Framebuffer>& fbo,
+            const std::string& passName);
         // Show a texture preview (uses ImGui::Image with correct aspect ratio).
         void ShowTexturePreview(void* texID, const char* label = nullptr);
 
@@ -58,7 +59,7 @@ namespace Ayaya {
         int  m_SelectedPass  = -1;
         int  m_SelectedAttach = 0;
 
-        // Frozen snapshot — deep copies taken when "Freeze" is pressed
+        // Frozen snapshot
         std::unordered_map<std::string, std::shared_ptr<Framebuffer>> m_SnapshotFramebuffers;
         std::unordered_map<std::string, PassDebugInfo>              m_SnapshotDebugInfos;
         bool m_HasSnapshot = false;

@@ -293,7 +293,7 @@ namespace Ayaya {
         editorCfg.EnableGrid = m_ShowGrid;
         editorCfg.EnableSkybox = renderSkybox;
         editorCfg.HoveredEntity = m_HoveredEntity;
-        editorCfg.SelectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
+        editorCfg.SelectedEntities = m_SceneHierarchyPanel.GetSelectedEntities();
         editorCfg.ClearColor = clearColor;
         m_SceneRenderer->RenderScene(m_ActiveScene, editorCfg);
         m_SceneRenderer->EndScene();

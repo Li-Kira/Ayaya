@@ -25,7 +25,6 @@ layout(push_constant) uniform PushConstants {
     int u_BlendMode;
     int u_UseAlbedoMap; int u_UseNormalMap; int u_UseORMMap;
     int u_UseMetallicMap; int u_UseRoughnessMap; int u_UseAOMap; int u_UseAlphaMap;
-    int u_IsSelected;
 } pc;
 
 vec3 GetNormalFromMap() {
@@ -64,5 +63,5 @@ void main() {
         if(pc.u_UseRoughnessMap==1) roughness=texture(u_RoughnessMap,v_TexCoord).r;
         if(pc.u_UseAOMap==1) ao=texture(u_AOMap,v_TexCoord).r; }
     g_PBR = vec4(metallic, roughness, ao, 1.0);
-    g_CustomData = vec4(pc.u_ReceiveShadows, float(pc.u_IsSelected), gl_FragCoord.z, 1.0);
+    g_CustomData = vec4(pc.u_ReceiveShadows, 0.0, 0.0, 1.0);
 }

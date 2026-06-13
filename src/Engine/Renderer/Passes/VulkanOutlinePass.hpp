@@ -14,12 +14,6 @@ namespace Ayaya {
         virtual void Execute(RenderContext& ctx, RenderCommandBuffer& cmd) override;
         static void DeclareResources(class RGBuilder& builder, uint32_t w, uint32_t h);
     private:
-        // GBuffer mask extraction (full-screen pass)
-        std::shared_ptr<Shader> m_MaskShader;
-        std::shared_ptr<VertexArray> m_EmptyVAO;
-        PipelineSpecification m_MaskPipeSpec;
-        std::shared_ptr<Pipeline> m_MaskPipeline;
-
         // Geometry rendering for full silhouette (meshes)
         std::shared_ptr<Shader> m_GeomShader;
         PipelineSpecification m_GeomPipeSpec;

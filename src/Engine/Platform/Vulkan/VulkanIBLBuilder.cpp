@@ -119,11 +119,13 @@ namespace Ayaya {
         vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
 
         // ==========================================
-        // 4. 定义 6 个面的视图矩阵 (注意 Vulkan 的 Y 轴翻转)
+        // 4. 定义 6 个面的视图矩阵 (engine flipped viewport, no proj Y-flip)
         // ==========================================
         glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
-        captureProjection[1][1] *= -1.0f; // Vulkan Y 轴翻转魔法
+        captureProjection[1][1] *= -1.0f; // + neg-height viewport = net Y-flip vs standard Vulkan
         
+        // Proj Y-flip and neg-height viewport are equivalent — both flip Y.
+        // Up vectors are unchanged from Vulkan default (neg-Y for ±X/±Z, ±Z for ±Y).
         glm::mat4 captureViews[] = {
             glm::lookAt(glm::vec3(0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
             glm::lookAt(glm::vec3(0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
@@ -225,7 +227,7 @@ namespace Ayaya {
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanPipeline->GetVulkanPipelineLayout(), 1, 1, &descSet, 0, nullptr);
             vkCmdPushConstants(cmd, vulkanPipeline->GetVulkanPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pc);
 
-            VkViewport viewport{ 0.0f, 0.0f, (float)dim, (float)dim, 0.0f, 1.0f };
+            VkViewport viewport{ 0.0f, (float)dim, (float)dim, -(float)dim, 0.0f, 1.0f };
             vkCmdSetViewport(cmd, 0, 1, &viewport);
             VkRect2D scissor{ {0, 0}, {dim, dim} };
             vkCmdSetScissor(cmd, 0, 1, &scissor);
@@ -379,7 +381,9 @@ namespace Ayaya {
 
         // 4. 定义视图矩阵
         glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
-        captureProjection[1][1] *= -1.0f;
+        captureProjection[1][1] *= -1.0f; // + neg-height viewport = net Y-flip vs standard Vulkan
+        // Proj Y-flip and neg-height viewport are equivalent — both flip Y.
+        // Up vectors are unchanged from Vulkan default (neg-Y for ±X/±Z, ±Z for ±Y).
         glm::mat4 captureViews[] = {
             glm::lookAt(glm::vec3(0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
             glm::lookAt(glm::vec3(0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
@@ -458,7 +462,7 @@ namespace Ayaya {
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanPipeline->GetVulkanPipelineLayout(), 1, 1, &descSet, 0, nullptr);
             vkCmdPushConstants(cmd, vulkanPipeline->GetVulkanPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pc);
 
-            VkViewport viewport{ 0.0f, 0.0f, (float)dim, (float)dim, 0.0f, 1.0f };
+            VkViewport viewport{ 0.0f, (float)dim, (float)dim, -(float)dim, 0.0f, 1.0f };
             vkCmdSetViewport(cmd, 0, 1, &viewport);
             VkRect2D scissor{ {0, 0}, {dim, dim} };
             vkCmdSetScissor(cmd, 0, 1, &scissor);
@@ -596,7 +600,9 @@ namespace Ayaya {
 
         // 4. 定义视图矩阵
         glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
-        captureProjection[1][1] *= -1.0f;
+        captureProjection[1][1] *= -1.0f; // + neg-height viewport = net Y-flip vs standard Vulkan
+        // Proj Y-flip and neg-height viewport are equivalent — both flip Y.
+        // Up vectors are unchanged from Vulkan default (neg-Y for ±X/±Z, ±Z for ±Y).
         glm::mat4 captureViews[] = {
             glm::lookAt(glm::vec3(0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
             glm::lookAt(glm::vec3(0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
@@ -684,7 +690,7 @@ namespace Ayaya {
                 vkCmdPushConstants(cmd, vulkanPipeline->GetVulkanPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pc);
 
                 // 【绝妙技巧】：通过动态改变视口大小，将低分辨率图像渲染到大 FBO 的左下角！
-                VkViewport viewport{ 0.0f, 0.0f, (float)mipWidth, (float)mipHeight, 0.0f, 1.0f };
+                VkViewport viewport{ 0.0f, (float)mipHeight, (float)mipWidth, -(float)mipHeight, 0.0f, 1.0f };
                 vkCmdSetViewport(cmd, 0, 1, &viewport);
                 VkRect2D scissor{ {0, 0}, {mipWidth, mipHeight} };
                 vkCmdSetScissor(cmd, 0, 1, &scissor);
@@ -859,7 +865,7 @@ namespace Ayaya {
         vkCmdBeginRendering(cmd, &renderingInfo);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkanPipeline->GetVulkanPipeline());
 
-        VkViewport viewport{ 0.0f, 0.0f, (float)dim, (float)dim, 0.0f, 1.0f };
+        VkViewport viewport{ 0.0f, (float)dim, (float)dim, -(float)dim, 0.0f, 1.0f };
         vkCmdSetViewport(cmd, 0, 1, &viewport);
         VkRect2D scissor{ {0, 0}, {dim, dim} };
         vkCmdSetScissor(cmd, 0, 1, &scissor);

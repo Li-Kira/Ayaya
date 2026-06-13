@@ -11,7 +11,6 @@ layout(push_constant) uniform Constants {
 
 void main() {
     v_TexCoords = a_Position;
-    v_TexCoords.y = -v_TexCoords.y;
 
     // 直接使用 CPU 算好的 VP 矩阵
     vec4 pos = pc.u_ViewProjection * vec4(a_Position, 1.0);

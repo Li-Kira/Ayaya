@@ -119,7 +119,7 @@ namespace Ayaya {
     static void FillPC(GBufferPushConstants& pc, const DrawPacket& packet) {
         pc.Albedo  = glm::vec3(1.0f); pc.Metallic = 0.0f; pc.Roughness = 0.5f;
         pc.AO = 1.0f; pc.AlphaMultiplier = 1.0f; pc.AlphaCutoff = 0.5f;
-        pc.BlendMode = 0; pc.IsSelected = 0;
+        pc.BlendMode = 0;
         pc.UseAlbedoMap = 0; pc.UseNormalMap = 0; pc.UseORMMap = 0;
         pc.UseMetallicMap = 0; pc.UseRoughnessMap = 0; pc.UseAOMap = 0; pc.UseAlphaMap = 0;
         pc.ReceiveShadows = packet.ReceiveShadows ? 1.0f : 0.0f;
@@ -151,10 +151,6 @@ namespace Ayaya {
         }
 
         auto whiteTex = context.GetTexture("WhiteTexture");
-        Entity selected = context.Get<Entity>("SelectedEntity", Entity{});
-        uint64_t selHandle = selected ? (uint64_t)selected.GetEntityHandle() : 0;
-        Entity hovered  = context.Get<Entity>("HoveredEntity", Entity{});
-        uint64_t hovHandle = hovered ? (uint64_t)hovered.GetEntityHandle() : 0;
 
         // ── Phase 1: Linear run-length batching ──
         // Packets are pre-sorted by SortKey → same-key packets are contiguous.
@@ -176,9 +172,7 @@ namespace Ayaya {
                              || GetBatchKey(p) != GetBatchKey(queue->Packets[i-1]))
                          && (i+1 >= queue->Packets.size() || !IsInstancable(queue->Packets[i+1])
                              || GetBatchKey(p) != GetBatchKey(queue->Packets[i+1]));
-            bool isSpecial = (selHandle && p.EntityHandle == selHandle)
-                          || (hovHandle && p.EntityHandle == hovHandle);
-            if (isSingle || isSpecial) continue;
+            if (isSingle) continue;
 
             uint64_t key = GetBatchKey(p);
             if (batches.empty() || key != GetBatchKey(*batches.back().firstPkt)) {
@@ -279,7 +273,6 @@ namespace Ayaya {
                 GBufferPushConstants pc{};
                 pc.Transform = packet.Transform;
                 FillPC(pc, packet);
-                pc.IsSelected = (selHandle && packet.EntityHandle == selHandle) ? 1 : 0;
 
                 if (key.Bits.MaterialHash != currentMaterialHash) {
                     currentMaterialHash = key.Bits.MaterialHash;
