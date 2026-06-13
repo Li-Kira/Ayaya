@@ -158,12 +158,17 @@ namespace Ayaya {
 
         vmaCreateBuffer(context->GetAllocator(), &bufferInfo, &allocInfo, &stagingBuffer, &stagingAllocation, nullptr);
 
-        // 3. 将 6 张图的数据按顺序拷贝进暂存区
+        // 3. 将 6 张图的数据按顺序拷贝进暂存区 (vertically flipped for engine viewport)
         void* data;
         vmaMapMemory(context->GetAllocator(), stagingAllocation, &data);
+        uint32_t rowSize = m_Width * bytesPerPixel;
         for (int i = 0; i < 6; i++) {
-            memcpy((uint8_t*)data + (i * faceSize), pixels[i], faceSize);
-            stbi_image_free(pixels[i]); // 内存复制完就可以把 stb 读的内存释放了
+            uint8_t* dst = (uint8_t*)data + (i * faceSize);
+            uint8_t* src = (uint8_t*)pixels[i];
+            // Vertical flip: Vulkan neg-height viewport convention
+            for (int y = 0; y < m_Height; y++)
+                memcpy(dst + y * rowSize, src + (m_Height - 1 - y) * rowSize, rowSize);
+            stbi_image_free(pixels[i]);
         }
         vmaUnmapMemory(context->GetAllocator(), stagingAllocation);
 

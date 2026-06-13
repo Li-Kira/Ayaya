@@ -287,8 +287,13 @@ namespace Ayaya {
     }
 
     void ContentBrowserPanel::OnImGuiRender() {
-        float scale = ImGui::GetIO().FontGlobalScale;
         ImGui::Begin("Content Browser");
+        RenderContent();
+        ImGui::End();
+    }
+
+    void ContentBrowserPanel::RenderContent() {
+        float scale = ImGui::GetIO().FontGlobalScale;
 
         std::filesystem::path activeAssetDir = Project::GetProjectDirectory();
         if (m_BaseDirectory != activeAssetDir) {
@@ -814,7 +819,5 @@ namespace Ayaya {
         ImGui::SliderFloat("##IconSize", &m_ThumbnailSize, 32.0f, 256.0f, "");
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(5);
-
-        ImGui::End();
     }
 }

@@ -181,6 +181,16 @@ namespace Ayaya {
             m_ActiveScene->OnUpdateRuntime(ts * m_TimeStepScale);
         }
 
+        // Content drawer toggle: Ctrl+Space
+        { static bool wasDown = false;
+          bool down = Input::IsKeyPressed(Key::LeftControl) && Input::IsKeyPressed(Key::Space);
+          if (down && !wasDown) m_ShowContentDrawer = !m_ShowContentDrawer;
+          wasDown = down; }
+        if (m_ShowContentDrawer)
+            m_DrawerAnimationProgress = glm::mix(m_DrawerAnimationProgress, 1.0f, 15.0f * ts.GetSeconds());
+        else
+            m_DrawerAnimationProgress = 0.0f;
+        if (m_DrawerAnimationProgress > 0.999f) m_DrawerAnimationProgress = 1.0f;
 
         // ==========================================
         // 4. 环境光与 IBL 动态更新系统
@@ -365,12 +375,13 @@ namespace Ayaya {
     }
 
     void EditorLayer::OnImGuiRender() {
-        UIRenderDockspace();
+        UIRenderDockspace(40.0f);
         UIRenderMenuBar();
         UIRenderToolbar();
 
         m_SceneHierarchyPanel.OnImGuiRender();
-        m_ContentBrowserPanel.OnImGuiRender();
+        // ContentBrowser in bottom drawer
+        // m_ContentBrowserPanel.OnImGuiRender();
         m_PreferencesPanel.OnImGuiRender();
         m_ScreenshotPanel.OnImGuiRender();
         m_HistoryPanel.OnImGuiRender();
@@ -397,6 +408,51 @@ namespace Ayaya {
         UIRenderNewProjectPopup();
         UIRenderSaveAsPopup();
         m_ImportModelPanel.Draw();
+
+        // ---- Drawer + Bottom bar ----
+        float barH = 40.0f;
+        float contentBottom = ImGui::GetCursorPosY() + ImGui::GetContentRegionAvail().y;
+
+        // Drawer (above bottom bar, animated)
+        if (m_DrawerAnimationProgress > 0.001f) {
+            ImVec2 dockWinPos = ImGui::GetWindowPos();
+            float dockWinW = ImGui::GetWindowWidth();
+            float targetH = ImGui::GetWindowHeight() * 0.40f;
+            float curH = targetH * m_DrawerAnimationProgress;
+            float curY = dockWinPos.y + contentBottom - barH - curH + 1.0f;
+            float curW = dockWinW * 0.75f;
+            bool animating = (m_DrawerAnimationProgress < 0.995f);
+            if (animating) {
+                ImGui::SetNextWindowPos(ImVec2(dockWinPos.x, curY), ImGuiCond_Always);
+                ImGui::SetNextWindowSize(ImVec2(curW, curH), ImGuiCond_Always);
+            }
+            if (ImGui::Begin("Content Browser##Drawer", &m_ShowContentDrawer, ImGuiWindowFlags_NoDocking))
+                m_ContentBrowserPanel.RenderContent();
+            ImGui::End();
+        }
+
+        // Bottom bar (at contentBottom)
+        {
+            ImGui::SetCursorPosY(contentBottom - barH);
+            ImGui::BeginChild("##BottomBar", ImVec2(0, barH), false,
+                ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            ImVec2 bp = ImGui::GetWindowPos(); ImVec2 bs = ImGui::GetWindowSize();
+            ImGui::GetWindowDrawList()->AddRectFilled(bp, ImVec2(bp.x + bs.x, bp.y + bs.y),
+                IM_COL32(20, 20, 25, 255), 0.0f);
+            float btnH = barH - 6.0f;
+            ImGui::SetCursorPosY(3.0f);
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 0));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.65f, 0.68f, 1.0f));
+            if (ImGui::Button(ICON_FA_FOLDER_OPEN " Content Browser", ImVec2(0, btnH)))
+                m_ShowContentDrawer = !m_ShowContentDrawer;
+            ImGui::PopStyleColor(2);
+            ImGui::PopStyleVar(2);
+            ImGui::PopFont();
+            ImGui::EndChild();
+        }
 
         ImGui::End(); // End DockSpace
     }
@@ -1221,7 +1277,7 @@ namespace Ayaya {
         }
     }
 
-    void EditorLayer::UIRenderDockspace() {
+    void EditorLayer::UIRenderDockspace(float reserveBottom) {
         static bool dockspaceOpen = true;
         static ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_None;
         ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
@@ -1274,7 +1330,7 @@ namespace Ayaya {
                 
                 ImGui::DockBuilderFinish(dockspace_id);
             }
-            ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
+            ImGui::DockSpace(dockspace_id, ImVec2(0.0f, -reserveBottom), dockspace_flags);
         }
     }
 

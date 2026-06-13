@@ -16,6 +16,7 @@ namespace Ayaya {
         ContentBrowserPanel();
 
         void OnImGuiRender();
+        void RenderContent();  // core content for drawer reuse
 
     private:
         std::shared_ptr<Texture2D> GetThumbnail(const std::filesystem::path& path);

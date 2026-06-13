@@ -55,6 +55,7 @@ namespace Ayaya {
         AssetWatcher& GetAssetWatcher() { return m_AssetWatcher; }
         ImportModelPanel& GetImportModelPanel() { return m_ImportModelPanel; }
 
+
     private:
         void SetupScene();
         void InitDefaultProject();
@@ -74,7 +75,7 @@ namespace Ayaya {
         
         void HandleShortcuts();
         
-        void UIRenderDockspace();
+        void UIRenderDockspace(float reserveBottom = 0.0f);
         void UIRenderMenuBar();
         void UIRenderToolbar(); // 顶部工具栏 (放播放按钮)
         void UIRenderViewport();
@@ -124,8 +125,12 @@ namespace Ayaya {
         bool m_ViewportHovered = false;
         glm::vec2 m_InitialMousePos = { 0.0f, 0.0f }; 
 
-        int m_GizmoType = 7;
+        int m_GizmoType = -1;
         bool m_ShowCameraSpeedPopup = false;
+
+        bool  m_ShowContentDrawer = false;
+        float m_DrawerAnimationProgress = 0.0f;
+
         Entity m_HoveredEntity = {}; 
 
         // Scene 窗口设置
