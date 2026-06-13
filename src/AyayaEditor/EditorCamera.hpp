@@ -26,6 +26,8 @@ namespace Ayaya {
         // ==========================================
         // 新增：用于序列化编辑器相机的属性访问器
         // ==========================================
+        float MoveSpeed = 5.0f;
+
         float GetDistance() const { return m_Distance; }
         void SetDistance(float distance) { m_Distance = distance; }
 

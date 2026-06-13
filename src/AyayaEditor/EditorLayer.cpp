@@ -171,6 +171,7 @@ namespace Ayaya {
         // ==========================================
         // 上帝相机只在 Edit 模式响应输入
         if (m_SceneState == SceneState::Edit) {
+            m_EditorCamera.MoveSpeed = m_CameraSpeed;
             m_EditorCamera.OnUpdate(ts, m_ViewportFocused);
             // Editor-mode Lua scripts (lazy-init env + call OnEditorUpdate)
             ScriptEngine::OnEditorUpdate(m_ActiveScene.get(), ts);
@@ -1321,12 +1322,6 @@ namespace Ayaya {
             }
 
             if (ImGui::BeginMenu("View")) {
-                ImGui::MenuItem("Show Gizmos", nullptr, &m_ShowGizmosOverlay);
-                
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Spacing();
-
                 ImGui::MenuItem("Show Statistics", nullptr, &m_ShowStatsPanel);
 
                 ImGui::Spacing();
@@ -1410,32 +1405,407 @@ namespace Ayaya {
                 HandleGizmo(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
                 UIRenderDebugGizmos(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
 
-                // ---- Gizmos overlay (right side) ----
-                if (m_ShowGizmosOverlay) {
-                    ImVec2 vpMin = ImGui::GetItemRectMin();
-                    ImVec2 vpSize = ImVec2(m_ViewportSize.x, m_ViewportSize.y);
-                    float panelW = 140.0f;
-                    ImGui::SetCursorScreenPos(ImVec2(vpMin.x + vpSize.x - panelW - 6, vpMin.y + 6));
-                    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.12f, 0.12f, 0.12f, 0.85f));
-                    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 4.0f);
-                    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 8));
-                    ImGui::BeginChild("GizmosOverlay", ImVec2(panelW, 0),
-                        ImGuiChildFlags_AutoResizeY,
-                        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+                // Anchor: viewport image top-left corner (saved before overlays)
+                // vpSize already declared at line 1396 from m_ViewportSize
+                ImVec2 vpMin = ImGui::GetItemRectMin();
+                float btnW = 38.0f, btnH = 32.0f, pad = 3.0f;
+
+                // ---- Top-left buttons: [Options]  [Show] ----
+                {
+                    ImVec4 inactiveTxt = ImVec4(0.65f, 0.65f, 0.68f, 1.0f);
+                    ImVec4 activeTxt   = ImVec4(0.40f, 0.65f, 1.00f, 1.0f);
+                    ImDrawList* dl = ImGui::GetWindowDrawList();
+                    ImU32 borderCol = IM_COL32(10, 10, 15, 180);
+                    ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+
+                    // Close all other popups when a new one opens
+                    auto closeOthers = [&](bool* keep) {
+                        if (keep != &m_ShowViewportOptions)  m_ShowViewportOptions = false;
+                        if (keep != &m_ShowGizmosOverlay)    m_ShowGizmosOverlay = false;
+                        if (keep != &m_ShowCameraSpeedPopup) m_ShowCameraSpeedPopup = false;
+                    };
+
+                    auto oneBtn = [&](float x, const char* icon, const char* tip, bool* toggle) {
+                        bool active = toggle ? *toggle : false;
+                        ImVec2 bMin(x, vpMin.y + 6);
+                        ImVec2 bMax(x + btnW, vpMin.y + 6 + btnH);
+                        dl->AddRectFilled(bMin, bMax,
+                            active ? IM_COL32(48, 88, 145, 180) : IM_COL32(20, 20, 25, 180), 10.0f);
+                        dl->AddRect(bMin, bMax, borderCol, 10.0f, 0, 1.0f);
+                        ImGui::SetCursorScreenPos(bMin);
+                        ImGui::PushID(tip);
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
+                        ImGui::PushStyleColor(ImGuiCol_Text, active ? activeTxt : inactiveTxt);
+                        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
+                        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+                        bool pressed = ImGui::Button(icon, ImVec2(btnW, btnH));
+                        ImGui::PopStyleVar(2);
+                        ImGui::PopStyleColor(2);
+                        ImGui::PopID();
+                        if (pressed && toggle) {
+                            closeOthers(toggle);
+                            *toggle = !*toggle;
+                        }
+                        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                            ImGui::SetTooltip("%s", tip);
+                    };
+
+                    // Left panel buttons: [Options] [Show]
+                    float ox = vpMin.x + 8;
+                    float sx = vpMin.x + 8 + btnW + 4;
+
+                    oneBtn(ox, ICON_FA_BARS, "Options", &m_ShowViewportOptions);
+                    oneBtn(sx, ICON_FA_EYE,  "Show",    &m_ShowGizmosOverlay);
+
+                    // Camera speed button (shows speed text)
+                    {
+                        float spdW = btnW + 48.0f;  // enough for "⚡ 50.0"
+                        float spdX = vpMin.x + 8 + (btnW + 4) * 2;
+                        ImVec2 cMin(spdX, vpMin.y + 6);
+                        ImVec2 cMax(spdX + spdW, vpMin.y + 6 + btnH);
+                        dl->AddRectFilled(cMin, cMax, IM_COL32(20, 20, 25, 180), 10.0f);
+                        dl->AddRect(cMin, cMax, IM_COL32(10, 10, 15, 180), 10.0f, 0, 1.0f);
+                        ImGui::SetCursorScreenPos(cMin);
+                        ImGui::PushID("CamSpeed");
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f,0.65f,0.68f,1.0f));
+                        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
+                        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 0));
+                        char spdLabel[24];
+                        snprintf(spdLabel, sizeof(spdLabel), "%s %.1f", ICON_FA_BOLT, m_CameraSpeed);
+                        if (ImGui::Button(spdLabel, ImVec2(spdW, btnH))) {
+                            closeOthers(&m_ShowCameraSpeedPopup);
+                            m_ShowCameraSpeedPopup = !m_ShowCameraSpeedPopup;
+                        }
+                        ImGui::PopStyleVar(2);
+                        ImGui::PopStyleColor(2);
+                        ImGui::PopID();
+                        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                            ImGui::SetTooltip("Camera Speed");
+                    }
+
+                    // Camera speed slider window
+                    if (m_ShowCameraSpeedPopup) {
+                        float popW = 200.0f;
+                        ImVec2 popPos(vpMin.x + 8 + (btnW + 4) * 2, vpMin.y + 6 + btnH + 4);
+                        ImGui::SetNextWindowPos(popPos);
+                        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.08f, 0.08f, 0.10f, 0.95f));
+                        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+                        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 10));
+                        ImGui::SetNextWindowSize(ImVec2(popW, 0));
+                        if (ImGui::Begin("##CamSpeedWin", &m_ShowCameraSpeedPopup,
+                            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove |
+                            ImGuiWindowFlags_AlwaysAutoResize)) {
+                            ImGui::SetNextItemWidth(popW - 20.0f);
+                            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+                            ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 4.0f);
+                            ImGui::SliderFloat("##SpeedSlider", &m_CameraSpeed, 0.1f, 50.0f, "%.1f");
+                            ImGui::PopStyleVar(2);
+                        }
+                        ImGui::End();
+                        ImGui::PopStyleVar(2);
+                        ImGui::PopStyleColor();
+                    }
+
+                    ImGui::PopFont();
+                }
+
+                // ---- Viewport options panel (toggled by Options button) ----
+                if (m_ShowViewportOptions) {
+                    float panelW = 352.0f, rowH = 32.0f;
+                    float titleTop = 10.0f, titleH = 20.0f, sepGap = 10.0f, rowsTop = 8.0f, bottomPad = 10.0f;
+                    int rowCount = 4;
+                    float panelH = titleTop + titleH + sepGap + rowsTop + rowH * rowCount + bottomPad;
+                    ImVec2 panelPos(vpMin.x + 8, vpMin.y + 6 + btnH + 4);
+                    ImDrawList* odl = ImGui::GetWindowDrawList();
+                    odl->AddRectFilled(panelPos, ImVec2(panelPos.x + panelW, panelPos.y + panelH),
+                        IM_COL32(20, 20, 25, 230), 8.0f);
+                    odl->AddRect(panelPos, ImVec2(panelPos.x + panelW, panelPos.y + panelH),
+                        IM_COL32(10, 10, 15, 180), 8.0f, 0, 1.0f);
+
+                    ImGui::SetNextWindowPos(panelPos);
+                    ImGui::SetNextWindowSize(ImVec2(panelW, panelH));
+                    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0,0,0,0));
+                    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+                    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+                    ImGui::Begin("##ViewportOptions", nullptr,
+                        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove |
+                        ImGuiWindowFlags_NoSavedSettings);
+
+                    ImGui::SetCursorPos(ImVec2(16.0f, titleTop));
+                    ImGui::TextDisabled("Viewport Options");
+                    ImGui::SetCursorPos(ImVec2(16.0f, titleTop + titleH + sepGap));
+                    ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.30f,0.35f,0.40f,0.60f));
+                    ImGui::Separator();
+                    ImGui::PopStyleColor();
 
                     ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
-                    ImGui::Text("Gizmos");
-                    ImGui::PopFont();
-                    ImGui::Separator();
-                    ImGui::Checkbox("Grid", &m_ShowGrid);
-                    ImGui::Checkbox("Camera", &m_ShowCameraGizmos);
-                    ImGui::Checkbox("Light", &m_ShowLightGizmos);
-                    ImGui::Checkbox("UI", &m_ShowUIGizmos);
 
-                    ImGui::EndChild();
+                    struct ResEntry { const char* label; int w, h; };
+                    ResEntry resolutions[] = {
+                        {"1920 x 1080  (1080p)", 1920, 1080},
+                        {"2560 x 1440  (2K)",    2560, 1440},
+                        {"3840 x 2160  (4K)",    3840, 2160},
+                        {"Fit Window",            0,    0},
+                    };
+
+                    auto resRow = [&](const char* label, bool active) {
+                        float rowY = ImGui::GetCursorPosY();
+                        ImVec2 rMin(panelPos.x, panelPos.y + rowY);
+                        ImVec2 rMax(panelPos.x + panelW, panelPos.y + rowY + rowH);
+                        bool hovered = ImGui::IsMouseHoveringRect(rMin, rMax);
+                        if (hovered) {
+                            odl->AddRectFilled(rMin, rMax, IM_COL32(0,112,255,100), 2.0f);
+                        }
+                        ImGui::SetCursorPos(ImVec2(0, rowY));
+                        ImGui::InvisibleButton("##resHit", ImVec2(panelW, rowH));
+                        // Active indicator
+                        if (active) {
+                            ImGui::SetCursorPos(ImVec2(16.0f, rowY + (rowH - ImGui::GetTextLineHeight()) * 0.5f));
+                            ImGui::Text("%s", ICON_FA_CHECK);
+                        }
+                        ImGui::SetCursorPos(ImVec2(40.0f, rowY + (rowH - ImGui::GetTextLineHeight()) * 0.5f));
+                        ImGui::Text("%s", label);
+                        return hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+                    };
+
+                    for (auto& r : resolutions) {
+                        ImGui::PushID(r.label);
+                        // Placeholder — no state tracked yet
+                        if (resRow(r.label, false))
+                            AYAYA_CORE_INFO("Resolution selected: {0}", r.label);
+                        ImGui::PopID();
+                    }
+
+                    ImGui::PopFont();
+                    ImGui::End();
                     ImGui::PopStyleVar(2);
                     ImGui::PopStyleColor();
                 }
+
+                // ---- Viewport display filter panel (toggled by Show button) ----
+                if (m_ShowGizmosOverlay) {
+                    float panelW = 352.0f;
+                    float rowH = 32.0f;
+                    float colCheckW = 32.0f, colIconW = 48.0f;
+                    float colCheck = 16.0f, colIcon = colCheck + colCheckW;
+                    float colText = colIcon + colIconW;
+                    ImVec2 panelPos(vpMin.x + 8 + (btnW + 4), vpMin.y + 6 + btnH + 4);
+                    int rowCount = 4;
+                    float titleTop = 10.0f, titleH = 20.0f, sepGap = 10.0f, rowsTop = 8.0f, bottomPad = 10.0f;
+                    float panelH = titleTop + titleH + sepGap + rowsTop + rowH * rowCount + bottomPad;
+                    ImDrawList* fdl = ImGui::GetWindowDrawList();
+                    fdl->AddRectFilled(panelPos, ImVec2(panelPos.x + panelW, panelPos.y + panelH),
+                        IM_COL32(20, 20, 25, 230), 8.0f);
+                    fdl->AddRect(panelPos, ImVec2(panelPos.x + panelW, panelPos.y + panelH),
+                        IM_COL32(10, 10, 15, 180), 8.0f, 0, 1.0f);
+
+                    ImGui::SetNextWindowPos(panelPos);
+                    ImGui::SetNextWindowSize(ImVec2(panelW, panelH));
+                    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0,0,0,0));
+                    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+                    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+                    ImGui::Begin("##ViewportFilters", nullptr,
+                        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove |
+                        ImGuiWindowFlags_NoSavedSettings);
+
+                    // Title
+                    ImGui::SetCursorPos(ImVec2(colCheck, titleTop));
+                    ImGui::TextDisabled("Viewport Display");
+                    ImGui::SetCursorPos(ImVec2(colCheck, titleTop + titleH + sepGap));
+                    ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.30f,0.35f,0.40f,0.60f));
+                    ImGui::Separator();
+                    ImGui::PopStyleColor();
+
+                    ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+
+                    auto filterRow = [&](const char* icon, const char* label, bool* val) {
+                        ImGui::PushID(label);
+                        float rowY = ImGui::GetCursorPosY();
+                        ImVec2 rowMin(panelPos.x, panelPos.y + rowY);
+                        ImVec2 rowMax(panelPos.x + panelW, panelPos.y + rowY + rowH);
+
+                        bool hovered = ImGui::IsMouseHoveringRect(rowMin, rowMax);
+                        if (hovered) {
+                            fdl->AddRectFilled(rowMin, rowMax,
+                                IM_COL32(0, 112, 255, 100), 2.0f);
+                            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                                *val = !*val;
+                        }
+
+                        ImGui::SetCursorPos(ImVec2(0, rowY));
+                        ImGui::InvisibleButton("##hit", ImVec2(panelW, rowH));
+
+                        if (*val) {
+                            ImGui::SetCursorPos(ImVec2(colCheck, rowY + (rowH - ImGui::GetTextLineHeight()) * 0.5f));
+                            ImGui::Text("%s", ICON_FA_CHECK);
+                        }
+                        ImVec2 isz = ImGui::CalcTextSize(icon);
+                        ImGui::SetCursorPos(ImVec2(colIcon + (colIconW - isz.x) * 0.5f,
+                            rowY + (rowH - ImGui::GetTextLineHeight()) * 0.5f));
+                        ImGui::Text("%s", icon);
+                        ImGui::SetCursorPos(ImVec2(colText, rowY + (rowH - ImGui::GetTextLineHeight()) * 0.5f));
+                        ImGui::Text("%s", label);
+
+                        ImGui::PopID();
+                    };
+
+                    filterRow(ICON_FA_BORDER_ALL,   "Grid",   &m_ShowGrid);
+                    filterRow(ICON_FA_VIDEO,         "Camera", &m_ShowCameraGizmos);
+                    filterRow(ICON_FA_LIGHTBULB,     "Light",  &m_ShowLightGizmos);
+                    filterRow(ICON_FA_OBJECT_GROUP,  "UI",     &m_ShowUIGizmos);
+
+                    ImGui::PopFont();
+                    ImGui::End();
+                    ImGui::PopStyleVar(2);
+                    ImGui::PopStyleColor();
+                }
+
+                // ---- Gizmo mode toolbar (top-right) ----
+                {
+                    float btnW = 38.0f, btnH = 32.0f;
+                    int btnCount = 4;
+                    ImVec2 gizmoStart(vpMin.x + vpSize.x - btnW - btnW * btnCount - 8 - 4, vpMin.y + 6);
+                    ImDrawList* dl2 = ImGui::GetWindowDrawList();
+                    // Continuous background behind all 4 mode buttons
+                    ImVec2 gEnd(gizmoStart.x + btnW * btnCount, gizmoStart.y + btnH);
+                    dl2->AddRectFilled(gizmoStart, gEnd, IM_COL32(20, 20, 25, 180), 10.0f);
+                    dl2->AddRect(gizmoStart, gEnd, IM_COL32(10, 10, 15, 180), 10.0f, 0, 1.0f);
+                    ImVec4 activeTxt   = ImVec4(0.40f, 0.65f, 1.00f, 1.0f);
+                    ImVec4 inactiveTxt = ImVec4(0.65f, 0.65f, 0.68f, 1.0f);
+                    ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+                    ImGui::SetCursorScreenPos(gizmoStart);
+
+                    auto modeBtn = [&](const char* icon, int mode, const char* tip) {
+                        bool active = (m_GizmoType == mode);
+                        if (active) {
+                            ImVec2 bMin = ImGui::GetCursorScreenPos();
+                            dl2->AddRectFilled(bMin, ImVec2(bMin.x + btnW, bMin.y + btnH),
+                                IM_COL32(48, 88, 145, 180), 10.0f);
+                        }
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
+                        ImGui::PushStyleColor(ImGuiCol_Text, active ? activeTxt : inactiveTxt);
+                        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
+                        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+                        bool pressed = ImGui::Button(icon, ImVec2(btnW, btnH));
+                        ImGui::PopStyleVar(2);
+                        ImGui::PopStyleColor(2);
+                        if (pressed) m_GizmoType = (m_GizmoType == mode) ? -1 : mode;
+                        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                            ImGui::SetTooltip("%s", tip);
+                        ImGui::SameLine(0, 0);
+                    };
+
+                    modeBtn(ICON_FA_MOUSE_POINTER, -1,                      "Select (Q)");
+                    modeBtn(ICON_FA_ARROWS_ALT,    ImGuizmo::OPERATION::TRANSLATE, "Translate (W)");
+                    modeBtn(ICON_FA_SYNC_ALT,      ImGuizmo::OPERATION::ROTATE,    "Rotate (E)");
+                    modeBtn(ICON_FA_EXPAND_ALT,    ImGuizmo::OPERATION::SCALE,     "Scale (R)");
+
+                    ImGui::PopFont();
+                }
+
+                // ---- Stats button (far right edge) ----
+                {
+                    float btnW = 38.0f, btnH = 32.0f;
+                    ImVec2 sp(vpMin.x + vpSize.x - btnW - 8, vpMin.y + 6);
+                    ImDrawList* dl3 = ImGui::GetWindowDrawList();
+                    dl3->AddRectFilled(sp, ImVec2(sp.x + btnW, sp.y + btnH),
+                        m_ShowViewportStats ? IM_COL32(48, 88, 145, 180) : IM_COL32(20, 20, 25, 180), 10.0f);
+                    dl3->AddRect(sp, ImVec2(sp.x + btnW, sp.y + btnH), IM_COL32(10, 10, 15, 180), 10.0f, 0, 1.0f);
+                    ImGui::SetCursorScreenPos(sp);
+                    ImVec4 atxt  = ImVec4(0.40f, 0.65f, 1.00f, 1.0f);
+                    ImVec4 itxt  = ImVec4(0.65f, 0.65f, 0.68f, 1.0f);
+                    ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+                    ImGui::PushID("PerfStats");
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
+                    ImGui::PushStyleColor(ImGuiCol_Text, m_ShowViewportStats ? atxt : itxt);
+                    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
+                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+                    if (ImGui::Button(ICON_FA_CHART_LINE, ImVec2(btnW, btnH)))
+                        m_ShowViewportStats = !m_ShowViewportStats;
+                    ImGui::PopStyleVar(2);
+                    ImGui::PopStyleColor(2);
+                    ImGui::PopID();
+                    ImGui::PopFont();
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                        ImGui::SetTooltip("Performance Stats");
+                }
+
+                // ---- Stats overlay (matching Game viewport panel) ----
+                if (m_ShowViewportStats) {
+                    static ImVec2 s_EditorStatsSize = ImVec2(375.0f, 340.0f);
+                    ImGui::SetCursorScreenPos(ImVec2(vpMin.x + vpSize.x - s_EditorStatsSize.x - 8,
+                        vpMin.y + 6 + btnH + pad * 2 + 4));
+                    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.15f, 0.9f));
+                    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 4.0f);
+                    ImGui::BeginChild("EditorStatsOverlay", s_EditorStatsSize, false,
+                        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+                    ImGui::SetCursorPosY(10.0f);
+                    ImGui::Indent(10.0f);
+
+                    auto& io = ImGui::GetIO();
+                    auto boldFont = io.Fonts->Fonts.Size > 1 ? io.Fonts->Fonts[1] : io.Fonts->Fonts[0];
+                    float memoryMB = GetPhysicalMemoryUsageMB();
+                    float uiScale = io.FontGlobalScale;
+                    float alignOffset = 100.0f * uiScale;
+
+                    auto& stats = m_SceneRenderer->GetStats();
+
+                    // Graphics
+                    ImGui::PushFont(boldFont);
+                    ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Graphics");
+                    ImGui::PopFont();
+                    ImGui::Separator();
+                    ImGui::Text("%.1f FPS (%.1f ms)", io.Framerate, 1000.0f / io.Framerate);
+                    ImGui::Text("CPU Time:"); ImGui::SameLine(alignOffset);
+                    ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%8.2f ms", stats.CPUTime);
+                    ImGui::Text("GPU Time:"); ImGui::SameLine(alignOffset);
+                    ImGui::TextColored(ImVec4(0.9f, 0.4f, 0.2f, 1.0f), "%8.2f ms", stats.GPUTime);
+                    ImGui::Text("RAM Usage:"); ImGui::SameLine(alignOffset);
+                    ImGui::TextColored(ImVec4(0.2f, 0.7f, 0.9f, 1.0f), "%8.1f MB", memoryMB);
+                    ImGui::Text("Screen Size: %dx%d", (int)m_ViewportSize.x, (int)m_ViewportSize.y);
+                    ImGui::Spacing();
+
+                    // Rendering
+                    ImGui::PushFont(boldFont);
+                    ImGui::TextColored(ImVec4(0.8f, 0.6f, 0.2f, 1.0f), "Rendering");
+                    ImGui::PopFont();
+                    ImGui::Separator();
+                    ImGui::Text("Draw Calls: %d", stats.DrawCalls);
+                    ImGui::Text("Shader Binds: %d", stats.ShaderBinds);
+                    ImGui::Spacing();
+
+                    // Geometry
+                    ImGui::PushFont(boldFont);
+                    ImGui::TextColored(ImVec4(0.3f, 0.6f, 0.9f, 1.0f), "Geometry");
+                    ImGui::PopFont();
+                    ImGui::Separator();
+                    ImGui::Text("Triangle Count: %d", stats.TriangleCount);
+                    ImGui::SameLine(0.0f, 15.0f * uiScale);
+                    ImGui::Text("Vertex Count: %d", stats.VertexCount);
+
+                    if (m_ActiveScene) {
+                        size_t entityCount = 0;
+                        auto view = m_ActiveScene->Reg().view<IDComponent>();
+                        for (auto e : view) entityCount++;
+                        ImGui::Text("Active Entities: %zu", entityCount);
+                    }
+
+                    ImGui::Unindent(10.0f);
+
+                    float currentLineHeight = ImGui::GetTextLineHeight();
+                    s_EditorStatsSize.x = 375.0f * (currentLineHeight / 16.0f);
+                    s_EditorStatsSize.y = ImGui::GetCursorPosY() + 10.0f;
+
+                    ImGui::EndChild();
+                    ImGui::PopStyleVar();
+                    ImGui::PopStyleColor();
+                }
+
             } else {
                 ImGui::Text("Viewport is initializing...");
             }

@@ -23,7 +23,7 @@ namespace Ayaya {
         // Context menu / interaction state
         void RenderContextMenuForItem(const std::filesystem::path& path, bool isDir, UUID handle, const std::string& name);
         void RenderDeleteConfirmModal();
-        void RenderRenameInput(const std::filesystem::path& parentDir);
+        void RenderRenameInput(float cellWidth);
         void BeginRename(const std::filesystem::path& path, bool isFolder);
 
         std::filesystem::path m_BaseDirectory;

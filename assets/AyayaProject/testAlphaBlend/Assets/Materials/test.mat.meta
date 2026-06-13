@@ -1,8 +1,3 @@
 uuid: 15677845308231836913
 type: 5
-import_settings:
-  filter: 0
-  wrap: 0
-  srgb: true
-  mipmaps: true
-  flip_y: true
+virtual_path: project://Materials/test.mat

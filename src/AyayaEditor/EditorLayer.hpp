@@ -124,7 +124,8 @@ namespace Ayaya {
         bool m_ViewportHovered = false;
         glm::vec2 m_InitialMousePos = { 0.0f, 0.0f }; 
 
-        int m_GizmoType = 7; // ImGuizmo::OPERATION::TRANSLATE 的值
+        int m_GizmoType = 7;
+        bool m_ShowCameraSpeedPopup = false;
         Entity m_HoveredEntity = {}; 
 
         // Scene 窗口设置
@@ -134,6 +135,9 @@ namespace Ayaya {
         bool m_ShowLightGizmos = true;
         bool m_ShowUIGizmos = true;
         bool m_ShowGizmosOverlay = false;
+        bool m_ShowViewportOptions = false;
+        bool m_ShowViewportStats = false;
+        float m_CameraSpeed = 5.0f;
 
         // Gizmo icon textures
         std::shared_ptr<Texture2D> m_CameraIcon;

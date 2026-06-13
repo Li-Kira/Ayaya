@@ -76,9 +76,17 @@ namespace Ayaya {
         m_RenameBuffer[std::min(stem.size(), sizeof(m_RenameBuffer) - 1)] = '\0';
     }
 
-    void ContentBrowserPanel::RenderRenameInput(const std::filesystem::path& parentDir) {
+    void ContentBrowserPanel::RenderRenameInput(float cellWidth) {
         float scale = ImGui::GetIO().FontGlobalScale;
-        ImGui::SetNextItemWidth(200.0f * scale);
+        float inputWidth = cellWidth - 4.0f * scale;  // stay inside cell
+        if (inputWidth < 60.0f * scale) inputWidth = 60.0f * scale;
+
+        // Center the input within the cell
+        float cursorX = ImGui::GetCursorPosX();
+        float offsetX = (cellWidth - inputWidth) * 0.5f;
+        if (offsetX > 0.0f) ImGui::SetCursorPosX(cursorX + offsetX);
+
+        ImGui::SetNextItemWidth(inputWidth);
         ImGui::SetKeyboardFocusHere();
         if (ImGui::InputText("##RenameInput", m_RenameBuffer, sizeof(m_RenameBuffer),
                              ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {
@@ -122,9 +130,20 @@ namespace Ayaya {
         // Batch operations when multiple items are selected
         if (totalSelected > 1) {
             char buf[64];
+            snprintf(buf, sizeof(buf), "Show in Explorer (%zu)", totalSelected);
+            if (ImGui::MenuItem(buf)) {
+                // Open Explorer at the first selected item's parent directory
+                if (!m_SelectedFolders.empty())
+                    FileDialogs::OpenInFileExplorer(m_SelectedFolders.begin()->string());
+                else {
+                    auto firstHandle = *m_SelectedAssets.begin();
+                    auto meta = AssetManager::GetMetadata(firstHandle);
+                    std::string phys = VFS::ResolveString(meta.VirtualPath);
+                    FileDialogs::ShowInFileExplorer(phys);
+                }
+            }
             snprintf(buf, sizeof(buf), "Delete Selected (%zu)", totalSelected);
             if (ImGui::MenuItem(buf)) {
-                // Collect UUIDs first (avoid iteration + mutation issues)
                 std::vector<UUID> toDelete(m_SelectedAssets.begin(), m_SelectedAssets.end());
                 std::vector<std::filesystem::path> toRemoveDirs(m_SelectedFolders.begin(), m_SelectedFolders.end());
                 m_SelectedAssets.clear();
@@ -161,6 +180,9 @@ namespace Ayaya {
             if (ImGui::MenuItem("Rename")) {
                 BeginRename(path, false);
             }
+            if (ImGui::MenuItem("Show in Explorer")) {
+                FileDialogs::ShowInFileExplorer(path.string());
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Move To...")) {
                 std::string dest = FileDialogs::OpenFolder();
@@ -186,6 +208,9 @@ namespace Ayaya {
             }
             if (ImGui::MenuItem("Rename")) {
                 BeginRename(path, true);
+            }
+            if (ImGui::MenuItem("Show in Explorer")) {
+                FileDialogs::OpenInFileExplorer(path.string());
             }
             ImGui::Separator();
             if (ImGui::MenuItem("New Folder")) {
@@ -380,12 +405,38 @@ namespace Ayaya {
             m_SelectedFolders.clear();
         }
 
+        // Global rename shortcut: F2 (Windows), Enter (macOS) — acts on last selected item
+        if (!m_IsRenaming && ImGui::IsWindowFocused()) {
+#ifdef _WIN32
+            bool renameKey = ImGui::IsKeyPressed(ImGuiKey_F2);
+#else
+            bool renameKey = ImGui::IsKeyPressed(ImGuiKey_Enter)
+                && !ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyShift && !ImGui::GetIO().KeyAlt;
+#endif
+            if (renameKey) {
+                size_t totalSel = m_SelectedAssets.size() + m_SelectedFolders.size();
+                if (totalSel == 1) {
+                    if (!m_SelectedFolders.empty()) {
+                        BeginRename(*m_SelectedFolders.begin(), true);
+                    } else if (!m_SelectedAssets.empty()) {
+                        auto meta = AssetManager::GetMetadata(*m_SelectedAssets.begin());
+                        std::string phys = VFS::ResolveString(meta.VirtualPath);
+                        BeginRename(phys, false);
+                    }
+                }
+            }
+        }
+
         // Ctrl+A → select all visible items (handled in the table loop via visibleItems vector)
         bool selectAll = ImGui::IsWindowFocused() && ImGui::GetIO().KeyCtrl
                          && ImGui::IsKeyPressed(ImGuiKey_A);
 
         // Empty-space right-click: use BeginPopupContextWindow on the child region
         if (ImGui::BeginPopupContextWindow("##EmptySpaceCtx", ImGuiPopupFlags_NoOpenOverItems)) {
+            if (ImGui::MenuItem("Open in Explorer")) {
+                FileDialogs::OpenInFileExplorer(m_CurrentDirectory.string());
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("New Folder")) {
                 AssetManager::CreateFolder(m_CurrentDirectory, "New Folder");
             }
@@ -591,10 +642,6 @@ namespace Ayaya {
                     ImGui::EndPopup();
                 }
 
-                // F2 → rename
-                if (hovered && ImGui::IsKeyPressed(ImGuiKey_F2) && !m_IsRenaming) {
-                    BeginRename(path, isDir);
-                }
 
                 // Drag source — UUID payload for assets (used by SceneHierarchy),
                 // path payload for folders (used by folder-to-folder move).
@@ -714,7 +761,7 @@ namespace Ayaya {
                 // Inline rename?
                 bool renamingThis = m_IsRenaming && (m_RenamingPath == path);
                 if (renamingThis) {
-                    RenderRenameInput(path.parent_path());
+                    RenderRenameInput(cellSize);
                 } else {
                     ImFont* font = ImGui::GetFont();
                     float fontScale = ImGui::GetIO().FontGlobalScale;

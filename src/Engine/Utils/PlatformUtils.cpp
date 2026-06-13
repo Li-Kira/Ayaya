@@ -8,8 +8,9 @@
 // ==========================================
 #ifdef _WIN32
     #include <windows.h>
+    #include <shellapi.h>
     #include <commdlg.h>
-    #include <shobjidl.h> // 【新增】：为了使用现代的 IFileOpenDialog 选择文件夹
+    #include <shobjidl.h>
 #endif
 
 namespace Ayaya {
@@ -146,6 +147,27 @@ namespace Ayaya {
         pclose(pipe);
         if (!result.empty() && result[result.length()-1] == '\n') result.erase(result.length()-1);
         return result;
+#endif
+    }
+
+    void FileDialogs::ShowInFileExplorer(const std::string& path) {
+        if (path.empty()) return;
+#ifdef _WIN32
+        std::string cmd = "/select,\"" + path + "\"";
+        ShellExecuteA(NULL, "open", "explorer.exe", cmd.c_str(), NULL, SW_SHOW);
+#else
+        std::string cmd = "open -R '" + path + "' 2>/dev/null";
+        system(cmd.c_str());
+#endif
+    }
+
+    void FileDialogs::OpenInFileExplorer(const std::string& folderPath) {
+        if (folderPath.empty()) return;
+#ifdef _WIN32
+        ShellExecuteA(NULL, "open", folderPath.c_str(), NULL, NULL, SW_SHOW);
+#else
+        std::string cmd = "open '" + folderPath + "' 2>/dev/null";
+        system(cmd.c_str());
 #endif
     }
 

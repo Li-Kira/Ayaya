@@ -1,2 +1,9 @@
 uuid: 1869855536195217183
 type: 2
+virtual_path: project://Textures/iron.png
+import_settings:
+  filter: 0
+  wrap: 0
+  srgb: true
+  mipmaps: true
+  flip_y: true

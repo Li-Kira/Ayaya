@@ -44,7 +44,7 @@ namespace Ayaya {
             glm::vec3 right   = glm::rotate(orientation, glm::vec3(1.0f, 0.0f, 0.0f));
             glm::vec3 up      = glm::rotate(orientation, glm::vec3(0.0f, 1.0f, 0.0f));
 
-            float velocity = (Input::IsKeyPressed(Key::LeftShift) ? 10.0f : 5.0f) * (float)ts;
+            float velocity = (Input::IsKeyPressed(Key::LeftShift) ? MoveSpeed * 2.0f : MoveSpeed) * (float)ts;
 
             if (Input::IsKeyPressed(Key::W)) m_Position += forward * velocity;
             if (Input::IsKeyPressed(Key::S)) m_Position -= forward * velocity;
