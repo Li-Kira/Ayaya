@@ -19,6 +19,9 @@ namespace Ayaya {
         void RenderContent();  // core content for drawer reuse
 
     private:
+        void DrawDirectoryTree(const std::filesystem::path& directoryPath);
+        void DrawContentGrid();
+
         std::shared_ptr<Texture2D> GetThumbnail(const std::filesystem::path& path);
 
         // Context menu / interaction state

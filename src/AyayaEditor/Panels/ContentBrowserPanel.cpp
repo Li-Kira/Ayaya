@@ -10,8 +10,10 @@
 
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <IconsFontAwesome5.h>
 #include <unordered_set>
 #include <algorithm>
+#include <fstream>
 
 namespace Ayaya {
 
@@ -306,10 +308,8 @@ namespace Ayaya {
         // ==========================================
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 
-        // Lambda: add drop target on breadcrumb that moves assets/folders to targetDir
         auto breadcrumbDropTarget = [&](const std::filesystem::path& targetDir) {
             if (ImGui::BeginDragDropTarget()) {
-                // Batch: move all selected assets
                 if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_BATCH")) {
                     auto& w = EditorLayer::Get().GetAssetWatcher();
                     bool wasPaused = w.IsPaused(); w.SetPaused(true);
@@ -343,6 +343,99 @@ namespace Ayaya {
         };
 
         float btnSize = 24.0f * scale;
+
+        // ---- Add button (create assets) ----
+        {
+            const char* icon = ICON_FA_PLUS;
+            const char* label = "Add";
+            float iconW = ImGui::CalcTextSize(icon).x;
+            float labelW = ImGui::CalcTextSize(label).x;
+            float btnW = iconW + labelW + 6.0f * scale + ImGui::GetStyle().FramePadding.x * 2;
+            ImVec2 btnPos = ImGui::GetCursorScreenPos();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 0, 0, 0)); // hide native text
+            if (ImGui::Button("##AddBtn", ImVec2(btnW, btnSize)))
+                ImGui::OpenPopup("##AddAssetPopup");
+            ImGui::PopStyleColor(2);
+            // Overlay: green icon + white text
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            float y = btnPos.y + (btnSize - ImGui::GetTextLineHeight()) * 0.5f;
+            dl->AddText(ImVec2(btnPos.x + ImGui::GetStyle().FramePadding.x, y),
+                        IM_COL32(76, 204, 102, 255), icon);
+            dl->AddText(ImVec2(btnPos.x + ImGui::GetStyle().FramePadding.x + iconW + 4.0f * scale, y),
+                        IM_COL32(255, 255, 255, 255), label);
+        }
+        if (ImGui::BeginPopup("##AddAssetPopup")) {
+            if (ImGui::MenuItem("New Folder")) {
+                AssetManager::CreateFolder(m_CurrentDirectory, "New Folder");
+            }
+            if (ImGui::MenuItem("New Scene")) {
+                AssetManager::CreateSceneAsset(m_CurrentDirectory, "New Scene");
+            }
+            if (ImGui::MenuItem("New Lua Script")) {
+                std::string baseName = "NewScript";
+                std::filesystem::path luaPath = m_CurrentDirectory / (baseName + ".lua");
+                int counter = 1;
+                while (std::filesystem::exists(luaPath)) {
+                    luaPath = m_CurrentDirectory / (baseName + std::to_string(counter) + ".lua");
+                    counter++;
+                }
+                std::ofstream out(luaPath);
+                if (out) {
+                    out << "-- " << luaPath.filename().string() << "\n"
+                        << "-- Configuration\n"
+                        << "Name = \"New Script\"\n\n"
+                        << "function OnCreate()\n"
+                        << "    -- Called once when the entity is created\n"
+                        << "end\n\n"
+                        << "function OnUpdate(ts)\n"
+                        << "    -- Called every frame\n"
+                        << "end\n\n"
+                        << "function OnDestroy()\n"
+                        << "    -- Called when the entity is destroyed\n"
+                        << "end\n";
+                    out.close();
+                    AssetManager::ImportAsset(luaPath);
+                }
+            }
+            ImGui::EndPopup();
+        }
+
+        ImGui::SameLine(0, 4.0f * scale);
+
+        // ---- Import button ----
+        {
+            const char* icon = ICON_FA_FILE_IMPORT;
+            const char* label = "Import";
+            float iconW = ImGui::CalcTextSize(icon).x;
+            float labelW = ImGui::CalcTextSize(label).x;
+            float btnW = iconW + labelW + 6.0f * scale + ImGui::GetStyle().FramePadding.x * 2;
+            ImVec2 btnPos = ImGui::GetCursorScreenPos();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 0, 0, 0)); // hide native text
+            if (ImGui::Button("##ImportBtn", ImVec2(btnW, btnSize)))
+                ImGui::OpenPopup("##ImportAssetPopup");
+            ImGui::PopStyleColor(2);
+            // Overlay: blue icon + white text
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            float y = btnPos.y + (btnSize - ImGui::GetTextLineHeight()) * 0.5f;
+            dl->AddText(ImVec2(btnPos.x + ImGui::GetStyle().FramePadding.x, y),
+                        IM_COL32(90, 140, 217, 255), icon);
+            dl->AddText(ImVec2(btnPos.x + ImGui::GetStyle().FramePadding.x + iconW + 4.0f * scale, y),
+                        IM_COL32(255, 255, 255, 255), label);
+        }
+        if (ImGui::BeginPopup("##ImportAssetPopup")) {
+            if (ImGui::MenuItem("Import 3D Model...")) {
+                std::string filepath = FileDialogs::OpenFile(
+                    "3D Models (*.fbx *.obj *.gltf *.glb)|*.fbx;*.obj;*.gltf;*.glb");
+                if (!filepath.empty())
+                    EditorLayer::Get().GetImportModelPanel().RequestOpen(filepath);
+            }
+            ImGui::EndPopup();
+        }
+
+        ImGui::SameLine(0, 40.0f * scale);
+
         if (m_CurrentDirectory != m_BaseDirectory) {
             if (ImGui::Button("<", ImVec2(btnSize, btnSize)))
                 m_CurrentDirectory = m_CurrentDirectory.parent_path();
@@ -385,9 +478,150 @@ namespace Ayaya {
         ImGui::Separator();
 
         // ==========================================
-        // Main content area
+        // Two-pane layout: folder tree | content grid
         // ==========================================
-        ImGui::BeginChild("ScrollingRegion", ImVec2(0, -32.0f * scale), false);
+        static ImGuiTableFlags tableFlags = ImGuiTableFlags_Resizable |
+                                            ImGuiTableFlags_BordersInnerV;
+
+        if (ImGui::BeginTable("ContentBrowserLayout", 2, tableFlags))
+        {
+            ImGui::TableSetupColumn("Folders", ImGuiTableColumnFlags_WidthFixed, 300.0f * scale);
+            ImGui::TableSetupColumn("Contents", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableNextRow();
+
+            // ---- Left: directory tree ----
+            ImGui::TableSetColumnIndex(0);
+            if (ImGui::BeginChild("FolderTreeChild", ImVec2(0, 0), false)) {
+                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.16f, 0.40f, 0.75f, 0.70f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.22f, 0.48f, 0.82f, 0.85f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.12f, 0.35f, 0.65f, 0.80f));
+                DrawDirectoryTree(m_BaseDirectory);
+                ImGui::PopStyleColor(3);
+            }
+            ImGui::EndChild();
+
+            // ---- Right: content grid ----
+            ImGui::TableSetColumnIndex(1);
+            if (ImGui::BeginChild("ContentGridChild", ImVec2(0, 0), false)) {
+                DrawContentGrid();
+            }
+            ImGui::EndChild();
+
+            ImGui::EndTable();
+        }
+
+        // ==========================================
+        // Delete confirmation modal
+        // ==========================================
+        RenderDeleteConfirmModal();
+
+        // ==========================================
+        // Bottom bar: thumbnail size slider
+        // ==========================================
+        float sliderWidth = 120.0f * scale;
+        ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - sliderWidth - 10.0f * scale);
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 8.0f * scale);
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.12f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.45f, 0.45f, 0.45f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(0.65f, 0.65f, 0.65f, 1.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0.0f));
+        ImGui::SetNextItemWidth(sliderWidth);
+        ImGui::SliderFloat("##IconSize", &m_ThumbnailSize, 32.0f, 256.0f, "");
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(5);
+    }
+
+    // =====================================================================
+    // Left pane: recursive directory tree
+    // =====================================================================
+    void ContentBrowserPanel::DrawDirectoryTree(const std::filesystem::path& directoryPath) {
+        std::vector<std::filesystem::path> subdirs;
+        for (auto& entry : std::filesystem::directory_iterator(directoryPath)) {
+            if (!entry.is_directory()) continue;
+            std::string name = entry.path().filename().string();
+            if (name.empty() || name[0] == '.') continue;
+            if (IsBuildArtifact(entry.path())) continue;
+            subdirs.push_back(entry.path());
+        }
+        std::sort(subdirs.begin(), subdirs.end(), [](auto& a, auto& b) {
+            return a.filename() < b.filename();
+        });
+
+        for (const auto& path : subdirs) {
+            bool hasChildren = false;
+            for (auto& entry : std::filesystem::directory_iterator(path)) {
+                if (entry.is_directory()) { hasChildren = true; break; }
+            }
+
+            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
+                                       ImGuiTreeNodeFlags_SpanAvailWidth;
+            if (!hasChildren)
+                flags |= ImGuiTreeNodeFlags_Leaf;
+            if (m_CurrentDirectory == path)
+                flags |= ImGuiTreeNodeFlags_Selected;
+
+            std::string label = path.filename().string();
+            // Use string content as ID — path.c_str() pointer is unstable across frames
+            std::string nodeId = path.string();
+            bool opened = ImGui::TreeNodeEx(nodeId.c_str(), flags, "%s %s",
+                                            ICON_FA_FOLDER, label.c_str());
+
+            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
+                m_CurrentDirectory = path;
+            }
+
+            // Drag target for moving assets into this folder via the tree
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_BATCH")) {
+                    auto& w = EditorLayer::Get().GetAssetWatcher();
+                    bool wasPaused = w.IsPaused(); w.SetPaused(true);
+                    uint32_t count = *(const uint32_t*)payload->Data;
+                    const UUID* handles = (const UUID*)((const char*)payload->Data + sizeof(uint32_t));
+                    for (uint32_t i = 0; i < count; i++)
+                        AssetManager::MoveAsset(handles[i], path);
+                    if (!wasPaused) w.SetPaused(false);
+                    m_SelectedAssets.clear();
+                    m_SelectedFolders.clear();
+                }
+                else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    UUID h = *(const UUID*)payload->Data;
+                    if (h != 0) {
+                        auto& w = EditorLayer::Get().GetAssetWatcher();
+                        bool wasPaused = w.IsPaused(); w.SetPaused(true);
+                        AssetManager::MoveAsset(h, path);
+                        if (!wasPaused) w.SetPaused(false);
+                    }
+                }
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_PATH")) {
+                    std::string srcPath((const char*)payload->Data, payload->DataSize - 1);
+                    if (!srcPath.empty() && std::filesystem::is_directory(srcPath) &&
+                        srcPath != path.string() &&
+                        srcPath != path.parent_path().string()) {
+                        std::error_code ec;
+                        auto dest = path / std::filesystem::path(srcPath).filename();
+                        if (!std::filesystem::exists(dest))
+                            std::filesystem::rename(srcPath, dest, ec);
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            if (opened) {
+                DrawDirectoryTree(path);
+                ImGui::TreePop();
+            }
+        }
+    }
+
+    // =====================================================================
+    // Right pane: content grid (extracted from original RenderContent body)
+    // =====================================================================
+    void ContentBrowserPanel::DrawContentGrid() {
+        float scale = ImGui::GetIO().FontGlobalScale;
+
+        if (m_CurrentDirectory.empty()) m_CurrentDirectory = m_BaseDirectory;
 
         float padding = 16.0f * scale;
         float cellSize = m_ThumbnailSize * scale + padding;
@@ -410,7 +644,7 @@ namespace Ayaya {
             m_SelectedFolders.clear();
         }
 
-        // Global rename shortcut: F2 (Windows), Enter (macOS) — acts on last selected item
+        // Global rename shortcut: F2
         if (!m_IsRenaming && ImGui::IsWindowFocused()) {
 #ifdef _WIN32
             bool renameKey = ImGui::IsKeyPressed(ImGuiKey_F2);
@@ -432,11 +666,11 @@ namespace Ayaya {
             }
         }
 
-        // Ctrl+A → select all visible items (handled in the table loop via visibleItems vector)
+        // Ctrl+A → select all
         bool selectAll = ImGui::IsWindowFocused() && ImGui::GetIO().KeyCtrl
                          && ImGui::IsKeyPressed(ImGuiKey_A);
 
-        // Empty-space right-click: use BeginPopupContextWindow on the child region
+        // Empty-space right-click context menu
         if (ImGui::BeginPopupContextWindow("##EmptySpaceCtx", ImGuiPopupFlags_NoOpenOverItems)) {
             if (ImGui::MenuItem("Open in Explorer")) {
                 FileDialogs::OpenInFileExplorer(m_CurrentDirectory.string());
@@ -475,7 +709,7 @@ namespace Ayaya {
             ImGui::EndPopup();
         }
 
-        // VisibleItem: pre-computed for range-select and Ctrl+A
+        // Pre-scan: collect visible items for range-select and Ctrl+A
         struct VisibleItem {
             std::filesystem::path path;
             std::string filename;
@@ -484,7 +718,6 @@ namespace Ayaya {
         };
         std::vector<VisibleItem> visibleItems;
 
-        // Pre-scan: collect all visible items so range-select sees the full list
         {
             std::vector<std::filesystem::directory_entry> sortedEntries;
             for (auto& e : std::filesystem::directory_iterator(m_CurrentDirectory))
@@ -536,7 +769,6 @@ namespace Ayaya {
                 bool isDir = vi.isDir;
                 UUID assetHandle = vi.handle;
 
-                // Selection state for this item
                 bool isSelected = isDir ? m_SelectedFolders.count(path) != 0
                                         : (assetHandle != 0 && m_SelectedAssets.count(assetHandle) != 0);
 
@@ -560,7 +792,6 @@ namespace Ayaya {
                 ImGui::InvisibleButton("##ItemHitbox", itemSize);
 
                 bool hovered = ImGui::IsItemHovered();
-                // macOS GLFW: modifier key polling unreliable. Combine all detection paths.
                 bool modCtrl  = ImGui::IsKeyDown(ImGuiKey_LeftCtrl)
                              || ImGui::IsKeyDown(ImGuiKey_RightCtrl)
                              || ImGui::GetIO().KeyCtrl;
@@ -575,7 +806,6 @@ namespace Ayaya {
                 // --- Multi-select click handling ---
                 if (clicked) {
                     if (modCtrl) {
-                        // Toggle
                         if (isDir) {
                             if (isSelected) m_SelectedFolders.erase(path);
                             else m_SelectedFolders.insert(path);
@@ -586,17 +816,16 @@ namespace Ayaya {
                         m_LastClickedAsset = isDir ? UUID(0) : assetHandle;
                         m_LastClickedFolder = isDir ? path : std::filesystem::path();
                     } else if (modShift && (m_LastClickedAsset != 0 || !m_LastClickedFolder.empty())) {
-                        // Range select — find both items in visibleItems by UUID/path
                         int idxLast = -1, idxCur = -1;
                         for (int i = 0; i < (int)visibleItems.size(); i++) {
-                            auto& vi = visibleItems[i];
-                            if (m_LastClickedAsset != 0 && !vi.isDir && vi.handle == m_LastClickedAsset)
+                            auto& vi2 = visibleItems[i];
+                            if (m_LastClickedAsset != 0 && !vi2.isDir && vi2.handle == m_LastClickedAsset)
                                 idxLast = i;
-                            if (!m_LastClickedFolder.empty() && vi.isDir && vi.path == m_LastClickedFolder)
+                            if (!m_LastClickedFolder.empty() && vi2.isDir && vi2.path == m_LastClickedFolder)
                                 idxLast = i;
-                            if (!isDir && assetHandle != 0 && !vi.isDir && vi.handle == assetHandle)
+                            if (!isDir && assetHandle != 0 && !vi2.isDir && vi2.handle == assetHandle)
                                 idxCur = i;
-                            if (isDir && vi.isDir && vi.path == path)
+                            if (isDir && vi2.isDir && vi2.path == path)
                                 idxCur = i;
                         }
                         if (idxLast >= 0 && idxCur >= 0) {
@@ -605,13 +834,12 @@ namespace Ayaya {
                             int lo = std::min(idxLast, idxCur);
                             int hi = std::max(idxLast, idxCur);
                             for (int i = lo; i <= hi; i++) {
-                                auto& vi = visibleItems[i];
-                                if (vi.isDir) m_SelectedFolders.insert(vi.path);
-                                else if (vi.handle != 0) m_SelectedAssets.insert(vi.handle);
+                                auto& vi3 = visibleItems[i];
+                                if (vi3.isDir) m_SelectedFolders.insert(vi3.path);
+                                else if (vi3.handle != 0) m_SelectedAssets.insert(vi3.handle);
                             }
                         }
                     } else {
-                        // Single click — clear, select this one
                         m_SelectedAssets.clear();
                         m_SelectedFolders.clear();
                         if (isDir) m_SelectedFolders.insert(path);
@@ -628,35 +856,29 @@ namespace Ayaya {
                     m_HoveredHandle = assetHandle;
 
                     ImU32 highlightColor = isSelected
-                        ? IM_COL32(60, 100, 180, 180)   // selected: blue
-                        : IM_COL32(80, 80, 80, 150);     // hovered: gray
+                        ? IM_COL32(60, 100, 180, 180)
+                        : IM_COL32(80, 80, 80, 150);
                     ImGui::GetWindowDrawList()->AddRectFilled(
                         ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
                         highlightColor, 6.0f * scale);
                     ImGui::SetTooltip("%s", filenameString.c_str());
                 } else if (isSelected) {
-                    // Show selected highlight even when not hovered
                     ImGui::GetWindowDrawList()->AddRectFilled(
                         ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
                         IM_COL32(50, 80, 150, 120), 6.0f * scale);
                 }
 
-                // === Right-click context menu (canonical ImGui pattern) ===
+                // Right-click context menu
                 if (ImGui::BeginPopupContextItem("##ItemCtx")) {
                     RenderContextMenuForItem(path, isDir, assetHandle, filenameString);
                     ImGui::EndPopup();
                 }
 
-
-                // Drag source — UUID payload for assets (used by SceneHierarchy),
-                // path payload for folders (used by folder-to-folder move).
-                // Batch payload when dragging a multi-selected item.
+                // Drag source
                 if (ImGui::BeginDragDropSource()) {
                     size_t totalSel = m_SelectedAssets.size() + m_SelectedFolders.size();
                     if (!isDir && assetHandle != 0) {
                         ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", &assetHandle, sizeof(UUID));
-                        // Batch: when dragging a selected item in a multi-selection,
-                        // also send all selected UUIDs for bulk move.
                         if (isSelected && totalSel > 1) {
                             size_t count = m_SelectedAssets.size();
                             size_t bufSize = sizeof(uint32_t) + count * sizeof(UUID);
@@ -687,9 +909,8 @@ namespace Ayaya {
                     ImGui::EndDragDropSource();
                 }
 
-                // Drag target — folders accept asset UUIDs, batches, and folder paths
+                // Drag target — folders accept asset drops
                 if (isDir && ImGui::BeginDragDropTarget()) {
-                    // Batch: move all selected assets at once
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_BATCH")) {
                         auto& watcher = EditorLayer::Get().GetAssetWatcher();
                         bool wasPaused = watcher.IsPaused(); watcher.SetPaused(true);
@@ -701,7 +922,6 @@ namespace Ayaya {
                         m_SelectedAssets.clear();
                         m_SelectedFolders.clear();
                     }
-                    // Single asset UUID
                     else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                         UUID draggedHandle = *(const UUID*)payload->Data;
                         if (draggedHandle != 0) {
@@ -712,7 +932,6 @@ namespace Ayaya {
                             if (!wasPaused) watcher.SetPaused(false);
                         }
                     }
-                    // Accept folder path
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_PATH")) {
                         std::string srcPath((const char*)payload->Data, payload->DataSize - 1);
                         if (!srcPath.empty() && std::filesystem::is_directory(srcPath) &&
@@ -730,7 +949,7 @@ namespace Ayaya {
 
                 // Double-click directory → navigate
                 if (doubleClicked && isDir) {
-                    m_CurrentDirectory /= path.filename();
+                    m_CurrentDirectory = path;
                 }
 
                 // Double-click scene file → open
@@ -742,7 +961,7 @@ namespace Ayaya {
                     }
                 }
 
-                // Single-click file → select in properties (skip during Ctrl/Shift multi-select)
+                // Single-click file → select in properties
                 if (hovered && ImGui::IsMouseReleased(ImGuiMouseButton_Left) && !isDir && assetHandle != 0) {
                     if (!ImGui::IsMouseDragPastThreshold(ImGuiMouseButton_Left)
                         && !modCtrl && !modShift) {
@@ -763,7 +982,6 @@ namespace Ayaya {
                 // Draw filename text
                 ImGui::SetCursorPos(ImVec2(cursorPos.x, cursorPos.y + 4.0f * scale + thumbSize + 8.0f * scale));
 
-                // Inline rename?
                 bool renamingThis = m_IsRenaming && (m_RenamingPath == path);
                 if (renamingThis) {
                     RenderRenameInput(cellSize);
@@ -796,28 +1014,5 @@ namespace Ayaya {
             }
             ImGui::EndTable();
         }
-        ImGui::EndChild();
-
-        // ==========================================
-        // Delete confirmation modal
-        // ==========================================
-        RenderDeleteConfirmModal();
-
-        // ==========================================
-        // Bottom bar: thumbnail size slider
-        // ==========================================
-        float sliderWidth = 120.0f * scale;
-        ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - sliderWidth - 10.0f * scale);
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 8.0f * scale);
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.12f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.45f, 0.45f, 0.45f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(0.65f, 0.65f, 0.65f, 1.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0.0f));
-        ImGui::SetNextItemWidth(sliderWidth);
-        ImGui::SliderFloat("##IconSize", &m_ThumbnailSize, 32.0f, 256.0f, "");
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor(5);
     }
 }

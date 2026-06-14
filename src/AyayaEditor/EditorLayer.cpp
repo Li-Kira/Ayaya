@@ -131,14 +131,18 @@ namespace Ayaya {
         // 2.1 处理 Scene (上帝视口) 的 Resize
         // ------------------------------------------
         static glm::vec2 s_LastViewportSize = { 0.0f, 0.0f };
-        if (m_ViewportSize.x > 0.0f && m_ViewportSize.y > 0.0f && 
+        if (m_ViewportSize.x > 0.0f && m_ViewportSize.y > 0.0f &&
            (s_LastViewportSize.x != m_ViewportSize.x || s_LastViewportSize.y != m_ViewportSize.y)) {
-            
-            uint32_t physicalWidth = (uint32_t)(m_ViewportSize.x * dpiScale);
-            uint32_t physicalHeight = (uint32_t)(m_ViewportSize.y * dpiScale);
-            // 【修改为调用 m_SceneRenderer】
-            m_SceneRenderer->OnWindowResize(physicalWidth, physicalHeight);
+
             m_EditorCamera.OnResize(m_ViewportSize.x, m_ViewportSize.y);
+            // When custom viewport resolution is active, skip renderer resize here —
+            // step 5.2 below applies the custom resolution. This avoids a redundant
+            // OnWindowResize (and vkDeviceWaitIdle) that would be immediately overridden.
+            if (!(m_ViewportResW > 0 && m_ViewportResH > 0)) {
+                uint32_t physicalWidth = (uint32_t)(m_ViewportSize.x * dpiScale);
+                uint32_t physicalHeight = (uint32_t)(m_ViewportSize.y * dpiScale);
+                m_SceneRenderer->OnWindowResize(physicalWidth, physicalHeight);
+            }
             s_LastViewportSize = m_ViewportSize;
         }
 
@@ -297,6 +301,9 @@ namespace Ayaya {
         // ------------------------------------------
         // 5.2: 渲染 Scene 窗口
         // ------------------------------------------
+        // Apply custom viewport resolution if set
+        if (m_ViewportResW > 0 && m_ViewportResH > 0)
+            m_SceneRenderer->OnWindowResize(m_ViewportResW, m_ViewportResH);
         m_SceneRenderer->SetClearColor(clearColor);
         m_SceneRenderer->BeginScene(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection(), m_EditorCamera.GetPosition());
         RenderViewConfig editorCfg;
@@ -312,64 +319,67 @@ namespace Ayaya {
         // ------------------------------------------
         // 5.3: 独立的高清截图执行器 (离线渲染 Pass)
         // ------------------------------------------
-        if (m_ScreenshotPanel.ConsumePending()) {
-            uint32_t shotWidth = m_ScreenshotPanel.GetWidth();
-            uint32_t shotHeight = m_ScreenshotPanel.GetHeight();
+        if (m_ScreenshotPanel.ConsumePending() && RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+            uint32_t shotW = m_ScreenshotPanel.GetWidth();
+            uint32_t shotH = m_ScreenshotPanel.GetHeight();
             std::string shotPath = m_ScreenshotPanel.GetPath();
 
             auto cameraView = m_ActiveScene->Reg().view<TransformComponent, CameraComponent>();
             for (auto entityID : cameraView) {
                 auto [transform, cameraComp] = cameraView.get<TransformComponent, CameraComponent>(entityID);
-                if (cameraComp.Primary) {
-                    // 1. 提取当前相机的世界坐标矩阵
-                    Entity cameraEntity{ entityID, m_ActiveScene.get() };
-                    glm::mat4 worldTransform = cameraEntity.GetWorldTransform();
-                    glm::vec3 scale, translation, skew;
-                    glm::quat rotation;
-                    glm::vec4 perspective;
-                    glm::decompose(worldTransform, scale, rotation, translation, skew, perspective);
-                    
-                    glm::vec3 camPos = translation;
-                    glm::mat4 unscaledTransform = glm::translate(glm::mat4(1.0f), translation) * glm::toMat4(rotation);
-                    glm::mat4 camViewMat = glm::inverse(unscaledTransform); 
+                if (!cameraComp.Primary) continue;
 
-                    // 2. 备份当前的管线状态
-                    uint32_t oldFboWidth = (uint32_t)(m_GameViewportSize.x * dpiScale);
-                    uint32_t oldFboHeight = (uint32_t)(m_GameViewportSize.y * dpiScale);
+                // Camera matrices
+                Entity camEntity{ entityID, m_ActiveScene.get() };
+                glm::mat4 worldXform = camEntity.GetWorldTransform();
+                glm::vec3 scale, trans, skew; glm::quat rot; glm::vec4 persp;
+                glm::decompose(worldXform, scale, rot, trans, skew, persp);
+                glm::vec3 camPos = trans;
+                glm::mat4 camView = glm::inverse(glm::translate(glm::mat4(1.0f), trans) * glm::toMat4(rot));
 
-                    // 3. 临时篡改相机比例和渲染器尺寸
-                    cameraComp.Camera.SetViewportSize(shotWidth, shotHeight);
-                    glm::mat4 camProjMat = cameraComp.Camera.GetProjection();
-                    m_GameRenderer->OnWindowResize(shotWidth, shotHeight);
-                    m_GameRenderer->SetClearColor(cameraComp.BackgroundColor);
+                // Save state
+                uint32_t oldW = (uint32_t)(m_GameViewportSize.x * dpiScale);
+                uint32_t oldH = (uint32_t)(m_GameViewportSize.y * dpiScale);
 
-                    // 4. 独立执行一帧专属渲染！
-                    bool drawSkybox = (cameraComp.ClearFlag == CameraComponent::ClearFlags::Skybox);
-                    m_GameRenderer->BeginScene(camViewMat, camProjMat, camPos);
-                    RenderViewConfig gameCfg3;
-                    gameCfg3.EnableSkybox = drawSkybox;
-                    gameCfg3.ClearColor = cameraComp.BackgroundColor;
-                    m_GameRenderer->RenderScene(m_ActiveScene, gameCfg3);
-                    m_GameRenderer->EndScene();
+                // Resize renderer to screenshot resolution
+                cameraComp.Camera.SetViewportSize(shotW, shotH);
+                glm::mat4 camProj = cameraComp.Camera.GetProjection();
+                m_GameRenderer->OnWindowResize(shotW, shotH);
+                m_GameRenderer->SetClearColor(cameraComp.BackgroundColor);
 
-                    // 5. 从显存偷出像素数据
-                    uint32_t fboID = (uint32_t)(intptr_t)m_GameRenderer->GetPostProcessFBORendererID();
-                    glBindFramebuffer(GL_FRAMEBUFFER, fboID);
-                    std::vector<unsigned char> pixels(shotWidth * shotHeight * 4);
-                    glReadPixels(0, 0, shotWidth, shotHeight, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-                    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                // Render offscreen
+                bool skybox = (cameraComp.ClearFlag == CameraComponent::ClearFlags::Skybox);
+                m_GameRenderer->BeginScene(camView, camProj, camPos);
+                RenderViewConfig cfg;
+                cfg.EnableSkybox = skybox;
+                cfg.ClearColor = cameraComp.BackgroundColor;
+                m_GameRenderer->RenderScene(m_ActiveScene, cfg);
+                m_GameRenderer->EndScene();
 
-                    // 6. 编码并写入硬盘
-                    stbi_flip_vertically_on_write(true);
-                    stbi_write_png(shotPath.c_str(), shotWidth, shotHeight, 4, pixels.data(), shotWidth * 4);
-                    AYAYA_CORE_INFO("High-Res Screenshot saved to: {0} ({1}x{2})", shotPath, shotWidth, shotHeight);
-
-                    // 7. 打扫战场：恢复相机和渲染器的原本状态
-                    cameraComp.Camera.SetViewportSize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);
-                    m_GameRenderer->OnWindowResize(oldFboWidth, oldFboHeight);
-
-                    break; // 截完图直接退出循环
+                // Read pixels from the FBO
+                std::vector<unsigned char> pixels(shotW * shotH * 4);
+                auto& fbs = m_GameRenderer->GetRenderContext().Framebuffers;
+                std::shared_ptr<Framebuffer> fbo;
+                for (auto& key : {"FXAA", "FinalOutput"}) {
+                    auto it = fbs.find(key);
+                    if (it != fbs.end()) { fbo = it->second; break; }
                 }
+                if (fbo) {
+                    GLuint fboID = (GLuint)(intptr_t)fbo->GetRendererID();
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER, fboID);
+                    glReadPixels(0, 0, shotW, shotH, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+                }
+
+                // Write PNG
+                stbi_flip_vertically_on_write(true);
+                stbi_write_png(shotPath.c_str(), shotW, shotH, 4, pixels.data(), shotW * 4);
+                AYAYA_CORE_INFO("Screenshot saved: {0} ({1}x{2})", shotPath, shotW, shotH);
+
+                // Restore
+                cameraComp.Camera.SetViewportSize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);
+                m_GameRenderer->OnWindowResize(oldW, oldH);
+                break;
             }
         }
     }
@@ -448,6 +458,10 @@ namespace Ayaya {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.65f, 0.68f, 1.0f));
             if (ImGui::Button(ICON_FA_FOLDER_OPEN " Content Browser", ImVec2(0, btnH)))
                 m_ShowContentDrawer = !m_ShowContentDrawer;
+            ImGui::SameLine(0, 4.0f);
+            if (ImGui::Button(ICON_FA_LIST_ALT " Log", ImVec2(0, btnH))) {}
+            ImGui::SameLine(0, 4.0f);
+            if (ImGui::Button(ICON_FA_CLOCK " Timeline", ImVec2(0, btnH))) {}
             ImGui::PopStyleColor(2);
             ImGui::PopStyleVar(2);
             ImGui::PopFont();
@@ -1444,10 +1458,34 @@ namespace Ayaya {
         if (m_SceneRenderer) {
             void* textureID = m_SceneRenderer->GetFinalColorAttachmentRendererID();
             if (textureID) {
-                ImVec2 vpSize{ m_ViewportSize.x, m_ViewportSize.y };
+                ImVec2 avail = ImGui::GetContentRegionAvail();
+                ImVec2 imageSize = avail;
+                ImVec2 imageOffset(0, 0);
+
+                if (m_ViewportResW > 0 && m_ViewportResH > 0) {
+                    float aspect = (float)m_ViewportResW / (float)m_ViewportResH;
+                    if (avail.x / avail.y > aspect) {
+                        imageSize.x = avail.y * aspect;
+                        imageSize.y = avail.y;
+                        imageOffset.x = (avail.x - imageSize.x) * 0.5f;
+                    } else {
+                        imageSize.x = avail.x;
+                        imageSize.y = avail.x / aspect;
+                        imageOffset.y = (avail.y - imageSize.y) * 0.5f;
+                    }
+                    ImGui::SetCursorPos(ImGui::GetCursorPos() + imageOffset);
+                }
+                ImVec2 vpSize = imageSize;
                 ImGui::Image(textureID, vpSize, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
 
-                // UI overlay — 独立 UI FBO 叠加在 3D 场景之上
+                // Update viewport bounds for gizmo/picking
+                ImVec2 imgMin = ImGui::GetItemRectMin();
+                ImVec2 imgMax = ImGui::GetItemRectMax();
+                m_ViewportBounds[0] = { imgMin.x, imgMin.y };
+                m_ViewportBounds[1] = { imgMax.x, imgMax.y };
+                m_ViewportSize = { imageSize.x, imageSize.y };
+
+                // UI overlay — must match image display size
                 ImVec2 uiOverlayPos = ImGui::GetItemRectMin();
                 void* uiTexID = m_SceneRenderer->GetBlackboardTextureID("UI");
                 if (uiTexID) {
@@ -1459,10 +1497,15 @@ namespace Ayaya {
 
                 HandleMousePicking(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
                 HandleGizmo(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
+
+                // Clip debug gizmos to viewport image area so camera/light icons
+                // don't spill into letterbox bars when a custom resolution is active.
+                ImDrawList* vpDrawList = ImGui::GetWindowDrawList();
+                vpDrawList->PushClipRect(imgMin, imgMax, true);
                 UIRenderDebugGizmos(m_EditorCamera.GetViewMatrix(), m_EditorCamera.GetProjection());
+                vpDrawList->PopClipRect();
 
                 // Anchor: viewport image top-left corner (saved before overlays)
-                // vpSize already declared at line 1396 from m_ViewportSize
                 ImVec2 vpMin = ImGui::GetItemRectMin();
                 float btnW = 38.0f, btnH = 32.0f, pad = 3.0f;
 
@@ -1629,9 +1672,13 @@ namespace Ayaya {
 
                     for (auto& r : resolutions) {
                         ImGui::PushID(r.label);
-                        // Placeholder — no state tracked yet
-                        if (resRow(r.label, false))
-                            AYAYA_CORE_INFO("Resolution selected: {0}", r.label);
+                        bool active = (m_ViewportResW == r.w && m_ViewportResH == r.h);
+                        if (resRow(r.label, active)) {
+                            m_ViewportResW = r.w;
+                            m_ViewportResH = r.h;
+                            // Mark viewport dirty so RenderGraph rebuilds at new resolution
+                            m_SceneRenderer->MarkViewportDirty();
+                        }
                         ImGui::PopID();
                     }
 
@@ -1823,7 +1870,10 @@ namespace Ayaya {
                     ImGui::TextColored(ImVec4(0.9f, 0.4f, 0.2f, 1.0f), "%8.2f ms", stats.GPUTime);
                     ImGui::Text("RAM Usage:"); ImGui::SameLine(alignOffset);
                     ImGui::TextColored(ImVec4(0.2f, 0.7f, 0.9f, 1.0f), "%8.1f MB", memoryMB);
-                    ImGui::Text("Screen Size: %dx%d", (int)m_ViewportSize.x, (int)m_ViewportSize.y);
+                    if (m_ViewportResW > 0 && m_ViewportResH > 0)
+                        ImGui::Text("Screen Size: %dx%d (custom)", m_ViewportResW, m_ViewportResH);
+                    else
+                        ImGui::Text("Screen Size: %dx%d", (int)m_ViewportSize.x, (int)m_ViewportSize.y);
                     ImGui::Spacing();
 
                     // Rendering

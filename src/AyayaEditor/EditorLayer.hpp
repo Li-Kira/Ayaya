@@ -130,6 +130,8 @@ namespace Ayaya {
 
         bool  m_ShowContentDrawer = false;
         float m_DrawerAnimationProgress = 0.0f;
+        int   m_ViewportResW = 0;  // 0 = fit window
+        int   m_ViewportResH = 0;
 
         Entity m_HoveredEntity = {}; 
 
