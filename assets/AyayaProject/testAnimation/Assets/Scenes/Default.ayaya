@@ -2,18 +2,18 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition: [-3.0688918, 1.1068674, 3.0702875]
-  CameraDistance: 4.0959997
-  CameraPitch: -0.24459583
-  CameraYaw: -0.7509993
-  CameraFocalPoint: [-0.35709834, 0.114962935, 0.1652031]
+  CameraPosition: [-2.4080305, 1.7806008, 9.926039]
+  CameraDistance: 10.367999
+  CameraPitch: -0.17259568
+  CameraYaw: -0.2379994
+  CameraFocalPoint: [0, 0, 0]
 Entities:
   - Entity: 7797903022091767064
     TagComponent:
       Tag: Main Camera
       IsActive: true
     TransformComponent:
-      Translation: [0, 0, 5]
+      Translation: [3.7, 0, 10.3]
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     CameraComponent:
@@ -41,11 +41,11 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     EnvironmentComponent:
-      Type: 1
+      Type: 3
       Intensity: 30000
       AmbientColor: [0, 0, 0]
       EquirectangularHandle: 16140901000000000005
-      CubemapHandle: 0
+      CubemapHandle: 16140901000000000006
     RelationshipComponent:
       Parent: 0
   - Entity: 2412633923466501589
@@ -63,14 +63,14 @@ Entities:
       Parent: 0
   - Entity: 17824050550919382742
     TagComponent:
-      Tag: Cube
+      Tag: Sphere
       IsActive: true
     TransformComponent:
-      Translation: [0, 0, 0]
-      Rotation: [0, -0, 0]
+      Translation: [0, 3, 0]
+      Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
-      ModelHandle: 16140901000000000001
+      ModelHandle: 16140901000000000002
       MaterialHandle: 16140901000000000004
       CastShadows: true
       ReceiveShadows: true
@@ -80,8 +80,29 @@ Entities:
         - CurveHandle: 5298546655020386346
           Property: Transform_PositionX
           TimeOffset: 0
-        - CurveHandle: 5298546655020386346
-          Property: Transform_RotationY
+        - CurveHandle: 17301001000000000001
+          Property: Transform_PositionY
           TimeOffset: 0
+        - CurveHandle: 17301001000000000002
+          Property: Transform_ScaleX
+          TimeOffset: 0
+        - CurveHandle: 17301001000000000003
+          Property: Transform_ScaleY
+          TimeOffset: 0
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 16292404773446829645
+    TagComponent:
+      Tag: Cube
+      IsActive: true
+    TransformComponent:
+      Translation: [0, -0.22, 0]
+      Rotation: [0, 0, 0]
+      Scale: [23.8, 0.4, 1]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000001
+      MaterialHandle: 16140901000000000004
+      CastShadows: true
+      ReceiveShadows: true
     RelationshipComponent:
       Parent: 0

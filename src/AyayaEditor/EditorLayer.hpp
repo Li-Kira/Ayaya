@@ -137,6 +137,7 @@ namespace Ayaya {
         int m_GizmoType = -1;
         bool m_ShowCameraSpeedPopup = false;
 
+        bool  m_ShowCurveEditor = false;
         bool  m_ShowContentDrawer = false;
         float m_DrawerAnimationProgress = 0.0f;
         bool  m_ShowTimelineDrawer = false;

@@ -410,6 +410,7 @@ namespace Ayaya {
         m_ScreenshotPanel.OnImGuiRender();
         m_HistoryPanel.OnImGuiRender();
         m_FrameDebuggerPanel.OnImGuiRender();
+        m_TimelinePanel.OnImGuiRender();
 
         // if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
         //     // OpenGL 模式下，一切照常渲染
@@ -469,7 +470,8 @@ namespace Ayaya {
                 ImGui::SetNextWindowPos(ImVec2(winPos.x, curY), ImGuiCond_Always);
                 ImGui::SetNextWindowSize(ImVec2(curW, curH), ImGuiCond_Always);
             }
-            if (ImGui::Begin("Timeline##Drawer", &m_ShowTimelineDrawer, ImGuiWindowFlags_NoDocking))
+            if (ImGui::Begin("Timeline##Drawer", &m_ShowTimelineDrawer,
+                    ImGuiWindowFlags_NoDocking))
                 m_TimelinePanel.RenderContent();
             ImGui::End();
         }
@@ -1434,6 +1436,7 @@ namespace Ayaya {
 
                 ImGui::MenuItem("Show History", nullptr, &m_HistoryPanel.IsOpen);
                 ImGui::MenuItem("Frame Debugger", nullptr, &m_FrameDebuggerPanel.IsOpen);
+                ImGui::MenuItem("Curve Editor", nullptr, &m_CurveEditorPanel.GetOpenFlag());
 
                 ImGui::EndMenu();
             }

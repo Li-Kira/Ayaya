@@ -18,9 +18,6 @@ namespace Ayaya {
         m_ExpandedEntities.clear();
     }
 
-    // ==========================================
-    // Coordinate helpers
-    // ==========================================
     float TimelinePanel::TimeToScreenX(float time, float canvasX) const {
         return canvasX + time * m_Zoom + m_ScrollX;
     }
@@ -29,40 +26,57 @@ namespace Ayaya {
         return (x - canvasX - m_ScrollX) / m_Zoom;
     }
 
+    float TimelinePanel::SnapToNearestKeyframe(float time) const {
+        if (!m_Scene) return time;
+        float snapDist = kSnapThresholdPx / m_Zoom; // threshold in seconds
+        float bestTime = time;
+        float bestDist = snapDist;
+
+        auto view = m_Scene->Reg().view<AnimationControllerComponent>();
+        for (auto e : view) {
+            Entity entity{e, m_Scene.get()};
+            auto& ctrl = entity.GetComponent<AnimationControllerComponent>();
+            for (auto& track : ctrl.Tracks) {
+                auto curve = track.CurveHandle
+                    ? AssetManager::GetAsset<CurveAsset>(track.CurveHandle) : nullptr;
+                if (!curve || curve->Keys.empty()) continue;
+                for (const auto& k : curve->Keys) {
+                    float keyTime = track.TimeOffset + k.Time;
+                    float dist = std::abs(keyTime - time);
+                    if (dist < bestDist) { bestDist = dist; bestTime = keyTime; }
+                }
+            }
+        }
+        return bestTime;
+    }
+
     // ==========================================
     // Snapshot / Restore
     // ==========================================
     void TimelinePanel::StartPreview() {
         if (!m_Scene || m_IsPreviewing) return;
         m_Snapshots.clear();
-
         auto view = m_Scene->Reg().view<AnimationControllerComponent>();
         for (auto e : view) {
             Entity entity{e, m_Scene.get()};
             UUID uuid = entity.GetComponent<IDComponent>().ID;
             EntitySnapshot snap;
-
             if (entity.HasComponent<TransformComponent>()) {
                 auto& t = entity.GetComponent<TransformComponent>();
-                snap.Translation = t.Translation;
-                snap.Rotation = t.Rotation;
-                snap.Scale = t.Scale;
+                snap.Translation = t.Translation; snap.Rotation = t.Rotation; snap.Scale = t.Scale;
                 snap.HasTransform = true;
             }
             if (entity.HasComponent<SpriteRendererComponent>()) {
-                snap.SpriteColor = entity.GetComponent<SpriteRendererComponent>().Color;
-                snap.HasSprite = true;
+                snap.SpriteColor = entity.GetComponent<SpriteRendererComponent>().Color; snap.HasSprite = true;
             }
             if (entity.HasComponent<CameraComponent>()) {
                 auto& cam = entity.GetComponent<CameraComponent>().Camera;
-                snap.CameraFOV = cam.GetPerspectiveFOV();
-                snap.CameraOrthoSize = cam.GetOrthographicSize();
+                snap.CameraFOV = cam.GetPerspectiveFOV(); snap.CameraOrthoSize = cam.GetOrthographicSize();
                 snap.HasCamera = true;
             }
             if (entity.HasComponent<PointLightComponent>()) {
                 auto& pl = entity.GetComponent<PointLightComponent>();
-                snap.PointLightIntensity = pl.LuminousPower;
-                snap.PointLightRadius = pl.Radius;
+                snap.PointLightIntensity = pl.LuminousPower; snap.PointLightRadius = pl.Radius;
                 snap.HasPointLight = true;
             }
             if (entity.HasComponent<DirectionalLightComponent>()) {
@@ -70,14 +84,11 @@ namespace Ayaya {
                 snap.HasDirLight = true;
             }
             if (entity.HasComponent<UIImageComponent>()) {
-                snap.UIOpacity = entity.GetComponent<UIImageComponent>().Color.a;
-                snap.HasUIImage = true;
+                snap.UIOpacity = entity.GetComponent<UIImageComponent>().Color.a; snap.HasUIImage = true;
             }
             if (entity.HasComponent<UITextComponent>()) {
-                snap.UIOpacity = entity.GetComponent<UITextComponent>().Color.a;
-                snap.HasUIText = true;
+                snap.UIOpacity = entity.GetComponent<UITextComponent>().Color.a; snap.HasUIText = true;
             }
-
             m_Snapshots[uuid] = snap;
         }
         m_IsPreviewing = true;
@@ -85,28 +96,22 @@ namespace Ayaya {
 
     void TimelinePanel::StopPreview() {
         if (!m_Scene) return;
-
         for (auto& [uuid, snap] : m_Snapshots) {
             Entity entity = m_Scene->GetEntityByUUID(uuid);
             if (!entity) continue;
-
             if (snap.HasTransform && entity.HasComponent<TransformComponent>()) {
                 auto& t = entity.GetComponent<TransformComponent>();
-                t.Translation = snap.Translation;
-                t.Rotation = snap.Rotation;
-                t.Scale = snap.Scale;
+                t.Translation = snap.Translation; t.Rotation = snap.Rotation; t.Scale = snap.Scale;
             }
             if (snap.HasSprite && entity.HasComponent<SpriteRendererComponent>())
                 entity.GetComponent<SpriteRendererComponent>().Color = snap.SpriteColor;
             if (snap.HasCamera && entity.HasComponent<CameraComponent>()) {
                 auto& cam = entity.GetComponent<CameraComponent>().Camera;
-                cam.SetPerspectiveFOV(snap.CameraFOV);
-                cam.SetOrthographicSize(snap.CameraOrthoSize);
+                cam.SetPerspectiveFOV(snap.CameraFOV); cam.SetOrthographicSize(snap.CameraOrthoSize);
             }
             if (snap.HasPointLight && entity.HasComponent<PointLightComponent>()) {
                 auto& pl = entity.GetComponent<PointLightComponent>();
-                pl.LuminousPower = snap.PointLightIntensity;
-                pl.Radius = snap.PointLightRadius;
+                pl.LuminousPower = snap.PointLightIntensity; pl.Radius = snap.PointLightRadius;
             }
             if (snap.HasDirLight && entity.HasComponent<DirectionalLightComponent>())
                 entity.GetComponent<DirectionalLightComponent>().Illuminance = snap.DirLightIntensity;
@@ -115,273 +120,449 @@ namespace Ayaya {
             if (snap.HasUIText && entity.HasComponent<UITextComponent>())
                 entity.GetComponent<UITextComponent>().Color.a = snap.UIOpacity;
         }
-
         m_Snapshots.clear();
-        m_PreviewTime = 0.0f;
-        m_IsPlaying = false;
-        m_IsPreviewing = false;
+        m_PreviewTime = 0.0f; m_IsPlaying = false; m_IsPreviewing = false;
     }
 
     // ==========================================
-    // Track List (left pane)
+    // Draw helpers
     // ==========================================
-    void TimelinePanel::DrawTrackList() {
-        ImGui::BeginChild("TrackList", ImVec2(kTrackListWidth, 0), true);
-        if (!m_Scene) { ImGui::TextDisabled("No scene"); ImGui::EndChild(); return; }
-
-        auto view = m_Scene->Reg().view<AnimationControllerComponent>();
-        if (view.empty()) {
-            ImGui::TextDisabled("No animated entities");
-            ImGui::EndChild();
-            return;
-        }
-
-        for (auto e : view) {
-            Entity entity{e, m_Scene.get()};
-            auto& controller = entity.GetComponent<AnimationControllerComponent>();
-            UUID uuid = entity.GetComponent<IDComponent>().ID;
-            std::string name = entity.GetComponent<TagComponent>().Tag;
-
-            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
-            bool expanded = m_ExpandedEntities.count(uuid) != 0;
-            if (expanded) flags |= ImGuiTreeNodeFlags_DefaultOpen;
-
-            ImGui::PushID((int)e);
-            bool nodeOpen = ImGui::TreeNodeEx(name.c_str(), flags);
-            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
-                if (expanded) m_ExpandedEntities.erase(uuid);
-                else          m_ExpandedEntities.insert(uuid);
-            }
-
-            if (nodeOpen) {
-                for (int i = 0; i < (int)controller.Tracks.size(); i++) {
-                    auto& track = controller.Tracks[i];
-                    ImGui::PushID(i);
-                    ImGui::BulletText("%s", GetTargetPropertyName(track.Property));
-                    ImGui::PopID();
-                }
-                ImGui::TreePop();
-            }
-            ImGui::PopID();
-        }
-        ImGui::EndChild();
+    static void DrawDiamond(ImDrawList* dl, ImVec2 c, float r, ImU32 fill, ImU32 border) {
+        ImVec2 p[4] = {{c.x, c.y-r}, {c.x+r, c.y}, {c.x, c.y+r}, {c.x-r, c.y}};
+        dl->AddConvexPolyFilled(p, 4, fill);
+        dl->AddPolyline(p, 4, border, ImDrawFlags_Closed, 1.0f);
     }
 
     // ==========================================
-    // Timeline Canvas (right pane)
+    // Track Cell (clip + keyframes inside a table cell)
     // ==========================================
-    void TimelinePanel::DrawTimelineCanvas() {
-        ImVec2 canvasPos = ImGui::GetCursorScreenPos();
-        ImVec2 canvasSize = ImGui::GetContentRegionAvail();
-        if (canvasSize.y < 50.0f) canvasSize.y = 50.0f;
-        float canvasX = canvasPos.x + kTrackListWidth;
-        float canvasW = canvasSize.x - kTrackListWidth;
-
+    void TimelinePanel::DrawTrackCell(ImVec2 cellMin, ImVec2 cellSize,
+                                       AnimationTrack& track,
+                                       Entity entity, int trackIdx) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
+        float canvasX = m_CanvasX;
 
-        // Background
-        dl->AddRectFilled(canvasPos, ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y),
-                          IM_COL32(22, 22, 30, 255));
+        auto curve = track.CurveHandle
+            ? AssetManager::GetAsset<CurveAsset>(track.CurveHandle) : nullptr;
 
-        // ---- Ruler ----
-        ImVec2 rulerMin(canvasX, canvasPos.y);
-        ImVec2 rulerMax(canvasX + canvasW, canvasPos.y + kRulerHeight);
-        dl->AddRectFilled(rulerMin, rulerMax, IM_COL32(30, 30, 40, 255));
+        float clipS = TimeToScreenX(track.TimeOffset, canvasX);
+        float dur = 1.0f;
+        if (curve && !curve->Keys.empty())
+            dur = curve->Keys.back().Time - curve->Keys.front().Time;
+        float clipE = clipS + dur * m_Zoom;
+        if (clipE - clipS < kMinClipWidth) clipE = clipS + kMinClipWidth;
 
-        // Ruler ticks
-        float timePerTick = 1.0f;
-        if (m_Zoom < 30.0f) timePerTick = 5.0f;
-        else if (m_Zoom < 60.0f) timePerTick = 2.0f;
-        else if (m_Zoom > 300.0f) timePerTick = 0.2f;
-        else if (m_Zoom > 150.0f) timePerTick = 0.5f;
+        // ---- UE5-style gradient clip (clipped to cell bounds) ----
+        ImVec2 cMin(clipS, cellMin.y + 3.0f);
+        ImVec2 cMax(clipE, cellMin.y + cellSize.y - 3.0f);
 
-        float firstTick = std::floor(ScreenXToTime(canvasX, canvasX) / timePerTick) * timePerTick;
-        for (float t = firstTick; t < ScreenXToTime(canvasX + canvasW + 100, canvasX); t += timePerTick) {
-            float sx = TimeToScreenX(t, canvasX);
-            dl->AddLine(ImVec2(sx, rulerMin.y + kRulerHeight * 0.5f),
-                        ImVec2(sx, rulerMax.y), IM_COL32(80, 80, 95, 255));
-            char buf[16];
-            snprintf(buf, sizeof(buf), "%.1fs", t);
-            dl->AddText(ImVec2(sx + 3.0f, rulerMin.y + 2.0f), IM_COL32(180, 180, 190, 255), buf);
-        }
+        dl->PushClipRect(ImVec2(cellMin.x, cellMin.y),
+                         ImVec2(cellMin.x + cellSize.x, cellMin.y + cellSize.y), true);
 
-        // ---- Track rows ----
-        float rowY = rulerMax.y;
-        if (!m_Scene) return;
-
-        auto view = m_Scene->Reg().view<AnimationControllerComponent>();
-        for (auto e : view) {
-            Entity entity{e, m_Scene.get()};
-            auto& controller = entity.GetComponent<AnimationControllerComponent>();
-            UUID uuid = entity.GetComponent<IDComponent>().ID;
-            bool expanded = m_ExpandedEntities.count(uuid) != 0;
-
-            // Entity header row
-            ImVec2 hdrMin(canvasX, rowY);
-            ImVec2 hdrMax(canvasX + canvasW, rowY + kTrackHeight);
-            dl->AddRectFilled(hdrMin, hdrMax,
-                expanded ? IM_COL32(40, 45, 55, 255) : IM_COL32(32, 35, 42, 255));
-            dl->AddText(ImVec2(hdrMin.x + 6.0f, hdrMin.y + 5.0f),
-                        IM_COL32(200, 200, 210, 255),
-                        entity.GetComponent<TagComponent>().Tag.c_str());
-            rowY += kTrackHeight;
-
-            // Track rows (if expanded)
-            if (expanded) {
-                for (int i = 0; i < (int)controller.Tracks.size(); i++) {
-                    auto& track = controller.Tracks[i];
-
-                    float clipStartX = TimeToScreenX(track.TimeOffset, canvasX);
-                    float duration = 1.0f;
-                    if (track.CurveHandle != 0) {
-                        auto curve = AssetManager::GetAsset<CurveAsset>(track.CurveHandle);
-                        if (curve && !curve->Keys.empty())
-                            duration = curve->Keys.back().Time - curve->Keys.front().Time;
-                    }
-                    float clipEndX = clipStartX + duration * m_Zoom;
-                    if (clipEndX - clipStartX < kMinClipWidth)
-                        clipEndX = clipStartX + kMinClipWidth;
-
-                    // Clip rect
-                    ImVec2 clipMin(clipStartX, rowY + 2.0f);
-                    ImVec2 clipMax(clipEndX, rowY + kTrackHeight - 2.0f);
-                    dl->AddRectFilled(clipMin, clipMax, IM_COL32(34, 150, 80, 200), 4.0f);
-                    dl->AddRect(clipMin, clipMax, IM_COL32(50, 180, 100, 255), 4.0f);
-                    dl->AddText(ImVec2(clipMin.x + 4.0f, clipMin.y + 2.0f),
-                                IM_COL32(255, 255, 255, 220), GetTargetPropertyName(track.Property));
-
-                    // InvisibleButton for clip drag
-                    ImGui::PushID((int)e);
-                    ImGui::PushID(i);
-                    ImGui::SetCursorScreenPos(clipMin);
-                    ImGui::InvisibleButton("##ClipDrag", ImVec2(clipMax.x - clipMin.x, clipMax.y - clipMin.y));
-
-                    if (ImGui::IsItemActivated()) {
-                        m_PreDragComponent = entity.GetComponent<AnimationControllerComponent>();
-                        m_DragEntity = entity;
-                    }
-                    if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
-                        float newOffset = track.TimeOffset + ImGui::GetIO().MouseDelta.x / m_Zoom;
-                        // Don't let offset go below 0
-                        if (newOffset < 0.0f) newOffset = 0.0f;
-                        track.TimeOffset = newOffset;
-                        ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
-                    }
-                    if (ImGui::IsItemDeactivatedAfterEdit()) {
-                        float oldOffset = m_PreDragComponent.Tracks[i].TimeOffset;
-                        float newOffset = track.TimeOffset;
-                        if (std::abs(newOffset - oldOffset) > 0.001f && m_DragEntity) {
-                            auto newComp = entity.GetComponent<AnimationControllerComponent>();
-                            EditorLayer::Get().GetCommandHistory().AddCommand(
-                                std::make_shared<ChangeComponentCommand<AnimationControllerComponent>>(
-                                    m_DragEntity, m_PreDragComponent, newComp));
-                        }
-                        m_DragEntity = Entity{};
-                    }
-
-                    ImGui::PopID();
-                    ImGui::PopID();
-                    rowY += kTrackHeight;
+        // 1. Dark green semi-transparent base
+        dl->AddRectFilled(cMin, cMax, IM_COL32(30, 80, 50, 150), 4.0f);
+        // 2. Top 30% subtle highlight (UE5 clip bevel)
+        dl->AddRectFilled(cMin, ImVec2(cMax.x, cMin.y + (cMax.y - cMin.y) * 0.3f),
+                          IM_COL32(255, 255, 255, 15), 4.0f, ImDrawFlags_RoundCornersTop);
+        // 3. Outer border
+        dl->AddRect(cMin, cMax, IM_COL32(50, 150, 80, 200), 4.0f);
+        // 4. Clip label (truncated with ellipsis if too wide)
+        {
+            const char* fullLabel = GetTargetPropertyName(track.Property);
+            float availW = (cMax.x - cMin.x) - 12.0f; // 6px padding each side
+            if (availW > 10.0f) {
+                std::string label(fullLabel);
+                float textW = ImGui::CalcTextSize(label.c_str()).x;
+                if (textW > availW) {
+                    while (!label.empty() && ImGui::CalcTextSize((label + "...").c_str()).x > availW)
+                        label.pop_back();
+                    label += "...";
                 }
+                dl->AddText(ImVec2(cMin.x + 6.0f, cMin.y + 2.0f),
+                            IM_COL32(210, 235, 215, 230), label.c_str());
             }
         }
 
-        // ---- Playhead ----
-        float px = TimeToScreenX(m_PreviewTime, canvasX);
-        dl->AddLine(ImVec2(px, rulerMin.y), ImVec2(px, rowY), IM_COL32(239, 68, 68, 220), 2.0f);
-        // Triangle handle
-        dl->AddTriangleFilled(ImVec2(px, rulerMin.y), ImVec2(px - 6.0f, rulerMin.y - 10.0f),
-                              ImVec2(px + 6.0f, rulerMin.y - 10.0f), IM_COL32(239, 68, 68, 240));
+        // ---- Keyframe diamonds ----
+        if (curve && !curve->Keys.empty()) {
+            for (const auto& k : curve->Keys) {
+                float kx = TimeToScreenX(track.TimeOffset + k.Time, canvasX);
+                if (kx >= cMin.x && kx <= cMax.x)
+                    DrawDiamond(dl, ImVec2(kx, cellMin.y + cellSize.y * 0.5f), 4.5f,
+                                IM_COL32(240, 240, 240, 255),
+                                IM_COL32(30, 30, 30, 200));
+            }
+        }
 
-        // InvisibleButton for playhead drag
-        ImGui::SetCursorScreenPos(ImVec2(px - 8.0f, rulerMin.y - 10.0f));
-        ImGui::InvisibleButton("##PlayheadDrag", ImVec2(16.0f, kRulerHeight + 10.0f));
-        if (ImGui::IsItemActivated()) StartPreview();
+        dl->PopClipRect();
+
+        // ---- Clip drag interaction ----
+        ImGui::SetCursorScreenPos(cMin);
+        ImGui::InvisibleButton("##ClipDrag", ImVec2(cMax.x - cMin.x, cMax.y - cMin.y));
+        if (ImGui::IsItemActivated()) {
+            m_PreDragComponent = entity.GetComponent<AnimationControllerComponent>();
+            m_DragEntity = entity;
+        }
         if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
-            m_PreviewTime = ScreenXToTime(ImGui::GetMousePos().x, canvasX);
-            if (m_PreviewTime < 0.0f) m_PreviewTime = 0.0f;
+            float no = track.TimeOffset + ImGui::GetIO().MouseDelta.x / m_Zoom;
+            if (no < 0.0f) no = 0.0f;
+            track.TimeOffset = no;
+            ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
         }
-
-        // Canvas-level InvisibleButton for scroll-to-scrub
-        ImGui::SetCursorScreenPos(ImVec2(canvasX, rulerMin.y + kRulerHeight));
-        ImVec2 canvasRemaining(canvasW, canvasSize.y - kRulerHeight);
-        ImGui::InvisibleButton("##CanvasBg", canvasRemaining);
-        // Scroll-to-click: jump playhead to clicked position
-        if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsAnyItemActive()) {
-            float t = ScreenXToTime(ImGui::GetMousePos().x, canvasX);
-            if (t >= 0.0f) { m_PreviewTime = t; StartPreview(); }
-        }
-
-        HandleCanvasInput(canvasPos, canvasSize);
-    }
-
-    // ==========================================
-    // Canvas input (scroll, zoom)
-    // ==========================================
-    void TimelinePanel::HandleCanvasInput(ImVec2 canvasPos, ImVec2 canvasSize) {
-        float canvasX = canvasPos.x + kTrackListWidth;
-        float canvasW = canvasSize.x - kTrackListWidth;
-        ImVec2 mousePos = ImGui::GetMousePos();
-        bool hovered = ImGui::IsItemHovered() ||
-            (mousePos.x >= canvasX && mousePos.x <= canvasX + canvasW &&
-             mousePos.y >= canvasPos.y && mousePos.y <= canvasPos.y + canvasSize.y);
-
-        if (hovered) {
-            // Scroll = zoom
-            if (ImGui::GetIO().MouseWheel != 0.0f) {
-                float oldTime = ScreenXToTime(mousePos.x, canvasX);
-                m_Zoom *= 1.0f + ImGui::GetIO().MouseWheel * 0.1f;
-                m_Zoom = std::clamp(m_Zoom, 20.0f, 1000.0f);
-                float newScrollX = mousePos.x - canvasX - oldTime * m_Zoom;
-                m_ScrollX = newScrollX;
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+            float old = m_PreDragComponent.Tracks[trackIdx].TimeOffset;
+            if (std::abs(track.TimeOffset - old) > 0.001f && m_DragEntity) {
+                EditorLayer::Get().GetCommandHistory().AddCommand(
+                    std::make_shared<ChangeComponentCommand<AnimationControllerComponent>>(
+                        m_DragEntity, m_PreDragComponent,
+                        entity.GetComponent<AnimationControllerComponent>()));
             }
-
-            // Ctrl+scroll = horizontal pan
-            if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().MouseWheel != 0.0f) {
-                m_ScrollX += ImGui::GetIO().MouseWheel * 50.0f;
-            }
+            m_DragEntity = Entity{};
         }
     }
 
     // ==========================================
-    // Main Render
+    // Canvas input: zoom + horizontal scroll + canvas click
+    //   wheel / wheelH are pre-saved before BeginTable (table's ScrollY
+    //   consumes io.MouseWheel during EndTable, so we must capture early).
+    // ==========================================
+    void TimelinePanel::HandleCanvasInput(float wheel, float wheelH) {
+        if (m_CanvasX <= 0.0f) return;
+        // Only process input when the Timeline window is actually hovered
+        // (prevents cross-window leakage, e.g. ContentBrowser clicks moving playhead)
+        if (!ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows)) return;
+        ImVec2 mp = ImGui::GetMousePos();
+        float canvasRight = m_CanvasX + m_CanvasWidth;
+        bool hov = (mp.x >= m_CanvasX && mp.x <= canvasRight &&
+                    mp.y >= m_TableTopY);
+        if (!hov) return;
+
+        // Ctrl+Wheel: zoom at cursor
+        if (ImGui::GetIO().KeyCtrl && wheel != 0.0f) {
+            float oldT = ScreenXToTime(mp.x, m_CanvasX);
+            m_Zoom *= 1.0f + wheel * 0.1f;
+            m_Zoom = std::clamp(m_Zoom, 20.0f, 1000.0f);
+            m_ScrollX = mp.x - m_CanvasX - oldT * m_Zoom;
+        }
+        // Horizontal mouse wheel: pan
+        if (wheelH != 0.0f) {
+            m_ScrollX += wheelH * 50.0f;
+        }
+
+        // Middle-mouse drag: free pan (UE5/Blender style)
+        if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle)) {
+            m_ScrollX += ImGui::GetIO().MouseDelta.x;
+        }
+
+        // ---- Canvas background click → scrub (with keyframe snap) ----
+        // Only in the track area (below ruler), and only when no item is active
+        if (mp.y >= m_TableTopY + kRulerHeight &&
+            ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+            !ImGui::IsAnyItemActive()) {
+            float t = ScreenXToTime(mp.x, m_CanvasX);
+            if (t >= 0.0f) { m_PreviewTime = SnapToNearestKeyframe(t); StartPreview(); }
+        }
+    }
+
+    // ==========================================
+    // OnImGuiRender (standalone)
     // ==========================================
     void TimelinePanel::OnImGuiRender() {
         if (!m_IsOpen) return;
-
         ImGui::SetNextWindowSize(ImVec2(800, 400), ImGuiCond_FirstUseEver);
         if (!ImGui::Begin("Timeline", &m_IsOpen)) { ImGui::End(); return; }
         RenderContent();
         ImGui::End();
-
         if (!m_IsOpen && m_IsPreviewing) StopPreview();
     }
 
+    // ==========================================
+    // RenderContent — UE5-style Sequencer Table
+    //   Ruler drawn frozen OUTSIDE scroll area; table body (no ScrollY)
+    //   scrolls inside BeginChild.  This eliminates the table's internal
+    //   channel-split z-order issue — all overlay drawing after EndChild
+    //   is naturally on top of both ruler and body.
+    // ==========================================
     void TimelinePanel::RenderContent() {
-        if (!m_Scene) {
-            ImGui::TextDisabled("No scene loaded");
-            return;
-        }
+        if (!m_Scene) { ImGui::TextDisabled("No scene loaded"); return; }
 
-        // ---- Bottom controls ----
-        if (ImGui::Button(ICON_FA_PLAY))  { StartPreview(); m_IsPlaying = true; }
+        // ---- Bottom transport controls ----
+        if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
+            ImGui::IsKeyPressed(ImGuiKey_Space)) {
+            if (m_IsPlaying) { m_IsPlaying = false; }
+            else { StartPreview(); m_IsPlaying = true; }
+        }
+        if (ImGui::Button(m_IsPlaying ? ICON_FA_PAUSE : ICON_FA_PLAY)) {
+            if (m_IsPlaying) { m_IsPlaying = false; }
+            else { StartPreview(); m_IsPlaying = true; }
+        }
         ImGui::SameLine();
-        if (ImGui::Button(ICON_FA_STOP))  { StopPreview(); }
+        if (ImGui::Button(ICON_FA_STOP)) StopPreview();
         ImGui::SameLine();
-        if (ImGui::Button(ICON_FA_UNDO " Reset")) { m_ScrollX = 0.0f; m_Zoom = 100.0f; }
+        if (ImGui::Button(ICON_FA_UNDO " Reset")) { m_ScrollX = 0.0f; m_Zoom = 500.0f; }
         ImGui::SameLine();
         ImGui::Text("  t=%.3f  zoom=%.0fpx/s", m_PreviewTime, m_Zoom);
-
         ImGui::Separator();
 
-        // ---- Splitter layout ----
-        DrawTrackList();
-        ImGui::SameLine(0, 0);
-        DrawTimelineCanvas();
+        // ---- Layout constants ----
+        ImGuiStyle& style = ImGui::GetStyle();
+        ImDrawList* dl   = ImGui::GetWindowDrawList();
+        float scrollbarW = style.ScrollbarSize;
+        ImVec2  areaPos   = ImGui::GetCursorScreenPos();
+        float   areaW     = ImGui::GetContentRegionAvail().x;
+        if (areaW < kTrackListWidth + 100.0f) areaW = kTrackListWidth + 100.0f;
+        float outlinerW   = kTrackListWidth;
+        float canvasX     = areaPos.x + outlinerW;
+        float canvasW     = areaW - outlinerW - scrollbarW;
+        if (canvasW < 50.0f) canvasW = 50.0f;
 
-        // Play timer
-        if (m_IsPlaying)
-            m_PreviewTime += ImGui::GetIO().DeltaTime;
+        m_CanvasX     = canvasX;
+        m_CanvasWidth = canvasW;
+        m_TableTopY   = areaPos.y;
+
+        // ==========================================
+        // Frozen ruler header (outside scroll area)
+        // ==========================================
+        ImVec2 rulerMax(canvasX + canvasW, areaPos.y + kRulerHeight);
+
+        // Outliner header bg
+        dl->AddRectFilled(ImVec2(areaPos.x, areaPos.y),
+                          ImVec2(canvasX, rulerMax.y),
+                          IM_COL32(36, 36, 42, 255));
+        {
+            float textH = ImGui::GetFontSize();
+            float textY = areaPos.y + (kRulerHeight - textH) * 0.5f;
+            dl->AddText(ImVec2(areaPos.x + 8.0f, textY),
+                        IM_COL32(150, 150, 165, 255), "Track Name");
+        }
+
+        // Ruler bg
+        dl->AddRectFilled(ImVec2(canvasX, areaPos.y), rulerMax, IM_COL32(36, 36, 42, 255));
+        dl->AddLine(ImVec2(canvasX, rulerMax.y), ImVec2(rulerMax.x, rulerMax.y),
+                    IM_COL32(18, 18, 22, 255), 1.0f);
+
+        // Ruler ticks (clipped)
+        dl->PushClipRect(ImVec2(canvasX, areaPos.y), rulerMax, true);
+        float timePerTick = 1.0f;
+        if (m_Zoom < 30.0f)      timePerTick = 5.0f;
+        else if (m_Zoom < 60.0f) timePerTick = 2.0f;
+        else if (m_Zoom > 300.0f) timePerTick = 0.2f;
+        else if (m_Zoom > 150.0f) timePerTick = 0.5f;
+        float firstTick = std::floor(ScreenXToTime(canvasX, canvasX) / timePerTick) * timePerTick;
+        float tickBottom = rulerMax.y;
+        float majorTop   = areaPos.y + kRulerHeight * 0.40f;
+        float minorTop   = areaPos.y + kRulerHeight * 0.80f;
+        for (float t = firstTick; t < ScreenXToTime(canvasX + canvasW + 100, canvasX); t += timePerTick) {
+            float ms = timePerTick / 5.0f;
+            for (int m = 0; m < 5; m++) {
+                float mx = TimeToScreenX(t + m * ms, canvasX);
+                if (mx > canvasX + canvasW) break;
+                if (m == 0) {
+                    dl->AddLine(ImVec2(mx, majorTop), ImVec2(mx, tickBottom),
+                                IM_COL32(180, 180, 180, 255));
+                    char buf[16]; snprintf(buf, sizeof(buf), "%.1f", t + m * ms);
+                    dl->AddText(ImVec2(mx + 3.0f, areaPos.y + 2.0f),
+                                IM_COL32(190, 190, 205, 255), buf);
+                } else {
+                    dl->AddLine(ImVec2(mx, minorTop), ImVec2(mx, tickBottom),
+                                IM_COL32(100, 100, 100, 150));
+                }
+            }
+        }
+        dl->PopClipRect();
+
+        // Vertical divider between outliner and canvas
+        dl->AddLine(ImVec2(canvasX, areaPos.y), ImVec2(canvasX, areaPos.y + kRulerHeight),
+                    IM_COL32(50, 50, 60, 255), 2.0f);
+
+        // ==========================================
+        // Scrollable table body (BeginChild, not ScrollY)
+        // ==========================================
+        ImGui::SetCursorScreenPos(ImVec2(areaPos.x, areaPos.y + kRulerHeight));
+        ImVec2 tableAreaSize = ImVec2(areaW, ImGui::GetContentRegionAvail().y);
+        if (tableAreaSize.y < kTrackHeight * 2.0f) tableAreaSize.y = kTrackHeight * 2.0f;
+
+        static ImGuiTableFlags tableFlags =
+            ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable |
+            ImGuiTableFlags_RowBg | ImGuiTableFlags_NoSavedSettings;
+
+        ImGui::PushStyleColor(ImGuiCol_TableRowBg,    ImVec4(0.12f, 0.12f, 0.13f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_TableRowBgAlt, ImVec4(0.10f, 0.10f, 0.11f, 1.0f));
+
+        // Save wheel before child consumes it
+        float preTableWheel  = ImGui::GetIO().MouseWheel;
+        float preTableWheelH = ImGui::GetIO().MouseWheelH;
+
+        if (ImGui::BeginChild("##TimelineScrollArea", tableAreaSize, false,
+                              ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
+
+            if (ImGui::BeginTable("TimelineSequencer", 2, tableFlags)) {
+                ImGui::TableSetupColumn("Outliner", ImGuiTableColumnFlags_WidthFixed, kTrackListWidth);
+                ImGui::TableSetupColumn("Canvas",   ImGuiTableColumnFlags_WidthStretch);
+
+                auto view = m_Scene->Reg().view<AnimationControllerComponent>();
+                for (auto e : view) {
+                    Entity entity{e, m_Scene.get()};
+                    auto& ctrl = entity.GetComponent<AnimationControllerComponent>();
+                    UUID   uuid = entity.GetComponent<IDComponent>().ID;
+                    std::string name = entity.GetComponent<TagComponent>().Tag;
+                    bool expanded = m_ExpandedEntities.count(uuid) != 0;
+
+                    ImGui::TableNextRow(0, kTrackHeight);
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::AlignTextToFramePadding();
+
+                    const char* icon = ICON_FA_CUBE;
+                    if (entity.HasComponent<CameraComponent>())           icon = ICON_FA_VIDEO;
+                    else if (entity.HasComponent<PointLightComponent>())  icon = ICON_FA_LIGHTBULB;
+                    else if (entity.HasComponent<DirectionalLightComponent>()) icon = ICON_FA_SUN;
+                    else if (entity.HasComponent<SpriteRendererComponent>())   icon = ICON_FA_IMAGE;
+
+                    ImGuiTreeNodeFlags fl = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+                    if (expanded) fl |= ImGuiTreeNodeFlags_DefaultOpen;
+
+                    ImGui::PushID((int)e);
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.80f, 0.84f, 0.92f, 1.0f));
+                    bool nodeOpen = ImGui::TreeNodeEx(name.c_str(), fl, "%s  %s", icon, name.c_str());
+                    ImGui::PopStyleColor();
+                    if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
+                        if (expanded) m_ExpandedEntities.erase(uuid);
+                        else          m_ExpandedEntities.insert(uuid);
+                    }
+
+                    ImGui::TableSetColumnIndex(1);
+
+                    if (nodeOpen) {
+                        for (int i = 0; i < (int)ctrl.Tracks.size(); i++) {
+                            auto& track = ctrl.Tracks[i];
+                            bool hasKeys = track.CurveHandle != 0;
+                            auto curve = hasKeys
+                                ? AssetManager::GetAsset<CurveAsset>(track.CurveHandle) : nullptr;
+                            hasKeys = curve && !curve->Keys.empty();
+
+                            ImGui::TableNextRow(0, kTrackHeight);
+                            ImGui::TableSetColumnIndex(0);
+                            ImGui::AlignTextToFramePadding();
+                            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 20.0f);
+                            ImGui::PushStyleColor(ImGuiCol_Text,
+                                hasKeys ? ImVec4(0.70f, 0.76f, 0.85f, 1.0f)
+                                        : ImVec4(0.45f, 0.45f, 0.50f, 1.0f));
+                            ImGui::Text("%s  %s",
+                                hasKeys ? ICON_FA_CIRCLE : ICON_FA_LINK,
+                                GetTargetPropertyName(track.Property));
+                            ImGui::PopStyleColor();
+
+                            ImGui::TableSetColumnIndex(1);
+                            ImVec2 cellMin = ImGui::GetCursorScreenPos();
+                            ImVec2 cellSize = ImGui::GetContentRegionAvail();
+                            cellSize.y = kTrackHeight;
+                            ImGui::PushID(i);
+                            DrawTrackCell(cellMin, cellSize, track, entity, i);
+                            ImGui::PopID();
+                        }
+                        ImGui::TreePop();
+                    }
+                    ImGui::PopID();
+                }
+                ImGui::EndTable();
+            }
+
+            // ---- Grid + playhead (child's draw list: on top of clips) ----
+            if (m_CanvasX > 0.0f) {
+                ImDrawList* cdl = ImGui::GetWindowDrawList();
+                float cTop = ImGui::GetWindowPos().y;
+                float cBot = cTop + ImGui::GetWindowHeight();
+
+                cdl->PushClipRect(ImVec2(m_CanvasX, cTop),
+                                  ImVec2(m_CanvasX + m_CanvasWidth, cBot), true);
+                float gTick = 1.0f;
+                if (m_Zoom < 30.0f)      gTick = 5.0f;
+                else if (m_Zoom < 60.0f) gTick = 2.0f;
+                else if (m_Zoom > 300.0f) gTick = 0.2f;
+                else if (m_Zoom > 150.0f) gTick = 0.5f;
+                float gFirst = std::floor(ScreenXToTime(m_CanvasX, m_CanvasX) / gTick) * gTick;
+                for (float t = gFirst; t < ScreenXToTime(m_CanvasX + m_CanvasWidth + 100, m_CanvasX); t += gTick) {
+                    float ms = gTick / 5.0f;
+                    for (int m = 0; m < 5; m++) {
+                        float mx = TimeToScreenX(t + m * ms, m_CanvasX);
+                        if (mx > m_CanvasX + m_CanvasWidth) break;
+                        cdl->AddLine(ImVec2(mx, cTop), ImVec2(mx, cBot),
+                                     m == 0 ? IM_COL32(255,255,255,15) : IM_COL32(255,255,255,5), 1.0f);
+                    }
+                }
+                float px = TimeToScreenX(m_PreviewTime, m_CanvasX);
+                cdl->AddLine(ImVec2(px - 2.0f, cTop), ImVec2(px - 2.0f, cBot), IM_COL32(255,50,50,30), 2.0f);
+                cdl->AddLine(ImVec2(px + 2.0f, cTop), ImVec2(px + 2.0f, cBot), IM_COL32(255,50,50,30), 2.0f);
+                cdl->AddLine(ImVec2(px, cTop), ImVec2(px, cBot), IM_COL32(255,55,55,255), 1.0f);
+                cdl->PopClipRect();
+            }
+        }
+        ImGui::EndChild();
+        ImGui::PopStyleColor(2);
+
+        // ---- Pill + ruler-region line (parent draw list; track-region
+        //      grid + line drawn inside child above so they sit on top of clips) ----
+        if (m_CanvasX > 0.0f) {
+            float px   = TimeToScreenX(m_PreviewTime, m_CanvasX);
+            float topY = m_TableTopY;
+
+            char tb[16]; snprintf(tb, sizeof(tb), "%.2f", m_PreviewTime);
+            float tw = ImGui::CalcTextSize(tb).x + 20.0f;
+            const float pillH = 32.0f;
+
+            dl->PushClipRect(ImVec2(m_CanvasX, m_TableTopY - pillH - 8.0f),
+                             ImVec2(m_CanvasX + m_CanvasWidth, m_TableTopY + kRulerHeight + 2.0f), true);
+
+            dl->AddLine(ImVec2(px - 2.0f, topY), ImVec2(px - 2.0f, topY + kRulerHeight + 2.0f),
+                        IM_COL32(255, 50, 50, 30), 2.0f);
+            dl->AddLine(ImVec2(px + 2.0f, topY), ImVec2(px + 2.0f, topY + kRulerHeight + 2.0f),
+                        IM_COL32(255, 50, 50, 30), 2.0f);
+            dl->AddLine(ImVec2(px, topY), ImVec2(px, topY + kRulerHeight + 2.0f),
+                        IM_COL32(255, 55, 55, 255), 1.0f);
+
+            float pillX = px - tw * 0.5f;
+            float pillTop = topY - pillH;
+            float pillBottom = topY - 2.0f;
+            ImVec2 hMin(pillX, pillTop);
+            ImVec2 hMax(pillX + tw, pillBottom);
+            dl->AddRectFilled(hMin, hMax, IM_COL32(200, 40, 40, 240), 3.0f);
+            dl->AddRect(hMin, hMax, IM_COL32(255, 70, 70, 255), 3.0f);
+            float textH = ImGui::CalcTextSize(tb).y;
+            float textY = pillTop + (pillH - 2.0f - textH) * 0.5f;
+            dl->AddText(ImVec2(hMin.x + 10.0f, textY),
+                        IM_COL32(255, 255, 255, 255), tb);
+
+            dl->PopClipRect();
+        }
+
+        // ---- Playhead drag handle ----
+        if (m_CanvasX > 0.0f) {
+            float px = TimeToScreenX(m_PreviewTime, m_CanvasX);
+            float topY = m_TableTopY;
+            char tb[16]; snprintf(tb, sizeof(tb), "%.2f", m_PreviewTime);
+            float tw = ImGui::CalcTextSize(tb).x + 20.0f;
+            const float pillH = 32.0f;
+            float btnX = px - tw * 0.5f;
+            float btnW = tw;
+            float canvasRight = m_CanvasX + m_CanvasWidth;
+            if (btnX < m_CanvasX) { btnW -= (m_CanvasX - btnX); btnX = m_CanvasX; }
+            if (btnX + btnW > canvasRight) btnW = canvasRight - btnX;
+            if (btnW > 4.0f) {
+                ImGui::SetCursorScreenPos(ImVec2(btnX, topY - pillH));
+                ImGui::InvisibleButton("##PlayheadDrag", ImVec2(btnW, pillH + kRulerHeight));
+                if (ImGui::IsItemActivated()) StartPreview();
+                if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                    float raw = ScreenXToTime(ImGui::GetMousePos().x, m_CanvasX);
+                    if (raw < 0.0f) raw = 0.0f;
+                    m_PreviewTime = SnapToNearestKeyframe(raw);
+                }
+            }
+        }
+
+        HandleCanvasInput(preTableWheel, preTableWheelH);
+
+        // ---- Playback tick ----
+        if (m_IsPlaying) m_PreviewTime += ImGui::GetIO().DeltaTime;
     }
 
 } // namespace Ayaya

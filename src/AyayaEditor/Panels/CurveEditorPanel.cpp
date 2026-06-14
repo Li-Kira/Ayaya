@@ -419,7 +419,7 @@ namespace Ayaya {
     // ==========================================
 
     void CurveEditorPanel::OnImGuiRender() {
-        if (!IsOpen()) return;
+        if (!m_IsOpen) return;
 
         ImGui::SetNextWindowSize(ImVec2(800, 500), ImGuiCond_FirstUseEver);
         ImGui::Begin("Curve Editor", &m_IsOpen, ImGuiWindowFlags_MenuBar);
@@ -431,6 +431,14 @@ namespace Ayaya {
                     CurveSerializer::Serialize(*m_ActiveCurve, m_CurveFilePath);
             }
             ImGui::EndMenuBar();
+        }
+
+        if (!m_ActiveCurve) {
+            ImGui::TextDisabled("No curve open.");
+            ImGui::TextDisabled("Double-click a .curve file in the Content Browser,");
+            ImGui::TextDisabled("or use Add > New Curve to create one.");
+            ImGui::End();
+            return;
         }
 
         // File name

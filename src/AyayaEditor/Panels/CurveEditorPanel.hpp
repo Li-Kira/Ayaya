@@ -17,6 +17,8 @@ namespace Ayaya {
         void OpenCurve(std::shared_ptr<CurveAsset> curve, const std::filesystem::path& filepath);
         void CloseCurve();
         bool IsOpen() const { return m_ActiveCurve != nullptr && m_IsOpen; }
+        bool& GetOpenFlag() { return m_IsOpen; }
+        void ToggleOpen() { m_IsOpen = !m_IsOpen; }
 
     private:
         // Coordinate mapping
@@ -53,7 +55,7 @@ namespace Ayaya {
         float m_PreviewTime     = 0.0f;
         bool  m_IsPlayingPreview = false;
 
-        bool m_IsOpen = true;
+        bool m_IsOpen = false;
 
         // Layout
         static constexpr float kSidebarWidth = 220.0f;

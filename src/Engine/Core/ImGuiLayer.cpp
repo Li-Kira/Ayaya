@@ -104,6 +104,8 @@ namespace Ayaya {
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // 允许键盘控制
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // 开启停靠功能
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // 开启多视口（可拖出主窗口）
+        io.ConfigWindowsMoveFromTitleBarOnly = true;         // 仅标题栏可拖拽窗口
+        io.MouseDragThreshold = 8.0f;                        // 适中阈值：防误触但不影响tab拖出
 
         float fontSize = 18.0f; // 基础字体大小
         // 建议加载你下载的高清 TTF 字体，不要用 AddFontDefault()
