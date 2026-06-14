@@ -6,6 +6,7 @@
 #include <string>
 
 #include "Engine/Core/UUID.hpp"
+#include "Engine/Animation/TweenManager.hpp"
 
 class b2World;
 
@@ -61,6 +62,13 @@ namespace Ayaya {
         // 收集当前场景中所有实体引用的资产 UUID（用于 GC Mark 阶段）
         std::unordered_set<UUID> GetActiveAssetHandles() const;
 
+        // O(1) UUID → Entity lookup (synced in Create/Destroy entity)
+        Entity GetEntityByUUID(UUID uuid);
+
+        TweenManager& GetTweenManager() { return m_TweenManager; }
+        float GetAnimationTime() const { return m_AnimationTime; }
+        void  SetAnimationTime(float t) { m_AnimationTime = t; }
+
     private:
         entt::registry m_Registry; 
         std::vector<entt::entity> m_RootEntities; 
@@ -68,6 +76,9 @@ namespace Ayaya {
         friend class Entity; 
 
         b2World* m_PhysicsWorld = nullptr;
+        TweenManager m_TweenManager;
+        float m_AnimationTime = 0.0f;
+        std::unordered_map<UUID, entt::entity> m_EntityMap;
     };
 
 }

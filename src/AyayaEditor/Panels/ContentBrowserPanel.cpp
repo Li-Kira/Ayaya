@@ -7,6 +7,7 @@
 #include "Renderer/RendererAPI.hpp"
 #include "Utils/PlatformUtils.hpp"
 #include "../EditorLayer.hpp"
+#include "Engine/Animation/CurveSerializer.hpp"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -63,6 +64,9 @@ namespace Ayaya {
             AssetPreviewer::RequestThumbnail(handle, at);
             return m_FileIcon;
         }
+        // Curve uses dedicated icon in DrawContentGrid via extension check
+        if (meta.Type == AssetType::Curve) return nullptr;
+        if (meta.Type == AssetType::LuaScript) return nullptr;
         return m_FileIcon;
     }
 
@@ -283,6 +287,7 @@ namespace Ayaya {
         m_DirectoryIcon = Texture2D::Create("assets/Editor/icons/folder_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png");
         m_FileIcon      = Texture2D::Create("assets/Editor/icons/docs_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png");
         m_PngIcon       = Texture2D::Create("assets/Editor/icons/image_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png");
+        m_CurveIcon     = Texture2D::Create("assets/Editor/icons/line_curve_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png");
 
         m_BaseDirectory = Project::GetProjectDirectory();
         m_CurrentDirectory = m_BaseDirectory;
@@ -397,6 +402,21 @@ namespace Ayaya {
                     out.close();
                     AssetManager::ImportAsset(luaPath);
                 }
+            }
+            if (ImGui::MenuItem("New Curve")) {
+                std::string baseName = "NewCurve";
+                std::filesystem::path curvePath = m_CurrentDirectory / (baseName + ".curve");
+                int counter = 1;
+                while (std::filesystem::exists(curvePath)) {
+                    curvePath = m_CurrentDirectory / (baseName + std::to_string(counter) + ".curve");
+                    counter++;
+                }
+                // Create a default curve with two keyframes
+                CurveAsset curve;
+                curve.AddKey(0.0f, 0.0f, 0.0f, 1.0f);
+                curve.AddKey(1.0f, 1.0f, -1.0f, 0.0f);
+                if (CurveSerializer::Serialize(curve, curvePath))
+                    AssetManager::ImportAsset(curvePath);
             }
             ImGui::EndPopup();
         }
@@ -777,7 +797,8 @@ namespace Ayaya {
                 std::shared_ptr<Texture2D> icon = isDir ? m_DirectoryIcon : m_FileIcon;
                 if (!isDir) {
                     auto thumb = GetThumbnail(path);
-                    icon = thumb ? thumb : m_FileIcon;
+                    if (thumb) icon = thumb;
+                    else if (path.extension() == ".curve") icon = m_CurveIcon;
                 }
 
                 ImGui::PushID(filenameString.c_str());
@@ -952,12 +973,18 @@ namespace Ayaya {
                     m_CurrentDirectory = path;
                 }
 
-                // Double-click scene file → open
+                // Double-click file → open
                 if (doubleClicked && !isDir && assetHandle != 0) {
                     AssetMetadata meta = AssetManager::GetMetadata(assetHandle);
                     if (meta.Type == AssetType::Scene) {
                         std::string phys = VFS::ResolveString(meta.VirtualPath);
                         EditorLayer::Get().OpenSceneFile(phys);
+                    } else if (meta.Type == AssetType::Curve) {
+                        auto curve = AssetManager::GetAsset<CurveAsset>(assetHandle);
+                        if (curve) {
+                            std::string phys = VFS::ResolveString(meta.VirtualPath);
+                            EditorLayer::Get().GetCurveEditorPanel().OpenCurve(curve, phys);
+                        }
                     }
                 }
 

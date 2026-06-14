@@ -3,6 +3,7 @@
 #include "Renderer/AssetPreviewer.hpp"
 #include "Events/MouseEvent.hpp"
 #include "Scripting/ScriptEngine.hpp"
+#include "Engine/Animation/AnimationSystem.hpp"
 #include "Engine/Core/EditorCommands.hpp"
 #include "Engine/Core/ImGuiBackend.hpp"
 #include "Engine/Core/Application.hpp"
@@ -70,6 +71,7 @@ namespace Ayaya {
         });
 
         InitDefaultProject();
+        m_TimelinePanel.SetContext(m_ActiveScene);
 
         // 清理临时文件
         std::string tempPath = VFS::ResolveString("project://temp/temp_play_scene.ayaya");
@@ -179,6 +181,12 @@ namespace Ayaya {
             m_EditorCamera.OnUpdate(ts, m_ViewportFocused);
             // Editor-mode Lua scripts (lazy-init env + call OnEditorUpdate)
             ScriptEngine::OnEditorUpdate(m_ActiveScene.get(), ts);
+            m_TweenManager.Update(ts);
+            // Timeline preview — drives AnimationSystem with preview time (not scene clock)
+            if (m_TimelinePanel.IsPreviewing()) {
+                m_ActiveScene->SetAnimationTime(m_TimelinePanel.GetPreviewTime());
+                AnimationSystem::Update(*m_ActiveScene, m_TimelinePanel.GetPreviewTime());
+            }
         }
         // 如果处于 Play 模式且没有暂停，则推进物理运算，兼容 m_TimeStepScale
         else if (m_SceneState == SceneState::Play && !m_IsPaused) {
@@ -195,6 +203,12 @@ namespace Ayaya {
         else
             m_DrawerAnimationProgress = 0.0f;
         if (m_DrawerAnimationProgress > 0.999f) m_DrawerAnimationProgress = 1.0f;
+
+        if (m_ShowTimelineDrawer)
+            m_TimelineDrawerProgress = glm::mix(m_TimelineDrawerProgress, 1.0f, 15.0f * ts.GetSeconds());
+        else
+            m_TimelineDrawerProgress = 0.0f;
+        if (m_TimelineDrawerProgress > 0.999f) m_TimelineDrawerProgress = 1.0f;
 
         // ==========================================
         // 4. 环境光与 IBL 动态更新系统
@@ -418,6 +432,7 @@ namespace Ayaya {
         UIRenderNewProjectPopup();
         UIRenderSaveAsPopup();
         m_ImportModelPanel.Draw();
+        m_CurveEditorPanel.OnImGuiRender();
 
         // ---- Drawer + Bottom bar ----
         float barH = 40.0f;
@@ -441,6 +456,24 @@ namespace Ayaya {
             ImGui::End();
         }
 
+        // ---- Timeline Drawer ----
+        if (m_TimelineDrawerProgress > 0.001f) {
+            ImVec2 winPos = ImGui::GetWindowPos();
+            float winW = ImGui::GetWindowWidth();
+            float targetH = ImGui::GetWindowHeight() * 0.35f;
+            float curH = targetH * m_TimelineDrawerProgress;
+            float curY = winPos.y + contentBottom - barH - curH + 1.0f;
+            float curW = winW * 0.75f;
+            bool animating = (m_TimelineDrawerProgress < 0.995f);
+            if (animating) {
+                ImGui::SetNextWindowPos(ImVec2(winPos.x, curY), ImGuiCond_Always);
+                ImGui::SetNextWindowSize(ImVec2(curW, curH), ImGuiCond_Always);
+            }
+            if (ImGui::Begin("Timeline##Drawer", &m_ShowTimelineDrawer, ImGuiWindowFlags_NoDocking))
+                m_TimelinePanel.RenderContent();
+            ImGui::End();
+        }
+
         // Bottom bar (at contentBottom)
         {
             ImGui::SetCursorPosY(contentBottom - barH);
@@ -461,7 +494,8 @@ namespace Ayaya {
             ImGui::SameLine(0, 4.0f);
             if (ImGui::Button(ICON_FA_LIST_ALT " Log", ImVec2(0, btnH))) {}
             ImGui::SameLine(0, 4.0f);
-            if (ImGui::Button(ICON_FA_CLOCK " Timeline", ImVec2(0, btnH))) {}
+            if (ImGui::Button(ICON_FA_CLOCK " Timeline", ImVec2(0, btnH)))
+                m_ShowTimelineDrawer = !m_ShowTimelineDrawer;
             ImGui::PopStyleColor(2);
             ImGui::PopStyleVar(2);
             ImGui::PopFont();
@@ -510,7 +544,7 @@ namespace Ayaya {
         mrc.ModelHandle = AssetManager::GetBuiltInCube();
         mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
 
-        m_SceneHierarchyPanel.SetContext(m_ActiveScene);
+        m_SceneHierarchyPanel.SetContext(m_ActiveScene); m_TimelinePanel.SetContext(m_ActiveScene);
     }
 
     // =====================================================================
@@ -765,7 +799,7 @@ namespace Ayaya {
         auto& cameraTransform = cameraEntity.GetComponent<TransformComponent>();
         cameraTransform.Translation = { 0.0f, 0.0f, 5.0f };
 
-        m_SceneHierarchyPanel.SetContext(m_ActiveScene);
+        m_SceneHierarchyPanel.SetContext(m_ActiveScene); m_TimelinePanel.SetContext(m_ActiveScene);
         m_CurrentScenePath = std::string(); 
         m_HoveredEntity = {};
         m_SceneHierarchyPanel.SetSelectedEntity({});
@@ -791,7 +825,7 @@ namespace Ayaya {
             m_ActiveScene = newScene;
             m_EditorScene = m_ActiveScene;
             m_CurrentScenePath = filepath;
-            m_SceneHierarchyPanel.SetContext(m_ActiveScene);
+            m_SceneHierarchyPanel.SetContext(m_ActiveScene); m_TimelinePanel.SetContext(m_ActiveScene);
             m_HoveredEntity = {};
             m_SceneHierarchyPanel.SetSelectedEntity({});
             m_CommandHistory.Clear();
@@ -816,7 +850,7 @@ namespace Ayaya {
             m_ActiveScene = newScene;
             m_EditorScene = m_ActiveScene;
             m_CurrentScenePath = filepath.string();
-            m_SceneHierarchyPanel.SetContext(m_ActiveScene);
+            m_SceneHierarchyPanel.SetContext(m_ActiveScene); m_TimelinePanel.SetContext(m_ActiveScene);
             m_HoveredEntity = {};
             m_SceneHierarchyPanel.SetSelectedEntity({});
             m_CommandHistory.Clear();
@@ -1175,7 +1209,7 @@ namespace Ayaya {
                 m_EditorCamera.SetYaw(state.CameraYaw);
                 m_EditorCamera.SetFocalPoint(state.CameraFocalPoint);
                 m_EditorCamera.UpdateCameraView();
-                m_SceneHierarchyPanel.SetContext(m_ActiveScene);
+                m_SceneHierarchyPanel.SetContext(m_ActiveScene); m_TimelinePanel.SetContext(m_ActiveScene);
                 m_CurrentScenePath = startScenePath;
                 m_HoveredEntity = {};
                 m_SceneHierarchyPanel.SetSelectedEntity({});
@@ -2456,7 +2490,7 @@ namespace Ayaya {
         deserializer.Deserialize(tempPath, dummyState);
 
         // 2. 更新面板上下文
-        m_SceneHierarchyPanel.SetContext(m_ActiveScene);
+        m_SceneHierarchyPanel.SetContext(m_ActiveScene); m_TimelinePanel.SetContext(m_ActiveScene);
 
         // ==========================================
         // 核心修复 3：强行重置克隆出来的玩家相机的视口比例和模式！
@@ -2497,7 +2531,7 @@ namespace Ayaya {
 
         // 恢复编辑状态的场景
         m_ActiveScene = m_EditorScene;
-        m_SceneHierarchyPanel.SetContext(m_ActiveScene);
+        m_SceneHierarchyPanel.SetContext(m_ActiveScene); m_TimelinePanel.SetContext(m_ActiveScene);
     }
 
     void EditorLayer::UIRenderToolbar() {

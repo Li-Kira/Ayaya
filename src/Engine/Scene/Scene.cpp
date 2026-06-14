@@ -13,6 +13,7 @@
 #include <box2d/b2_fixture.h>
 #include <box2d/b2_polygon_shape.h>
 #include "Scripting/ScriptEngine.hpp"
+#include "Engine/Animation/AnimationSystem.hpp"
 #include <glm/gtx/matrix_decompose.hpp>
 
 namespace Ayaya {
@@ -58,6 +59,7 @@ namespace Ayaya {
         
         entity.AddComponent<RelationshipComponent>();
         m_RootEntities.push_back(entity.m_EntityHandle);
+        m_EntityMap[uuid] = entity.m_EntityHandle;
 
         return entity;
     }
@@ -75,7 +77,13 @@ namespace Ayaya {
         auto it = std::find(m_RootEntities.begin(), m_RootEntities.end(), entity.m_EntityHandle);
         if (it != m_RootEntities.end()) m_RootEntities.erase(it);
 
+        m_EntityMap.erase(entity.GetComponent<IDComponent>().ID);
         m_Registry.destroy(entity);
+    }
+
+    Entity Scene::GetEntityByUUID(UUID uuid) {
+        auto it = m_EntityMap.find(uuid);
+        return (it != m_EntityMap.end()) ? Entity{it->second, this} : Entity{};
     }
 
     // ==========================================
@@ -217,6 +225,7 @@ namespace Ayaya {
         CopyComponentIfExists<LuaScriptComponent>(newEntity, entity);
         CopyComponentIfExists<PostProcessVolumeComponent>(newEntity, entity);
         CopyComponentIfExists<EnvironmentComponent>(newEntity, entity);
+        CopyComponentIfExists<AnimationControllerComponent>(newEntity, entity);
 
         // =========================================================
         // 【核心修复】：必须预先拷贝被复制物体的父节点和子节点数组！
@@ -266,6 +275,7 @@ namespace Ayaya {
             CopyComponentIfExists<LuaScriptComponent>(dst, src);
             CopyComponentIfExists<PostProcessVolumeComponent>(dst, src);
             CopyComponentIfExists<EnvironmentComponent>(dst, src);
+            CopyComponentIfExists<AnimationControllerComponent>(dst, src);
 
             // Clone children recursively
             auto& srcRel = src.GetComponent<RelationshipComponent>();
@@ -378,7 +388,14 @@ namespace Ayaya {
         });
 
         // ==========================================
-        // 2. 物理步进计算
+        // 2.5. 动画系统 (曲线驱动 + Tween 补间)
+        // ==========================================
+        m_AnimationTime += ts.GetSeconds();
+        AnimationSystem::Update(*this, m_AnimationTime);
+        m_TweenManager.Update(ts);
+
+        // ==========================================
+        // 3. 物理步进计算
         // ==========================================
         const int32_t velocityIterations = 6;
         const int32_t positionIterations = 2;

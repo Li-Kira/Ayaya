@@ -7,6 +7,7 @@
 #include "Renderer/Material.hpp"
 #include "Renderer/MaterialSerializer.hpp"
 #include "Scene/SceneSerializer.hpp"
+#include "Engine/Animation/CurveSerializer.hpp"
 #include "Scene/Components.hpp"
 #include "Project/Project.hpp"
 #include "Core/VFS.hpp"
@@ -218,7 +219,7 @@ namespace Ayaya {
                ext == ".bmp"  || ext == ".hdr" ||
                ext == ".obj"  || ext == ".fbx" || ext == ".gltf" || ext == ".glb" ||
                ext == ".mat"  || ext == ".lua" || ext == ".cube" ||
-               ext == ".prefab" || ext == ".ayaya";
+               ext == ".prefab" || ext == ".ayaya" || ext == ".curve";
     }
 
     void AssetManager::RefreshRegistry() {
@@ -1059,6 +1060,7 @@ namespace Ayaya {
         else if (ext == ".lua")                              type = AssetType::LuaScript;
         else if (ext == ".cube")                             type = AssetType::TextureCube;
         else if (ext == ".ayaya")                            type = AssetType::Scene;
+        else if (ext == ".curve")                            type = AssetType::Curve;
 
         if (type == AssetType::None) {
             AYAYA_CORE_WARN("AssetManager: Unsupported asset format '{0}'", ext);
@@ -1157,6 +1159,11 @@ namespace Ayaya {
             if (prefab->Load(physicalPath)) {
                 asset = prefab;
             }
+        }
+        else if (metadata.Type == AssetType::Curve) {
+            auto curve = std::make_shared<CurveAsset>();
+            if (CurveSerializer::Deserialize(curve, physicalPath))
+                asset = curve;
         }
         else if (metadata.Type == AssetType::TextureCube) {
             asset = TextureCube::Create(physicalPath);

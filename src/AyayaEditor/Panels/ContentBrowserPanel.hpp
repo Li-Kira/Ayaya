@@ -36,6 +36,7 @@ namespace Ayaya {
         std::shared_ptr<Texture2D> m_DirectoryIcon;
         std::shared_ptr<Texture2D> m_FileIcon;
         std::shared_ptr<Texture2D> m_PngIcon;
+        std::shared_ptr<Texture2D> m_CurveIcon;
 
         float m_ThumbnailSize = 96.0f;
         char m_SearchFilter[256] = "";

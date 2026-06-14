@@ -1,0 +1,87 @@
+Scene: Untitled
+EditorState:
+  ShowGrid: true
+  ShowSkybox: true
+  CameraPosition: [-3.0688918, 1.1068674, 3.0702875]
+  CameraDistance: 4.0959997
+  CameraPitch: -0.24459583
+  CameraYaw: -0.7509993
+  CameraFocalPoint: [-0.35709834, 0.114962935, 0.1652031]
+Entities:
+  - Entity: 7797903022091767064
+    TagComponent:
+      Tag: Main Camera
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 5]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    CameraComponent:
+      Primary: true
+      FixedAspectRatio: false
+      EV100: 14.5
+      ClearFlag: 1
+      BackgroundColor: [0.016, 0.016, 0.02, 1]
+      Camera:
+        ProjectionType: 0
+        PerspectiveFOV: 0.7853982
+        PerspectiveNear: 0.01
+        PerspectiveFar: 1000
+        OrthographicSize: 5
+        OrthographicNear: -1
+        OrthographicFar: 1000
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 10870913517887167100
+    TagComponent:
+      Tag: Skybox
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    EnvironmentComponent:
+      Type: 1
+      Intensity: 30000
+      AmbientColor: [0, 0, 0]
+      EquirectangularHandle: 16140901000000000005
+      CubemapHandle: 0
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 2412633923466501589
+    TagComponent:
+      Tag: Directional Light
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [-0.7853982, 0.7853982, 0]
+      Scale: [1, 1, 1]
+    DirectionalLightComponent:
+      Color: [1, 1, 1]
+      Illuminance: 100000
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 17824050550919382742
+    TagComponent:
+      Tag: Cube
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000001
+      MaterialHandle: 16140901000000000004
+      CastShadows: true
+      ReceiveShadows: true
+    AnimationControllerComponent:
+      IsPlaying: true
+      Tracks:
+        - CurveHandle: 5298546655020386346
+          Property: Transform_PositionX
+          TimeOffset: 0
+        - CurveHandle: 5298546655020386346
+          Property: Transform_RotationY
+          TimeOffset: 0
+    RelationshipComponent:
+      Parent: 0

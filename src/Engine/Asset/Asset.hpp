@@ -13,7 +13,8 @@ namespace Ayaya {
         Material,
         LuaScript,
         Prefab,      // entity tree template
-        SubMesh      // lightweight: ParentHandle + SubMeshIndex, no own buffers
+        SubMesh,     // lightweight: ParentHandle + SubMeshIndex, no own buffers
+        Curve        // Hermite-interpolated animation curve (.curve)
     };
 
     class Asset {

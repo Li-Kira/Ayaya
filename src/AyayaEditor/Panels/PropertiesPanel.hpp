@@ -60,6 +60,7 @@ namespace Ayaya {
         void DrawUIImageComponent(Entity referenceEntity, float uiScale);
         void DrawUITextComponent(Entity referenceEntity);
         void DrawUIButtonComponent(Entity referenceEntity);
+        void DrawAnimationControllerComponent(Entity referenceEntity);
         void DrawAddComponentButton(Entity referenceEntity, float uiScale);
         void DrawAssetInspector();
 

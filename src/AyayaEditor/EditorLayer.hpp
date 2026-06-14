@@ -9,6 +9,9 @@
 #include "Panels/HistoryPanel.hpp"
 #include "Panels/FrameDebuggerPanel.hpp"
 #include "Panels/ImportModelPanel.hpp"
+#include "Panels/CurveEditorPanel.hpp"
+#include "Panels/TimelinePanel.hpp"
+#include "Engine/Animation/TweenManager.hpp"
 #include "Asset/AssetWatcher.hpp"
 #include "Renderer/SceneRenderer.hpp"
 #include "Renderer/Framebuffer.hpp"
@@ -54,6 +57,9 @@ namespace Ayaya {
         void OpenSceneFile(const std::filesystem::path& filepath);
         AssetWatcher& GetAssetWatcher() { return m_AssetWatcher; }
         ImportModelPanel& GetImportModelPanel() { return m_ImportModelPanel; }
+        CurveEditorPanel& GetCurveEditorPanel() { return m_CurveEditorPanel; }
+        TimelinePanel& GetTimelinePanel() { return m_TimelinePanel; }
+        TweenManager& GetTweenManager() { return m_TweenManager; }
 
 
     private:
@@ -119,7 +125,10 @@ namespace Ayaya {
         HistoryPanel m_HistoryPanel;
         FrameDebuggerPanel m_FrameDebuggerPanel;
         ImportModelPanel m_ImportModelPanel;
+        CurveEditorPanel m_CurveEditorPanel;
+        TimelinePanel m_TimelinePanel;
         AssetWatcher m_AssetWatcher;
+        TweenManager m_TweenManager;
 
         bool m_ViewportFocused = false;
         bool m_ViewportHovered = false;
@@ -130,6 +139,8 @@ namespace Ayaya {
 
         bool  m_ShowContentDrawer = false;
         float m_DrawerAnimationProgress = 0.0f;
+        bool  m_ShowTimelineDrawer = false;
+        float m_TimelineDrawerProgress = 0.0f;
         int   m_ViewportResW = 0;  // 0 = fit window
         int   m_ViewportResH = 0;
 

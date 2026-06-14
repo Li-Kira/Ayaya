@@ -219,7 +219,24 @@ namespace Ayaya {
             out << YAML::Key << "EnableSSAO" << YAML::Value << ppv.EnableSSAO;
             out << YAML::Key << "SSAORadius" << YAML::Value << ppv.SSAORadius;
             out << YAML::Key << "SSAOBias" << YAML::Value << ppv.SSAOBias;
-            out << YAML::EndMap; 
+            out << YAML::EndMap;
+        }
+
+        if (entity.HasComponent<AnimationControllerComponent>()) {
+            auto& ac = entity.GetComponent<AnimationControllerComponent>();
+            out << YAML::Key << "AnimationControllerComponent";
+            out << YAML::BeginMap;
+            out << YAML::Key << "IsPlaying" << YAML::Value << ac.IsPlaying;
+            out << YAML::Key << "Tracks" << YAML::Value << YAML::BeginSeq;
+            for (auto& track : ac.Tracks) {
+                out << YAML::BeginMap;
+                out << YAML::Key << "CurveHandle" << YAML::Value << (uint64_t)track.CurveHandle;
+                out << YAML::Key << "Property" << YAML::Value << GetTargetPropertyName(track.Property);
+                out << YAML::Key << "TimeOffset" << YAML::Value << track.TimeOffset;
+                out << YAML::EndMap;
+            }
+            out << YAML::EndSeq;
+            out << YAML::EndMap;
         }
 
         if (entity.HasComponent<Rigidbody2DComponent>()) {
@@ -552,6 +569,22 @@ namespace Ayaya {
                 if (ppvComponent["EnableSSAO"]) ppv.EnableSSAO = ppvComponent["EnableSSAO"].as<bool>();
                 if (ppvComponent["SSAORadius"]) ppv.SSAORadius = ppvComponent["SSAORadius"].as<float>();
                 if (ppvComponent["SSAOBias"])   ppv.SSAOBias   = ppvComponent["SSAOBias"].as<float>();
+            }
+
+            auto animController = entity["AnimationControllerComponent"];
+            if (animController) {
+                auto& ac = deserializedEntity.AddComponent<AnimationControllerComponent>();
+                ac.IsPlaying = animController["IsPlaying"] ? animController["IsPlaying"].as<bool>() : true;
+                if (animController["Tracks"] && animController["Tracks"].IsSequence()) {
+                    for (auto trackNode : animController["Tracks"]) {
+                        AnimationTrack track;
+                        track.CurveHandle = trackNode["CurveHandle"] ? trackNode["CurveHandle"].as<uint64_t>() : 0;
+                        track.TimeOffset  = trackNode["TimeOffset"]  ? trackNode["TimeOffset"].as<float>()    : 0.0f;
+                        if (trackNode["Property"])
+                            track.Property = ParseTargetProperty(trackNode["Property"].as<std::string>());
+                        ac.Tracks.push_back(track);
+                    }
+                }
             }
 
             auto rigidbody2DComponent = entity["Rigidbody2DComponent"];

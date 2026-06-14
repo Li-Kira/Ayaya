@@ -13,6 +13,7 @@
 #include "Renderer/SceneCamera.hpp"
 #include "Renderer/Model.hpp"
 #include "Renderer/Material.hpp"
+#include "Engine/Animation/AnimationTrack.hpp"
 #include "Renderer/Texture.hpp"
 #include "Renderer/TextureCube.hpp"
 #include "Engine/Core/UUID.hpp"
@@ -312,6 +313,17 @@ namespace Ayaya {
 
         UIButtonComponent() = default;
         UIButtonComponent(const UIButtonComponent&) = default;
+    };
+
+    // ==========================================
+    // Animation — curve-driven track controller
+    // ==========================================
+    struct AnimationControllerComponent {
+        std::vector<AnimationTrack> Tracks;
+        bool IsPlaying = true;
+
+        AnimationControllerComponent() = default;
+        AnimationControllerComponent(const AnimationControllerComponent&) = default;
     };
 
 }

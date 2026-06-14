@@ -1,0 +1,10 @@
+Curve:
+  Keys:
+    - Time: 0
+      Value: 0
+      InTangent: 0
+      OutTangent: 0.19312482
+    - Time: 0.9771631
+      Value: 0.85603225
+      InTangent: 3.0220006
+      OutTangent: 0

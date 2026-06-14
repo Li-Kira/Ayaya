@@ -144,6 +144,7 @@ namespace Ayaya {
             DrawLuaScriptComponent(referenceEntity);
             DrawRigidbody2DComponent(referenceEntity);
             DrawBoxCollider2DComponent(referenceEntity);
+            DrawAnimationControllerComponent(referenceEntity);
             DrawCanvasComponent(referenceEntity);
             DrawRectTransformComponent(referenceEntity, uiScale);
             DrawUIImageComponent(referenceEntity, uiScale);
@@ -730,7 +731,7 @@ namespace Ayaya {
                 };
 
                 // ==========================================
-                // 【绝妙修复】：在任何 UI 交互发生前，先拍下一张绝对纯净的“快照”！
+                // 【绝妙修复】：在任何 UI 交互发生前，先拍下一张绝对纯净的"快照"！
                 // ==========================================
                 std::vector<DirectionalLightComponent> pureOldLights;
                 for (auto e : m_SelectedEntities) pureOldLights.push_back(e.GetComponent<DirectionalLightComponent>());
@@ -917,7 +918,7 @@ namespace Ayaya {
                 int currentTypeIdx = (int)refEnv.Type;
                 if (ImGui::Combo("Type", &currentTypeIdx, envTypeStrings, 4)) {
                     std::vector<EnvironmentComponent> oldComps = pureOldEnvs;
-                    for (auto& c : oldComps) c.IsDirty = true; // 强行“弄脏”备份数据以触发重绘
+                    for (auto& c : oldComps) c.IsDirty = true; // 强行"弄脏"备份数据以触发重绘
 
                     for (auto e : m_SelectedEntities) {
                         auto& comp = e.GetComponent<EnvironmentComponent>();
@@ -1121,7 +1122,7 @@ namespace Ayaya {
         // --- 绘制 Mesh Renderer 组件 ---
         // ==========================================
         // 记录的命令：模型(.obj/.fbx)的拖入分配、基础几何体的切换、材质(.mat)的拖入分配、材质的移除与默认材质添加、阴影投射(Cast)与接收(Receive)的切换
-        // (注：材质内部属性的修改属于“资产级别(Asset)”，为保护材质共享(Batching)，暂不纳入组件级撤回栈)
+        // (注：材质内部属性的修改属于"资产级别(Asset)"，为保护材质共享(Batching)，暂不纳入组件级撤回栈)
         bool allHaveMeshRenderer = true;
         for (auto e : m_SelectedEntities) if (!e.HasComponent<MeshRendererComponent>()) { allHaveMeshRenderer = false; break; }
 
@@ -2334,9 +2335,132 @@ namespace Ayaya {
         }
     }
 
+    void PropertiesPanel::DrawAnimationControllerComponent(Entity referenceEntity) {
+        // Guard: only draw if all selected entities have the component
+        bool allHave = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<AnimationControllerComponent>()) { allHave = false; break; }
+        if (!allHave) return;
+
+        float uiScale = ImGui::GetIO().FontGlobalScale;
+        auto& component = referenceEntity.GetComponent<AnimationControllerComponent>();
+
+        ImGuiTreeNodeFlags headerFlags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
+        bool treeOpen = ImGui::CollapsingHeader("Animation Controller", headerFlags);
+        if (!treeOpen) return;
+
+        // ---- IsPlaying (works across multi-select) ----
+        if (ImGui::Checkbox("Is Playing", &component.IsPlaying))
+            for (auto e : m_SelectedEntities) e.GetComponent<AnimationControllerComponent>().IsPlaying = component.IsPlaying;
+
+        // Multi-select safety: track array editing is disabled for multiple entities
+        if (m_SelectedEntities.size() > 1) {
+            ImGui::Spacing();
+            ImGui::TextDisabled("Track editing is not available in multi-select mode.");
+            ImGui::TextDisabled("Select a single entity to edit animation tracks.");
+            return;
+        }
+
+        ImGui::Separator();
+
+        // --- Snapshot for undo ---
+        AnimationControllerComponent oldComp = component;
+        static AnimationControllerComponent s_OldComp;
+        std::string targetName = "'" + referenceEntity.GetComponent<TagComponent>().Tag + "'";
+
+        auto handleDragState = [&](const std::string& actionName) {
+            if (ImGui::IsItemActivated()) s_OldComp = oldComp;
+            if (ImGui::IsItemDeactivatedAfterEdit()) {
+                auto cmd = std::make_shared<ChangeComponentCommand<AnimationControllerComponent>>(
+                    referenceEntity, s_OldComp, referenceEntity.GetComponent<AnimationControllerComponent>());
+                EditorLayer::Get().GetCommandHistory().AddCommand(cmd);
+            }
+        };
+
+        // ---- Tracks ----
+        int trackToRemove = -1;
+        for (int i = 0; i < (int)component.Tracks.size(); i++) {
+            auto& track = component.Tracks[i];
+            ImGui::PushID(i);
+
+            ImGui::Text("Track %d", i);
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x - 20.0f * uiScale);
+            if (ImGui::SmallButton("X")) {
+                trackToRemove = i;
+                ImGui::PopID();
+                break; // erase after loop
+            }
+
+            // ---- Curve Asset drag-drop ----
+            std::string assetLabel = "Drop .curve here";
+            if (track.CurveHandle != 0) {
+                AssetMetadata meta = AssetManager::GetMetadata(track.CurveHandle);
+                const std::string& vpath = meta.VirtualPath;
+                if (!vpath.empty()) {
+                    auto pos = vpath.find_last_of("/\\");
+                    assetLabel = (pos != std::string::npos) ? vpath.substr(pos + 1) : vpath;
+                } else {
+                    assetLabel = "Curve Assigned";
+                }
+            }
+            ImGui::Text("Curve"); ImGui::SameLine(60.0f * uiScale);
+            ImGui::Button(assetLabel.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0.0f));
+
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    UUID droppedHandle = *(const UUID*)payload->Data;
+                    auto meta = AssetManager::GetMetadata(droppedHandle);
+                    if (droppedHandle != 0 && meta.Type == AssetType::Curve) {
+                        track.CurveHandle = droppedHandle;
+                        auto cmd = std::make_shared<ChangeComponentCommand<AnimationControllerComponent>>(
+                            referenceEntity, oldComp, referenceEntity.GetComponent<AnimationControllerComponent>());
+                        EditorLayer::Get().GetCommandHistory().AddCommand(cmd);
+                        oldComp = referenceEntity.GetComponent<AnimationControllerComponent>();
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            // ---- TargetProperty combo ----
+            int currentProp = static_cast<int>(track.Property);
+            if (ImGui::Combo("Target", &currentProp, s_TargetPropertyStrings, s_TargetPropertyCount)) {
+                track.Property = static_cast<TargetProperty>(currentProp);
+                auto cmd = std::make_shared<ChangeComponentCommand<AnimationControllerComponent>>(
+                    referenceEntity, oldComp, referenceEntity.GetComponent<AnimationControllerComponent>());
+                EditorLayer::Get().GetCommandHistory().AddCommand(cmd);
+                oldComp = referenceEntity.GetComponent<AnimationControllerComponent>();
+            }
+
+            // ---- TimeOffset drag ----
+            float timeOff = track.TimeOffset;
+            if (ImGui::DragFloat("Time Offset", &timeOff, 0.05f, 0.0f, 0.0f, "%.2f s")) {
+                track.TimeOffset = timeOff;
+            }
+            handleDragState("Change Track TimeOffset");
+
+            ImGui::Separator();
+            ImGui::PopID();
+        }
+
+        // Apply deferred removal
+        if (trackToRemove >= 0) {
+            component.Tracks.erase(component.Tracks.begin() + trackToRemove);
+            auto cmd = std::make_shared<ChangeComponentCommand<AnimationControllerComponent>>(
+                referenceEntity, oldComp, referenceEntity.GetComponent<AnimationControllerComponent>());
+            EditorLayer::Get().GetCommandHistory().AddCommand(cmd);
+        }
+
+        // ---- Add Track button ----
+        if (ImGui::Button("Add Track", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f))) {
+            component.Tracks.push_back(AnimationTrack());
+            auto cmd = std::make_shared<ChangeComponentCommand<AnimationControllerComponent>>(
+                referenceEntity, oldComp, referenceEntity.GetComponent<AnimationControllerComponent>());
+            EditorLayer::Get().GetCommandHistory().AddCommand(cmd);
+        }
+    }
+
     void PropertiesPanel::DrawAddComponentButton(Entity referenceEntity, float uiScale) {
         // ==========================================
-        // “添加组件” 按钮 (基于第一个实体判定，给所有实体添加)
+        // "添加组件" 按钮 (基于第一个实体判定，给所有实体添加)
         // ==========================================
         ImGui::Spacing();
         ImGui::Separator();
@@ -2505,6 +2629,17 @@ namespace Ayaya {
             if (!referenceEntity.HasComponent<UIButtonComponent>()) {
                 if (ImGui::MenuItem("UI Button")) {
                     for (auto e : m_SelectedEntities) if (!e.HasComponent<UIButtonComponent>()) e.AddComponent<UIButtonComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
+            ImGui::Separator();
+            ImGui::TextDisabled("Animation");
+            if (!referenceEntity.HasComponent<AnimationControllerComponent>()) {
+                if (ImGui::MenuItem("Animation Controller")) {
+                    for (auto e : m_SelectedEntities)
+                        if (!e.HasComponent<AnimationControllerComponent>())
+                            e.AddComponent<AnimationControllerComponent>();
                     ImGui::CloseCurrentPopup();
                 }
             }
@@ -2965,6 +3100,38 @@ namespace Ayaya {
                         break;
                     }
                     ImGui::PopID();
+                }
+            }
+        } else if (meta.Type == AssetType::Curve) {
+            auto curve = AssetManager::GetAsset<CurveAsset>(m_SelectedAsset);
+            if (!curve) {
+                ImGui::TextDisabled("Curve not loaded");
+            } else {
+                ImGui::Text("Keyframes: %zu", curve->Keys.size());
+                float minT = curve->Keys.empty() ? 0.0f : curve->Keys[0].Time;
+                float maxT = curve->Keys.empty() ? 1.0f : curve->Keys.back().Time;
+                ImGui::Text("Time Range: [%.2f, %.2f]", minT, maxT);
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                // Keyframe list (read-only, first 10)
+                int showCount = std::min((int)curve->Keys.size(), 10);
+                for (int i = 0; i < showCount; i++) {
+                    auto& k = curve->Keys[i];
+                    ImGui::Text("  #%d: t=%.3f  v=%.3f", i, k.Time, k.Value);
+                }
+                if ((int)curve->Keys.size() > 10)
+                    ImGui::TextDisabled("  ... and %zu more", curve->Keys.size() - 10);
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                if (ImGui::Button("Open in Curve Editor", ImVec2(-1, 0))) {
+                    std::string phys = VFS::ResolveString(meta.VirtualPath);
+                    EditorLayer::Get().GetCurveEditorPanel().OpenCurve(curve, phys);
                 }
             }
         } else {
