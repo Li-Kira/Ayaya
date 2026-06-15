@@ -503,6 +503,10 @@ namespace Ayaya {
         static ImGuiTableFlags tableFlags = ImGuiTableFlags_Resizable |
                                             ImGuiTableFlags_BordersInnerV;
 
+        // Reserve space for the bottom thumbnail-size slider
+        float bottomBarH = ImGui::GetTextLineHeightWithSpacing() + 8.0f * scale;
+        ImVec2 childSize(0.0f, -bottomBarH);
+
         if (ImGui::BeginTable("ContentBrowserLayout", 2, tableFlags))
         {
             ImGui::TableSetupColumn("Folders", ImGuiTableColumnFlags_WidthFixed, 300.0f * scale);
@@ -511,7 +515,7 @@ namespace Ayaya {
 
             // ---- Left: directory tree ----
             ImGui::TableSetColumnIndex(0);
-            if (ImGui::BeginChild("FolderTreeChild", ImVec2(0, 0), false)) {
+            if (ImGui::BeginChild("FolderTreeChild", childSize, false)) {
                 ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.16f, 0.40f, 0.75f, 0.70f));
                 ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.22f, 0.48f, 0.82f, 0.85f));
                 ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.12f, 0.35f, 0.65f, 0.80f));
@@ -522,7 +526,7 @@ namespace Ayaya {
 
             // ---- Right: content grid ----
             ImGui::TableSetColumnIndex(1);
-            if (ImGui::BeginChild("ContentGridChild", ImVec2(0, 0), false)) {
+            if (ImGui::BeginChild("ContentGridChild", childSize, false)) {
                 DrawContentGrid();
             }
             ImGui::EndChild();

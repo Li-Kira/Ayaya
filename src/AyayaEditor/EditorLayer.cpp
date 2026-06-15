@@ -461,7 +461,7 @@ namespace Ayaya {
         if (m_TimelineDrawerProgress > 0.001f) {
             ImVec2 winPos = ImGui::GetWindowPos();
             float winW = ImGui::GetWindowWidth();
-            float targetH = ImGui::GetWindowHeight() * 0.35f;
+            float targetH = ImGui::GetWindowHeight() * 0.40f;
             float curH = targetH * m_TimelineDrawerProgress;
             float curY = winPos.y + contentBottom - barH - curH + 1.0f;
             float curW = winW * 0.75f;
@@ -1893,7 +1893,7 @@ namespace Ayaya {
                     float uiScale = io.FontGlobalScale;
                     float alignOffset = 100.0f * uiScale;
 
-                    auto& stats = m_SceneRenderer->GetStats();
+                    const auto& stats = m_SceneRenderer->GetStats();
 
                     // Graphics
                     ImGui::PushFont(boldFont);

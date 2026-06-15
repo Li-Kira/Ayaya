@@ -44,7 +44,7 @@ namespace Ayaya {
         float SnapToNearestKeyframe(float time) const;
 
         std::shared_ptr<Scene> m_Scene;
-        bool m_IsOpen = true;
+        bool m_IsOpen = false;
 
         float m_Zoom = 500.0f, m_ScrollX = 0.0f;
         float m_PreviewTime = 0.0f;
@@ -55,6 +55,9 @@ namespace Ayaya {
         float m_CanvasWidth = 0.0f;
         float m_TableTopY   = 0.0f;
         bool  m_DraggingPlayhead = false;
+
+        // Tracks user-adjusted outliner column width (pixels)
+        float m_OutlinerWidth = kTrackListWidth;
 
         std::unordered_map<UUID, EntitySnapshot> m_Snapshots;
         AnimationControllerComponent m_PreDragComponent;

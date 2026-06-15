@@ -310,8 +310,8 @@ namespace Ayaya {
         float scrollbarW = style.ScrollbarSize;
         ImVec2  areaPos   = ImGui::GetCursorScreenPos();
         float   areaW     = ImGui::GetContentRegionAvail().x;
-        if (areaW < kTrackListWidth + 100.0f) areaW = kTrackListWidth + 100.0f;
-        float outlinerW   = kTrackListWidth;
+        if (areaW < m_OutlinerWidth + 100.0f) areaW = m_OutlinerWidth + 100.0f;
+        float outlinerW   = m_OutlinerWidth;
         float canvasX     = areaPos.x + outlinerW;
         float canvasW     = areaW - outlinerW - scrollbarW;
         if (canvasW < 50.0f) canvasW = 50.0f;
@@ -336,13 +336,17 @@ namespace Ayaya {
                         IM_COL32(150, 150, 165, 255), "Track Name");
         }
 
-        // Ruler bg
-        dl->AddRectFilled(ImVec2(canvasX, areaPos.y), rulerMax, IM_COL32(36, 36, 42, 255));
-        dl->AddLine(ImVec2(canvasX, rulerMax.y), ImVec2(rulerMax.x, rulerMax.y),
+        // Ruler bg (cover full width including scrollbar gutter)
+        dl->AddRectFilled(ImVec2(canvasX, areaPos.y),
+                          ImVec2(areaPos.x + areaW, areaPos.y + kRulerHeight),
+                          IM_COL32(36, 36, 42, 255));
+        dl->AddLine(ImVec2(canvasX, areaPos.y + kRulerHeight),
+                    ImVec2(areaPos.x + areaW, areaPos.y + kRulerHeight),
                     IM_COL32(18, 18, 22, 255), 1.0f);
 
-        // Ruler ticks (clipped)
-        dl->PushClipRect(ImVec2(canvasX, areaPos.y), rulerMax, true);
+        // Ruler ticks (clipped to canvas area)
+        dl->PushClipRect(ImVec2(canvasX, areaPos.y),
+                         ImVec2(areaPos.x + areaW, areaPos.y + kRulerHeight), true);
         float timePerTick = 1.0f;
         if (m_Zoom < 30.0f)      timePerTick = 5.0f;
         else if (m_Zoom < 60.0f) timePerTick = 2.0f;
@@ -371,15 +375,43 @@ namespace Ayaya {
         }
         dl->PopClipRect();
 
-        // Vertical divider between outliner and canvas
+        // Vertical divider between outliner and canvas (ruler region)
         dl->AddLine(ImVec2(canvasX, areaPos.y), ImVec2(canvasX, areaPos.y + kRulerHeight),
                     IM_COL32(50, 50, 60, 255), 2.0f);
+
+        // ---- Manual column resize handle ----
+        // Height must not exceed remaining content region, otherwise ImGui
+        // registers overflow content and adds an outer scrollbar.
+        {
+            float availY     = ImGui::GetContentRegionAvail().y;
+            float fullHeight = availY;  // total remaining space from areaPos.y
+            if (fullHeight < kTrackHeight * 2.0f)
+                fullHeight = kTrackHeight * 2.0f;
+            const float kResizeHandleHW = 5.0f;
+            ImGui::SetCursorScreenPos(ImVec2(canvasX - kResizeHandleHW, areaPos.y));
+            ImGui::InvisibleButton("##TimelineColResize",
+                                   ImVec2(kResizeHandleHW * 2.0f, fullHeight));
+            if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+            if (ImGui::IsItemActive())
+            {
+                float newW = ImGui::GetIO().MousePos.x - areaPos.x;
+                if (newW < 100.0f) newW = 100.0f;
+                if (newW > areaW - 150.0f) newW = areaW - 150.0f;
+                m_OutlinerWidth = newW;
+            }
+        }
 
         // ==========================================
         // Scrollable table body (BeginChild, not ScrollY)
         // ==========================================
         ImGui::SetCursorScreenPos(ImVec2(areaPos.x, areaPos.y + kRulerHeight));
-        ImVec2 tableAreaSize = ImVec2(areaW, ImGui::GetContentRegionAvail().y);
+        // Reserve space for bottom bar (separator + compact slider row)
+        // Separator: ~ItemSpacing.y*2 + 1px   Text/Slider: ~1 line
+        float bottomBarH = ImGui::GetTextLineHeightWithSpacing()
+                         + ImGui::GetStyle().ItemSpacing.y + 6.0f;
+        float childH     = ImGui::GetContentRegionAvail().y - bottomBarH;
+        ImVec2 tableAreaSize = ImVec2(areaW, childH);
         if (tableAreaSize.y < kTrackHeight * 2.0f) tableAreaSize.y = kTrackHeight * 2.0f;
 
         static ImGuiTableFlags tableFlags =
@@ -393,12 +425,16 @@ namespace Ayaya {
         float preTableWheel  = ImGui::GetIO().MouseWheel;
         float preTableWheelH = ImGui::GetIO().MouseWheelH;
 
-        if (ImGui::BeginChild("##TimelineScrollArea", tableAreaSize, false,
-                              ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
+        if (ImGui::BeginChild("##TimelineScrollArea", tableAreaSize, false)) {
 
             if (ImGui::BeginTable("TimelineSequencer", 2, tableFlags)) {
                 ImGui::TableSetupColumn("Outliner", ImGuiTableColumnFlags_WidthFixed, kTrackListWidth);
                 ImGui::TableSetupColumn("Canvas",   ImGuiTableColumnFlags_WidthStretch);
+
+                // Sync table column width to tracked value.
+                // Skip first frame (MinColumnWidth not yet set by TableUpdateLayout).
+                if (ImGui::GetCurrentTable()->MinColumnWidth > 0.0f)
+                    ImGui::TableSetColumnWidth(0, m_OutlinerWidth);
 
                 auto view = m_Scene->Reg().view<AnimationControllerComponent>();
                 for (auto e : view) {
@@ -499,6 +535,33 @@ namespace Ayaya {
         }
         ImGui::EndChild();
         ImGui::PopStyleColor(2);
+
+        // ---- Bottom status bar ----
+        {
+            ImGui::Separator();
+            int objCount = (int)m_Scene->Reg()
+                               .view<AnimationControllerComponent>().size();
+            ImGui::Text("Objects: %d", objCount);
+            ImGui::SameLine();
+            float avail   = ImGui::GetContentRegionAvail().x;
+            float sliderW = 160.0f;
+            float sliderX = ImGui::GetCursorPosX() + avail - sliderW;
+            if (sliderX > ImGui::GetCursorPosX())
+                ImGui::SetCursorPosX(sliderX);
+            ImGui::SetNextItemWidth(sliderW);
+
+            // Match ContentBrowser slider style
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                                ImVec2(ImGui::GetStyle().FramePadding.x, 0.0f));
+            ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.12f, 0.12f, 0.12f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_SliderGrab,       ImVec4(0.45f, 0.45f, 0.45f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(0.65f, 0.65f, 0.65f, 1.0f));
+            ImGui::SliderFloat("##ZoomSlider", &m_Zoom, 20.0f, 2000.0f, "");
+            ImGui::PopStyleColor(5);
+            ImGui::PopStyleVar();
+        }
 
         // ---- Pill + ruler-region line (parent draw list; track-region
         //      grid + line drawn inside child above so they sit on top of clips) ----
