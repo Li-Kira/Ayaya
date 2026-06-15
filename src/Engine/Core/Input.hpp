@@ -8,11 +8,22 @@ namespace Ayaya {
     class Input {
     public:
         // 静态公共接口，供 CameraController 等直接使用
-        static bool IsKeyPressed(KeyCode key) { return s_Instance->IsKeyPressedImpl(key); }
-        static bool IsMouseButtonPressed(MouseCode button) { return s_Instance->IsMouseButtonPressedImpl(button); }
-        static std::pair<float, float> GetMousePosition() { return s_Instance->GetMousePositionImpl(); }
-        static float GetMouseX() { return s_Instance->GetMouseXImpl(); }
-        static float GetMouseY() { return s_Instance->GetMouseYImpl(); }
+        // Returns safe defaults when no platform implementation is active (headless/test).
+        static bool IsKeyPressed(KeyCode key) {
+            return s_Instance ? s_Instance->IsKeyPressedImpl(key) : false;
+        }
+        static bool IsMouseButtonPressed(MouseCode button) {
+            return s_Instance ? s_Instance->IsMouseButtonPressedImpl(button) : false;
+        }
+        static std::pair<float, float> GetMousePosition() {
+            return s_Instance ? s_Instance->GetMousePositionImpl() : std::make_pair(0.0f, 0.0f);
+        }
+        static float GetMouseX() {
+            return s_Instance ? s_Instance->GetMouseXImpl() : 0.0f;
+        }
+        static float GetMouseY() {
+            return s_Instance ? s_Instance->GetMouseYImpl() : 0.0f;
+        }
 
     protected:
         // 平台相关的具体实现接口
