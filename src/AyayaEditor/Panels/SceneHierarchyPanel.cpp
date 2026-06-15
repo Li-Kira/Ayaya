@@ -374,7 +374,7 @@ namespace Ayaya {
         float cursorY = ImGui::GetCursorPosY();
         ImGui::SetNextItemAllowOverlap();
 
-        bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, "%s", displayString.c_str());
+        bool opened = ImGui::TreeNodeEx((void*)(uint64_t)entity.GetEntityHandle(), flags, "%s", displayString.c_str());
 
         if (ImGui::IsItemClicked()) {
             if (ImGui::GetIO().KeyShift) {
@@ -479,7 +479,7 @@ namespace Ayaya {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
         }
 
-        ImGui::PushID((uint32_t)entity);
+        ImGui::PushID((uint32_t)entity.GetEntityHandle());
         if (ImGui::Button(eyeIcon.c_str(), ImVec2(24.0f * uiScaleBtn, ImGui::GetTextLineHeight()))) {
             tagComp.IsActive = !tagComp.IsActive;
         }
