@@ -72,7 +72,18 @@ namespace Ayaya {
         cmd.BindPipeline(m_SkyboxPipeline);
         cmd.BindTextureCube(m_SkyboxPipeline, "u_Skybox", 0, envMap);
         struct alignas(16) { glm::mat4 VP; float I; } pc;
-        pc.VP = ctx.ProjectionMatrix * glm::mat4(glm::mat3(ctx.ViewMatrix));
+        // Skybox requires perspective projection; fall back when orthographic.
+        // ctx.ProjectionMatrix includes the Vulkan Y-flip correction —
+        // our replacement perspective matrix must include the same flip.
+        glm::mat4 skyProj = ctx.ProjectionMatrix;
+        if (skyProj[3][3] == 1.0f) {
+            auto fbo = ctx.GetFramebuffer("Lighting");
+            float aspect = fbo ? (float)fbo->GetSpecification().Width
+                                 / (float)fbo->GetSpecification().Height : 1.778f;
+            skyProj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10.0f);
+            skyProj[1][1] *= -1.0f; // Vulkan Y-flip
+        }
+        pc.VP = skyProj * glm::mat4(glm::mat3(ctx.ViewMatrix));
         pc.I = ctx.Get<float>("EnvironmentIntensity", 1.0f);
         cmd.PushConstantData(m_SkyboxPipeline, &pc, sizeof pc);
         auto mesh = ctx.Get<std::shared_ptr<Mesh>>("SkyboxMesh", nullptr);

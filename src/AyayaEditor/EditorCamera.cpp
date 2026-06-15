@@ -21,7 +21,19 @@ namespace Ayaya {
 
     void EditorCamera::OnResize(float width, float height) {
         m_AspectRatio = width / height;
-        m_Projection = glm::perspective(glm::radians(m_FOV), m_AspectRatio, m_NearClip, m_FarClip);
+        RecalculateProjection();
+    }
+
+    void EditorCamera::RecalculateProjection() {
+        if (m_Perspective) {
+            m_Projection = glm::perspective(glm::radians(m_FOV), m_AspectRatio,
+                                            m_NearClip, m_FarClip);
+        } else {
+            float halfH = m_OrthoSize * 0.5f;
+            float halfW = halfH * m_AspectRatio;
+            m_Projection = glm::ortho(-halfW, halfW, -halfH, halfH,
+                                      m_NearClip, m_FarClip);
+        }
     }
 
     void EditorCamera::OnUpdate(Timestep ts, bool viewportFocused) {

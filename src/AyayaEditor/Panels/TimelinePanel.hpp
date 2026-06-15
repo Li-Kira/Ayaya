@@ -46,7 +46,7 @@ namespace Ayaya {
         std::shared_ptr<Scene> m_Scene;
         bool m_IsOpen = false;
 
-        float m_Zoom = 500.0f, m_ScrollX = 0.0f;
+        float m_Zoom = 500.0f, m_ScrollX = 50.0f;
         float m_PreviewTime = 0.0f;
         bool  m_IsPlaying = false, m_IsPreviewing = false;
 
@@ -54,7 +54,6 @@ namespace Ayaya {
         float m_CanvasX     = 0.0f;
         float m_CanvasWidth = 0.0f;
         float m_TableTopY   = 0.0f;
-        bool  m_DraggingPlayhead = false;
 
         // Tracks user-adjusted outliner column width (pixels)
         float m_OutlinerWidth = kTrackListWidth;

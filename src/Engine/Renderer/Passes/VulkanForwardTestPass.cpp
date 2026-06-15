@@ -278,7 +278,15 @@ namespace Ayaya {
         if (showSkybox && skyboxMesh && envCubemap) {
             cmd.BindPipeline(m_SkyboxPipeline);
             SkyboxPushConstants skyConst;
-            skyConst.ViewProjection = context.ProjectionMatrix * glm::mat4(glm::mat3(context.ViewMatrix));
+            glm::mat4 skyProj = context.ProjectionMatrix;
+            if (skyProj[3][3] == 1.0f) {
+                uint32_t vpW = context.Get<uint32_t>("ViewportWidth", 1920);
+                uint32_t vpH = context.Get<uint32_t>("ViewportHeight", 1080);
+                float aspect = (float)vpW / (float)vpH;
+                skyProj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10.0f);
+                skyProj[1][1] *= -1.0f; // Vulkan Y-flip
+            }
+            skyConst.ViewProjection = skyProj * glm::mat4(glm::mat3(context.ViewMatrix));
             skyConst.Intensity = context.Get<float>("EnvironmentIntensity", 1.0f);
             cmd.PushConstantData(m_SkyboxPipeline, &skyConst, sizeof(SkyboxPushConstants));
             cmd.BindTextureCube(m_SkyboxPipeline, "u_Skybox", 0, envCubemap);

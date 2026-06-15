@@ -158,6 +158,11 @@ namespace Ayaya {
         bool m_ShowViewportStats = false;
         float m_CameraSpeed = 5.0f;
 
+        // Game viewport toolbar
+        bool m_ShowGameOptions = false;
+        int  m_GameViewportResW = 0;   // 0 = fit window
+        int  m_GameViewportResH = 0;
+
         // Gizmo icon textures
         std::shared_ptr<Texture2D> m_CameraIcon;
         std::shared_ptr<Texture2D> m_PointLightIcon;

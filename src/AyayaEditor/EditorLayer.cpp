@@ -155,21 +155,33 @@ namespace Ayaya {
         if (m_GameViewportSize.x > 0.0f && m_GameViewportSize.y > 0.0f && 
            (s_LastGameViewportSize.x != m_GameViewportSize.x || s_LastGameViewportSize.y != m_GameViewportSize.y)) {
             
-            uint32_t physicalGameWidth = (uint32_t)(m_GameViewportSize.x * dpiScale);
+            uint32_t physicalGameWidth  = (uint32_t)(m_GameViewportSize.x * dpiScale);
             uint32_t physicalGameHeight = (uint32_t)(m_GameViewportSize.y * dpiScale);
-            
-            // 【修改为调用 m_GameRenderer，并删除 m_GameFBO->Resize】
-            m_GameRenderer->OnWindowResize(physicalGameWidth, physicalGameHeight);
-            
-            // 只有 Game 窗口改变，才改变玩家相机的长宽比！
+
+            // Skip renderer resize when custom resolution is active
+            if (!(m_GameViewportResW > 0 && m_GameViewportResH > 0))
+                m_GameRenderer->OnWindowResize(physicalGameWidth, physicalGameHeight);
+
+            // Update non-fixed-aspect-ratio cameras for the Game viewport
             auto view = m_ActiveScene->Reg().view<CameraComponent>();
             for (auto entityID : view) {
                 auto& cameraComp = view.get<CameraComponent>(entityID);
                 if (!cameraComp.FixedAspectRatio) {
-                    cameraComp.Camera.SetViewportSize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);
+                    cameraComp.Camera.SetViewportSize(
+                        (m_GameViewportResW > 0 && m_GameViewportResH > 0)
+                            ? (uint32_t)m_GameViewportResW : (uint32_t)m_GameViewportSize.x,
+                        (m_GameViewportResW > 0 && m_GameViewportResH > 0)
+                            ? (uint32_t)m_GameViewportResH : (uint32_t)m_GameViewportSize.y);
                 }
             }
             s_LastGameViewportSize = m_GameViewportSize;
+        }
+
+        // Apply custom game viewport resolution each frame
+        if (m_GameViewportResW > 0 && m_GameViewportResH > 0) {
+            m_GameRenderer->OnWindowResize(
+                (uint32_t)(m_GameViewportResW * dpiScale),
+                (uint32_t)(m_GameViewportResH * dpiScale));
         }
 
         // ==========================================
@@ -278,7 +290,11 @@ namespace Ayaya {
                 // 这样新建的相机立刻就能拥有完美的 Game 窗口比例
                 // ==========================================
                 if (!cameraComp.FixedAspectRatio && m_GameViewportSize.x > 0.0f && m_GameViewportSize.y > 0.0f) {
-                    cameraComp.Camera.SetViewportSize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);
+                    cameraComp.Camera.SetViewportSize(
+                    (m_GameViewportResW > 0 && m_GameViewportResH > 0)
+                        ? (uint32_t)m_GameViewportResW : (uint32_t)m_GameViewportSize.x,
+                    (m_GameViewportResW > 0 && m_GameViewportResH > 0)
+                        ? (uint32_t)m_GameViewportResH : (uint32_t)m_GameViewportSize.y);
                 }
 
                 cameraProjectionMatrix = cameraComp.Camera.GetProjection();
@@ -391,7 +407,11 @@ namespace Ayaya {
                 AYAYA_CORE_INFO("Screenshot saved: {0} ({1}x{2})", shotPath, shotW, shotH);
 
                 // Restore
-                cameraComp.Camera.SetViewportSize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);
+                cameraComp.Camera.SetViewportSize(
+                    (m_GameViewportResW > 0 && m_GameViewportResH > 0)
+                        ? (uint32_t)m_GameViewportResW : (uint32_t)m_GameViewportSize.x,
+                    (m_GameViewportResW > 0 && m_GameViewportResH > 0)
+                        ? (uint32_t)m_GameViewportResH : (uint32_t)m_GameViewportSize.y);
                 m_GameRenderer->OnWindowResize(oldW, oldH);
                 break;
             }
@@ -411,21 +431,6 @@ namespace Ayaya {
         m_HistoryPanel.OnImGuiRender();
         m_FrameDebuggerPanel.OnImGuiRender();
         m_TimelinePanel.OnImGuiRender();
-
-        // if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
-        //     // OpenGL 模式下，一切照常渲染
-        //     // m_ContentBrowserPanel.OnImGuiRender();
-        //     m_FrameDebuggerPanel.OnImGuiRender();
-        // } else {
-        //     // Vulkan 模式下，保留窗口外壳防止布局错乱，但内部用文字占位
-        //     // ImGui::Begin("Content Browser");
-        //     // ImGui::TextDisabled("Vulkan Mode: Content Browser is paused pending Descriptor Sets.");
-        //     // ImGui::End();
-
-        //     // ImGui::Begin("Frame Debugger");
-        //     // ImGui::TextDisabled("Vulkan Mode: Frame Debugger is paused pending Descriptor Sets.");
-        //     // ImGui::End();
-        // }
         
         UIRenderViewport();
         UIRenderGameViewport();
@@ -1251,23 +1256,13 @@ namespace Ayaya {
         // =====================================
         Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
         bool canUseGizmoShortcuts = m_ViewportHovered || m_ViewportFocused;
-        
+
         // 【核心修复】：全部改用 ImGui 的按键枚举，无视操作系统焦点丢失！
         if (canUseGizmoShortcuts && selectedEntity && !ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
             if (ImGui::IsKeyPressed(ImGuiKey_Q, false)) m_GizmoType = -1;
             if (ImGui::IsKeyPressed(ImGuiKey_W, false)) m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
             if (ImGui::IsKeyPressed(ImGuiKey_E, false)) m_GizmoType = ImGuizmo::OPERATION::ROTATE;
             if (ImGui::IsKeyPressed(ImGuiKey_R, false)) m_GizmoType = ImGuizmo::OPERATION::SCALE;
-
-            // 按下 F 键聚焦到选中物体 (Focus)
-            if (ImGui::IsKeyPressed(ImGuiKey_F, false)) {
-                glm::mat4 transform = selectedEntity.GetWorldTransform();
-                glm::vec3 targetPos = glm::vec3(transform[3]); 
-                m_EditorCamera.SetFocalPoint(targetPos);
-                m_EditorCamera.SetDistance(5.0f);
-                m_EditorCamera.UpdateCameraView(); 
-                AYAYA_CORE_INFO("Camera focused on entity.");
-            }
         }
 
         // =====================================
@@ -1586,17 +1581,49 @@ namespace Ayaya {
                             ImGui::SetTooltip("%s", tip);
                     };
 
-                    // Left panel buttons: [Options] [Show]
-                    float ox = vpMin.x + 8;
-                    float sx = vpMin.x + 8 + btnW + 4;
+                    // Left panel buttons: [Options] [Show] [Proj] [CamSpeed]
+                    float ox  = vpMin.x + 8;
+                    float sx  = ox  + btnW + 4;
+                    float pjx = sx  + btnW + 4;
 
                     oneBtn(ox, ICON_FA_BARS, "Options", &m_ShowViewportOptions);
                     oneBtn(sx, ICON_FA_EYE,  "Show",    &m_ShowGizmosOverlay);
 
+                    // Projection mode toggle (icon + text)
+                    {
+                        const char* projLabel = m_EditorCamera.IsPerspective()
+                            ? ICON_FA_CUBE " Persp" : ICON_FA_BORDER_ALL " Ortho";
+                        float projW = ImGui::CalcTextSize(projLabel).x
+                                      + ImGui::GetStyle().FramePadding.x * 2.0f + 8.0f;
+                        ImVec2 pMin(pjx, vpMin.y + 6);
+                        ImVec2 pMax(pjx + projW, vpMin.y + 6 + btnH);
+                        dl->AddRectFilled(pMin, pMax, IM_COL32(20, 20, 25, 180), 10.0f);
+                        dl->AddRect(pMin, pMax, IM_COL32(10, 10, 15, 180), 10.0f, 0, 1.0f);
+                        ImGui::SetCursorScreenPos(pMin);
+                        ImGui::PushID("ProjToggle");
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f,0.65f,0.68f,1.0f));
+                        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
+                        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+                        if (ImGui::Button(projLabel, ImVec2(projW, btnH))) {
+                            m_EditorCamera.SetPerspective(!m_EditorCamera.IsPerspective());
+                            m_EditorCamera.OnResize(m_ViewportSize.x, m_ViewportSize.y);
+                        }
+                        ImGui::PopStyleVar(2);
+                        ImGui::PopStyleColor(2);
+                        ImGui::PopID();
+                        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                            ImGui::SetTooltip("Projection: %s",
+                                m_EditorCamera.IsPerspective() ? "Perspective" : "Orthographic");
+                    }
+
                     // Camera speed button (shows speed text)
                     {
                         float spdW = btnW + 48.0f;  // enough for "⚡ 50.0"
-                        float spdX = vpMin.x + 8 + (btnW + 4) * 2;
+                        float spdX = pjx + ImGui::CalcTextSize(
+                            m_EditorCamera.IsPerspective()
+                                ? ICON_FA_CUBE " Persp" : ICON_FA_BORDER_ALL " Ortho").x
+                            + ImGui::GetStyle().FramePadding.x * 2.0f + 8.0f + 4;
                         ImVec2 cMin(spdX, vpMin.y + 6);
                         ImVec2 cMax(spdX + spdW, vpMin.y + 6 + btnH);
                         dl->AddRectFilled(cMin, cMax, IM_COL32(20, 20, 25, 180), 10.0f);
@@ -1954,6 +1981,29 @@ namespace Ayaya {
             }
         }
 
+        // ---- Global F-key focus (Unity-style: works regardless of window focus,
+        //      as long as an entity is selected in the Scene Hierarchy) ----
+        if (ImGui::IsKeyPressed(ImGuiKey_F, false) && !ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
+            Entity sel = m_SceneHierarchyPanel.GetSelectedEntity();
+            if (sel) {
+                glm::vec3 targetPos = glm::vec3(sel.GetWorldTransform()[3]);
+                glm::vec3 dir = targetPos - m_EditorCamera.GetPosition();
+                float dirLen = glm::length(dir);
+                if (dirLen < 0.01f)
+                    dir = glm::vec3(2.0f, 1.5f, 3.0f);
+                glm::vec3 forward = glm::normalize(dir);
+
+                float pitch = glm::asin(glm::clamp(forward.y, -1.0f, 1.0f));
+                float yaw   = std::atan2(-forward.x, -forward.z);
+
+                m_EditorCamera.SetFocalPoint(targetPos);
+                m_EditorCamera.SetPitch(pitch);
+                m_EditorCamera.SetYaw(yaw);
+                m_EditorCamera.SetDistance(5.0f);
+                m_EditorCamera.UpdateCameraView();
+            }
+        }
+
         ImGui::End();
         ImGui::PopStyleVar();
     }
@@ -1964,21 +2014,42 @@ namespace Ayaya {
 
         ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
         m_GameViewportSize = { std::floor(viewportPanelSize.x), std::floor(viewportPanelSize.y) };
-        // 记录画图前的光标起始位置，这是悬浮层定位的锚点！
         ImVec2 cursorStartPos = ImGui::GetCursorPos();
 
-        // 渲染底层的游戏画面
+        // ==========================================
+        // Game Viewport Image (with letterboxing for custom resolution)
+        // ==========================================
+        ImVec2 vpSize, vpMin(0,0);
         if (m_GameRenderer) {
             void* textureID = m_GameRenderer->GetFinalColorAttachmentRendererID();
             if (textureID) {
-                ImVec2 vpSize{ m_GameViewportSize.x, m_GameViewportSize.y };
-                ImGui::Image(textureID, vpSize, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+                ImVec2 avail = ImGui::GetContentRegionAvail();
+                vpSize = avail;
+                ImVec2 imageOffset(0, 0);
 
-                // 在画图前先记录屏幕坐标，供 UI Gizmo 使用
-                ImVec2 gameVpScreenMin = ImGui::GetCursorScreenPos();
+                // Letterbox when a custom resolution is active
+                if (m_GameViewportResW > 0 && m_GameViewportResH > 0) {
+                    float aspect = (float)m_GameViewportResW / (float)m_GameViewportResH;
+                    if (avail.x / avail.y > aspect) {
+                        vpSize.x = avail.y * aspect;
+                        vpSize.y = avail.y;
+                        imageOffset.x = (avail.x - vpSize.x) * 0.5f;
+                    } else {
+                        vpSize.x = avail.x;
+                        vpSize.y = avail.x / aspect;
+                        imageOffset.y = (avail.y - vpSize.y) * 0.5f;
+                    }
+                    ImGui::SetCursorPos(cursorStartPos + imageOffset);
+                }
+
+                ImGui::Image(textureID, vpSize, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+                vpMin = ImGui::GetItemRectMin();
+
+                // UI overlay (must match letterboxed position)
+                ImVec2 gameVpScreenMin = ImGui::GetItemRectMin();
                 void* uiTexID = m_GameRenderer->GetBlackboardTextureID("UI");
                 if (uiTexID) {
-                    ImGui::SetCursorPos(cursorStartPos);
+                    ImGui::SetCursorScreenPos(gameVpScreenMin);
                     ImGui::Image(uiTexID, vpSize, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
                 }
                 if (m_ShowUIGizmos) UIRenderDebugUIGizmos(gameVpScreenMin, vpSize,
@@ -1989,14 +2060,210 @@ namespace Ayaya {
         }
 
         // ==========================================
+        // Game Viewport Toolbar Overlay
+        // ==========================================
+        if (vpMin.x > 0.0f && m_GameRenderer) {
+            float btnW = 38.0f, btnH = 32.0f;
+
+            // ---- Top-left: [Options] button ----
+            {
+                ImVec4 inactiveTxt = ImVec4(0.65f, 0.65f, 0.68f, 1.0f);
+                ImVec4 activeTxt   = ImVec4(0.40f, 0.65f, 1.00f, 1.0f);
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                ImU32 borderCol = IM_COL32(10, 10, 15, 180);
+                ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+
+                auto oneBtn = [&](float x, const char* icon, const char* tip, bool* toggle) {
+                    bool active = toggle ? *toggle : false;
+                    ImVec2 bMin(x, vpMin.y + 6);
+                    ImVec2 bMax(x + btnW, vpMin.y + 6 + btnH);
+                    dl->AddRectFilled(bMin, bMax,
+                        active ? IM_COL32(48, 88, 145, 180) : IM_COL32(20, 20, 25, 180), 10.0f);
+                    dl->AddRect(bMin, bMax, borderCol, 10.0f, 0, 1.0f);
+                    ImGui::SetCursorScreenPos(bMin);
+                    ImGui::PushID(tip);
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
+                    ImGui::PushStyleColor(ImGuiCol_Text, active ? activeTxt : inactiveTxt);
+                    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
+                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+                    bool pressed = ImGui::Button(icon, ImVec2(btnW, btnH));
+                    ImGui::PopStyleVar(2);
+                    ImGui::PopStyleColor(2);
+                    ImGui::PopID();
+                    if (pressed && toggle) *toggle = !*toggle;
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                        ImGui::SetTooltip("%s", tip);
+                };
+
+                float ox  = vpMin.x + 8;
+                float pjx = ox  + btnW + 4;
+                oneBtn(ox, ICON_FA_BARS, "Options", &m_ShowGameOptions);
+
+                // Projection mode toggle (icon + text)
+                {
+                    bool isPersp = true;
+                    if (m_ActiveScene) {
+                        auto camView = m_ActiveScene->Reg().view<CameraComponent>();
+                        for (auto e : camView) {
+                            auto& cc = camView.get<CameraComponent>(e);
+                            isPersp = (cc.Camera.GetProjectionType()
+                                       == SceneCamera::ProjectionType::Perspective);
+                            break;
+                        }
+                    }
+
+                    const char* projLabel = isPersp
+                        ? ICON_FA_CUBE " Persp" : ICON_FA_BORDER_ALL " Ortho";
+                    float projW = ImGui::CalcTextSize(projLabel).x
+                                  + ImGui::GetStyle().FramePadding.x * 2.0f + 8.0f;
+                    ImVec2 pMin(pjx, vpMin.y + 6);
+                    ImVec2 pMax(pjx + projW, vpMin.y + 6 + btnH);
+                    dl->AddRectFilled(pMin, pMax, IM_COL32(20, 20, 25, 180), 10.0f);
+                    dl->AddRect(pMin, pMax, IM_COL32(10, 10, 15, 180), 10.0f, 0, 1.0f);
+                    ImGui::SetCursorScreenPos(pMin);
+                    ImGui::PushID("GameProjToggle");
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f,0.65f,0.68f,1.0f));
+                    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
+                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+                    if (ImGui::Button(projLabel, ImVec2(projW, btnH)) && m_ActiveScene) {
+                        auto camView = m_ActiveScene->Reg().view<CameraComponent>();
+                        for (auto e : camView) {
+                            auto& cc = camView.get<CameraComponent>(e);
+                            cc.Camera.SetProjectionType(isPersp
+                                ? SceneCamera::ProjectionType::Orthographic
+                                : SceneCamera::ProjectionType::Perspective);
+                            break;
+                        }
+                    }
+                    ImGui::PopStyleVar(2);
+                    ImGui::PopStyleColor(2);
+                    ImGui::PopID();
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                        ImGui::SetTooltip("Projection: %s",
+                            isPersp ? "Perspective" : "Orthographic");
+                }
+
+                ImGui::PopFont();
+            }
+
+            // ---- Game Viewport Resolution Panel ----
+            if (m_ShowGameOptions) {
+                float panelW = 352.0f, rowH = 32.0f;
+                float titleTop = 10.0f, titleH = 20.0f, sepGap = 10.0f;
+                float rowsTop = 8.0f, bottomPad = 10.0f;
+                int rowCount = 4;
+                float panelH = titleTop + titleH + sepGap + rowsTop + rowH * rowCount + bottomPad;
+                ImVec2 panelPos(vpMin.x + 8, vpMin.y + 6 + btnH + 4);
+                ImDrawList* odl = ImGui::GetWindowDrawList();
+                odl->AddRectFilled(panelPos, ImVec2(panelPos.x + panelW, panelPos.y + panelH),
+                    IM_COL32(20, 20, 25, 230), 8.0f);
+                odl->AddRect(panelPos, ImVec2(panelPos.x + panelW, panelPos.y + panelH),
+                    IM_COL32(10, 10, 15, 180), 8.0f, 0, 1.0f);
+
+                ImGui::SetNextWindowPos(panelPos);
+                ImGui::SetNextWindowSize(ImVec2(panelW, panelH));
+                ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0,0,0,0));
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+                ImGui::Begin("##GameViewportOptions", nullptr,
+                    ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                    ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove |
+                    ImGuiWindowFlags_NoSavedSettings);
+
+                ImGui::SetCursorPos(ImVec2(16.0f, titleTop));
+                ImGui::TextDisabled("Game Viewport Options");
+                ImGui::SetCursorPos(ImVec2(16.0f, titleTop + titleH + sepGap));
+                ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.30f,0.35f,0.40f,0.60f));
+                ImGui::Separator();
+                ImGui::PopStyleColor();
+
+                ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+
+                struct ResEntry { const char* label; int w, h; };
+                ResEntry resolutions[] = {
+                    {"1920 x 1080  (1080p)", 1920, 1080},
+                    {"2560 x 1440  (2K)",    2560, 1440},
+                    {"3840 x 2160  (4K)",    3840, 2160},
+                    {"Fit Window",            0,    0},
+                };
+
+                auto resRow = [&](const char* label, bool active) {
+                    float rowY = ImGui::GetCursorPosY();
+                    ImVec2 rMin(panelPos.x, panelPos.y + rowY);
+                    ImVec2 rMax(panelPos.x + panelW, panelPos.y + rowY + rowH);
+                    bool hovered = ImGui::IsMouseHoveringRect(rMin, rMax);
+                    if (hovered) {
+                        odl->AddRectFilled(rMin, rMax, IM_COL32(0,112,255,100), 2.0f);
+                    }
+                    ImGui::SetCursorPos(ImVec2(0, rowY));
+                    ImGui::InvisibleButton("##resHit", ImVec2(panelW, rowH));
+                    if (active) {
+                        ImGui::SetCursorPos(ImVec2(16.0f, rowY + (rowH - ImGui::GetTextLineHeight()) * 0.5f));
+                        ImGui::Text("%s", ICON_FA_CHECK);
+                    }
+                    ImGui::SetCursorPos(ImVec2(40.0f, rowY + (rowH - ImGui::GetTextLineHeight()) * 0.5f));
+                    ImGui::Text("%s", label);
+                    return hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+                };
+
+                for (auto& r : resolutions) {
+                    ImGui::PushID(r.label);
+                    bool active = (m_GameViewportResW == r.w && m_GameViewportResH == r.h);
+                    if (resRow(r.label, active)) {
+                        m_GameViewportResW = r.w;
+                        m_GameViewportResH = r.h;
+                        m_GameRenderer->MarkViewportDirty();
+                    }
+                    ImGui::PopID();
+                }
+
+                ImGui::PopFont();
+                ImGui::End();
+                ImGui::PopStyleVar(2);
+                ImGui::PopStyleColor();
+            }
+
+            // ---- Top-right: [Stats] button ----
+            {
+                ImVec2 sp(vpMin.x + vpSize.x - btnW - 8, vpMin.y + 6);
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                dl->AddRectFilled(sp, ImVec2(sp.x + btnW, sp.y + btnH),
+                    m_ShowStatsPanel ? IM_COL32(48, 88, 145, 180) : IM_COL32(20, 20, 25, 180), 10.0f);
+                dl->AddRect(sp, ImVec2(sp.x + btnW, sp.y + btnH),
+                    IM_COL32(10, 10, 15, 180), 10.0f, 0, 1.0f);
+                ImGui::SetCursorScreenPos(sp);
+                ImVec4 atxt = ImVec4(0.40f, 0.65f, 1.00f, 1.0f);
+                ImVec4 itxt = ImVec4(0.65f, 0.65f, 0.68f, 1.0f);
+                ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+                ImGui::PushID("GamePerfStats");
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
+                ImGui::PushStyleColor(ImGuiCol_Text, m_ShowStatsPanel ? atxt : itxt);
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+                if (ImGui::Button(ICON_FA_CHART_LINE, ImVec2(btnW, btnH)))
+                    m_ShowStatsPanel = !m_ShowStatsPanel;
+                ImGui::PopStyleVar(2);
+                ImGui::PopStyleColor(2);
+                ImGui::PopID();
+                ImGui::PopFont();
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                    ImGui::SetTooltip("Performance Stats");
+            }
+        }
+
+        // ==========================================
         // Game 窗口内置 Stats 悬浮层 (完美动态适配版)
         // ==========================================
         if (m_ShowStatsPanel) {
-            // 1. 使用 static 保存上一帧算出的完美尺寸，实现 0 延迟感的自适应外框
-            static ImVec2 s_OverlaySize = ImVec2(375.0f, 340.0f); 
-            
-            // 2. 定位时使用这个动态尺寸
-            ImGui::SetCursorPos(ImVec2(cursorStartPos.x + m_GameViewportSize.x - s_OverlaySize.x - 10.0f, cursorStartPos.y + 10.0f));
+            static ImVec2 s_OverlaySize = ImVec2(375.0f, 340.0f);
+
+            // Position below the toolbar buttons (avoid overlapping them)
+            ImVec2 vpMinRel = (vpMin.x > 0.0f)
+                ? ImVec2(vpMin.x - ImGui::GetWindowPos().x, vpMin.y - ImGui::GetWindowPos().y)
+                : cursorStartPos;
+            float statsY = vpMinRel.y + 6.0f + 32.0f + 3.0f * 2.0f + 4.0f; // btnY + btnH + pad*2 + margin
+            ImGui::SetCursorPos(ImVec2(vpMinRel.x + vpSize.x - s_OverlaySize.x - 10.0f, statsY));
 
             ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.15f, 0.9f));
             ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 4.0f);
@@ -2027,7 +2294,11 @@ namespace Ayaya {
             ImGui::TextColored(ImVec4(0.9f, 0.4f, 0.2f, 1.0f), "%8.2f ms", m_GameStats.GPUTime);
             ImGui::Text("RAM Usage:"); ImGui::SameLine(alignOffset);
             ImGui::TextColored(ImVec4(0.2f, 0.7f, 0.9f, 1.0f), "%8.1f MB", memoryMB);
-            ImGui::Text("Screen Size: %dx%d", (int)m_GameViewportSize.x, (int)m_GameViewportSize.y);
+            ImGui::Text("Screen Size: %dx%d",
+                (m_GameViewportResW > 0 && m_GameViewportResH > 0)
+                    ? m_GameViewportResW : (int)m_GameViewportSize.x,
+                (m_GameViewportResW > 0 && m_GameViewportResH > 0)
+                    ? m_GameViewportResH : (int)m_GameViewportSize.y);
             ImGui::Spacing();
             
             // --- 渲染调用大类 ---
@@ -2226,7 +2497,8 @@ namespace Ayaya {
                 }
             }
 
-            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+                !ImGui::IsAnyItemHovered()) {  // don't deselect when clicking toolbar buttons
                 m_SceneHierarchyPanel.SetSelectedEntity(m_HoveredEntity);
             }
         }
@@ -2504,7 +2776,11 @@ namespace Ayaya {
             
             if (!cameraComp.FixedAspectRatio) {
                 // 解开这里的注释！让 Game 窗口的尺寸赋给新相机
-                cameraComp.Camera.SetViewportSize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);
+                cameraComp.Camera.SetViewportSize(
+                    (m_GameViewportResW > 0 && m_GameViewportResH > 0)
+                        ? (uint32_t)m_GameViewportResW : (uint32_t)m_GameViewportSize.x,
+                    (m_GameViewportResW > 0 && m_GameViewportResH > 0)
+                        ? (uint32_t)m_GameViewportResH : (uint32_t)m_GameViewportSize.y);
             }
         }
 

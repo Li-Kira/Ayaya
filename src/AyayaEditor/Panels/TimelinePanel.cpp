@@ -241,7 +241,7 @@ namespace Ayaya {
         if (ImGui::GetIO().KeyCtrl && wheel != 0.0f) {
             float oldT = ScreenXToTime(mp.x, m_CanvasX);
             m_Zoom *= 1.0f + wheel * 0.1f;
-            m_Zoom = std::clamp(m_Zoom, 20.0f, 1000.0f);
+            m_Zoom = std::clamp(m_Zoom, 20.0f, 2000.0f);
             m_ScrollX = mp.x - m_CanvasX - oldT * m_Zoom;
         }
         // Horizontal mouse wheel: pan
@@ -299,7 +299,7 @@ namespace Ayaya {
         ImGui::SameLine();
         if (ImGui::Button(ICON_FA_STOP)) StopPreview();
         ImGui::SameLine();
-        if (ImGui::Button(ICON_FA_UNDO " Reset")) { m_ScrollX = 0.0f; m_Zoom = 500.0f; }
+        if (ImGui::Button(ICON_FA_UNDO " Reset")) { m_ScrollX = 50.0f; m_Zoom = 500.0f; }
         ImGui::SameLine();
         ImGui::Text("  t=%.3f  zoom=%.0fpx/s", m_PreviewTime, m_Zoom);
         ImGui::Separator();
@@ -323,11 +323,11 @@ namespace Ayaya {
         // ==========================================
         // Frozen ruler header (outside scroll area)
         // ==========================================
-        ImVec2 rulerMax(canvasX + canvasW, areaPos.y + kRulerHeight);
+        float rulerBottom = areaPos.y + kRulerHeight;
 
         // Outliner header bg
         dl->AddRectFilled(ImVec2(areaPos.x, areaPos.y),
-                          ImVec2(canvasX, rulerMax.y),
+                          ImVec2(canvasX, rulerBottom),
                           IM_COL32(36, 36, 42, 255));
         {
             float textH = ImGui::GetFontSize();
@@ -353,7 +353,7 @@ namespace Ayaya {
         else if (m_Zoom > 300.0f) timePerTick = 0.2f;
         else if (m_Zoom > 150.0f) timePerTick = 0.5f;
         float firstTick = std::floor(ScreenXToTime(canvasX, canvasX) / timePerTick) * timePerTick;
-        float tickBottom = rulerMax.y;
+        float tickBottom = rulerBottom;
         float majorTop   = areaPos.y + kRulerHeight * 0.40f;
         float minorTop   = areaPos.y + kRulerHeight * 0.80f;
         for (float t = firstTick; t < ScreenXToTime(canvasX + canvasW + 100, canvasX); t += timePerTick) {
@@ -379,18 +379,14 @@ namespace Ayaya {
         dl->AddLine(ImVec2(canvasX, areaPos.y), ImVec2(canvasX, areaPos.y + kRulerHeight),
                     IM_COL32(50, 50, 60, 255), 2.0f);
 
-        // ---- Manual column resize handle ----
-        // Height must not exceed remaining content region, otherwise ImGui
-        // registers overflow content and adds an outer scrollbar.
+        // ---- Manual column resize handle (ruler region only) ----
+        // Limited to ruler height so the playhead-drag InvisibleButton
+        // (which spans ruler + pill area) is not obstructed at the left edge.
         {
-            float availY     = ImGui::GetContentRegionAvail().y;
-            float fullHeight = availY;  // total remaining space from areaPos.y
-            if (fullHeight < kTrackHeight * 2.0f)
-                fullHeight = kTrackHeight * 2.0f;
-            const float kResizeHandleHW = 5.0f;
+            const float kResizeHandleHW = 4.0f;
             ImGui::SetCursorScreenPos(ImVec2(canvasX - kResizeHandleHW, areaPos.y));
             ImGui::InvisibleButton("##TimelineColResize",
-                                   ImVec2(kResizeHandleHW * 2.0f, fullHeight));
+                                   ImVec2(kResizeHandleHW * 2.0f, kRulerHeight));
             if (ImGui::IsItemHovered() || ImGui::IsItemActive())
                 ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
             if (ImGui::IsItemActive())
@@ -558,7 +554,11 @@ namespace Ayaya {
             ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_SliderGrab,       ImVec4(0.45f, 0.45f, 0.45f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(0.65f, 0.65f, 0.65f, 1.0f));
+            float zoomBefore = m_Zoom;
             ImGui::SliderFloat("##ZoomSlider", &m_Zoom, 20.0f, 2000.0f, "");
+            // Keep playhead at same screen position when zoom changes
+            if (m_Zoom != zoomBefore)
+                m_ScrollX += m_PreviewTime * (zoomBefore - m_Zoom);
             ImGui::PopStyleColor(5);
             ImGui::PopStyleVar();
         }

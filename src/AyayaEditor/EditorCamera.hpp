@@ -40,15 +40,22 @@ namespace Ayaya {
         const glm::vec3& GetFocalPoint() const { return m_FocalPoint; }
         void SetFocalPoint(const glm::vec3& focalPoint) { m_FocalPoint = focalPoint; }
 
+        // Projection type toggle
+        void SetPerspective(bool persp) { m_Perspective = persp; RecalculateProjection(); }
+        bool IsPerspective() const { return m_Perspective; }
+
         // 强行刷新相机的 View 矩阵和位置
         void SetPosition(const glm::vec3& position) { m_Position = position; }
         void UpdateCameraView() { RecalculateView(); }
 
     private:
         void RecalculateView();
+        void RecalculateProjection();
 
     private:
         float m_FOV = 45.0f, m_AspectRatio = 1.778f, m_NearClip = 0.1f, m_FarClip = 1000.0f;
+        bool  m_Perspective = true;
+        float m_OrthoSize = 10.0f;
         glm::mat4 m_Projection{1.0f};
         glm::mat4 m_ViewMatrix{1.0f};
 

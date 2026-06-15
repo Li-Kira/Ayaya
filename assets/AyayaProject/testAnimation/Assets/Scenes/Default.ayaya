@@ -2,11 +2,11 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition: [-2.4080305, 1.7806008, 9.926039]
+  CameraPosition: [-2.6534848, 2.7959657, 3.6610038]
   CameraDistance: 10.367999
-  CameraPitch: -0.17259568
-  CameraYaw: -0.2379994
-  CameraFocalPoint: [0, 0, 0]
+  CameraPitch: -0.15267393
+  CameraYaw: -0.7863079
+  CameraFocalPoint: [4.599109, 1.2191846, -3.5784066]
 Entities:
   - Entity: 7797903022091767064
     TagComponent:
@@ -71,7 +71,7 @@ Entities:
       Scale: [1, 1, 1]
     MeshRendererComponent:
       ModelHandle: 16140901000000000002
-      MaterialHandle: 16140901000000000004
+      MaterialHandle: 15993227941290141570
       CastShadows: true
       ReceiveShadows: true
     AnimationControllerComponent:

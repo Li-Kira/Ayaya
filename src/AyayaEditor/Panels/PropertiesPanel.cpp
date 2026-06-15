@@ -2345,7 +2345,11 @@ namespace Ayaya {
         auto& component = referenceEntity.GetComponent<AnimationControllerComponent>();
 
         ImGuiTreeNodeFlags headerFlags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
-        bool treeOpen = ImGui::CollapsingHeader("Animation Controller", headerFlags);
+        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.9f, 0.8f, 1.0f));
+        bool treeOpen = ImGui::CollapsingHeader(ICON_FA_FILM " Animation Controller", headerFlags);
+        ImGui::PopStyleColor();
+        ImGui::PopFont();
         if (!treeOpen) return;
 
         // ---- IsPlaying (works across multi-select) ----
