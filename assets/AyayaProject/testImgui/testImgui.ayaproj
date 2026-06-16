@@ -1,0 +1,4 @@
+Project:
+  Name: testImgui
+  StartScene: Scenes/Default.ayaya
+  AssetDirectory: Assets

@@ -1423,7 +1423,7 @@ namespace Ayaya {
             }
 
             if (ImGui::BeginMenu("View")) {
-                ImGui::MenuItem("Show Statistics", nullptr, &m_ShowStatsPanel);
+                ImGui::MenuItem("Show Statistics", nullptr, &m_ShowGameStats);
 
                 ImGui::Spacing();
                 ImGui::Separator();
@@ -1461,6 +1461,10 @@ namespace Ayaya {
     void EditorLayer::UIRenderViewport() {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{ 0.0f, 0.0f });
         ImGui::Begin("Viewport");
+
+        // Close Game overlays when Viewport is active
+        if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+            m_ShowGameOptions = false;
 
         m_ViewportFocused = ImGui::IsWindowFocused();
         m_ViewportHovered = ImGui::IsWindowHovered();
@@ -1552,8 +1556,9 @@ namespace Ayaya {
                     // Close all other popups when a new one opens
                     auto closeOthers = [&](bool* keep) {
                         if (keep != &m_ShowViewportOptions)  m_ShowViewportOptions = false;
-                        if (keep != &m_ShowGizmosOverlay)    m_ShowGizmosOverlay = false;
-                        if (keep != &m_ShowCameraSpeedPopup) m_ShowCameraSpeedPopup = false;
+                        if (keep != &m_ShowViewportGizmos)    m_ShowViewportGizmos = false;
+                        if (keep != &m_ShowViewportCameraSpeed) m_ShowViewportCameraSpeed = false;
+                        m_ShowGameOptions = false; // close Game's Options too
                     };
 
                     auto oneBtn = [&](float x, const char* icon, const char* tip, bool* toggle) {
@@ -1587,7 +1592,7 @@ namespace Ayaya {
                     float pjx = sx  + btnW + 4;
 
                     oneBtn(ox, ICON_FA_BARS, "Options", &m_ShowViewportOptions);
-                    oneBtn(sx, ICON_FA_EYE,  "Show",    &m_ShowGizmosOverlay);
+                    oneBtn(sx, ICON_FA_EYE,  "Show",    &m_ShowViewportGizmos);
 
                     // Projection mode toggle (icon + text)
                     {
@@ -1637,8 +1642,8 @@ namespace Ayaya {
                         char spdLabel[24];
                         snprintf(spdLabel, sizeof(spdLabel), "%s %.1f", ICON_FA_BOLT, m_CameraSpeed);
                         if (ImGui::Button(spdLabel, ImVec2(spdW, btnH))) {
-                            closeOthers(&m_ShowCameraSpeedPopup);
-                            m_ShowCameraSpeedPopup = !m_ShowCameraSpeedPopup;
+                            closeOthers(&m_ShowViewportCameraSpeed);
+                            m_ShowViewportCameraSpeed = !m_ShowViewportCameraSpeed;
                         }
                         ImGui::PopStyleVar(2);
                         ImGui::PopStyleColor(2);
@@ -1648,7 +1653,7 @@ namespace Ayaya {
                     }
 
                     // Camera speed slider window
-                    if (m_ShowCameraSpeedPopup) {
+                    if (m_ShowViewportCameraSpeed) {
                         float popW = 200.0f;
                         ImVec2 popPos(vpMin.x + 8 + (btnW + 4) * 2, vpMin.y + 6 + btnH + 4);
                         ImGui::SetNextWindowPos(popPos);
@@ -1656,7 +1661,7 @@ namespace Ayaya {
                         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
                         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 10));
                         ImGui::SetNextWindowSize(ImVec2(popW, 0));
-                        if (ImGui::Begin("##CamSpeedWin", &m_ShowCameraSpeedPopup,
+                        if (ImGui::Begin("##CamSpeedWin", &m_ShowViewportCameraSpeed,
                             ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                             ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove |
                             ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -1753,7 +1758,7 @@ namespace Ayaya {
                 }
 
                 // ---- Viewport display filter panel (toggled by Show button) ----
-                if (m_ShowGizmosOverlay) {
+                if (m_ShowViewportGizmos) {
                     float panelW = 352.0f;
                     float rowH = 32.0f;
                     float colCheckW = 32.0f, colIconW = 48.0f;
@@ -2012,6 +2017,13 @@ namespace Ayaya {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{ 0.0f, 0.0f });
         ImGui::Begin("Game");
 
+        // Close Viewport overlays when Game tab is focused
+        if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) {
+            m_ShowViewportOptions     = false;
+            m_ShowViewportGizmos       = false;
+            m_ShowViewportCameraSpeed  = false;
+        }
+
         ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
         m_GameViewportSize = { std::floor(viewportPanelSize.x), std::floor(viewportPanelSize.y) };
         ImVec2 cursorStartPos = ImGui::GetCursorPos();
@@ -2098,6 +2110,11 @@ namespace Ayaya {
                 float ox  = vpMin.x + 8;
                 float pjx = ox  + btnW + 4;
                 oneBtn(ox, ICON_FA_BARS, "Options", &m_ShowGameOptions);
+                if (m_ShowGameOptions) {
+                    m_ShowViewportOptions = false;
+                    m_ShowViewportGizmos   = false;
+                    m_ShowViewportCameraSpeed = false;
+                }
 
                 // Projection mode toggle (icon + text)
                 {
@@ -2229,7 +2246,7 @@ namespace Ayaya {
                 ImVec2 sp(vpMin.x + vpSize.x - btnW - 8, vpMin.y + 6);
                 ImDrawList* dl = ImGui::GetWindowDrawList();
                 dl->AddRectFilled(sp, ImVec2(sp.x + btnW, sp.y + btnH),
-                    m_ShowStatsPanel ? IM_COL32(48, 88, 145, 180) : IM_COL32(20, 20, 25, 180), 10.0f);
+                    m_ShowGameStats ? IM_COL32(48, 88, 145, 180) : IM_COL32(20, 20, 25, 180), 10.0f);
                 dl->AddRect(sp, ImVec2(sp.x + btnW, sp.y + btnH),
                     IM_COL32(10, 10, 15, 180), 10.0f, 0, 1.0f);
                 ImGui::SetCursorScreenPos(sp);
@@ -2238,11 +2255,11 @@ namespace Ayaya {
                 ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
                 ImGui::PushID("GamePerfStats");
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
-                ImGui::PushStyleColor(ImGuiCol_Text, m_ShowStatsPanel ? atxt : itxt);
+                ImGui::PushStyleColor(ImGuiCol_Text, m_ShowGameStats ? atxt : itxt);
                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
                 ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
                 if (ImGui::Button(ICON_FA_CHART_LINE, ImVec2(btnW, btnH)))
-                    m_ShowStatsPanel = !m_ShowStatsPanel;
+                    m_ShowGameStats = !m_ShowGameStats;
                 ImGui::PopStyleVar(2);
                 ImGui::PopStyleColor(2);
                 ImGui::PopID();
@@ -2255,7 +2272,7 @@ namespace Ayaya {
         // ==========================================
         // Game 窗口内置 Stats 悬浮层 (完美动态适配版)
         // ==========================================
-        if (m_ShowStatsPanel) {
+        if (m_ShowGameStats) {
             static ImVec2 s_OverlaySize = ImVec2(375.0f, 340.0f);
 
             // Position below the toolbar buttons (avoid overlapping them)

@@ -259,89 +259,73 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<TransformComponent>()) { allHaveTransform = false; break; }
 
         if (allHaveTransform) {
-            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(TransformComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_ARROWS_ALT " Transform");
-            ImGui::PopFont();
-            
-            if (opened) {
-                auto& refTransform = referenceEntity.GetComponent<TransformComponent>();
+            auto& refTransform = referenceEntity.GetComponent<TransformComponent>();
 
-                auto getTargetName = [&]() -> std::string {
-                    if (m_SelectedEntities.size() == 1) return "'" + m_SelectedEntities[0].GetComponent<TagComponent>().Tag + "'";
-                    return std::to_string(m_SelectedEntities.size()) + " Entities";
+            auto getTargetName = [&]() -> std::string {
+                if (m_SelectedEntities.size() == 1) return "'" + m_SelectedEntities[0].GetComponent<TagComponent>().Tag + "'";
+                return std::to_string(m_SelectedEntities.size()) + " Entities";
+            };
+
+            static std::vector<TransformComponent> s_OldTransforms;
+            std::vector<TransformComponent> tempTransforms;
+            for (auto e : m_SelectedEntities) tempTransforms.push_back(e.GetComponent<TransformComponent>());
+
+            bool remove = false;
+            if (UI::DrawComponentHeader("Transform", ICON_FA_ARROWS_ALT " ",
+                                         ImVec4(1,1,1,1), (void*)"TransformComponent",
+                                         true, &remove)) {
+                UI::BeginPropertyTable("TransformProps");
+
+                // Freeze old-state snapshot before first drag frame.
+                // `s_WasActive` prevents re-capture on the deactivation frame.
+                static bool s_WasActive = false;
+                if (!ImGui::IsAnyItemActive() && !s_WasActive)
+                    s_OldTransforms = tempTransforms;
+                s_WasActive = ImGui::IsAnyItemActive();
+
+                auto commitVec3 = [&](const char* action, size_t idx) {
+                    auto macroCmd = std::make_shared<MacroCommand>(
+                        std::string("Change ") + action + " of " + getTargetName());
+                    for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                        Entity e = m_SelectedEntities[i];
+                        macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<TransformComponent>>(
+                            e, s_OldTransforms[i], e.GetComponent<TransformComponent>()));
+                    }
+                    EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                 };
 
-                static std::vector<TransformComponent> s_OldTransforms;
-
-                // 【物理快照】：在控件绘制前，提取最纯净的上一帧状态，防止拖拽瞬间数据被篡改！
-                std::vector<TransformComponent> tempTransforms;
-                for (auto e : m_SelectedEntities) tempTransforms.push_back(e.GetComponent<TransformComponent>());
-
-                bool activated = false, deactivated = false;
-
-                // ------------------------------------------
-                // 1. 绘制 Position
-                // ------------------------------------------
-                glm::vec3 translation = refTransform.Translation;
-                if (UI::DrawVec3Control("Position", translation, 0.0f, 80.0f, &activated, &deactivated)) {
-                    for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Translation = translation;
-                }
-                
-                if (activated) s_OldTransforms = tempTransforms; // 拖动开始：装填纯净的快照
-                if (deactivated) { // 拖动结束：结算命令
-                    auto macroCmd = std::make_shared<MacroCommand>("Change Position of " + getTargetName());
-                    for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
-                        Entity e = m_SelectedEntities[i];
-                        macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<TransformComponent>>(
-                            e, s_OldTransforms[i], e.GetComponent<TransformComponent>()
-                        ));
-                    }
-                    EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
+                // Position
+                {
+                    bool committed = false;
+                    glm::vec3 v = refTransform.Translation;
+                    if (UI::DrawVec3Control("Position", v, 0.0f, &committed))
+                        for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Translation = v;
+                    if (committed) commitVec3("Position", 0);
                 }
 
-                // ------------------------------------------
-                // 2. 绘制 Rotation
-                // ------------------------------------------
-                activated = false; deactivated = false;
-                glm::vec3 rotation = glm::degrees(refTransform.Rotation);
-                if (UI::DrawVec3Control("Rotation", rotation, 0.0f, 80.0f, &activated, &deactivated)) {
-                    for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Rotation = glm::radians(rotation);
-                }
-                
-                if (activated) s_OldTransforms = tempTransforms;
-                if (deactivated) {
-                    auto macroCmd = std::make_shared<MacroCommand>("Change Rotation of " + getTargetName());
-                    for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
-                        Entity e = m_SelectedEntities[i];
-                        macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<TransformComponent>>(
-                            e, s_OldTransforms[i], e.GetComponent<TransformComponent>()
-                        ));
-                    }
-                    EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
+                // Rotation
+                {
+                    bool committed = false;
+                    glm::vec3 v = glm::degrees(refTransform.Rotation);
+                    if (UI::DrawVec3Control("Rotation", v, 0.0f, &committed))
+                        for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Rotation = glm::radians(v);
+                    if (committed) commitVec3("Rotation", 0);
                 }
 
-                // ------------------------------------------
-                // 3. 绘制 Scale
-                // ------------------------------------------
-                activated = false; deactivated = false;
-                glm::vec3 scale = refTransform.Scale;
-                if (UI::DrawVec3Control("Scale", scale, 1.0f, 80.0f, &activated, &deactivated)) {
-                    for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Scale = scale;
-                }
-                
-                if (activated) s_OldTransforms = tempTransforms;
-                if (deactivated) {
-                    auto macroCmd = std::make_shared<MacroCommand>("Change Scale of " + getTargetName());
-                    for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
-                        Entity e = m_SelectedEntities[i];
-                        macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<TransformComponent>>(
-                            e, s_OldTransforms[i], e.GetComponent<TransformComponent>()
-                        ));
-                    }
-                    EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
+                // Scale
+                {
+                    bool committed = false;
+                    glm::vec3 v = refTransform.Scale;
+                    if (UI::DrawVec3Control("Scale", v, 1.0f, &committed))
+                        for (auto e : m_SelectedEntities) e.GetComponent<TransformComponent>().Scale = v;
+                    if (committed) commitVec3("Scale", 0);
                 }
 
+                ImGui::EndTable();
                 ImGui::TreePop();
+            }
+            if (remove) {
+                for (auto e : m_SelectedEntities) e.RemoveComponent<TransformComponent>();
             }
         }
     }
@@ -355,21 +339,12 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<SpriteRendererComponent>()) { allHaveSprite = false; break; }
 
         if (allHaveSprite) {
-            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.3f, 0.8f, 1.0f)); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(SpriteRendererComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_IMAGE " Sprite Renderer");
-            ImGui::PopStyleColor();
-            ImGui::PopFont();
-
-            // 新增：允许通过右键菜单移除组件
+            auto& refSrc = referenceEntity.GetComponent<SpriteRendererComponent>();
             bool removeComponent = false;
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) removeComponent = true;
-                ImGui::EndPopup();
-            }
-
-            if (opened) {
-                auto& refSrc = referenceEntity.GetComponent<SpriteRendererComponent>();
+            if (UI::DrawComponentHeader("Sprite Renderer", ICON_FA_IMAGE " ",
+                                         ImVec4(0.8f, 0.3f, 0.8f, 1.0f),
+                                         (void*)"SpriteRendererComponent",
+                                         true, &removeComponent)) {
                 
                 // 动态名字生成器
                 auto getTargetName = [&]() -> std::string {
@@ -382,12 +357,11 @@ namespace Ayaya {
                 // ------------------------------------------
                 static std::vector<SpriteRendererComponent> s_OldSprites;
 
+                UI::BeginPropertyTable("SpriteProps");
+                UI::DrawPropertyLabel("Color");
                 glm::vec4 color = refSrc.Color;
-                if (ImGui::ColorEdit4("Color", glm::value_ptr(color))) {
+                if (ImGui::ColorEdit4("##Color", glm::value_ptr(color)))
                     for (auto e : m_SelectedEntities) e.GetComponent<SpriteRendererComponent>().Color = color;
-                }
-                
-                // 颜色选择器的撤回拦截
                 if (ImGui::IsItemActivated()) {
                     s_OldSprites.clear();
                     for (auto e : m_SelectedEntities) s_OldSprites.push_back(e.GetComponent<SpriteRendererComponent>());
@@ -396,28 +370,26 @@ namespace Ayaya {
                     auto macroCmd = std::make_shared<MacroCommand>("Change Sprite Color of " + getTargetName());
                     for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
                         macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<SpriteRendererComponent>>(
-                            m_SelectedEntities[i], s_OldSprites[i], m_SelectedEntities[i].GetComponent<SpriteRendererComponent>()
-                        ));
+                            m_SelectedEntities[i], s_OldSprites[i], m_SelectedEntities[i].GetComponent<SpriteRendererComponent>()));
                     }
                     EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                 }
 
-                ImGui::Spacing();
-                ImGui::Text("Texture");
+                UI::DrawPropertyLabel("Texture");
 
-                ImVec2 textureSlotSize = { 64.0f * uiScale, 64.0f * uiScale };
+                ImVec2 texSlot = { 64.0f * uiScale, 64.0f * uiScale };
                 
                 if (refSrc.TextureHandle != 0 && AssetManager::IsAssetHandleValid(refSrc.TextureHandle)) {
                     auto tex = AssetManager::GetAsset<Texture2D>(refSrc.TextureHandle);
                     if (tex && tex->GetImGuiTextureID() != nullptr) {
                         ImVec2 uv0 = tex->IsDataFlipped() ? ImVec2(0, 1) : ImVec2(0, 0);
                         ImVec2 uv1 = tex->IsDataFlipped() ? ImVec2(1, 0) : ImVec2(1, 1);
-                        ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), textureSlotSize, uv0, uv1);
+                        ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), texSlot, uv0, uv1);
                     } else {
-                        ImGui::Button("Loading...", textureSlotSize);
+                        ImGui::Button("Loading...", texSlot);
                     }
                 } else {
-                    ImGui::Button("Empty", textureSlotSize);
+                    ImGui::Button("Empty", texSlot);
                 }
 
                 // ------------------------------------------
@@ -453,7 +425,7 @@ namespace Ayaya {
                 // ------------------------------------------
                 if (refSrc.TextureHandle != 0) {
                     ImGui::SameLine();
-                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textureSlotSize.y * 0.5f - 10.0f * uiScale);
+                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + texSlot.y * 0.5f - 10.0f * uiScale);
                     if (ImGui::Button("Remove")) {
                         // 【撤回拦截】：点击瞬间，备份旧状态
                         std::vector<SpriteRendererComponent> oldComps;
@@ -473,10 +445,10 @@ namespace Ayaya {
                     }
                 }
 
+                ImGui::EndTable();
                 ImGui::TreePop();
             }
 
-            // 处理右键移除整个组件的结算
             if (removeComponent) {
                 for (auto e : m_SelectedEntities) e.RemoveComponent<SpriteRendererComponent>();
             }
@@ -492,21 +464,12 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<CameraComponent>()) { allHaveCamera = false; break; }
 
         if (allHaveCamera) {
-            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.6f, 0.9f, 1.0f)); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(CameraComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_VIDEO " Camera");
-            ImGui::PopStyleColor();
-            ImGui::PopFont();
-
-            // 新增：右键移除组件支持
+            auto& refCamera = referenceEntity.GetComponent<CameraComponent>();
             bool removeComponent = false;
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) removeComponent = true;
-                ImGui::EndPopup();
-            }
-
-            if (opened) {
-                auto& refCamera = referenceEntity.GetComponent<CameraComponent>();
+            if (UI::DrawComponentHeader("Camera", ICON_FA_VIDEO " ",
+                                         ImVec4(0.2f, 0.6f, 0.9f, 1.0f),
+                                         (void*)"CameraComponent",
+                                         true, &removeComponent)) {
                 
                 // 动态名字生成器
                 auto getTargetName = [&]() -> std::string {
@@ -533,11 +496,14 @@ namespace Ayaya {
                         EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                     }
                 };
-                
-                // 1. 投影模式 (下拉框，瞬时状态)
+
+                UI::BeginPropertyTable("CameraProps");
+
+                // Projection mode (instant combo)
+                UI::DrawPropertyLabel("Projection");
                 const char* projectionTypeStrings[] = { "Perspective", "Orthographic" };
                 const char* currentProjectionTypeString = projectionTypeStrings[(int)refCamera.Camera.GetProjectionType()];
-                if (ImGui::BeginCombo("Projection", currentProjectionTypeString)) {
+                if (ImGui::BeginCombo("##Projection", currentProjectionTypeString)) {
                     for (int i = 0; i < 2; i++) {
                         bool isSelected = currentProjectionTypeString == projectionTypeStrings[i];
                         if (ImGui::Selectable(projectionTypeStrings[i], isSelected)) {
@@ -561,39 +527,45 @@ namespace Ayaya {
                 }
 
                if (refCamera.Camera.GetProjectionType() == SceneCamera::ProjectionType::Perspective) {
+                    UI::DrawPropertyLabel("FOV");
                     float fov = glm::degrees(refCamera.Camera.GetPerspectiveFOV());
-                    if (ImGui::DragFloat("FOV", &fov, 0.1f, 1.0f, 179.0f)) {
+                    if (ImGui::DragFloat("##FOV", &fov, 0.1f, 1.0f, 179.0f)) {
                         for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().Camera.SetPerspectiveFOV(glm::radians(fov));
                     }
                     handleDragState("Change FOV"); // 调用复用逻辑
 
+                    UI::DrawPropertyLabel("Near Clip");
                     float nearClip = refCamera.Camera.GetPerspectiveNearClip();
-                    if (ImGui::DragFloat("Near Clip", &nearClip, 0.1f, 0.01f, 1000.0f)) {
+                    if (ImGui::DragFloat("##NearClip", &nearClip, 0.1f, 0.01f, 1000.0f)) {
                         for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().Camera.SetPerspectiveNearClip(nearClip);
                     }
                     handleDragState("Change Near Clip");
 
+                    UI::DrawPropertyLabel("Far Clip");
                     float farClip = refCamera.Camera.GetPerspectiveFarClip();
-                    if (ImGui::DragFloat("Far Clip", &farClip, 1.0f, nearClip + 0.1f, 10000.0f)) {
+                    if (ImGui::DragFloat("##FarClip", &farClip, 1.0f, nearClip + 0.1f, 10000.0f)) {
                         for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().Camera.SetPerspectiveFarClip(farClip);
                     }
                     handleDragState("Change Far Clip");
 
                 } else {
+                    UI::DrawPropertyLabel("Size");
                     float orthoSize = refCamera.Camera.GetOrthographicSize();
-                    if (ImGui::DragFloat("Size", &orthoSize, 0.1f, 0.1f, 1000.0f)) {
+                    if (ImGui::DragFloat("##OrthoSize", &orthoSize, 0.1f, 0.1f, 1000.0f)) {
                         for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().Camera.SetOrthographicSize(orthoSize);
                     }
                     handleDragState("Change Ortho Size");
 
+                    UI::DrawPropertyLabel("Near Clip");
                     float nearClip = refCamera.Camera.GetOrthographicNearClip();
-                    if (ImGui::DragFloat("Near Clip", &nearClip, 0.1f, -1000.0f, 1000.0f)) {
+                    if (ImGui::DragFloat("##NearClip", &nearClip, 0.1f, -1000.0f, 1000.0f)) {
                         for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().Camera.SetOrthographicNearClip(nearClip);
                     }
                     handleDragState("Change Near Clip");
 
+                    UI::DrawPropertyLabel("Far Clip");
                     float farClip = refCamera.Camera.GetOrthographicFarClip();
-                    if (ImGui::DragFloat("Far Clip", &farClip, 0.1f, nearClip + 0.1f, 1000.0f)) {
+                    if (ImGui::DragFloat("##FarClip", &farClip, 0.1f, nearClip + 0.1f, 1000.0f)) {
                         for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().Camera.SetOrthographicFarClip(farClip);
                     }
                     handleDragState("Change Far Clip");
@@ -602,7 +574,8 @@ namespace Ayaya {
                 // 2. 清除模式 (Combo)
                 const char* clearFlagStrings[] = { "Skybox", "Solid Color" };
                 const char* currentClearFlagString = clearFlagStrings[(int)refCamera.ClearFlag];
-                if (ImGui::BeginCombo("Clear Flags", currentClearFlagString)) {
+                UI::DrawPropertyLabel("Clear Flags");
+                if (ImGui::BeginCombo("##ClearFlags", currentClearFlagString)) {
                     for (int i = 0; i < 2; i++) {
                         bool isSelected = currentClearFlagString == clearFlagStrings[i];
                         if (ImGui::Selectable(clearFlagStrings[i], isSelected)) {
@@ -627,7 +600,8 @@ namespace Ayaya {
                 // 3. 背景颜色选择器
                 if (refCamera.ClearFlag == CameraComponent::ClearFlags::SolidColor) {
                     glm::vec4 bgColor = refCamera.BackgroundColor;
-                    if (ImGui::ColorEdit4("Background", glm::value_ptr(bgColor))) {
+                    UI::DrawPropertyLabel("Background");
+                    if (ImGui::ColorEdit4("##Background", glm::value_ptr(bgColor))) {
                         for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().BackgroundColor = bgColor;
                     }
                     handleDragState("Change Background Color");
@@ -637,7 +611,8 @@ namespace Ayaya {
 
                 // 4. 其他基础属性
                 bool primary = refCamera.Primary;
-                if (ImGui::Checkbox("Primary Camera", &primary)) {
+                UI::DrawPropertyLabel("Primary Camera");
+                if (ImGui::Checkbox("##PrimaryCamera", &primary)) {
                     // 【蝴蝶效应处理】：因为会影响到其他未被选中的相机，我们需要备份场景中所有的相机！
                     auto view = m_Context->Reg().view<CameraComponent>();
                     std::vector<Entity> affectedEntities;
@@ -670,7 +645,8 @@ namespace Ayaya {
                 }
                 
                 bool fixedAspect = refCamera.FixedAspectRatio;
-                if (ImGui::Checkbox("Fixed Aspect Ratio", &fixedAspect)) {
+                UI::DrawPropertyLabel("Fixed Aspect Ratio");
+                if (ImGui::Checkbox("##FixedAspect", &fixedAspect)) {
                     std::vector<CameraComponent> oldComps;
                     for (auto e : m_SelectedEntities) oldComps.push_back(e.GetComponent<CameraComponent>());
                     
@@ -686,11 +662,13 @@ namespace Ayaya {
                 }
 
                 float ev100 = refCamera.EV100;
-                if (ImGui::DragFloat("EV100 (Exposure)", &ev100, 0.1f, -10.0f, 25.0f, "%.2f")) {
+                UI::DrawPropertyLabel("EV100 (Exposure)");
+                if (ImGui::DragFloat("##EV100", &ev100, 0.1f, -10.0f, 25.0f, "%.2f")) {
                     for (auto e : m_SelectedEntities) e.GetComponent<CameraComponent>().EV100 = ev100;
                 }
                 handleDragState("Change Exposure");
 
+                ImGui::EndTable();
                 ImGui::TreePop();
             }
 
@@ -710,20 +688,12 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<DirectionalLightComponent>()) { allHaveDirLight = false; break; }
 
         if (allHaveDirLight) {
-            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.8f, 0.2f, 1.0f)); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(DirectionalLightComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_SUN " Directional Light");
-            ImGui::PopStyleColor();
-            ImGui::PopFont();
-
+            auto& refDlc = referenceEntity.GetComponent<DirectionalLightComponent>();
             bool removeComponent = false;
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) removeComponent = true;
-                ImGui::EndPopup();
-            }
-
-            if (opened) {
-                auto& refDlc = referenceEntity.GetComponent<DirectionalLightComponent>();
+            if (UI::DrawComponentHeader("Directional Light", ICON_FA_SUN " ",
+                                         ImVec4(0.9f, 0.8f, 0.2f, 1.0f),
+                                         (void*)"DirectionalLightComponent",
+                                         true, &removeComponent)) {
                 
                 auto getTargetName = [&]() -> std::string {
                     if (m_SelectedEntities.size() == 1) return "'" + m_SelectedEntities[0].GetComponent<TagComponent>().Tag + "'";
@@ -738,32 +708,30 @@ namespace Ayaya {
 
                 static std::vector<DirectionalLightComponent> s_OldLights;
                 auto handleDragState = [&](const std::string& actionName) {
-                    if (ImGui::IsItemActivated()) {
-                        // 使用上面拍好的纯净快照，而不是去读可能已经被 UI 污染的实体数据！
-                        s_OldLights = pureOldLights; 
-                    }
+                    if (ImGui::IsItemActivated()) { s_OldLights = pureOldLights; }
                     if (ImGui::IsItemDeactivatedAfterEdit()) {
                         auto macroCmd = std::make_shared<MacroCommand>(actionName + " of " + getTargetName());
                         for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
                             macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<DirectionalLightComponent>>(
-                                m_SelectedEntities[i], s_OldLights[i], m_SelectedEntities[i].GetComponent<DirectionalLightComponent>()
-                            ));
+                                m_SelectedEntities[i], s_OldLights[i], m_SelectedEntities[i].GetComponent<DirectionalLightComponent>()));
                         }
                         EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                     }
                 };
-                
+
+                UI::BeginPropertyTable("DirLightProps");
+                UI::DrawPropertyLabel("Light Color");
                 glm::vec3 color = refDlc.Color;
-                if (ImGui::ColorEdit3("Light Color", glm::value_ptr(color))) {
+                if (ImGui::ColorEdit3("##LightColor", glm::value_ptr(color)))
                     for (auto e : m_SelectedEntities) e.GetComponent<DirectionalLightComponent>().Color = color;
-                }
                 handleDragState("Change Light Color");
 
+                UI::DrawPropertyLabel("Illuminance (Lux)");
                 float illuminance = refDlc.Illuminance;
-                if (ImGui::DragFloat("Illuminance (Lux)", &illuminance, 1000.0f, 0.0f, 150000.0f, "%.0f")) {
+                if (ImGui::DragFloat("##Illuminance", &illuminance, 1000.0f, 0.0f, 150000.0f, "%.0f"))
                     for (auto e : m_SelectedEntities) e.GetComponent<DirectionalLightComponent>().Illuminance = illuminance;
-                }
                 handleDragState("Change Illuminance");
+                ImGui::EndTable();
 
                 ImGui::TreePop();
             }
@@ -783,20 +751,11 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<PointLightComponent>()) { allHavePointLight = false; break; }
 
         if (allHavePointLight) {
-            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.6f, 0.1f, 1.0f)); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(PointLightComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_LIGHTBULB " Point Light");
-            ImGui::PopStyleColor();
-            ImGui::PopFont();
-
-            // 新增：右键移除组件支持
             bool removeComponent = false;
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) removeComponent = true;
-                ImGui::EndPopup();
-            }
-
-            if (opened) {
+            if (UI::DrawComponentHeader("Point Light", ICON_FA_LIGHTBULB " ",
+                                         ImVec4(0.9f, 0.6f, 0.1f, 1.0f),
+                                         (void*)"PointLightComponent",
+                                         true, &removeComponent)) {
                 auto& refPlc = referenceEntity.GetComponent<PointLightComponent>();
                 
                 // 动态名字生成器
@@ -827,31 +786,31 @@ namespace Ayaya {
                     }
                 };
                 
-                // 1. 颜色修改与状态拦截
+                UI::BeginPropertyTable("PointLightProps");
+                UI::DrawPropertyLabel("Color");
                 glm::vec3 color = refPlc.Color;
-                if (ImGui::ColorEdit3("Color", glm::value_ptr(color))) {
+                if (ImGui::ColorEdit3("##Color", glm::value_ptr(color)))
                     for (auto e : m_SelectedEntities) e.GetComponent<PointLightComponent>().Color = color;
-                }
                 handleDragState("Change Light Color");
 
-                // 2. 发光功率修改与状态拦截
+                UI::DrawPropertyLabel("Luminous Power (lm)");
                 float power = refPlc.LuminousPower;
-                if (ImGui::DragFloat("Luminous Power (lm)", &power, 50.0f, 0.0f, 100000.0f, "%.0f")) {
+                if (ImGui::DragFloat("##Power", &power, 50.0f, 0.0f, 100000.0f, "%.0f"))
                     for (auto e : m_SelectedEntities) e.GetComponent<PointLightComponent>().LuminousPower = power;
-                }
                 handleDragState("Change Luminous Power");
 
+                UI::DrawPropertyLabel("Radius (m)");
                 float radius = refPlc.Radius;
-                if (ImGui::DragFloat("Radius (m)", &radius, 0.1f, 0.1f, 1000.0f, "%.1f")) {
+                if (ImGui::DragFloat("##Radius", &radius, 0.1f, 0.1f, 1000.0f, "%.1f"))
                     for (auto e : m_SelectedEntities) e.GetComponent<PointLightComponent>().Radius = radius;
-                }
                 handleDragState("Change PointLight Radius");
 
+                UI::DrawPropertyLabel("Falloff");
                 float falloff = refPlc.Falloff;
-                if (ImGui::DragFloat("Falloff", &falloff, 0.05f, 0.0f, 10.0f, "%.2f")) {
+                if (ImGui::DragFloat("##Falloff", &falloff, 0.05f, 0.0f, 10.0f, "%.2f"))
                     for (auto e : m_SelectedEntities) e.GetComponent<PointLightComponent>().Falloff = falloff;
-                }
                 handleDragState("Change PointLight Falloff");
+                ImGui::EndTable();
 
                 ImGui::TreePop();
             }
@@ -872,19 +831,11 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<EnvironmentComponent>()) { allHaveEnvironment = false; break; }
 
         if (allHaveEnvironment) {
-            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.8f, 0.9f, 1.0f)); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(EnvironmentComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_GLOBE " Environment (Skybox)");
-            ImGui::PopStyleColor();
-            ImGui::PopFont();
-
             bool removeComponent = false;
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) removeComponent = true;
-                ImGui::EndPopup();
-            }
-
-            if (opened) {
+            if (UI::DrawComponentHeader("Environment (Skybox)", ICON_FA_GLOBE " ",
+                                         ImVec4(0.4f, 0.8f, 0.9f, 1.0f),
+                                         (void*)"EnvironmentComponent",
+                                         true, &removeComponent)) {
                 auto& refEnv = referenceEntity.GetComponent<EnvironmentComponent>();
 
                 auto getTargetName = [&]() -> std::string {
@@ -911,12 +862,12 @@ namespace Ayaya {
                     }
                 };
 
-                // ------------------------------------------
-                // 1. 类型切换下拉框
-                // ------------------------------------------
+                UI::BeginPropertyTable("EnvProps");
+
+                UI::DrawPropertyLabel("Type");
                 const char* envTypeStrings[] = { "None", "HDR Equirectangular", "LDR Equirectangular", "Classic Cubemap" };
                 int currentTypeIdx = (int)refEnv.Type;
-                if (ImGui::Combo("Type", &currentTypeIdx, envTypeStrings, 4)) {
+                if (ImGui::Combo("##Type", &currentTypeIdx, envTypeStrings, 4)) {
                     std::vector<EnvironmentComponent> oldComps = pureOldEnvs;
                     for (auto& c : oldComps) c.IsDirty = true; // 强行"弄脏"备份数据以触发重绘
 
@@ -935,23 +886,17 @@ namespace Ayaya {
                     EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                 }
 
-                // ------------------------------------------
-                // 2. 环境光亮度滑块
-                // ------------------------------------------
+                UI::DrawPropertyLabel("Intensity");
                 float intensity = refEnv.Intensity;
-                if (ImGui::DragFloat("Intensity", &intensity, 100.0f, 0.0f, 150000.0f)) {
+                if (ImGui::DragFloat("##Intensity", &intensity, 100.0f, 0.0f, 150000.0f))
                     for (auto e : m_SelectedEntities) e.GetComponent<EnvironmentComponent>().Intensity = intensity;
-                }
                 handleDragState("Change Environment Intensity");
 
                 if (refEnv.Type != EnvironmentType::None) {
-                    // ------------------------------------------
-                    // 3. 全景图 (HDR/JPG) 资源槽位与拖拽交互
-                    // ------------------------------------------
+                    // Equirectangular map slot
                     if (refEnv.Type == EnvironmentType::HDR_Equirectangular || refEnv.Type == EnvironmentType::LDR_Equirectangular) {
-                        ImGui::Spacing();
-                        ImGui::Text("Equirectangular Map");
-                        
+                        UI::DrawPropertyLabel("Equirectangular Map");
+
                         std::string pathDisplay = "Drop .hdr / .jpg here";
                         if (refEnv.EquirectangularHandle != 0) {
                             AssetMetadata meta = AssetManager::GetMetadata(refEnv.EquirectangularHandle);
@@ -1026,9 +971,8 @@ namespace Ayaya {
                     // 4. 传统 6 面体贴图 (统一为单一资产 UUID 拖拽)
                     // ------------------------------------------
                     else if (refEnv.Type == EnvironmentType::Classic_Cubemap) {
-                        ImGui::Spacing();
-                        ImGui::Text("Cubemap Asset");
-                        
+                        UI::DrawPropertyLabel("Cubemap Asset");
+
                         std::string faceDisplay = "Drop .cube / .dds here";
                         if (refEnv.CubemapHandle != 0) {
                             AssetMetadata meta = AssetManager::GetMetadata(refEnv.CubemapHandle);
@@ -1095,20 +1039,13 @@ namespace Ayaya {
                     }
                 }
 
-                // ------------------------------------------
-                // 5. 基础环境底光颜色
-                // ------------------------------------------
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Spacing();
-                
-                ImGui::Text("Ambient Light (Flat)");
+                UI::DrawPropertyLabel("Ambient Color");
                 glm::vec3 ambientColor = refEnv.AmbientColor;
-                if (ImGui::ColorEdit3("Ambient Color", glm::value_ptr(ambientColor), ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float)) {
+                if (ImGui::ColorEdit3("##AmbientColor", glm::value_ptr(ambientColor), ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float))
                     for (auto e : m_SelectedEntities) e.GetComponent<EnvironmentComponent>().AmbientColor = ambientColor;
-                }
                 handleDragState("Change Ambient Color");
 
+                ImGui::EndTable();
                 ImGui::TreePop();
             }
             if (removeComponent) {
@@ -1127,25 +1064,11 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<MeshRendererComponent>()) { allHaveMeshRenderer = false; break; }
 
         if (allHaveMeshRenderer) {
-            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.8f, 0.4f, 1.0f)); 
-            
-            // 【优化 1】：增加 AllowItemOverlap 标志，允许我们在标题栏同一行放置删除按钮
-            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap;
-            bool opened = ImGui::TreeNodeEx((void*)typeid(MeshRendererComponent).hash_code(), flags, ICON_FA_CUBE " Mesh Renderer");
-            
-            ImGui::PopStyleColor();
-            ImGui::PopFont();
-            
+            auto& refMrc = referenceEntity.GetComponent<MeshRendererComponent>();
             bool removeComponent = false;
-
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) removeComponent = true;
-                ImGui::EndPopup();
-            }
-
-            if (opened) {
-                auto& refMrc = referenceEntity.GetComponent<MeshRendererComponent>();
+            if (UI::DrawComponentHeader("Mesh Renderer", ICON_FA_CUBE " ",
+                                         ImVec4(0.2f, 0.8f, 0.4f, 1.0f),
+                                         (void*)"MeshRendererComponent", true, &removeComponent)) {
 
                 auto getTargetName = [&]() -> std::string {
                     if (m_SelectedEntities.size() == 1) return "'" + m_SelectedEntities[0].GetComponent<TagComponent>().Tag + "'";
@@ -1170,9 +1093,8 @@ namespace Ayaya {
                 // 1. 模型资产管理
                 // ==========================================
                 ImGui::Spacing();
-                if (ImGui::TreeNodeEx("Model", ImGuiTreeNodeFlags_DefaultOpen)) {
-                    
-                    ImGui::Text("Mesh Source");
+                if (ImGui::TreeNodeEx((void*)"ModelNode", ImGuiTreeNodeFlags_DefaultOpen, "Model")) {
+                    ImGui::TextDisabled("Mesh Source");
                     std::string modelDisplay = "Drop .obj / .fbx here";
 
                     if (refMrc.ModelHandle != 0) {
@@ -1234,10 +1156,10 @@ namespace Ayaya {
                 }
 
                 // ==========================================
-                // 2. 材质资产管理
+                // 2. Material
                 // ==========================================
                 ImGui::Spacing();
-                if (ImGui::TreeNodeEx("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (ImGui::TreeNodeEx((void*)"MaterialNode", ImGuiTreeNodeFlags_DefaultOpen, "Material")) {
 
                     std::shared_ptr<Material> currentMat = nullptr;
                     if (refMrc.MaterialHandle != 0 && AssetManager::IsAssetHandleValid(refMrc.MaterialHandle)) {
@@ -1262,7 +1184,7 @@ namespace Ayaya {
                     bool isBuiltIn = currentMat && currentMat->IsBuiltIn();
                     float btnH = ImGui::GetTextLineHeight() + ImGui::GetStyle().FramePadding.y * 2.0f + 4.0f;
 
-                    // ---- Material name (big button, drag-drop target, adapts to text) ----
+                    ImGui::TextDisabled("Material");
                     std::string btnLabel = getMatDisplayName();
                     if (isBuiltIn)
                         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.55f, 0.55f, 1.0f));
@@ -1348,9 +1270,9 @@ namespace Ayaya {
                     if (currentMat) {
                         if (isBuiltIn) ImGui::BeginDisabled(true);
 
-                        ImGui::Text("Shader: %s", currentMat->ShaderName.c_str());
+                        ImGui::TextDisabled("Shader: %s", currentMat->ShaderName.c_str());
 
-                        // Blend Mode dropdown
+                        // Blend Mode — table row for consistent height
                         static const char* kBlendNames[] = { "Opaque", "Masked", "Translucent" };
                         int currentBlend = 0;
                         switch (currentMat->GetBlendMode()) {
@@ -1358,10 +1280,8 @@ namespace Ayaya {
                             case MaterialBlendMode::Masked:      currentBlend = 1; break;
                             case MaterialBlendMode::Translucent: currentBlend = 2; break;
                         }
-                        ImGui::Spacing();
-                        ImGui::Text("Blend Mode:");
-                        ImGui::SameLine();
-                        ImGui::SetNextItemWidth(160.0f);
+                        ImGui::TextDisabled("Blend Mode");
+                        ImGui::SetNextItemWidth(-FLT_MIN);
                         if (ImGui::Combo("##BlendMode", &currentBlend, kBlendNames, 3)) {
                             MaterialBlendMode newBlend = MaterialBlendMode::Opaque;
                             switch (currentBlend) {
@@ -1380,158 +1300,162 @@ namespace Ayaya {
                         }
                         ImGui::Separator();
 
-                        ImGui::Columns(2, "MaterialProperties", false);
-                        ImGui::SetColumnWidth(0, 140.0f * uiScale);
-                        std::string lastCategory = "";
+                        // Ordered categories: Albedo → Normal → Roughness+Metallic → AO → ORM → Other
+                        using CatEntry = std::pair<std::string, std::vector<MaterialProperty*>>;
+                        std::vector<CatEntry> orderedCats = {
+                            {"Albedo", {}}, {"Normal", {}}, {"Metallic", {}},
+                            {"Roughness", {}}, {"AO", {}}, {"ORM", {}}, {"Other", {}}
+                        };
+                        auto& groups = orderedCats;
                         bool hasAlphaTex = false;
 
                         for (auto& prop : currentMat->Properties) {
-                            // Smart filtering based on BlendMode
                             if (currentMat->GetBlendMode() == MaterialBlendMode::Opaque) {
                                 if (prop.UniformName == "u_Alpha" ||
                                     prop.UniformName == "u_UseAlphaMap" ||
-                                    prop.UniformName == "u_AlphaMap") {
-                                    continue;
-                                }
+                                    prop.UniformName == "u_AlphaMap") continue;
                             }
-                            // In Masked mode: hide the "Enable Alpha Map" checkbox (redundant)
                             if (currentMat->GetBlendMode() == MaterialBlendMode::Masked) {
                                 if (prop.UniformName == "u_UseAlphaMap") continue;
                             }
-
-                            // Detect alpha texture presence
                             if (prop.UniformName == "u_AlphaMap" && prop.TextureHandle != 0)
                                 hasAlphaTex = true;
 
-                            std::string currentCategory = "Other";
-                            if (prop.UniformName.find("Albedo") != std::string::npos) currentCategory = "Albedo";
-                            else if (prop.UniformName.find("Metallic") != std::string::npos) currentCategory = "Metallic";
-                            else if (prop.UniformName.find("Roughness") != std::string::npos) currentCategory = "Roughness";
-                            else if (prop.UniformName.find("Normal") != std::string::npos) currentCategory = "Normal";
-                            else if (prop.UniformName.find("Emission") != std::string::npos || prop.UniformName.find("Emissive") != std::string::npos) currentCategory = "Emission";
-                            else if (prop.UniformName.find("AO") != std::string::npos || prop.UniformName.find("Ambient") != std::string::npos) currentCategory = "AO";
+                            std::string name = prop.UniformName;
+                            if (name.find("Albedo") != std::string::npos)
+                                groups[0].second.push_back(&prop);
+                            else if (name.find("Normal") != std::string::npos)
+                                groups[1].second.push_back(&prop);
+                            else if (name.find("Metallic") != std::string::npos)
+                                groups[2].second.push_back(&prop);
+                            else if (name.find("Roughness") != std::string::npos)
+                                groups[3].second.push_back(&prop);
+                            else if (name.find("AO") != std::string::npos ||
+                                     name.find("Ambient") != std::string::npos)
+                                groups[4].second.push_back(&prop);
+                            else if (name.find("ORM") != std::string::npos)
+                                groups[5].second.push_back(&prop);
+                            else
+                                groups[6].second.push_back(&prop);
+                        }
 
-                            if (currentCategory != lastCategory) {
-                                if (!lastCategory.empty()) ImGui::Separator();
-                                lastCategory = currentCategory;
-                            }
+                        for (auto& [catName, props] : groups) {
+                            if (props.empty()) continue;
+                            ImGui::Spacing();
+                            ImGui::SeparatorText(catName.c_str());
+                            ImGui::PushID(catName.c_str());
+                            if (UI::BeginPropertyTable("CategoryTable", 100.0f, 0.8f)) {
+                                for (auto* prop : props) {
+                                    ImGui::PushID(prop->UniformName.c_str());
 
-                            ImGui::PushID(prop.UniformName.c_str()); 
-                            ImGui::AlignTextToFramePadding(); 
-                            ImGui::Text("%s", prop.DisplayName.c_str());
-                            ImGui::NextColumn();
-                            ImGui::SetNextItemWidth(-1.0f);
+                                    // Texture2D: taller row for 64px thumbnail
+                                    if (prop->Type == MaterialPropertyType::Texture2D) {
+                                        float slot = 64.0f * uiScale;
+                                        ImGui::TableNextRow(ImGuiTableRowFlags_None, slot);
+                                        ImGui::TableSetColumnIndex(0);
+                                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (slot - ImGui::GetTextLineHeight()) * 0.5f);
+                                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f,0.6f,0.6f,1.0f));
+                                        ImGui::TextUnformatted(prop->DisplayName.c_str());
+                                        ImGui::PopStyleColor();
+                                        ImGui::TableSetColumnIndex(1);
 
-                            switch (prop.Type) {
-                                case MaterialPropertyType::Float: ImGui::SliderFloat("##val", &prop.FloatValue, 0.0f, 1.0f); break;
-                                case MaterialPropertyType::Int: ImGui::InputInt("##val", &prop.IntValue); break;
-                                case MaterialPropertyType::Bool: ImGui::Checkbox("##val", &prop.BoolValue); break;
-                                case MaterialPropertyType::Vec2: ImGui::DragFloat2("##val", glm::value_ptr(prop.Vec2Value), 0.05f); break;
-                                case MaterialPropertyType::Vec3: ImGui::ColorEdit3("##val", glm::value_ptr(prop.Vec3Value), ImGuiColorEditFlags_NoInputs); break;
-                                case MaterialPropertyType::Vec4: ImGui::ColorEdit4("##val", glm::value_ptr(prop.Vec4Value), ImGuiColorEditFlags_NoInputs); break;
-                                case MaterialPropertyType::Texture2D:
-                                {
-                                    ImVec2 textureSlotSize = { 64.0f * uiScale, 64.0f * uiScale };
-                                    
-                                    std::shared_ptr<Texture2D> tex = nullptr;
-                                    if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
-                                        tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
-                                    }
+                                        std::shared_ptr<Texture2D> tex = nullptr;
+                                        if (prop->TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop->TextureHandle))
+                                            tex = AssetManager::GetAsset<Texture2D>(prop->TextureHandle);
 
-                                    if (tex) {
-                                        if (tex->GetImGuiTextureID() != nullptr && (uint64_t)tex->GetImGuiTextureID() != 0) {
+                                        if (tex && tex->GetImGuiTextureID() != nullptr && (uint64_t)tex->GetImGuiTextureID() != 0) {
                                             bool vk = (RendererAPI::GetAPI() == RendererAPI::API::Vulkan);
-                                            ImVec2 uv0 = vk ? ImVec2(0, 0) : ImVec2(0, 1);
-                                            ImVec2 uv1 = vk ? ImVec2(1, 1) : ImVec2(1, 0);
-                                            ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), textureSlotSize, uv0, uv1);
+                                            ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), ImVec2(slot,slot), vk?ImVec2(0,0):ImVec2(0,1), vk?ImVec2(1,1):ImVec2(1,0));
                                         } else {
-                                            ImGui::Button("Loading...", textureSlotSize);
+                                            ImGui::Button(tex ? "Loading..." : "Null", ImVec2(slot,slot));
+                                        }
+                                        if (ImGui::BeginDragDropTarget()) {
+                                            if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                                                UUID h = *(const UUID*)p->Data;
+                                                if (h != 0 && AssetManager::GetMetadata(h).Type == AssetType::Texture2D) {
+                                                    if (!AssetManager::GetMetadata(h).VirtualPath.empty())
+                                                        AssetManager::ImportAsset(VFS::ResolveString(AssetManager::GetMetadata(h).VirtualPath));
+                                                    if (prop->TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop->TextureHandle))
+                                                        m_TextureGarbageBin.push_back(AssetManager::GetAsset<Texture2D>(prop->TextureHandle));
+                                                    prop->TextureHandle = h;
+                                                }
+                                            }
+                                            ImGui::EndDragDropTarget();
+                                        }
+                                        if (prop->TextureHandle != 0) {
+                                            ImGui::SameLine();
+                                            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + slot * 0.5f - 12.0f);
+                                            if (ImGui::Button("X##Remove")) {
+                                                if (AssetManager::IsAssetHandleValid(prop->TextureHandle))
+                                                    m_TextureGarbageBin.push_back(AssetManager::GetAsset<Texture2D>(prop->TextureHandle));
+                                                prop->TextureHandle = 0;
+                                            }
                                         }
                                     } else {
-                                        ImGui::Button("Null", textureSlotSize);
-                                    }
-
-                                    if (ImGui::BeginDragDropTarget()) {
-                                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                                            UUID droppedHandle = *(const UUID*)payload->Data;
-                                            auto meta = AssetManager::GetMetadata(droppedHandle);
-                                            if (droppedHandle != 0 && meta.Type == AssetType::Texture2D) {
-                                                // 确保纹理 UUID 持久化到注册表（防止 ContentBrowser 未刷新导致丢失）
-                                                if (!meta.VirtualPath.empty()) {
-                                                    AssetManager::ImportAsset(VFS::ResolveString(meta.VirtualPath));
-                                                }
-                                                if (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
-                                                    m_TextureGarbageBin.push_back(AssetManager::GetAsset<Texture2D>(prop.TextureHandle));
-                                                }
-                                                prop.TextureHandle = droppedHandle;
-                                            }
-                                        }
-                                        ImGui::EndDragDropTarget();
-                                    }
-
-                                    if (prop.TextureHandle != 0) {
-                                        ImGui::SameLine();
-                                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textureSlotSize.y * 0.5f - 12.0f);
-                                        if (ImGui::Button("X##Remove")) {
-                                            if (AssetManager::IsAssetHandleValid(prop.TextureHandle)) {
-                                                m_TextureGarbageBin.push_back(AssetManager::GetAsset<Texture2D>(prop.TextureHandle));
-                                            }
-                                            prop.TextureHandle = 0;
+                                        // Standard row: label + widget
+                                        UI::DrawPropertyLabel(prop->DisplayName.c_str());
+                                        switch (prop->Type) {
+                                            case MaterialPropertyType::Float: ImGui::SliderFloat("##v", &prop->FloatValue, 0.0f, 1.0f); break;
+                                            case MaterialPropertyType::Int:   ImGui::InputInt("##v", &prop->IntValue); break;
+                                            case MaterialPropertyType::Bool:  ImGui::Checkbox("##v", &prop->BoolValue); break;
+                                            case MaterialPropertyType::Vec2:  ImGui::DragFloat2("##v", glm::value_ptr(prop->Vec2Value), 0.05f); break;
+                                            case MaterialPropertyType::Vec3:  ImGui::ColorEdit3("##v", glm::value_ptr(prop->Vec3Value), ImGuiColorEditFlags_NoInputs); break;
+                                            case MaterialPropertyType::Vec4:  ImGui::ColorEdit4("##v", glm::value_ptr(prop->Vec4Value), ImGuiColorEditFlags_NoInputs); break;
+                                            default: break;
                                         }
                                     }
-                                    break;
+                                    ImGui::PopID();
                                 }
-                                default: break;
+                                ImGui::EndTable();
                             }
-
-                            ImGui::NextColumn();
                             ImGui::PopID();
                         }
 
-                        // Alpha Cutoff: only shown in Masked mode with an alpha texture assigned
+                        // Alpha Cutoff (Masked mode)
                         if (currentMat->GetBlendMode() == MaterialBlendMode::Masked && hasAlphaTex) {
-                            ImGui::Separator();
-                            float cutoff = currentMat->GetAlphaCutoff();
-                            ImGui::AlignTextToFramePadding();
-                            ImGui::Text("Alpha Cutoff");
-                            ImGui::NextColumn();
-                            ImGui::SetNextItemWidth(-1.0f);
-                            if (ImGui::SliderFloat("##AlphaCutoff", &cutoff, 0.0f, 1.0f, "%.3f")) {
-                                currentMat->SetAlphaCutoff(cutoff);
-                                for (auto e : m_SelectedEntities) {
-                                    auto& mrc = e.GetComponent<MeshRendererComponent>();
-                                    if (mrc.MaterialHandle != 0) {
-                                        auto mat = AssetManager::GetAsset<Material>(mrc.MaterialHandle);
-                                        if (mat) mat->SetAlphaCutoff(cutoff);
+                            ImGui::Spacing();
+                            ImGui::SeparatorText("Alpha");
+                            if (UI::BeginPropertyTable("AlphaTable", 100.0f, 0.8f)) {
+                                UI::DrawPropertyLabel("Cutoff");
+                                float cutoff = currentMat->GetAlphaCutoff();
+                                if (ImGui::SliderFloat("##AlphaCutoff", &cutoff, 0.0f, 1.0f, "%.3f")) {
+                                    currentMat->SetAlphaCutoff(cutoff);
+                                    for (auto e : m_SelectedEntities) {
+                                        auto& m = e.GetComponent<MeshRendererComponent>();
+                                        if (m.MaterialHandle != 0) {
+                                            auto mat = AssetManager::GetAsset<Material>(m.MaterialHandle);
+                                            if (mat) mat->SetAlphaCutoff(cutoff);
+                                        }
                                     }
                                 }
+                                ImGui::EndTable();
                             }
-                            ImGui::NextColumn();
                         }
 
-                        ImGui::Columns(1);
                         if (isBuiltIn)
                             ImGui::EndDisabled();
                     }
                     ImGui::Spacing();
-                    ImGui::Separator();
-                    ImGui::Spacing();
-                    
+                    UI::BeginPropertyTable("RendererSettingsTable", 100.0f, 0.8f);
+
+                    UI::DrawPropertyLabel("Cast Shadows");
                     bool castShadows = refMrc.CastShadows;
-                    if (ImGui::Checkbox("Cast Shadows", &castShadows)) {
+                    if (ImGui::Checkbox("##CastShadows", &castShadows)) {
                         std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
                         for (auto e : m_SelectedEntities) e.GetComponent<MeshRendererComponent>().CastShadows = castShadows;
                         commitInstantCommand("Toggle Cast Shadows", oldComps);
                     }
 
+                    UI::DrawPropertyLabel("Receive Shadows");
                     bool receiveShadows = refMrc.ReceiveShadows;
-                    if (ImGui::Checkbox("Receive Shadows", &receiveShadows)) {
+                    if (ImGui::Checkbox("##ReceiveShadows", &receiveShadows)) {
                         std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
                         for (auto e : m_SelectedEntities) e.GetComponent<MeshRendererComponent>().ReceiveShadows = receiveShadows;
                         commitInstantCommand("Toggle Receive Shadows", oldComps);
                     }
 
-                    ImGui::TreePop(); 
+                    ImGui::EndTable();
+                    ImGui::TreePop();
                 }
                 ImGui::TreePop();
             }
@@ -1551,20 +1475,10 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<PostProcessVolumeComponent>()) { allHavePPV = false; break; }
 
         if (allHavePPV) {
-            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.4f, 0.9f, 1.0f)); // 优雅的紫色以区分后期特效
-            bool opened = ImGui::TreeNodeEx((void*)typeid(PostProcessVolumeComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_MAGIC " Post Process Volume");
-            ImGui::PopStyleColor();
-            ImGui::PopFont();
-            
-            // 右键菜单支持移除组件
             bool removeComponent = false;
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) removeComponent = true;
-                ImGui::EndPopup();
-            }
-
-            if (opened) {
+            if (UI::DrawComponentHeader("Post Process Volume", ICON_FA_MAGIC " ",
+                                         ImVec4(0.7f, 0.4f, 0.9f, 1.0f),
+                                         (void*)"PostProcessVolumeComponent", true, &removeComponent)) {
                 auto& refPPV = referenceEntity.GetComponent<PostProcessVolumeComponent>();
 
                 // 动态名字生成器
@@ -1605,116 +1519,113 @@ namespace Ayaya {
                     }
                 };
 
-                // ------------------------------------------
-                // 1. 体积类型
-                // ------------------------------------------
+                UI::BeginPropertyTable("PPVProps", 100.0f, 0.8f);
+                UI::DrawPropertyLabel("Is Global");
                 bool isGlobal = refPPV.IsGlobal;
-                if (ImGui::Checkbox("Is Global", &isGlobal)) {
+                if (ImGui::Checkbox("##IsGlobal", &isGlobal)) {
                     std::vector<PostProcessVolumeComponent> oldComps = pureOldPPVs;
                     for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().IsGlobal = isGlobal;
                     commitInstantCommand("Toggle Is Global", oldComps);
                 }
-                if (!refPPV.IsGlobal) {
+                if (!refPPV.IsGlobal)
                     ImGui::TextDisabled("Local volumes (Bounding Box Blending) coming soon...");
-                }
+                ImGui::EndTable();
 
-                ImGui::Separator();
-                ImGui::Text("Tone Mapping & Exposure");
+                ImGui::Spacing();
+                ImGui::SeparatorText("Tone Mapping & Exposure");
 
-                // ------------------------------------------
-                // 2. 色调映射与曝光
-                // ------------------------------------------
+                UI::BeginPropertyTable("PPV_ToneMap", 100.0f, 0.8f);
+                UI::DrawPropertyLabel("Algorithm");
                 const char* tmTypes[] = { "None", "ACES (Filmic)", "Reinhard" };
                 int currentTmType = refPPV.ToneMappingType;
-                if (ImGui::Combo("Algorithm", &currentTmType, tmTypes, 3)) {
+                if (ImGui::Combo("##Algorithm", &currentTmType, tmTypes, 3)) {
                     std::vector<PostProcessVolumeComponent> oldComps = pureOldPPVs;
                     for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().ToneMappingType = currentTmType;
                     commitInstantCommand("Change Tone Mapping Type", oldComps);
                 }
-
+                UI::DrawPropertyLabel("Exposure Comp.");
                 float exposure = refPPV.Exposure;
-                if (ImGui::DragFloat("Exposure Comp.", &exposure, 0.05f, 0.0f, 10.0f, "%.2f")) {
+                if (ImGui::DragFloat("##Exposure", &exposure, 0.05f, 0.0f, 10.0f, "%.2f"))
                     for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().Exposure = exposure;
-                }
                 handleDragState("Change Exposure");
+                ImGui::EndTable();
 
-                ImGui::Separator();
-                ImGui::Text("Bloom (Dual-Filtering)");
+                ImGui::Spacing();
+                ImGui::SeparatorText("Bloom");
 
-                // ------------------------------------------
-                // 3. Bloom 参数组
-                // ------------------------------------------
+                UI::BeginPropertyTable("PPV_Bloom", 100.0f, 0.8f);
+                UI::DrawPropertyLabel("Enable Bloom");
                 bool enableBloom = refPPV.EnableBloom;
-                if (ImGui::Checkbox("Enable Bloom", &enableBloom)) {
+                if (ImGui::Checkbox("##EnableBloom", &enableBloom)) {
                     std::vector<PostProcessVolumeComponent> oldComps = pureOldPPVs;
                     for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().EnableBloom = enableBloom;
                     commitInstantCommand("Toggle Enable Bloom", oldComps);
                 }
-
                 if (refPPV.EnableBloom) {
-                    ImGui::Indent(10.0f * uiScale);
-
+                    UI::DrawPropertyLabel("  Threshold");
                     float threshold = refPPV.BloomThreshold;
-                    if (ImGui::DragFloat("Threshold", &threshold, 0.05f, 0.0f, 10.0f, "%.2f")) {
+                    if (ImGui::DragFloat("##BloomThresh", &threshold, 0.05f, 0.0f, 10.0f, "%.2f"))
                         for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().BloomThreshold = threshold;
-                    }
                     handleDragState("Change Bloom Threshold");
 
+                    UI::DrawPropertyLabel("  Soft Knee");
                     float knee = refPPV.BloomKnee;
-                    if (ImGui::DragFloat("Soft Knee", &knee, 0.01f, 0.0001f, 1.0f, "%.2f")) {
+                    if (ImGui::DragFloat("##BloomKnee", &knee, 0.01f, 0.0001f, 1.0f, "%.2f"))
                         for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().BloomKnee = knee;
-                    }
                     handleDragState("Change Bloom Knee");
 
+                    UI::DrawPropertyLabel("  Filter Radius");
                     float radius = refPPV.BloomRadius;
-                    if (ImGui::DragFloat("Filter Radius", &radius, 0.0005f, 0.001f, 0.02f, "%.4f")) {
+                    if (ImGui::DragFloat("##BloomRadius", &radius, 0.0005f, 0.001f, 0.02f, "%.4f"))
                         for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().BloomRadius = radius;
-                    }
                     handleDragState("Change Bloom Radius");
 
+                    UI::DrawPropertyLabel("  Intensity");
                     float intensity = refPPV.BloomIntensity;
-                    if (ImGui::DragFloat("Intensity", &intensity, 0.05f, 0.0f, 5.0f, "%.2f")) {
+                    if (ImGui::DragFloat("##BloomIntensity", &intensity, 0.05f, 0.0f, 5.0f, "%.2f"))
                         for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().BloomIntensity = intensity;
-                    }
                     handleDragState("Change Bloom Intensity");
-
-                    ImGui::Unindent(10.0f * uiScale);
                 }
+                ImGui::EndTable();
 
-                ImGui::Separator();
-                ImGui::Text("Anti-Aliasing");
+                ImGui::Spacing();
+                ImGui::SeparatorText("Anti-Aliasing");
 
-                // ------------------------------------------
-                // 4. FXAA
-                // ------------------------------------------
+                UI::BeginPropertyTable("PPV_AA", 100.0f, 0.8f);
+                UI::DrawPropertyLabel("Enable FXAA");
                 bool enableFXAA = refPPV.EnableFXAA;
-                if (ImGui::Checkbox("Enable FXAA", &enableFXAA)) {
+                if (ImGui::Checkbox("##EnableFXAA", &enableFXAA)) {
                     std::vector<PostProcessVolumeComponent> oldComps = pureOldPPVs;
                     for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().EnableFXAA = enableFXAA;
                     commitInstantCommand("Toggle Enable FXAA", oldComps);
                 }
+                ImGui::EndTable();
 
-                // ------------------------------------------
-                // 5. SSAO
-                // ------------------------------------------
+                ImGui::Spacing();
+                ImGui::SeparatorText("SSAO (Screen-Space Ambient Occlusion)");
+
+                UI::BeginPropertyTable("PPV_SSAO", 100.0f, 0.8f);
+                UI::DrawPropertyLabel("Enable SSAO");
                 bool enableSSAO = refPPV.EnableSSAO;
-                if (ImGui::Checkbox("Enable SSAO", &enableSSAO)) {
+                if (ImGui::Checkbox("##EnableSSAO", &enableSSAO)) {
                     std::vector<PostProcessVolumeComponent> oldComps = pureOldPPVs;
                     for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().EnableSSAO = enableSSAO;
                     commitInstantCommand("Toggle Enable SSAO", oldComps);
                 }
                 if (enableSSAO) {
+                    UI::DrawPropertyLabel("  Radius");
                     float ssaoRadius = refPPV.SSAORadius;
-                    if (ImGui::DragFloat("SSAO Radius", &ssaoRadius, 0.01f, 0.1f, 3.0f, "%.2f")) {
+                    if (ImGui::DragFloat("##SSAORadius", &ssaoRadius, 0.01f, 0.1f, 3.0f, "%.2f"))
                         for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().SSAORadius = ssaoRadius;
-                    }
                     handleDragState("Change SSAO Radius");
+
+                    UI::DrawPropertyLabel("  Bias");
                     float ssaoBias = refPPV.SSAOBias;
-                    if (ImGui::DragFloat("SSAO Bias", &ssaoBias, 0.001f, 0.001f, 0.2f, "%.3f")) {
+                    if (ImGui::DragFloat("##SSAOBias", &ssaoBias, 0.001f, 0.001f, 0.2f, "%.3f"))
                         for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().SSAOBias = ssaoBias;
-                    }
                     handleDragState("Change SSAO Bias");
                 }
+                ImGui::EndTable();
 
                 ImGui::TreePop();
             }
@@ -1735,19 +1646,10 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<LuaScriptComponent>()) { allHaveLuaScript = false; break; }
 
         if (allHaveLuaScript) {
-            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.2f, 0.5f, 1.0f)); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(LuaScriptComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_FILE_CODE " Lua Script");
-            ImGui::PopStyleColor();
-            ImGui::PopFont();
-            
             bool removeComponent = false;
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) removeComponent = true;
-                ImGui::EndPopup();
-            }
-
-            if (opened) {
+            if (UI::DrawComponentHeader("Lua Script", ICON_FA_FILE_CODE " ",
+                                         ImVec4(0.9f, 0.2f, 0.5f, 1.0f),
+                                         (void*)"LuaScriptComponent", true, &removeComponent)) {
                 auto& refLsc = referenceEntity.GetComponent<LuaScriptComponent>();
 
                 // 动态名字生成器
@@ -1771,17 +1673,13 @@ namespace Ayaya {
                     return "Script (ID: " + std::to_string((uint64_t)handle) + ")";
                 };
 
-                ImGui::Text("Script Source");
+                ImGui::TextDisabled("Script Source");
                 std::string pathDisplay = "Drop .lua file here";
-                if (refLsc.ScriptHandle != 0) {
+                if (refLsc.ScriptHandle != 0)
                     pathDisplay = ICON_FA_FILE_CODE " " + getScriptDisplayName(refLsc.ScriptHandle);
-                }
                 float btnH = ImGui::GetTextLineHeight() + ImGui::GetStyle().FramePadding.y * 2.0f + 4.0f;
                 ImGui::Button(pathDisplay.c_str(), ImVec2(-1.0f, btnH));
 
-                // ==========================================
-                // 交互 1：支持拖拽 .lua 文件绑定脚本 (极简 UUID 转换)
-                // ==========================================
                 if (ImGui::BeginDragDropTarget()) {
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                         UUID droppedHandle = *(const UUID*)payload->Data;
@@ -1790,16 +1688,13 @@ namespace Ayaya {
                             for (auto e : m_SelectedEntities) {
                                 ScriptEngine::ReleaseScriptEnv(e);
                                 e.GetComponent<LuaScriptComponent>().ScriptHandle = droppedHandle;
-                                // Immediately init + rebuild so default params take effect
                                 ScriptEngine::InitEditorScript(e, m_Context.get());
                                 ScriptEngine::TriggerRebuild(e, m_Context.get());
                             }
                             auto macroCmd = std::make_shared<MacroCommand>("Assign Lua Script to " + getTargetName());
-                            for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                            for (size_t i = 0; i < m_SelectedEntities.size(); ++i)
                                 macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<LuaScriptComponent>>(
-                                    m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<LuaScriptComponent>()
-                                ));
-                            }
+                                    m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<LuaScriptComponent>()));
                             EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                         }
                     }
@@ -1807,83 +1702,60 @@ namespace Ayaya {
                 }
 
                 ImGui::Spacing();
-                
-                // ==========================================
-                // 交互 2：一键移除脚本 (替代原本容易越界的字符串修改)
-                // ==========================================
+
                 if (refLsc.ScriptHandle != 0) {
                     if (ImGui::Button(ICON_FA_TRASH " Remove Script", ImVec2(-1.0f, btnH))) {
                         std::vector<LuaScriptComponent> oldComps = pureOldLscs;
-
-                        // Destroy all children (spawned by the script)
                         for (auto e : m_SelectedEntities) {
                             if (e.HasComponent<RelationshipComponent>()) {
                                 auto& rel = e.GetComponent<RelationshipComponent>();
-                                auto children = rel.Children;  // copy
-                                for (auto childID : children) {
+                                auto children = rel.Children;
+                                for (auto childID : children)
                                     if (m_Context->Reg().valid(childID))
                                         m_Context->DestroyEntity(Entity{childID, m_Context.get()});
-                                }
                                 rel.Children.clear();
                             }
                         }
-
-                        // Release Lua env + clear handle
                         for (auto e : m_SelectedEntities) {
                             ScriptEngine::ReleaseScriptEnv(e);
                             e.GetComponent<LuaScriptComponent>().ScriptHandle = 0;
                         }
-
-                        // 提交撤回指令
                         auto macroCmd = std::make_shared<MacroCommand>("Remove Lua Script from " + getTargetName());
-                        for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                        for (size_t i = 0; i < m_SelectedEntities.size(); ++i)
                             macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<LuaScriptComponent>>(
-                                m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<LuaScriptComponent>()
-                            ));
-                        }
+                                m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<LuaScriptComponent>()));
                         EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                     }
                 }
 
-                // ==========================================
-                // CONFIG parameters — auto-generated from Lua CONFIG table
-                // ==========================================
+                // Config parameters — property table layout
                 if (refLsc.ScriptHandle != 0) {
-                    // Ensure the Lua env is created for editor mode (idempotent)
                     ScriptEngine::InitEditorScript(referenceEntity, m_Context.get());
-
                     const auto& params = ScriptEngine::GetScriptParams(referenceEntity);
                     if (!params.empty()) {
                         ImGui::Spacing();
                         ImGui::Separator();
                         ImGui::TextDisabled("Script Parameters");
 
-                        float uiScale = ImGui::GetIO().FontGlobalScale;
-                        float avail = ImGui::GetContentRegionAvail().x;
-                        float labelW = 100.0f * uiScale;
-                        float valW = std::max(60.0f, avail - labelW - 12.0f);
-
+                        UI::BeginPropertyTable("LuaScriptParams");
                         for (const auto& p : params) {
                             ImGui::PushID(p.Name.c_str());
 
                             if (p.Type == "int") {
                                 int v = ScriptEngine::GetConfigInt(referenceEntity, p.Name, 0);
-                                ImGui::Text("%s", p.Label.c_str()); ImGui::SameLine(labelW);
-                                ImGui::SetNextItemWidth(valW);
+                                UI::DrawPropertyLabel(p.Label.c_str());
                                 if (ImGui::DragInt(("##" + p.Name).c_str(), &v, 1.0f, (int)p.Min, (int)p.Max))
                                     ScriptEngine::SetConfigInt(referenceEntity, p.Name, v);
                             }
                             else if (p.Type == "float") {
                                 float v = ScriptEngine::GetConfigFloat(referenceEntity, p.Name, 0.0f);
-                                ImGui::Text("%s", p.Label.c_str()); ImGui::SameLine(labelW);
-                                ImGui::SetNextItemWidth(valW);
+                                UI::DrawPropertyLabel(p.Label.c_str());
                                 if (ImGui::DragFloat(("##" + p.Name).c_str(), &v, 0.1f, p.Min, p.Max, "%.2f"))
                                     ScriptEngine::SetConfigFloat(referenceEntity, p.Name, v);
                             }
                             else if (p.Type == "combo") {
                                 int v = ScriptEngine::GetConfigInt(referenceEntity, p.Name, 0);
-                                ImGui::Text("%s", p.Label.c_str()); ImGui::SameLine(labelW);
-                                ImGui::SetNextItemWidth(valW);
+                                UI::DrawPropertyLabel(p.Label.c_str());
                                 std::vector<const char*> items;
                                 for (auto& opt : p.ComboOpts) items.push_back(opt.c_str());
                                 if (ImGui::Combo(("##" + p.Name).c_str(), &v, items.data(), (int)items.size()))
@@ -1897,14 +1769,12 @@ namespace Ayaya {
                                 if (handle != 0) {
                                     auto meta = AssetManager::GetMetadata(UUID(handle));
                                     btnLabel = meta.VirtualPath.empty()
-                                        ? ("Asset: " + std::to_string(handle))
-                                        : meta.VirtualPath;
+                                        ? ("Asset: " + std::to_string(handle)) : meta.VirtualPath;
                                     auto slash = btnLabel.find_last_of("/\\");
                                     if (slash != std::string::npos) btnLabel = btnLabel.substr(slash + 1);
                                 }
-                                ImGui::Text("%s", p.Label.c_str()); ImGui::SameLine(labelW);
-                                ImGui::Button(btnLabel.c_str(), ImVec2(valW, 0));
-
+                                UI::DrawPropertyLabel(p.Label.c_str());
+                                ImGui::Button(btnLabel.c_str(), ImVec2(-FLT_MIN, 0));
                                 if (ImGui::BeginDragDropTarget()) {
                                     if (const ImGuiPayload* pl = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                                         UUID dropped = *(const UUID*)pl->Data;
@@ -1917,12 +1787,14 @@ namespace Ayaya {
                             else if (p.Type == "bool") {
                                 int v = ScriptEngine::GetConfigInt(referenceEntity, p.Name, 0);
                                 bool bv = (v != 0);
-                                if (ImGui::Checkbox(p.Label.c_str(), &bv))
+                                UI::DrawPropertyLabel(p.Label.c_str());
+                                if (ImGui::Checkbox(("##" + p.Name).c_str(), &bv))
                                     ScriptEngine::SetConfigInt(referenceEntity, p.Name, bv ? 1 : 0);
                             }
 
                             ImGui::PopID();
                         }
+                        ImGui::EndTable();
                     }
                 }
 
@@ -1943,20 +1815,11 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<Rigidbody2DComponent>()) { allHaveRb2d = false; break; }
 
         if (allHaveRb2d) {
-            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.3f, 0.3f, 1.0f)); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(Rigidbody2DComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_BULLSEYE " Rigidbody 2D");
-            ImGui::PopStyleColor();
-            ImGui::PopFont();
-            
+            auto& refRb2d = referenceEntity.GetComponent<Rigidbody2DComponent>();
             bool removeComponent = false;
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) removeComponent = true;
-                ImGui::EndPopup();
-            }
-
-            if (opened) {
-                auto& refRb2d = referenceEntity.GetComponent<Rigidbody2DComponent>();
+            if (UI::DrawComponentHeader("Rigidbody 2D", ICON_FA_BULLSEYE " ",
+                                         ImVec4(0.9f, 0.3f, 0.3f, 1.0f),
+                                         (void*)"Rigidbody2DComponent", true, &removeComponent)) {
 
                 // 动态名字生成器
                 auto getTargetName = [&]() -> std::string {
@@ -1979,18 +1842,17 @@ namespace Ayaya {
                     EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
                 };
 
+                UI::BeginPropertyTable("Rb2dProps");
+                UI::DrawPropertyLabel("Body Type");
                 const char* bodyTypeStrings[] = { "Static", "Dynamic", "Kinematic" };
                 const char* currentBodyTypeString = bodyTypeStrings[(int)refRb2d.Type];
-                if (ImGui::BeginCombo("Body Type", currentBodyTypeString)) {
+                if (ImGui::BeginCombo("##BodyType", currentBodyTypeString)) {
                     for (int i = 0; i < 3; i++) {
                         bool isSelected = currentBodyTypeString == bodyTypeStrings[i];
                         if (ImGui::Selectable(bodyTypeStrings[i], isSelected)) {
                             std::vector<Rigidbody2DComponent> oldComps = pureOldRb2ds;
-                            
-                            for (auto e : m_SelectedEntities) {
+                            for (auto e : m_SelectedEntities)
                                 e.GetComponent<Rigidbody2DComponent>().Type = (Rigidbody2DComponent::BodyType)i;
-                            }
-                            
                             commitInstantCommand("Change Body Type", oldComps);
                         }
                         if (isSelected) ImGui::SetItemDefaultFocus();
@@ -1998,14 +1860,14 @@ namespace Ayaya {
                     ImGui::EndCombo();
                 }
 
+                UI::DrawPropertyLabel("Fixed Rotation");
                 bool fixedRotation = refRb2d.FixedRotation;
-                if (ImGui::Checkbox("Fixed Rotation", &fixedRotation)) {
+                if (ImGui::Checkbox("##FixedRotation", &fixedRotation)) {
                     std::vector<Rigidbody2DComponent> oldComps = pureOldRb2ds;
-                    
                     for (auto e : m_SelectedEntities) e.GetComponent<Rigidbody2DComponent>().FixedRotation = fixedRotation;
-                    
                     commitInstantCommand("Toggle Fixed Rotation", oldComps);
                 }
+                ImGui::EndTable();
 
                 ImGui::TreePop();
             }
@@ -2024,19 +1886,10 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<BoxCollider2DComponent>()) { allHaveBc2d = false; break; }
 
         if (allHaveBc2d) {
-            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]); 
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.9f, 0.3f, 1.0f)); 
-            bool opened = ImGui::TreeNodeEx((void*)typeid(BoxCollider2DComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_VECTOR_SQUARE " Box Collider 2D");
-            ImGui::PopStyleColor();
-            ImGui::PopFont();
-            
             bool removeComponent = false;
-            if (ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Component")) removeComponent = true;
-                ImGui::EndPopup();
-            }
-
-            if (opened) {
+            if (UI::DrawComponentHeader("Box Collider 2D", ICON_FA_VECTOR_SQUARE " ",
+                                         ImVec4(0.5f, 0.9f, 0.3f, 1.0f),
+                                         (void*)"BoxCollider2DComponent", true, &removeComponent)) {
                 auto& refBc2d = referenceEntity.GetComponent<BoxCollider2DComponent>();
 
                 // 动态名字生成器
@@ -2066,36 +1919,39 @@ namespace Ayaya {
                     }
                 };
 
+                UI::BeginPropertyTable("Bc2dProps");
                 glm::vec2 offset = refBc2d.Offset;
-                if (ImGui::DragFloat2("Offset", glm::value_ptr(offset), 0.05f)) {
+                UI::DrawPropertyLabel("Offset");
+                if (ImGui::DragFloat2("##Offset", glm::value_ptr(offset), 0.05f)) {
                     for (auto e : m_SelectedEntities) e.GetComponent<BoxCollider2DComponent>().Offset = offset;
                 }
                 handleDragState("Change BoxCollider2D Offset");
 
                 glm::vec2 size = refBc2d.Size;
-                if (ImGui::DragFloat2("Size", glm::value_ptr(size), 0.05f)) {
+                UI::DrawPropertyLabel("Size");
+                if (ImGui::DragFloat2("##Size", glm::value_ptr(size), 0.05f))
                     for (auto e : m_SelectedEntities) e.GetComponent<BoxCollider2DComponent>().Size = size;
-                }
                 handleDragState("Change BoxCollider2D Size");
 
                 float density = refBc2d.Density;
-                if (ImGui::DragFloat("Density", &density, 0.01f, 0.0f, 10.0f)) {
+                UI::DrawPropertyLabel("Density");
+                if (ImGui::DragFloat("##Density", &density, 0.01f, 0.0f, 10.0f))
                     for (auto e : m_SelectedEntities) e.GetComponent<BoxCollider2DComponent>().Density = density;
-                }
                 handleDragState("Change BoxCollider2D Density");
 
                 float friction = refBc2d.Friction;
-                if (ImGui::DragFloat("Friction", &friction, 0.01f, 0.0f, 1.0f)) {
+                UI::DrawPropertyLabel("Friction");
+                if (ImGui::DragFloat("##Friction", &friction, 0.01f, 0.0f, 1.0f))
                     for (auto e : m_SelectedEntities) e.GetComponent<BoxCollider2DComponent>().Friction = friction;
-                }
                 handleDragState("Change BoxCollider2D Friction");
 
                 float restitution = refBc2d.Restitution;
-                if (ImGui::DragFloat("Restitution (Bounciness)", &restitution, 0.01f, 0.0f, 1.0f)) {
+                UI::DrawPropertyLabel("Restitution");
+                if (ImGui::DragFloat("##Restitution", &restitution, 0.01f, 0.0f, 1.0f))
                     for (auto e : m_SelectedEntities) e.GetComponent<BoxCollider2DComponent>().Restitution = restitution;
-                }
                 handleDragState("Change BoxCollider2D Restitution");
 
+                ImGui::EndTable();
                 ImGui::TreePop();
             }
             if (removeComponent) {
@@ -2109,25 +1965,20 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<CanvasComponent>()) { allHave = false; break; }
         if (!allHave) return;
 
-        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.75f, 0.75f, 1.0f));
-        bool opened = ImGui::TreeNodeEx((void*)typeid(CanvasComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_DESKTOP " Canvas");
-        ImGui::PopStyleColor();
-        ImGui::PopFont();
-
         bool removeComponent = false;
-        if (ImGui::BeginPopupContextItem()) {
-            if (ImGui::MenuItem("Remove Component")) removeComponent = true;
-            ImGui::EndPopup();
-        }
-
-        if (opened) {
+        if (UI::DrawComponentHeader("Canvas", ICON_FA_DESKTOP " ",
+                                     ImVec4(0.2f, 0.75f, 0.75f, 1.0f),
+                                     (void*)"CanvasComponent", true, &removeComponent)) {
             auto& ref = referenceEntity.GetComponent<CanvasComponent>();
+            UI::BeginPropertyTable("CanvasProps");
+            UI::DrawPropertyLabel("Render Mode");
             const char* modes[] = { "Screen Overlay", "Screen Camera", "World Space" };
             int cur = (int)ref.Mode;
-            if (ImGui::Combo("Render Mode", &cur, modes, 3))
+            if (ImGui::Combo("##RenderMode", &cur, modes, 3))
                 ref.Mode = (CanvasComponent::RenderMode)cur;
-            ImGui::DragInt("Sort Order", &ref.SortOrder, 0.1f, -100, 100);
+            UI::DrawPropertyLabel("Sort Order");
+            ImGui::DragInt("##SortOrder", &ref.SortOrder, 0.1f, -100, 100);
+            ImGui::EndTable();
             ImGui::TreePop();
         }
         if (removeComponent) {
@@ -2140,37 +1991,28 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<RectTransformComponent>()) { allHave = false; break; }
         if (!allHave) return;
 
-        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.7f, 0.9f, 1.0f));
-        bool opened = ImGui::TreeNodeEx((void*)typeid(RectTransformComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_OBJECT_GROUP " Rect Transform");
-        ImGui::PopStyleColor();
-        ImGui::PopFont();
-
         bool removeComponent = false;
-        if (ImGui::BeginPopupContextItem()) {
-            if (ImGui::MenuItem("Remove Component")) removeComponent = true;
-            ImGui::EndPopup();
-        }
-
-        if (opened) {
+        if (UI::DrawComponentHeader("Rect Transform", ICON_FA_OBJECT_GROUP " ",
+                                     ImVec4(0.5f, 0.7f, 0.9f, 1.0f),
+                                     (void*)"RectTransformComponent", true, &removeComponent)) {
             auto& ref = referenceEntity.GetComponent<RectTransformComponent>();
-            // 窄面板下 DragFloat2 太宽，改用自带标签的控件，避免列布局遮挡
-            float fullW = ImGui::GetContentRegionAvail().x;
+            UI::BeginPropertyTable("RectTransformProps");
 
-            ImGui::SetNextItemWidth(fullW);
-            ImGui::DragFloat2("Anchor Min", glm::value_ptr(ref.AnchorMin), 0.01f, 0.0f, 1.0f);
-            ImGui::SetNextItemWidth(fullW);
-            ImGui::DragFloat2("Anchor Max", glm::value_ptr(ref.AnchorMax), 0.01f, 0.0f, 1.0f);
-            ImGui::SetNextItemWidth(fullW);
-            ImGui::DragFloat2("Pivot", glm::value_ptr(ref.Pivot), 0.01f, 0.0f, 1.0f);
-            ImGui::SetNextItemWidth(fullW);
-            ImGui::DragFloat2("Position", glm::value_ptr(ref.Position), 0.5f);
-            ImGui::SetNextItemWidth(fullW);
-            ImGui::DragFloat2("Size##RT", glm::value_ptr(ref.Size), 0.5f, 0.0f, 10000.0f);
-            ImGui::SetNextItemWidth(fullW);
-            ImGui::DragFloat("Rotation", &ref.Rotation, 0.5f);
-            ImGui::SetNextItemWidth(fullW);
-            ImGui::DragFloat2("Scale##RT", glm::value_ptr(ref.Scale), 0.01f, 0.01f, 100.0f);
+            UI::DrawPropertyLabel("Anchor Min");
+            ImGui::DragFloat2("##AnchorMin", glm::value_ptr(ref.AnchorMin), 0.01f, 0.0f, 1.0f);
+            UI::DrawPropertyLabel("Anchor Max");
+            ImGui::DragFloat2("##AnchorMax", glm::value_ptr(ref.AnchorMax), 0.01f, 0.0f, 1.0f);
+            UI::DrawPropertyLabel("Pivot");
+            ImGui::DragFloat2("##Pivot", glm::value_ptr(ref.Pivot), 0.01f, 0.0f, 1.0f);
+            UI::DrawPropertyLabel("Position");
+            ImGui::DragFloat2("##Position", glm::value_ptr(ref.Position), 0.5f);
+            UI::DrawPropertyLabel("Size");
+            ImGui::DragFloat2("##SizeRT", glm::value_ptr(ref.Size), 0.5f, 0.0f, 10000.0f);
+            UI::DrawPropertyLabel("Rotation");
+            ImGui::DragFloat("##Rotation", &ref.Rotation, 0.5f);
+            UI::DrawPropertyLabel("Scale");
+            ImGui::DragFloat2("##ScaleRT", glm::value_ptr(ref.Scale), 0.01f, 0.01f, 100.0f);
+            ImGui::EndTable();
             ImGui::TreePop();
         }
         if (removeComponent) {
@@ -2183,46 +2025,40 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<UIImageComponent>()) { allHave = false; break; }
         if (!allHave) return;
 
-        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.3f, 0.8f, 1.0f));
-        bool opened = ImGui::TreeNodeEx((void*)typeid(UIImageComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_IMAGE " UI Image");
-        ImGui::PopStyleColor();
-        ImGui::PopFont();
-
         bool removeComponent = false;
-        if (ImGui::BeginPopupContextItem()) {
-            if (ImGui::MenuItem("Remove Component")) removeComponent = true;
-            ImGui::EndPopup();
-        }
-
-        if (opened) {
+        if (UI::DrawComponentHeader("UI Image", ICON_FA_IMAGE " ",
+                                     ImVec4(0.8f, 0.3f, 0.8f, 1.0f),
+                                     (void*)"UIImageComponent", true, &removeComponent)) {
             auto& ref = referenceEntity.GetComponent<UIImageComponent>();
+            UI::BeginPropertyTable("UIImageProps");
             auto getName = [&]() -> std::string {
                 return m_SelectedEntities.size() == 1 ? referenceEntity.GetComponent<TagComponent>().Tag : std::to_string(m_SelectedEntities.size()) + " entities";
             };
 
-            ImGui::ColorEdit4("Color", glm::value_ptr(ref.Color));
+            UI::DrawPropertyLabel("Color");
+            ImGui::ColorEdit4("##Color", glm::value_ptr(ref.Color));
 
-            ImGui::Spacing();
-            ImGui::Text("Texture");
-
-            ImVec2 textureSlotSize = { 64.0f * uiScale, 64.0f * uiScale };
-
+            // Texture — taller row with label on left, image on right
+            ImVec2 texSlot = { 64.0f * uiScale, 64.0f * uiScale };
+            ImGui::TableNextRow(ImGuiTableRowFlags_None, texSlot.y);
+            ImGui::TableSetColumnIndex(0);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (texSlot.y - ImGui::GetTextLineHeight()) * 0.5f);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f,0.6f,0.6f,1.0f));
+            ImGui::TextUnformatted("Texture");
+            ImGui::PopStyleColor();
+            ImGui::TableSetColumnIndex(1);
             if (ref.TextureHandle != 0 && AssetManager::IsAssetHandleValid(ref.TextureHandle)) {
                 auto tex = AssetManager::GetAsset<Texture2D>(ref.TextureHandle);
                 if (tex && tex->GetImGuiTextureID() != nullptr) {
                     bool vk = (RendererAPI::GetAPI() == RendererAPI::API::Vulkan);
-                    ImVec2 uv0 = vk ? ImVec2(0, 0) : ImVec2(0, 1);
-                    ImVec2 uv1 = vk ? ImVec2(1, 1) : ImVec2(1, 0);
-                    ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), textureSlotSize, uv0, uv1);
+                    ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), texSlot, vk?ImVec2(0,0):ImVec2(0,1), vk?ImVec2(1,1):ImVec2(1,0));
                 } else {
-                    ImGui::Button("Loading...", textureSlotSize);
+                    ImGui::Button("Loading...", texSlot);
                 }
             } else {
-                ImGui::Button("Empty", textureSlotSize);
+                ImGui::Button("Empty", texSlot);
             }
 
-            // 拖放贴图
             if (ImGui::BeginDragDropTarget()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
                     UUID droppedHandle = *(const UUID*)payload->Data;
@@ -2247,7 +2083,7 @@ namespace Ayaya {
             // 移除贴图
             if (ref.TextureHandle != 0) {
                 ImGui::SameLine();
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textureSlotSize.y * 0.5f - 10.0f * uiScale);
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + texSlot.y * 0.5f - 10.0f * uiScale);
                 if (ImGui::Button("Remove")) {
                     std::vector<UIImageComponent> oldComps;
                     for (auto e : m_SelectedEntities) oldComps.push_back(e.GetComponent<UIImageComponent>());
@@ -2260,6 +2096,7 @@ namespace Ayaya {
                 }
             }
 
+            ImGui::EndTable();
             ImGui::TreePop();
         }
         if (removeComponent) {
@@ -2272,26 +2109,22 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<UITextComponent>()) { allHave = false; break; }
         if (!allHave) return;
 
-        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.6f, 0.2f, 1.0f));
-        bool opened = ImGui::TreeNodeEx((void*)typeid(UITextComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_FONT " UI Text");
-        ImGui::PopStyleColor();
-        ImGui::PopFont();
-
         bool removeComponent = false;
-        if (ImGui::BeginPopupContextItem()) {
-            if (ImGui::MenuItem("Remove Component")) removeComponent = true;
-            ImGui::EndPopup();
-        }
-
-        if (opened) {
+        if (UI::DrawComponentHeader("UI Text", ICON_FA_FONT " ",
+                                     ImVec4(0.9f, 0.6f, 0.2f, 1.0f),
+                                     (void*)"UITextComponent", true, &removeComponent)) {
             auto& ref = referenceEntity.GetComponent<UITextComponent>();
+            UI::BeginPropertyTable("UITextProps");
+            UI::DrawPropertyLabel("Text");
             char buf[256];
             strncpy(buf, ref.Text.c_str(), sizeof(buf)-1); buf[sizeof(buf)-1] = 0;
-            if (ImGui::InputText("Text", buf, sizeof(buf)))
+            if (ImGui::InputText("##Text", buf, sizeof(buf)))
                 ref.Text = buf;
-            ImGui::ColorEdit4("Color", glm::value_ptr(ref.Color));
-            ImGui::DragFloat("Font Size", &ref.FontSize, 0.5f, 6.0f, 256.0f);
+            UI::DrawPropertyLabel("Font Size");
+            ImGui::DragFloat("##FontSize", &ref.FontSize, 0.5f, 6.0f, 256.0f);
+            UI::DrawPropertyLabel("Color");
+            ImGui::ColorEdit4("##Color", glm::value_ptr(ref.Color));
+            ImGui::EndTable();
             ImGui::TreePop();
         }
         if (removeComponent) {
@@ -2304,30 +2137,27 @@ namespace Ayaya {
         for (auto e : m_SelectedEntities) if (!e.HasComponent<UIButtonComponent>()) { allHave = false; break; }
         if (!allHave) return;
 
-        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
-        bool opened = ImGui::TreeNodeEx((void*)typeid(UIButtonComponent).hash_code(), ImGuiTreeNodeFlags_DefaultOpen, ICON_FA_HAND_POINTER " UI Button");
-        ImGui::PopStyleColor();
-        ImGui::PopFont();
-
         bool removeComponent = false;
-        if (ImGui::BeginPopupContextItem()) {
-            if (ImGui::MenuItem("Remove Component")) removeComponent = true;
-            ImGui::EndPopup();
-        }
-
-        if (opened) {
+        if (UI::DrawComponentHeader("UI Button", ICON_FA_HAND_POINTER " ",
+                                     ImVec4(0.3f, 0.9f, 0.3f, 1.0f),
+                                     (void*)"UIButtonComponent", true, &removeComponent)) {
             auto& ref = referenceEntity.GetComponent<UIButtonComponent>();
+            UI::BeginPropertyTable("UIButtonProps");
             const char* states[] = { "Normal", "Hover", "Pressed", "Disabled" };
             int cur = (int)ref.CurrentState;
             ImGui::Combo("State", &cur, states, 4);
-            ImGui::ColorEdit4("Normal Color", glm::value_ptr(ref.NormalColor));
-            ImGui::ColorEdit4("Hover Color", glm::value_ptr(ref.HoverColor));
-            ImGui::ColorEdit4("Pressed Color", glm::value_ptr(ref.PressedColor));
+            UI::DrawPropertyLabel("Normal Color");
+            ImGui::ColorEdit4("##NormalColor", glm::value_ptr(ref.NormalColor));
+            UI::DrawPropertyLabel("Hover Color");
+            ImGui::ColorEdit4("##HoverColor", glm::value_ptr(ref.HoverColor));
+            UI::DrawPropertyLabel("Pressed Color");
+            ImGui::ColorEdit4("##PressedColor", glm::value_ptr(ref.PressedColor));
             char buf[128];
             strncpy(buf, ref.OnClickCallback.c_str(), sizeof(buf)-1); buf[sizeof(buf)-1] = 0;
-            if (ImGui::InputText("OnClick", buf, sizeof(buf)))
+            if (UI::DrawPropertyLabel("OnClick");
+            ImGui::InputText("##OnClick", buf, sizeof(buf)))
                 ref.OnClickCallback = buf;
+            ImGui::EndTable();
             ImGui::TreePop();
         }
         if (removeComponent) {
@@ -2344,13 +2174,10 @@ namespace Ayaya {
         float uiScale = ImGui::GetIO().FontGlobalScale;
         auto& component = referenceEntity.GetComponent<AnimationControllerComponent>();
 
-        ImGuiTreeNodeFlags headerFlags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
-        ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.9f, 0.8f, 1.0f));
-        bool treeOpen = ImGui::CollapsingHeader(ICON_FA_FILM " Animation Controller", headerFlags);
-        ImGui::PopStyleColor();
-        ImGui::PopFont();
-        if (!treeOpen) return;
+        if (!UI::DrawComponentHeader("Animation Controller", ICON_FA_FILM " ",
+                                      ImVec4(0.3f, 0.9f, 0.8f, 1.0f),
+                                      (void*)"AnimationControllerComponent", true))
+            return;
 
         // ---- IsPlaying (works across multi-select) ----
         if (ImGui::Checkbox("Is Playing", &component.IsPlaying))
@@ -2387,14 +2214,17 @@ namespace Ayaya {
             ImGui::PushID(i);
 
             ImGui::Text("Track %d", i);
-            ImGui::SameLine(ImGui::GetContentRegionAvail().x - 20.0f * uiScale);
+            ImGui::SameLine(ImGui::GetContentRegionMax().x - 22.0f);
             if (ImGui::SmallButton("X")) {
                 trackToRemove = i;
                 ImGui::PopID();
-                break; // erase after loop
+                break;
             }
 
-            // ---- Curve Asset drag-drop ----
+            UI::BeginPropertyTable("AnimTrackProps", 80.0f, 1.8f);
+
+            // Curve Asset
+            UI::DrawPropertyLabel("Curve");
             std::string assetLabel = "Drop .curve here";
             if (track.CurveHandle != 0) {
                 AssetMetadata meta = AssetManager::GetMetadata(track.CurveHandle);
@@ -2406,15 +2236,12 @@ namespace Ayaya {
                     assetLabel = "Curve Assigned";
                 }
             }
-            ImGui::Text("Curve"); ImGui::SameLine(60.0f * uiScale);
-            ImGui::Button(assetLabel.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0.0f));
-
+            ImGui::Button(assetLabel.c_str(), ImVec2(-FLT_MIN, 0));
             if (ImGui::BeginDragDropTarget()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                    UUID droppedHandle = *(const UUID*)payload->Data;
-                    auto meta = AssetManager::GetMetadata(droppedHandle);
-                    if (droppedHandle != 0 && meta.Type == AssetType::Curve) {
-                        track.CurveHandle = droppedHandle;
+                if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    UUID h = *(const UUID*)p->Data;
+                    if (h != 0 && AssetManager::GetMetadata(h).Type == AssetType::Curve) {
+                        track.CurveHandle = h;
                         auto cmd = std::make_shared<ChangeComponentCommand<AnimationControllerComponent>>(
                             referenceEntity, oldComp, referenceEntity.GetComponent<AnimationControllerComponent>());
                         EditorLayer::Get().GetCommandHistory().AddCommand(cmd);
@@ -2424,9 +2251,9 @@ namespace Ayaya {
                 ImGui::EndDragDropTarget();
             }
 
-            // ---- TargetProperty combo ----
+            UI::DrawPropertyLabel("Target");
             int currentProp = static_cast<int>(track.Property);
-            if (ImGui::Combo("Target", &currentProp, s_TargetPropertyStrings, s_TargetPropertyCount)) {
+            if (ImGui::Combo("##Target", &currentProp, s_TargetPropertyStrings, s_TargetPropertyCount)) {
                 track.Property = static_cast<TargetProperty>(currentProp);
                 auto cmd = std::make_shared<ChangeComponentCommand<AnimationControllerComponent>>(
                     referenceEntity, oldComp, referenceEntity.GetComponent<AnimationControllerComponent>());
@@ -2434,13 +2261,13 @@ namespace Ayaya {
                 oldComp = referenceEntity.GetComponent<AnimationControllerComponent>();
             }
 
-            // ---- TimeOffset drag ----
+            UI::DrawPropertyLabel("Time Offset");
             float timeOff = track.TimeOffset;
-            if (ImGui::DragFloat("Time Offset", &timeOff, 0.05f, 0.0f, 0.0f, "%.2f s")) {
+            if (ImGui::DragFloat("##TimeOffset", &timeOff, 0.05f, 0.0f, 0.0f, "%.2f s"))
                 track.TimeOffset = timeOff;
-            }
             handleDragState("Change Track TimeOffset");
 
+            ImGui::EndTable();
             ImGui::Separator();
             ImGui::PopID();
         }
@@ -2460,6 +2287,8 @@ namespace Ayaya {
                 referenceEntity, oldComp, referenceEntity.GetComponent<AnimationControllerComponent>());
             EditorLayer::Get().GetCommandHistory().AddCommand(cmd);
         }
+
+        ImGui::TreePop();
     }
 
     void PropertiesPanel::DrawAddComponentButton(Entity referenceEntity, float uiScale) {
@@ -2472,13 +2301,15 @@ namespace Ayaya {
 
         // 动态计算按钮大小
         float addBtnWidth = 150.0f * uiScale;
-        float addBtnHeight = 30.0f * uiScale; 
-        
-        float minX = ImGui::GetWindowContentRegionMin().x;
-        float maxX = ImGui::GetWindowContentRegionMax().x;
-        float trueContentWidth = maxX - minX;
-        
-        ImGui::SetCursorPosX(minX + (trueContentWidth - addBtnWidth) * 0.5f);
+        float addBtnHeight = 30.0f * uiScale;
+
+        // GetContentRegionMax accounts for scrollbar presence dynamically
+        float usableW = ImGui::GetContentRegionMax().x
+                      - ImGui::GetStyle().WindowPadding.x;
+        float btnX = ImGui::GetStyle().WindowPadding.x
+                   + (usableW - addBtnWidth) * 0.5f;
+
+        ImGui::SetCursorPosX(btnX);
         
         if (ImGui::Button("Add Component", ImVec2(addBtnWidth, addBtnHeight))) {
             ImGui::OpenPopup("AddComponentPopup");

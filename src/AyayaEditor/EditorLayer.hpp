@@ -135,7 +135,7 @@ namespace Ayaya {
         glm::vec2 m_InitialMousePos = { 0.0f, 0.0f }; 
 
         int m_GizmoType = -1;
-        bool m_ShowCameraSpeedPopup = false;
+        bool m_ShowViewportCameraSpeed = false;
 
         bool  m_ShowCurveEditor = false;
         bool  m_ShowContentDrawer = false;
@@ -153,7 +153,7 @@ namespace Ayaya {
         bool m_ShowCameraGizmos = true;
         bool m_ShowLightGizmos = true;
         bool m_ShowUIGizmos = true;
-        bool m_ShowGizmosOverlay = false;
+        bool m_ShowViewportGizmos = false;
         bool m_ShowViewportOptions = false;
         bool m_ShowViewportStats = false;
         float m_CameraSpeed = 5.0f;
@@ -170,7 +170,7 @@ namespace Ayaya {
 
         // 统计
         SceneRenderer::Statistics m_GameStats;
-        bool m_ShowStatsPanel = false;
+        bool m_ShowGameStats = false;
 
         // 进度条加载系统
         std::string m_ProjectToLoad = "";

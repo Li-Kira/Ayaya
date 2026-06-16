@@ -1,0 +1,254 @@
+Scene: Untitled
+EditorState:
+  ShowGrid: true
+  ShowSkybox: true
+  CameraPosition: [-5.1704745, 3.7611105, 7.6889687]
+  CameraDistance: 10
+  CameraPitch: -0.3855956
+  CameraYaw: -0.5919982
+  CameraFocalPoint: [0, 0, 0]
+Entities:
+  - Entity: 16737923487123981289
+    TagComponent:
+      Tag: Main Camera
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 5]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    CameraComponent:
+      Primary: true
+      FixedAspectRatio: false
+      EV100: 14.5
+      ClearFlag: 0
+      BackgroundColor: [0.016, 0.016, 0.02, 1]
+      Camera:
+        ProjectionType: 0
+        PerspectiveFOV: 0.7853982
+        PerspectiveNear: 0.01
+        PerspectiveFar: 1000
+        OrthographicSize: 5
+        OrthographicNear: -1
+        OrthographicFar: 1000
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 6545522898058945471
+    TagComponent:
+      Tag: Skybox
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    EnvironmentComponent:
+      Type: 1
+      Intensity: 30000
+      AmbientColor: [0, 0, 0]
+      EquirectangularHandle: 16140901000000000005
+      CubemapHandle: 0
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 5356174921667686969
+    TagComponent:
+      Tag: Directional Light
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [-0.7853982, 0.7853982, 0]
+      Scale: [1, 1, 1]
+    DirectionalLightComponent:
+      Color: [1, 1, 1]
+      Illuminance: 100000
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 14118077834835412320
+    TagComponent:
+      Tag: Point Light
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    PointLightComponent:
+      Color: [1, 1, 1]
+      LuminousPower: 1500
+      Radius: 10
+      Falloff: 1
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 8220621443673471597
+    TagComponent:
+      Tag: Cube1234
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000001
+      MaterialHandle: 16140901000000000004
+      CastShadows: true
+      ReceiveShadows: true
+    AnimationControllerComponent:
+      IsPlaying: true
+      Tracks:
+        - CurveHandle: 0
+          Property: Transform_PositionX
+          TimeOffset: 0
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 17007503190867892537
+    TagComponent:
+      Tag: Post Process Volume
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    PostProcessVolumeComponent:
+      IsGlobal: true
+      ToneMappingType: 0
+      Exposure: 1
+      EnableBloom: true
+      BloomThreshold: 1
+      BloomKnee: 0.1
+      BloomRadius: 0.005
+      BloomIntensity: 1
+      EnableFXAA: false
+      EnableSSAO: true
+      SSAORadius: 0.5
+      SSAOBias: 0.025
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 17423239560730373153
+    TagComponent:
+      Tag: Canvas
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    RectTransformComponent:
+      AnchorMin: [0, 0]
+      AnchorMax: [1, 1]
+      Pivot: [0.5, 0.5]
+      Position: [0, 0]
+      Size: [0, 0]
+      Rotation: 0
+      Scale: [1, 1]
+    CanvasComponent:
+      Mode: 0
+      SortOrder: 0
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 13695377885736680238
+    TagComponent:
+      Tag: Image
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    RectTransformComponent:
+      AnchorMin: [0.5, 0.5]
+      AnchorMax: [0.5, 0.5]
+      Pivot: [0.5, 0.5]
+      Position: [0, 0]
+      Size: [128, 128]
+      Rotation: 0
+      Scale: [1, 1]
+    UIImageComponent:
+      Color: [1, 1, 1, 1]
+      TextureHandle: 0
+    RelationshipComponent:
+      Parent: 17423239560730373153
+  - Entity: 11743465530322832980
+    TagComponent:
+      Tag: Text
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    RectTransformComponent:
+      AnchorMin: [0.5, 0.5]
+      AnchorMax: [0.5, 0.5]
+      Pivot: [0.5, 0.5]
+      Position: [0, 0]
+      Size: [256, 32]
+      Rotation: 0
+      Scale: [1, 1]
+    UITextComponent:
+      Text: ""
+      FontHandle: 0
+      Color: [1, 1, 1, 1]
+      FontSize: 16
+    RelationshipComponent:
+      Parent: 17423239560730373153
+  - Entity: 1787829957702724088
+    TagComponent:
+      Tag: Button
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    RectTransformComponent:
+      AnchorMin: [0.5, 0.5]
+      AnchorMax: [0.5, 0.5]
+      Pivot: [0.5, 0.5]
+      Position: [0, 0]
+      Size: [160, 48]
+      Rotation: 0
+      Scale: [1, 1]
+    UIImageComponent:
+      Color: [1, 1, 1, 1]
+      TextureHandle: 0
+    UIButtonComponent:
+      NormalColor: [1, 1, 1, 1]
+      HoverColor: [0.8, 0.8, 0.8, 1]
+      PressedColor: [0.6, 0.6, 0.6, 1]
+      OnClickCallback: ""
+    RelationshipComponent:
+      Parent: 17423239560730373153
+  - Entity: 9344890312591043758
+    TagComponent:
+      Tag: Empty Entity
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    AnimationControllerComponent:
+      IsPlaying: true
+      Tracks:
+        - CurveHandle: 0
+          Property: Transform_PositionX
+          TimeOffset: 0
+    Rigidbody2DComponent:
+      BodyType: 0
+      FixedRotation: false
+    BoxCollider2DComponent:
+      Offset: [0, 0]
+      Size: [0.5, 0.5]
+      Density: 1
+      Friction: 0.5
+      Restitution: 0
+      RestitutionThreshold: 0.5
+    LuaScriptComponent:
+      ScriptHandle: 0
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 337491284374050775
+    TagComponent:
+      Tag: Plane
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    SpriteRendererComponent:
+      Color: [1, 1, 1, 1]
+      TextureHandle: 0
+    RelationshipComponent:
+      Parent: 0
