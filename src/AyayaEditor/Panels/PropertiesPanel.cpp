@@ -65,7 +65,7 @@ namespace Ayaya {
         ImGui::Begin("Properties");
 
         // ==========================================
-        // UE5-style Inspector Toolbar
+        // Inspector Toolbar
         // ==========================================
         {
             float uiScale = ImGui::GetIO().FontGlobalScale;
@@ -940,7 +940,7 @@ namespace Ayaya {
                             ImGui::EndDragDropTarget();
                         }
 
-                        if (ImGui::BeginPopup("EnvEquirectPopup")) {
+                                                if (ImGui::BeginPopup("EnvEquirectPopup")) {
                             ImGui::TextDisabled("Built-in HDR");
                             ImGui::Separator();
                             if (ImGui::MenuItem("Newport Loft")) {
@@ -966,7 +966,7 @@ namespace Ayaya {
                             }
                             ImGui::EndPopup();
                         }
-                    } 
+                                            }
                     // ------------------------------------------
                     // 4. 传统 6 面体贴图 (统一为单一资产 UUID 拖拽)
                     // ------------------------------------------
@@ -1011,7 +1011,7 @@ namespace Ayaya {
                             ImGui::EndDragDropTarget();
                         }
 
-                        if (ImGui::BeginPopup("EnvCubemapPopup")) {
+                                                if (ImGui::BeginPopup("EnvCubemapPopup")) {
                             ImGui::TextDisabled("Built-in Skybox");
                             ImGui::Separator();
                             if (ImGui::MenuItem("Skybox 01")) {
@@ -1037,7 +1037,7 @@ namespace Ayaya {
                             ImGui::EndPopup();
                         }
                     }
-                }
+                                    }
 
                 UI::DrawPropertyLabel("Ambient Color");
                 glm::vec3 ambientColor = refEnv.AmbientColor;
@@ -2154,8 +2154,8 @@ namespace Ayaya {
             ImGui::ColorEdit4("##PressedColor", glm::value_ptr(ref.PressedColor));
             char buf[128];
             strncpy(buf, ref.OnClickCallback.c_str(), sizeof(buf)-1); buf[sizeof(buf)-1] = 0;
-            if (UI::DrawPropertyLabel("OnClick");
-            ImGui::InputText("##OnClick", buf, sizeof(buf)))
+            UI::DrawPropertyLabel("OnClick");
+            if (ImGui::InputText("##OnClick", buf, sizeof(buf)))
                 ref.OnClickCallback = buf;
             ImGui::EndTable();
             ImGui::TreePop();

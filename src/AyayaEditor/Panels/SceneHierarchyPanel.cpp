@@ -54,38 +54,41 @@ namespace Ayaya {
                 ClearSelection();
             }
 
+            UI::PushPopupStyles(280.0f);
             if (ImGui::BeginPopupContextItem("HierarchySpacePopup")) {
-                if (ImGui::MenuItem("Create Empty Entity")) {
+                UI::DrawMenuHeader("Create Entity");
+
+                if (UI::DrawNativeMenuItem("Create Empty Entity", ICON_FA_PLUS)) {
                     Entity newEntity = m_Context->CreateEntity("Empty Entity");
                     SetSelectedEntity(newEntity);
                 }
 
-                if (ImGui::BeginMenu("3D Object")) {
-                    if (ImGui::MenuItem("Cube")) {
+                if (UI::BeginNativeMenu("3D Object", ICON_FA_CUBE)) {
+                    if (UI::DrawNativeMenuItem("Cube",   ICON_FA_CUBE)) {
                         Entity entity = m_Context->CreateEntity("Cube");
                         auto& mrc = entity.AddComponent<MeshRendererComponent>();
                         mrc.ModelHandle = AssetManager::GetBuiltInCube();
                         mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
                         SetSelectedEntity(entity);
                     }
-                    if (ImGui::MenuItem("Sphere")) {
+                    if (UI::DrawNativeMenuItem("Sphere", ICON_FA_CIRCLE)) {
                         Entity entity = m_Context->CreateEntity("Sphere");
                         auto& mrc = entity.AddComponent<MeshRendererComponent>();
                         mrc.ModelHandle = AssetManager::GetBuiltInSphere();
                         mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
                         SetSelectedEntity(entity);
                     }
-                    if (ImGui::MenuItem("Plane")) {
+                    if (UI::DrawNativeMenuItem("Plane",  ICON_FA_SQUARE)) {
                         Entity entity = m_Context->CreateEntity("Plane");
                         auto& mrc = entity.AddComponent<MeshRendererComponent>();
                         mrc.ModelHandle = AssetManager::GetBuiltInPlane();
                         mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
                         SetSelectedEntity(entity);
                     }
-                    ImGui::EndMenu();
+                    UI::EndNativeMenu();
                 }
 
-                if (ImGui::MenuItem("Create Skybox")) {
+                if (UI::DrawNativeMenuItem("Create Skybox", ICON_FA_CLOUD_SUN)) {
                     Entity skyEntity = m_Context->CreateEntity("Skybox");
                     auto& envComp = skyEntity.AddComponent<EnvironmentComponent>();
                     envComp.Type = EnvironmentType::None;
@@ -95,24 +98,24 @@ namespace Ayaya {
                     m_SelectedEntities.push_back(skyEntity);
                 }
 
-                if (ImGui::BeginMenu("Light")) {
-                    if (ImGui::MenuItem("Directional Light")) {
+                if (UI::BeginNativeMenu("Light", ICON_FA_LIGHTBULB)) {
+                    if (UI::DrawNativeMenuItem("Directional Light", ICON_FA_SUN)) {
                         Entity entity = m_Context->CreateEntity("Directional Light");
                         auto& lightTransform = entity.GetComponent<TransformComponent>();
                         lightTransform.Rotation = glm::radians(glm::vec3(-45.0f, 45.0f, 0.0f));
                         entity.AddComponent<DirectionalLightComponent>();
                         SetSelectedEntity(entity);
                     }
-                    if (ImGui::MenuItem("Point Light")) {
+                    if (UI::DrawNativeMenuItem("Point Light", ICON_FA_LIGHTBULB)) {
                         Entity entity = m_Context->CreateEntity("Point Light");
                         entity.AddComponent<PointLightComponent>();
                         entity.GetComponent<PointLightComponent>().LuminousPower = 1500.0f;
                         SetSelectedEntity(entity);
                     }
-                    ImGui::EndMenu();
+                    UI::EndNativeMenu();
                 }
 
-                if (ImGui::MenuItem("Camera")) {
+                if (UI::DrawNativeMenuItem("Camera", ICON_FA_VIDEO)) {
                     Entity entity = m_Context->CreateEntity("Camera");
                     auto& cc = entity.AddComponent<CameraComponent>();
                     cc.Camera.SetProjectionType(SceneCamera::ProjectionType::Perspective);
@@ -120,14 +123,13 @@ namespace Ayaya {
                     SetSelectedEntity(entity);
                 }
 
-                if (ImGui::MenuItem("Post Process Volume")) {
+                if (UI::DrawNativeMenuItem("Post Process Volume", ICON_FA_MAGIC)) {
                     Entity ppvEntity = m_Context->CreateEntity("Post Process Volume");
                     ppvEntity.AddComponent<PostProcessVolumeComponent>();
                     SetSelectedEntity(ppvEntity);
                 }
 
-                if (ImGui::BeginMenu("UI")) {
-                    // Helper: find or create the default Canvas (fills screen)
+                if (UI::BeginNativeMenu("UI", ICON_FA_OBJECT_GROUP)) {
                     auto getOrCreateCanvas = [&]() -> Entity {
                         auto view = m_Context->Reg().view<CanvasComponent>();
                         if (view.begin() != view.end())
@@ -141,40 +143,16 @@ namespace Ayaya {
                         return canvas;
                     };
 
-                    if (ImGui::MenuItem("Canvas")) {
-                        Entity entity = getOrCreateCanvas();
-                        SetSelectedEntity(entity);
-                    }
-                    if (ImGui::MenuItem("UI Image")) {
-                        Entity entity = m_Context->CreateEntity("Image");
-                        auto& rt = entity.AddComponent<RectTransformComponent>();
-                        rt.Size = { 128.0f, 128.0f };
-                        entity.AddComponent<UIImageComponent>();
-                        entity.SetParent(getOrCreateCanvas());
-                        SetSelectedEntity(entity);
-                    }
-                    if (ImGui::MenuItem("UI Text")) {
-                        Entity entity = m_Context->CreateEntity("Text");
-                        auto& rt = entity.AddComponent<RectTransformComponent>();
-                        rt.Size = { 256.0f, 32.0f };
-                        entity.AddComponent<UITextComponent>();
-                        entity.SetParent(getOrCreateCanvas());
-                        SetSelectedEntity(entity);
-                    }
-                    if (ImGui::MenuItem("UI Button")) {
-                        Entity entity = m_Context->CreateEntity("Button");
-                        auto& rt = entity.AddComponent<RectTransformComponent>();
-                        rt.Size = { 160.0f, 48.0f };
-                        entity.AddComponent<UIImageComponent>();
-                        entity.AddComponent<UIButtonComponent>();
-                        entity.SetParent(getOrCreateCanvas());
-                        SetSelectedEntity(entity);
-                    }
-                    ImGui::EndMenu();
+                    if (UI::DrawNativeMenuItem("Canvas",    ICON_FA_DESKTOP))       { Entity entity = getOrCreateCanvas(); SetSelectedEntity(entity); }
+                    if (UI::DrawNativeMenuItem("UI Image",  ICON_FA_IMAGE))         { Entity entity = m_Context->CreateEntity("Image");  auto& rt = entity.AddComponent<RectTransformComponent>(); rt.Size = { 128.0f, 128.0f }; entity.AddComponent<UIImageComponent>();   entity.SetParent(getOrCreateCanvas()); SetSelectedEntity(entity); }
+                    if (UI::DrawNativeMenuItem("UI Text",   ICON_FA_FONT))          { Entity entity = m_Context->CreateEntity("Text");   auto& rt = entity.AddComponent<RectTransformComponent>(); rt.Size = { 256.0f, 32.0f };  entity.AddComponent<UITextComponent>();   entity.SetParent(getOrCreateCanvas()); SetSelectedEntity(entity); }
+                    if (UI::DrawNativeMenuItem("UI Button", ICON_FA_HAND_POINTER))  { Entity entity = m_Context->CreateEntity("Button"); auto& rt = entity.AddComponent<RectTransformComponent>(); rt.Size = { 160.0f, 48.0f };  entity.AddComponent<UIImageComponent>(); entity.AddComponent<UIButtonComponent>(); entity.SetParent(getOrCreateCanvas()); SetSelectedEntity(entity); }
+                    UI::EndNativeMenu();
                 }
 
                 ImGui::EndPopup();
             }
+            UI::PopPopupStyles();
 
             if (ImGui::BeginDragDropTarget()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_PAYLOAD")) {
@@ -438,59 +416,50 @@ namespace Ayaya {
             ImGui::EndDragDropTarget();
         }
 
+                UI::PushPopupStyles();
         if (ImGui::BeginPopupContextItem()) {
-            if (ImGui::MenuItem("Duplicate Entity")) {
+            if (UI::DrawNativeMenuItem("Duplicate Entity", nullptr, "Ctrl+D")) {
                 if (IsEntitySelected(entity)) m_EntitiesToDuplicate = m_SelectedEntities;
                 else m_EntitiesToDuplicate.push_back(entity);
             }
-            if (ImGui::MenuItem("Delete Entity")) {
+            if (UI::DrawNativeMenuItem("Delete Entity", nullptr, "Del")) {
                 if (IsEntitySelected(entity)) m_EntitiesToDestroy = m_SelectedEntities;
                 else m_EntitiesToDestroy.push_back(entity);
             }
-            if (ImGui::MenuItem("Unparent")) {
+            if (UI::DrawNativeMenuItem("Unparent")) {
                 if (IsEntitySelected(entity)) m_EntitiesToUnparent = m_SelectedEntities;
                 else m_EntitiesToUnparent.push_back(entity);
             }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Create Prefab")) {
+            UI::MenuSeparator();
+            if (UI::DrawNativeMenuItem("Create Prefab")) {
                 Entity target = IsEntitySelected(entity) ? *m_SelectedEntities.begin() : entity;
                 m_PrefabEntity = target;
             }
             ImGui::EndPopup();
         }
+        UI::PopPopupStyles();
 
-        if (!activeInHierarchy) {
-            ImGui::PopStyleColor();
-        }
-
+        // Visibility toggle (eye icon)
         float uiScaleBtn = ImGui::GetIO().FontGlobalScale;
-
         ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 24.0f * uiScaleBtn);
         ImGui::SetCursorPosY(cursorY);
-
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0, 0, 0, 0));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.3f, 0.3f, 0.5f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.2f, 0.2f, 0.2f, 0.5f));
-
-        std::string eyeIcon = tagComp.IsActive ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
-
-        if (!activeInHierarchy) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
-        }
-
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.2f, 0.2f, 0.2f, 0.5f));
+        if (!activeInHierarchy) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
         ImGui::PushID((uint32_t)entity);
-        if (ImGui::Button(eyeIcon.c_str(), ImVec2(24.0f * uiScaleBtn, ImGui::GetTextLineHeight()))) {
+        if (ImGui::Button(tagComp.IsActive ? ICON_FA_EYE : ICON_FA_EYE_SLASH,
+                          ImVec2(24.0f * uiScaleBtn, ImGui::GetTextLineHeight())))
             tagComp.IsActive = !tagComp.IsActive;
-        }
         ImGui::PopID();
+        if (!activeInHierarchy) ImGui::PopStyleColor();
+        ImGui::PopStyleColor(3);
+        ImGui::PopStyleVar();
 
         if (!activeInHierarchy) {
             ImGui::PopStyleColor();
         }
-
-        ImGui::PopStyleColor(3);
-        ImGui::PopStyleVar();
 
         if (opened) {
             bool isBeingDestroyed = std::find(m_EntitiesToDestroy.begin(), m_EntitiesToDestroy.end(), entity) != m_EntitiesToDestroy.end();

@@ -2,6 +2,7 @@
 #include "Engine/Animation/CurveSerializer.hpp"
 #include "Asset/AssetManager.hpp"
 #include "Core/Log.hpp"
+#include "UI_Widgets.hpp"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -305,17 +306,19 @@ namespace Ayaya {
             ImGui::OpenPopup("##CurveCtx");
         }
 
+        UI::PushPopupStyles();
         if (ImGui::BeginPopup("##CurveCtx")) {
-            if (ImGui::MenuItem("Add Key Here")) {
+            if (UI::DrawMenuItem("Add Key Here", ICON_FA_PLUS, nullptr)) {
                 m_SelectedKeyIndex = m_ActiveCurve->AddKey(s_CtxTime, s_CtxValue);
             }
-            if (ImGui::MenuItem("Reset View")) {
+            if (UI::DrawMenuItem("Reset View", ICON_FA_UNDO, nullptr)) {
                 m_ViewMinTime = -0.1f; m_ViewMaxTime = 2.0f;
                 m_ViewMinValue = -0.5f; m_ViewMaxValue = 1.5f;
             }
             ImGui::EndPopup();
         }
-
+        UI::PopPopupStyles();
+        
         // --- Keyframe hit test (hover) ---
         m_HoveredKeyIndex = -1;
         if (canvasHovered && !m_IsDraggingKey && !m_DraggingTangent) {

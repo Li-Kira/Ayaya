@@ -11,6 +11,199 @@ namespace Ayaya {
     namespace UI {
 
         // ==========================================
+        // Popup/menu helpers
+        // ==========================================
+        static void PushPopupStyles(float minWidth = 240.0f)
+        {
+            ImGui::SetNextWindowSizeConstraints(ImVec2(minWidth, 0), ImVec2(FLT_MAX, FLT_MAX));
+            ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 4.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f, 6.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 6.0f));
+            ImGui::PushStyleColor(ImGuiCol_PopupBg,        ImVec4(0.12f, 0.12f, 0.12f, 0.96f));
+            ImGui::PushStyleColor(ImGuiCol_Border,         ImVec4(0.08f, 0.08f, 0.08f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered,  ImVec4(0.20f, 0.35f, 0.90f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Header,         ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive,   ImVec4(0, 0, 0, 0));
+        }
+        static void PopPopupStyles()
+        {
+            ImGui::PopStyleColor(5);
+            ImGui::PopStyleVar(4);
+        }
+
+        static void DrawMenuHeader(const char* title)
+        {
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f);
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8.0f);
+            ImGui::TextUnformatted(title);
+            ImGui::PopStyleColor();
+            ImGui::PopFont();
+            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+            ImGui::Separator();
+            ImGui::PopStyleColor();
+            ImGui::Spacing();
+        }
+
+        static bool DrawMenuItem(const char* label, const char* icon = nullptr,
+                                  const char* shortcut = nullptr, bool enabled = true,
+                                  bool hasSubMenu = false, bool* outHovered = nullptr)
+        {
+            // Fixed column layout for pixel-perfect alignment
+            const float iconColW = 40.0f;
+            const float rightPad = 8.0f;
+            const float chevronW = 12.0f;
+
+            if (!enabled)
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+
+            float fullW = ImGui::GetContentRegionAvail().x;
+            if (fullW < 180.0f) fullW = 180.0f;
+
+            // Selectable as invisible hit-target background
+            ImGui::PushID(label);
+            bool clicked = ImGui::Selectable("##Item", false,
+                enabled ? 0 : ImGuiSelectableFlags_Disabled, ImVec2(fullW, 0));
+            ImGui::PopID();
+
+            if (outHovered) *outHovered = ImGui::IsItemHovered();
+
+            ImVec2 itemMin = ImGui::GetItemRectMin();
+            ImVec2 itemMax = ImGui::GetItemRectMax();
+            float  centerY = itemMin.y + (itemMax.y - itemMin.y) * 0.5f;
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+
+            // 1. Icon — centred inside the fixed icon column
+            if (icon) {
+                ImVec2 sz = ImGui::CalcTextSize(icon);
+                dl->AddText(ImVec2(itemMin.x + (iconColW - sz.x) * 0.5f, centerY - sz.y * 0.5f),
+                            ImGui::GetColorU32(ImGuiCol_Text), icon);
+            }
+
+            // 2. Label — full iconColW when icon present, half when no icon
+            float labelX = itemMin.x + (icon ? iconColW : iconColW * 0.5f);
+            ImVec2 lsz = ImGui::CalcTextSize(label);
+            dl->AddText(ImVec2(labelX, centerY - lsz.y * 0.5f),
+                        ImGui::GetColorU32(ImGuiCol_Text), label);
+
+            // 3. Shortcut — right-aligned, pushed left if chevron is present
+            if (shortcut) {
+                ImVec2 ssz = ImGui::CalcTextSize(shortcut);
+                float  sx  = itemMax.x - rightPad
+                           - (hasSubMenu ? chevronW + 6.0f : 0.0f) - ssz.x;
+                dl->AddText(ImVec2(sx, centerY - ssz.y * 0.5f),
+                            enabled ? IM_COL32(128,128,128,255) : IM_COL32(80,80,80,255),
+                            shortcut);
+            }
+
+            // 4. Chevron — right-aligned submenu indicator
+            if (hasSubMenu) {
+                ImVec2 csz = ImGui::CalcTextSize(ICON_FA_CHEVRON_RIGHT);
+                dl->AddText(ImVec2(itemMax.x - rightPad - csz.x, centerY - csz.y * 0.5f),
+                            IM_COL32(150,150,150,255), ICON_FA_CHEVRON_RIGHT);
+            }
+
+            if (!enabled) ImGui::PopStyleColor();
+            return clicked;
+        }
+        // ==========================================
+        // Transparent-render-hijack menu items
+        // Native MenuItem/BeginMenu handle ALL interaction logic
+        // (hover, click, Safe Triangle, popup stack).
+        // We hide their native text and overlay our layout.
+        // ==========================================
+
+        // Pure rendering using explicit rect + drawlist (survives BeginMenu window-context switch).
+        static void RenderAdvancedMenuLayout(ImDrawList* dl, const ImVec2& rMin, const ImVec2& rMax,
+                                              const char* label, const char* icon,
+                                              const char* shortcut, bool hasSubMenu, bool enabled)
+        {
+            float cy = rMin.y + (rMax.y - rMin.y) * 0.5f;
+            const float iconColW = 40.0f;
+            const float rightPad = 8.0f;
+
+            ImU32 textCol = ImGui::GetColorU32(enabled ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+            ImU32 dimCol  = enabled ? IM_COL32(128, 128, 128, 255) : IM_COL32(80, 80, 80, 255);
+
+            // Custom hover highlight — inset from item edges with rounding
+            if (enabled && ImGui::IsItemHovered()) {
+                float m = 6.0f;
+                dl->AddRectFilled(ImVec2(rMin.x + m, rMin.y + 1.0f),
+                                  ImVec2(rMax.x - m, rMax.y - 1.0f),
+                                  ImGui::GetColorU32(ImGuiCol_HeaderHovered), 8.0f);
+            }
+
+            if (icon) {
+                ImVec2 sz = ImGui::CalcTextSize(icon);
+                dl->AddText(ImVec2(rMin.x + (iconColW - sz.x) * 0.5f, cy - sz.y * 0.5f), textCol, icon);
+            }
+            float labelX = rMin.x + (icon ? iconColW : iconColW * 0.5f);
+            ImVec2 lsz = ImGui::CalcTextSize(label);
+            dl->AddText(ImVec2(labelX, cy - lsz.y * 0.5f), textCol, label);
+
+            if (hasSubMenu) {
+                ImVec2 csz = ImGui::CalcTextSize(ICON_FA_CHEVRON_RIGHT);
+                dl->AddText(ImVec2(rMax.x - rightPad - csz.x, cy - csz.y * 0.5f), dimCol, ICON_FA_CHEVRON_RIGHT);
+            }
+            if (shortcut) {
+                ImVec2 ssz = ImGui::CalcTextSize(shortcut);
+                float  off = rightPad + (hasSubMenu ? 18.0f : 0.0f) + ssz.x;
+                dl->AddText(ImVec2(rMax.x - off, cy - ssz.y * 0.5f), dimCol, shortcut);
+            }
+        }
+
+        // Regular menu item — native MenuItem for logic, our layout for visuals.
+        static bool DrawNativeMenuItem(const char* label, const char* icon = nullptr,
+                                        const char* shortcut = nullptr, bool enabled = true)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImVec4(0, 0, 0, 0));
+            bool clicked = ImGui::MenuItem(label, shortcut, false, enabled);
+            ImGui::PopStyleColor(2);
+            RenderAdvancedMenuLayout(ImGui::GetWindowDrawList(),
+                ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                label, icon, shortcut, false, enabled);
+            return clicked;
+        }
+
+        // Submenu trigger — native BeginMenu for logic, our layout for visuals.
+        // Must snapshot drawlist + rect BEFORE BeginMenu because it switches
+        // the current window into the child popup when the menu is open.
+        static bool BeginNativeMenu(const char* label, const char* icon = nullptr,
+                                     bool enabled = true, float childMinWidth = 200.0f)
+        {
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            // Constrain child popup width so long labels don't clip
+            ImGui::SetNextWindowSizeConstraints(ImVec2(childMinWidth, 0), ImVec2(FLT_MAX, FLT_MAX));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 0, 0, 0));
+            bool open = ImGui::BeginMenu(label, enabled);
+            ImGui::PopStyleColor();
+            RenderAdvancedMenuLayout(dl,
+                ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                label, icon, nullptr, true, enabled);
+            return open;
+        }
+
+        static void EndNativeMenu() { ImGui::EndMenu(); }
+
+        static void MenuSeparator()
+        {
+            ImGui::Spacing();
+            ImVec2 pMin = ImGui::GetCursorScreenPos();
+            float margin = 8.0f;
+            float width = ImGui::GetContentRegionAvail().x - margin * 2.0f;
+            ImGui::GetWindowDrawList()->AddLine(
+                ImVec2(pMin.x + margin, pMin.y),
+                ImVec2(pMin.x + margin + width, pMin.y),
+                IM_COL32(20, 20, 20, 255));
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 3.0f);
+            ImGui::Spacing();
+        }
+
+        // ==========================================
         // Professional component header with gear icon + remove popup
         // ==========================================
         // `id` must be a stable pointer that uniquely identifies this component
@@ -58,8 +251,8 @@ namespace Ayaya {
             ImGui::PopStyleColor();
 
             if (ImGui::BeginPopup("ComponentPopup")) {
-                if (ImGui::MenuItem("Remove Component") && outRemove)
-                    *outRemove = true;
+                if (ImGui::MenuItem("Remove Component"))
+                    if (outRemove) *outRemove = true;
                 ImGui::EndPopup();
             }
             ImGui::PopID();
@@ -113,7 +306,7 @@ namespace Ayaya {
         }
 
         // ==========================================
-        // UE5-style Vec3 controller with colored axis buttons.
+        // Vec3 controller with colored axis buttons.
         // Must be called inside an active BeginPropertyTable/EndTable pair.
         // `outCommitted` is set when the user finishes a drag or clicks a
         // reset button — use this to push a single undo command.
@@ -173,5 +366,6 @@ namespace Ayaya {
             if (outCommitted) *outCommitted = committed;
             return modified;
         }
+
     }
 }

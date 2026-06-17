@@ -152,7 +152,7 @@ namespace Ayaya {
         float clipE = clipS + dur * m_Zoom;
         if (clipE - clipS < kMinClipWidth) clipE = clipS + kMinClipWidth;
 
-        // ---- UE5-style gradient clip (clipped to cell bounds) ----
+        // ---- Gradient clip (clipped to cell bounds) ----
         ImVec2 cMin(clipS, cellMin.y + 3.0f);
         ImVec2 cMax(clipE, cellMin.y + cellSize.y - 3.0f);
 
@@ -161,7 +161,7 @@ namespace Ayaya {
 
         // 1. Dark green semi-transparent base
         dl->AddRectFilled(cMin, cMax, IM_COL32(30, 80, 50, 150), 4.0f);
-        // 2. Top 30% subtle highlight (UE5 clip bevel)
+        // 2. Top 30% subtle highlight (Clip bevel)
         dl->AddRectFilled(cMin, ImVec2(cMax.x, cMin.y + (cMax.y - cMin.y) * 0.3f),
                           IM_COL32(255, 255, 255, 15), 4.0f, ImDrawFlags_RoundCornersTop);
         // 3. Outer border
@@ -249,7 +249,7 @@ namespace Ayaya {
             m_ScrollX += wheelH * 50.0f;
         }
 
-        // Middle-mouse drag: free pan (UE5/Blender style)
+        // Middle-mouse drag: free pan
         if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle)) {
             m_ScrollX += ImGui::GetIO().MouseDelta.x;
         }
@@ -277,7 +277,7 @@ namespace Ayaya {
     }
 
     // ==========================================
-    // RenderContent — UE5-style Sequencer Table
+    // RenderContent — Sequencer Table
     //   Ruler drawn frozen OUTSIDE scroll area; table body (no ScrollY)
     //   scrolls inside BeginChild.  This eliminates the table's internal
     //   channel-split z-order issue — all overlay drawing after EndChild

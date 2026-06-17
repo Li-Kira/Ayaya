@@ -1381,69 +1381,58 @@ namespace Ayaya {
 
     void EditorLayer::UIRenderMenuBar() {
         if (ImGui::BeginMenuBar()) {
+            // ---- File ----
+            UI::PushPopupStyles(220.0f);
             if (ImGui::BeginMenu("File")) {
-
-                if (ImGui::MenuItem("New Project", "Ctrl+N")) {
-                    m_ShowNewProjectPopup = true; 
+                if (UI::DrawNativeMenuItem("New Project",       nullptr, "Ctrl+N"))       { m_ShowNewProjectPopup = true; }
+                if (UI::DrawNativeMenuItem("Save Project",      nullptr, "Ctrl+S")) {
+                    bool has = Project::GetActive() && std::filesystem::exists(
+                        Project::GetProjectDirectory() / (Project::GetActive()->GetConfig().Name + ".ayaproj"));
+                    has ? SaveProject() : SaveProjectAs();
                 }
-                if (ImGui::MenuItem("Save Project", "Ctrl+S")) {
-                    bool hasProjectFile = Project::GetActive() &&
-                        std::filesystem::exists(Project::GetProjectDirectory() /
-                            (Project::GetActive()->GetConfig().Name + ".ayaproj"));
-                    if (hasProjectFile) SaveProject();
-                    else SaveProjectAs();
-                }
-                if (ImGui::MenuItem("Save Project As...", "Ctrl+Shift+S")) SaveProjectAs();
-                if (ImGui::MenuItem("Open Project", "Ctrl+O")) OpenProject();
-
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Spacing();
-
-                if (ImGui::MenuItem("Import Model...", "Ctrl+I")) {
+                if (UI::DrawNativeMenuItem("Save Project As...",nullptr, "Ctrl+Shift+S")) { SaveProjectAs(); }
+                if (UI::DrawNativeMenuItem("Open Project",      nullptr, "Ctrl+O"))       { OpenProject(); }
+                UI::MenuSeparator();
+                if (UI::DrawNativeMenuItem("Import Model...",   nullptr, "Ctrl+I")) {
                     std::string filepath = FileDialogs::OpenFile(
                         "3D Models (*.fbx *.obj *.gltf *.glb)|*.fbx;*.obj;*.gltf;*.glb");
-                    if (!filepath.empty())
-                        m_ImportModelPanel.RequestOpen(filepath);
+                    if (!filepath.empty()) m_ImportModelPanel.RequestOpen(filepath);
                 }
-
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Spacing();
-                if (ImGui::MenuItem("Exit")) Application::Get().Close(); 
-                
+                UI::MenuSeparator();
+                if (UI::DrawNativeMenuItem("Exit")) { Application::Get().Close(); }
                 ImGui::EndMenu();
             }
+            UI::PopPopupStyles();
 
+            // ---- Edit ----
+            UI::PushPopupStyles(200.0f);
             if (ImGui::BeginMenu("Edit")) {
-                if (ImGui::MenuItem("Preferences")) {
-                    m_PreferencesPanel.SetOpen(true); // 打开偏好设置面板
-                }
+                if (UI::DrawNativeMenuItem("Preferences")) { m_PreferencesPanel.SetOpen(true); }
                 ImGui::EndMenu();
             }
+            UI::PopPopupStyles();
 
+            // ---- View (checkbox items kept native) ----
+            UI::PushPopupStyles(200.0f);
             if (ImGui::BeginMenu("View")) {
                 ImGui::MenuItem("Show Statistics", nullptr, &m_ShowGameStats);
-
-                ImGui::Spacing();
                 ImGui::Separator();
-                ImGui::Spacing();
-
-                ImGui::MenuItem("Show History", nullptr, &m_HistoryPanel.IsOpen);
+                ImGui::MenuItem("Show History",   nullptr, &m_HistoryPanel.IsOpen);
                 ImGui::MenuItem("Frame Debugger", nullptr, &m_FrameDebuggerPanel.IsOpen);
-                ImGui::MenuItem("Curve Editor", nullptr, &m_CurveEditorPanel.GetOpenFlag());
-
+                ImGui::MenuItem("Curve Editor",   nullptr, &m_CurveEditorPanel.GetOpenFlag());
                 ImGui::EndMenu();
             }
+            UI::PopPopupStyles();
 
+            // ---- Tools ----
+            UI::PushPopupStyles(200.0f);
             if (ImGui::BeginMenu("Tools")) {
-                if (ImGui::MenuItem("High-Res Screenshot")) {
-                    m_ScreenshotPanel.Open(); // 唤出截图面板
-                }
+                if (UI::DrawNativeMenuItem("High-Res Screenshot")) { m_ScreenshotPanel.Open(); }
                 ImGui::EndMenu();
             }
+            UI::PopPopupStyles();
 
-            // 右侧状态文本...
+            // Right-side status text
             std::string sceneName = "Untitled";
             if (!m_CurrentScenePath.empty()) {
                 size_t pos = m_CurrentScenePath.find_last_of("/\\");

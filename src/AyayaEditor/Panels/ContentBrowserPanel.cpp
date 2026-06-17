@@ -133,12 +133,10 @@ namespace Ayaya {
 
         size_t totalSelected = m_SelectedAssets.size() + m_SelectedFolders.size();
 
-        // Batch operations when multiple items are selected
         if (totalSelected > 1) {
             char buf[64];
             snprintf(buf, sizeof(buf), "Show in Explorer (%zu)", totalSelected);
-            if (ImGui::MenuItem(buf)) {
-                // Open Explorer at the first selected item's parent directory
+            if (UI::DrawNativeMenuItem(buf)) {
                 if (!m_SelectedFolders.empty())
                     FileDialogs::OpenInFileExplorer(m_SelectedFolders.begin()->string());
                 else {
@@ -149,84 +147,60 @@ namespace Ayaya {
                 }
             }
             snprintf(buf, sizeof(buf), "Delete Selected (%zu)", totalSelected);
-            if (ImGui::MenuItem(buf)) {
+            if (UI::DrawNativeMenuItem(buf)) {
                 std::vector<UUID> toDelete(m_SelectedAssets.begin(), m_SelectedAssets.end());
                 std::vector<std::filesystem::path> toRemoveDirs(m_SelectedFolders.begin(), m_SelectedFolders.end());
                 m_SelectedAssets.clear();
                 m_SelectedFolders.clear();
-
                 auto& w = EditorLayer::Get().GetAssetWatcher();
                 bool wasPaused = w.IsPaused(); w.SetPaused(true);
-                for (auto& h : toDelete) {
-                    if (AssetManager::IsAssetHandleValid(h))
-                        AssetManager::DeleteAsset(h);
-                }
-                for (auto& p : toRemoveDirs) {
-                    std::error_code ec;
-                    std::filesystem::remove_all(p, ec);
-                }
+                for (auto& h : toDelete)
+                    if (AssetManager::IsAssetHandleValid(h)) AssetManager::DeleteAsset(h);
+                for (auto& p : toRemoveDirs) { std::error_code ec; std::filesystem::remove_all(p, ec); }
                 if (!wasPaused) w.SetPaused(false);
                 return;
             }
-            ImGui::Separator();
+            UI::MenuSeparator();
         }
 
         if (!isDir && assetHandle != 0) {
-            // --- File context menu ---
             AssetMetadata meta = AssetManager::GetMetadata(assetHandle);
             std::string label = (meta.Type == AssetType::Scene) ? "Open Scene" : "Open";
-            if (ImGui::MenuItem(label.c_str())) {
+            if (UI::DrawNativeMenuItem(label.c_str())) {
                 if (meta.Type == AssetType::Scene) {
-                    std::string phys = VFS::ResolveString(meta.VirtualPath);
-                    EditorLayer::Get().OpenSceneFile(phys);
+                    EditorLayer::Get().OpenSceneFile(VFS::ResolveString(meta.VirtualPath));
                 } else {
                     EditorLayer::Get().GetSceneHierarchyPanel().GetPropertiesPanel().SetSelectedAsset(assetHandle);
                 }
             }
-            if (ImGui::MenuItem("Rename")) {
-                BeginRename(path, false);
-            }
-            if (ImGui::MenuItem("Show in Explorer")) {
-                FileDialogs::ShowInFileExplorer(path.string());
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Move To...")) {
+            if (UI::DrawNativeMenuItem("Rename"))       { BeginRename(path, false); }
+            if (UI::DrawNativeMenuItem("Show in Explorer")) { FileDialogs::ShowInFileExplorer(path.string()); }
+            UI::MenuSeparator();
+            if (UI::DrawNativeMenuItem("Move To...")) {
                 std::string dest = FileDialogs::OpenFolder();
                 if (!dest.empty()) {
                     auto& watcher = EditorLayer::Get().GetAssetWatcher();
-                    bool wasPaused = watcher.IsPaused();
-                    watcher.SetPaused(true);
+                    bool wasPaused = watcher.IsPaused(); watcher.SetPaused(true);
                     AssetManager::MoveAsset(assetHandle, dest);
                     if (!wasPaused) watcher.SetPaused(false);
                 }
             }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Delete")) {
+            UI::MenuSeparator();
+            if (UI::DrawNativeMenuItem("Delete")) {
                 m_PendingDeleteHandle = assetHandle;
                 m_PendingDeletePath = path;
                 m_ShowDeleteConfirm = true;
             }
         }
         else if (isDir) {
-            // --- Folder context menu ---
-            if (ImGui::MenuItem("Open")) {
-                m_CurrentDirectory = path;
-            }
-            if (ImGui::MenuItem("Rename")) {
-                BeginRename(path, true);
-            }
-            if (ImGui::MenuItem("Show in Explorer")) {
-                FileDialogs::OpenInFileExplorer(path.string());
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem("New Folder")) {
-                AssetManager::CreateFolder(path, "New Folder");
-            }
-            if (ImGui::MenuItem("New Scene")) {
-                AssetManager::CreateSceneAsset(path, "New Scene");
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Delete")) {
+            if (UI::DrawNativeMenuItem("Open"))             { m_CurrentDirectory = path; }
+            if (UI::DrawNativeMenuItem("Rename"))           { BeginRename(path, true); }
+            if (UI::DrawNativeMenuItem("Show in Explorer")) { FileDialogs::OpenInFileExplorer(path.string()); }
+            UI::MenuSeparator();
+            if (UI::DrawNativeMenuItem("New Folder"))       { AssetManager::CreateFolder(path, "New Folder"); }
+            if (UI::DrawNativeMenuItem("New Scene"))        { AssetManager::CreateSceneAsset(path, "New Scene"); }
+            UI::MenuSeparator();
+            if (UI::DrawNativeMenuItem("Delete")) {
                 std::error_code ec;
                 std::filesystem::remove_all(path, ec);
                 if (ec) AYAYA_CORE_ERROR("ContentBrowser: Folder delete failed: {0}", ec.message());
@@ -370,14 +344,16 @@ namespace Ayaya {
             dl->AddText(ImVec2(btnPos.x + ImGui::GetStyle().FramePadding.x + iconW + 4.0f * scale, y),
                         IM_COL32(255, 255, 255, 255), label);
         }
+        UI::PushPopupStyles(240.0f);
         if (ImGui::BeginPopup("##AddAssetPopup")) {
-            if (ImGui::MenuItem("New Folder")) {
+            UI::DrawMenuHeader("New Asset");
+            if (UI::DrawNativeMenuItem("New Folder",     ICON_FA_FOLDER_PLUS)) {
                 AssetManager::CreateFolder(m_CurrentDirectory, "New Folder");
             }
-            if (ImGui::MenuItem("New Scene")) {
+            if (UI::DrawNativeMenuItem("New Scene",      ICON_FA_FILE)) {
                 AssetManager::CreateSceneAsset(m_CurrentDirectory, "New Scene");
             }
-            if (ImGui::MenuItem("New Lua Script")) {
+            if (UI::DrawNativeMenuItem("New Lua Script", ICON_FA_CODE)) {
                 std::string baseName = "NewScript";
                 std::filesystem::path luaPath = m_CurrentDirectory / (baseName + ".lua");
                 int counter = 1;
@@ -403,7 +379,7 @@ namespace Ayaya {
                     AssetManager::ImportAsset(luaPath);
                 }
             }
-            if (ImGui::MenuItem("New Curve")) {
+            if (UI::DrawNativeMenuItem("New Curve",      ICON_FA_CHART_LINE)) {
                 std::string baseName = "NewCurve";
                 std::filesystem::path curvePath = m_CurrentDirectory / (baseName + ".curve");
                 int counter = 1;
@@ -411,7 +387,6 @@ namespace Ayaya {
                     curvePath = m_CurrentDirectory / (baseName + std::to_string(counter) + ".curve");
                     counter++;
                 }
-                // Create a default curve with two keyframes
                 CurveAsset curve;
                 curve.AddKey(0.0f, 0.0f, 0.0f, 1.0f);
                 curve.AddKey(1.0f, 1.0f, -1.0f, 0.0f);
@@ -420,6 +395,7 @@ namespace Ayaya {
             }
             ImGui::EndPopup();
         }
+        UI::PopPopupStyles();
 
         ImGui::SameLine(0, 4.0f * scale);
 
@@ -444,8 +420,10 @@ namespace Ayaya {
             dl->AddText(ImVec2(btnPos.x + ImGui::GetStyle().FramePadding.x + iconW + 4.0f * scale, y),
                         IM_COL32(255, 255, 255, 255), label);
         }
+        UI::PushPopupStyles(240.0f);
         if (ImGui::BeginPopup("##ImportAssetPopup")) {
-            if (ImGui::MenuItem("Import 3D Model...")) {
+            UI::DrawMenuHeader("Import Asset");
+            if (UI::DrawNativeMenuItem("Import 3D Model...", ICON_FA_FILE_IMPORT)) {
                 std::string filepath = FileDialogs::OpenFile(
                     "3D Models (*.fbx *.obj *.gltf *.glb)|*.fbx;*.obj;*.gltf;*.glb");
                 if (!filepath.empty())
@@ -453,6 +431,7 @@ namespace Ayaya {
             }
             ImGui::EndPopup();
         }
+        UI::PopPopupStyles();
 
         ImGui::SameLine(0, 40.0f * scale);
 
@@ -695,19 +674,20 @@ namespace Ayaya {
                          && ImGui::IsKeyPressed(ImGuiKey_A);
 
         // Empty-space right-click context menu
+        UI::PushPopupStyles(240.0f);
         if (ImGui::BeginPopupContextWindow("##EmptySpaceCtx", ImGuiPopupFlags_NoOpenOverItems)) {
-            if (ImGui::MenuItem("Open in Explorer")) {
+            if (UI::DrawNativeMenuItem("Open in Explorer", ICON_FA_FOLDER_OPEN)) {
                 FileDialogs::OpenInFileExplorer(m_CurrentDirectory.string());
             }
-            ImGui::Separator();
-            if (ImGui::MenuItem("New Folder")) {
+            UI::MenuSeparator();
+            if (UI::DrawNativeMenuItem("New Folder", ICON_FA_FOLDER_PLUS)) {
                 AssetManager::CreateFolder(m_CurrentDirectory, "New Folder");
             }
-            if (ImGui::MenuItem("New Scene")) {
+            if (UI::DrawNativeMenuItem("New Scene",  ICON_FA_FILE)) {
                 AssetManager::CreateSceneAsset(m_CurrentDirectory, "New Scene");
             }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Import Asset...")) {
+            UI::MenuSeparator();
+            if (UI::DrawNativeMenuItem("Import Asset...", ICON_FA_FILE_IMPORT)) {
                 std::string filepath = FileDialogs::OpenFile(
                     "Supported Assets (*.png *.jpg *.jpeg *.bmp *.hdr *.obj *.fbx *.gltf *.glb *.mat *.lua *.cube *.prefab *.ayaya)");
                 if (!filepath.empty()) {
@@ -732,6 +712,7 @@ namespace Ayaya {
             }
             ImGui::EndPopup();
         }
+        UI::PopPopupStyles();
 
         // Pre-scan: collect visible items for range-select and Ctrl+A
         struct VisibleItem {
@@ -894,11 +875,13 @@ namespace Ayaya {
                 }
 
                 // Right-click context menu
+                UI::PushPopupStyles(240.0f);
                 if (ImGui::BeginPopupContextItem("##ItemCtx")) {
                     RenderContextMenuForItem(path, isDir, assetHandle, filenameString);
                     ImGui::EndPopup();
                 }
-
+                UI::PopPopupStyles();
+                
                 // Drag source
                 if (ImGui::BeginDragDropSource()) {
                     size_t totalSel = m_SelectedAssets.size() + m_SelectedFolders.size();
