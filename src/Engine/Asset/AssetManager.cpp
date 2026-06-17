@@ -1030,6 +1030,13 @@ namespace Ayaya {
     UUID AssetManager::ImportAsset(const std::filesystem::path& filepath) {
         std::string virtualPath = VFS::GetVirtualPath(filepath);
 
+        // 防御：如果 GetVirtualPath 兜底返回了绝对路径（filepath 不在任何 VFS mount 范围内），
+        // 说明文件被创建在了错误的位置（如 project 根目录而非 Assets/ 目录）。
+        if (virtualPath.find("://") == std::string::npos) {
+            AYAYA_CORE_WARN("ImportAsset: file is outside any VFS mount point! "
+                            "virtual path is absolute: {}", virtualPath);
+        }
+
         // 检查是否已经导入过（通过查找是否存在 .meta 文件）
         if (std::filesystem::exists(filepath.string() + ".meta")) {
             UUID existing = FindHandleForPath(filepath);

@@ -501,7 +501,7 @@ namespace Ayaya {
             ImGui::SameLine(0, 4.0f);
             if (ImGui::Button(ICON_FA_LIST_ALT " Log", ImVec2(0, btnH))) {}
             ImGui::SameLine(0, 4.0f);
-            if (ImGui::Button(ICON_FA_CLOCK " Timeline", ImVec2(0, btnH)))
+            if (ImGui::Button(ICON_FA_FILM " Timeline", ImVec2(0, btnH)))
                 m_ShowTimelineDrawer = !m_ShowTimelineDrawer;
             ImGui::PopStyleColor(2);
             ImGui::PopStyleVar(2);
@@ -1383,6 +1383,7 @@ namespace Ayaya {
         if (ImGui::BeginMenuBar()) {
             // ---- File ----
             UI::PushPopupStyles(220.0f);
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
             if (ImGui::BeginMenu("File")) {
                 if (UI::DrawNativeMenuItem("New Project",       nullptr, "Ctrl+N"))       { m_ShowNewProjectPopup = true; }
                 if (UI::DrawNativeMenuItem("Save Project",      nullptr, "Ctrl+S")) {
@@ -1403,34 +1404,39 @@ namespace Ayaya {
                 ImGui::EndMenu();
             }
             UI::PopPopupStyles();
+            ImGui::PopStyleColor();
 
             // ---- Edit ----
             UI::PushPopupStyles(200.0f);
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
             if (ImGui::BeginMenu("Edit")) {
                 if (UI::DrawNativeMenuItem("Preferences")) { m_PreferencesPanel.SetOpen(true); }
                 ImGui::EndMenu();
             }
             UI::PopPopupStyles();
+            ImGui::PopStyleColor();
 
             // ---- View (checkbox items kept native) ----
             UI::PushPopupStyles(200.0f);
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
             if (ImGui::BeginMenu("View")) {
-                ImGui::MenuItem("Show Statistics", nullptr, &m_ShowGameStats);
-                ImGui::Separator();
                 ImGui::MenuItem("Show History",   nullptr, &m_HistoryPanel.IsOpen);
                 ImGui::MenuItem("Frame Debugger", nullptr, &m_FrameDebuggerPanel.IsOpen);
                 ImGui::MenuItem("Curve Editor",   nullptr, &m_CurveEditorPanel.GetOpenFlag());
                 ImGui::EndMenu();
             }
             UI::PopPopupStyles();
+            ImGui::PopStyleColor();
 
             // ---- Tools ----
             UI::PushPopupStyles(200.0f);
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
             if (ImGui::BeginMenu("Tools")) {
                 if (UI::DrawNativeMenuItem("High-Res Screenshot")) { m_ScreenshotPanel.Open(); }
                 ImGui::EndMenu();
             }
             UI::PopPopupStyles();
+            ImGui::PopStyleColor();
 
             // Right-side status text
             std::string sceneName = "Untitled";
@@ -2020,12 +2026,11 @@ namespace Ayaya {
         // ==========================================
         // Game Viewport Image (with letterboxing for custom resolution)
         // ==========================================
-        ImVec2 vpSize, vpMin(0,0);
         if (m_GameRenderer) {
             void* textureID = m_GameRenderer->GetFinalColorAttachmentRendererID();
             if (textureID) {
                 ImVec2 avail = ImGui::GetContentRegionAvail();
-                vpSize = avail;
+                ImVec2 vpSize = avail;
                 ImVec2 imageOffset(0, 0);
 
                 // Letterbox when a custom resolution is active
@@ -2044,7 +2049,6 @@ namespace Ayaya {
                 }
 
                 ImGui::Image(textureID, vpSize, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
-                vpMin = ImGui::GetItemRectMin();
 
                 // UI overlay (must match letterboxed position)
                 ImVec2 gameVpScreenMin = ImGui::GetItemRectMin();
@@ -2055,301 +2059,284 @@ namespace Ayaya {
                 }
                 if (m_ShowUIGizmos) UIRenderDebugUIGizmos(gameVpScreenMin, vpSize,
                     ImGui::GetIO().DisplayFramebufferScale.x);
+
+                // Anchor: viewport image top-left corner (matching Editor viewport toolbar pattern)
+                ImVec2 vpMin = ImGui::GetItemRectMin();
+                float btnW = 38.0f, btnH = 32.0f;
+                { // Game Viewport Toolbar Overlay block
+                    // ---- Top-left: [Options] button ----
+                    ImVec4 inactiveTxt = ImVec4(0.65f, 0.65f, 0.68f, 1.0f);
+                    ImVec4 activeTxt   = ImVec4(0.40f, 0.65f, 1.00f, 1.0f);
+                    ImDrawList* dl = ImGui::GetWindowDrawList();
+                    ImU32 borderCol = IM_COL32(10, 10, 15, 180);
+                    ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+
+                    auto oneBtn = [&](float x, const char* icon, const char* tip, bool* toggle) {
+                        bool active = toggle ? *toggle : false;
+                        ImVec2 bMin(x, vpMin.y + 6);
+                        ImVec2 bMax(x + btnW, vpMin.y + 6 + btnH);
+                        dl->AddRectFilled(bMin, bMax,
+                            active ? IM_COL32(48, 88, 145, 180) : IM_COL32(20, 20, 25, 180), 10.0f);
+                        dl->AddRect(bMin, bMax, borderCol, 10.0f, 0, 1.0f);
+                        ImGui::SetCursorScreenPos(bMin);
+                        ImGui::PushID(tip);
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
+                        ImGui::PushStyleColor(ImGuiCol_Text, active ? activeTxt : inactiveTxt);
+                        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
+                        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+                        bool pressed = ImGui::Button(icon, ImVec2(btnW, btnH));
+                        ImGui::PopStyleVar(2);
+                        ImGui::PopStyleColor(2);
+                        ImGui::PopID();
+                        if (pressed && toggle) *toggle = !*toggle;
+                        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                            ImGui::SetTooltip("%s", tip);
+                    };
+
+                    float ox  = vpMin.x + 8;
+                    float pjx = ox  + btnW + 4;
+                    oneBtn(ox, ICON_FA_BARS, "Options", &m_ShowGameOptions);
+                    if (m_ShowGameOptions) {
+                        m_ShowViewportOptions = false;
+                        m_ShowViewportGizmos   = false;
+                        m_ShowViewportCameraSpeed = false;
+                    }
+
+                    // Projection mode toggle (icon + text)
+                    {
+                        bool isPersp = true;
+                        if (m_ActiveScene) {
+                            auto camView = m_ActiveScene->Reg().view<CameraComponent>();
+                            for (auto e : camView) {
+                                auto& cc = camView.get<CameraComponent>(e);
+                                isPersp = (cc.Camera.GetProjectionType()
+                                           == SceneCamera::ProjectionType::Perspective);
+                                break;
+                            }
+                        }
+
+                        const char* projLabel = isPersp
+                            ? ICON_FA_CUBE " Persp" : ICON_FA_BORDER_ALL " Ortho";
+                        float projW = ImGui::CalcTextSize(projLabel).x
+                                      + ImGui::GetStyle().FramePadding.x * 2.0f + 8.0f;
+                        ImVec2 pMin(pjx, vpMin.y + 6);
+                        ImVec2 pMax(pjx + projW, vpMin.y + 6 + btnH);
+                        dl->AddRectFilled(pMin, pMax, IM_COL32(20, 20, 25, 180), 10.0f);
+                        dl->AddRect(pMin, pMax, IM_COL32(10, 10, 15, 180), 10.0f, 0, 1.0f);
+                        ImGui::SetCursorScreenPos(pMin);
+                        ImGui::PushID("GameProjToggle");
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f,0.65f,0.68f,1.0f));
+                        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
+                        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+                        if (ImGui::Button(projLabel, ImVec2(projW, btnH)) && m_ActiveScene) {
+                            auto camView = m_ActiveScene->Reg().view<CameraComponent>();
+                            for (auto e : camView) {
+                                auto& cc = camView.get<CameraComponent>(e);
+                                cc.Camera.SetProjectionType(isPersp
+                                    ? SceneCamera::ProjectionType::Orthographic
+                                    : SceneCamera::ProjectionType::Perspective);
+                                break;
+                            }
+                        }
+                        ImGui::PopStyleVar(2);
+                        ImGui::PopStyleColor(2);
+                        ImGui::PopID();
+                        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                            ImGui::SetTooltip("Projection: %s",
+                                isPersp ? "Perspective" : "Orthographic");
+                    }
+
+                    ImGui::PopFont();
+                }
+
+                // ---- Game Viewport Resolution Panel ----
+                if (m_ShowGameOptions) {
+                    float panelW = 352.0f, rowH = 32.0f;
+                    float titleTop = 10.0f, titleH = 20.0f, sepGap = 10.0f;
+                    float rowsTop = 8.0f, bottomPad = 10.0f;
+                    int rowCount = 4;
+                    float panelH = titleTop + titleH + sepGap + rowsTop + rowH * rowCount + bottomPad;
+                    ImVec2 panelPos(vpMin.x + 8, vpMin.y + 6 + btnH + 4);
+                    ImDrawList* odl = ImGui::GetWindowDrawList();
+                    odl->AddRectFilled(panelPos, ImVec2(panelPos.x + panelW, panelPos.y + panelH),
+                        IM_COL32(20, 20, 25, 230), 8.0f);
+                    odl->AddRect(panelPos, ImVec2(panelPos.x + panelW, panelPos.y + panelH),
+                        IM_COL32(10, 10, 15, 180), 8.0f, 0, 1.0f);
+
+                    ImGui::SetNextWindowPos(panelPos);
+                    ImGui::SetNextWindowSize(ImVec2(panelW, panelH));
+                    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0,0,0,0));
+                    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+                    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+                    ImGui::Begin("##GameViewportOptions", nullptr,
+                        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove |
+                        ImGuiWindowFlags_NoSavedSettings);
+
+                    ImGui::SetCursorPos(ImVec2(16.0f, titleTop));
+                    ImGui::TextDisabled("Game Viewport Options");
+                    ImGui::SetCursorPos(ImVec2(16.0f, titleTop + titleH + sepGap));
+                    ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.30f,0.35f,0.40f,0.60f));
+                    ImGui::Separator();
+                    ImGui::PopStyleColor();
+
+                    ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+
+                    struct ResEntry { const char* label; int w, h; };
+                    ResEntry resolutions[] = {
+                        {"1920 x 1080  (1080p)", 1920, 1080},
+                        {"2560 x 1440  (2K)",    2560, 1440},
+                        {"3840 x 2160  (4K)",    3840, 2160},
+                        {"Fit Window",            0,    0},
+                    };
+
+                    auto resRow = [&](const char* label, bool active) {
+                        float rowY = ImGui::GetCursorPosY();
+                        ImVec2 rMin(panelPos.x, panelPos.y + rowY);
+                        ImVec2 rMax(panelPos.x + panelW, panelPos.y + rowY + rowH);
+                        bool hovered = ImGui::IsMouseHoveringRect(rMin, rMax);
+                        if (hovered) {
+                            odl->AddRectFilled(rMin, rMax, IM_COL32(0,112,255,100), 2.0f);
+                        }
+                        ImGui::SetCursorPos(ImVec2(0, rowY));
+                        ImGui::InvisibleButton("##resHit", ImVec2(panelW, rowH));
+                        if (active) {
+                            ImGui::SetCursorPos(ImVec2(16.0f, rowY + (rowH - ImGui::GetTextLineHeight()) * 0.5f));
+                            ImGui::Text("%s", ICON_FA_CHECK);
+                        }
+                        ImGui::SetCursorPos(ImVec2(40.0f, rowY + (rowH - ImGui::GetTextLineHeight()) * 0.5f));
+                        ImGui::Text("%s", label);
+                        return hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+                    };
+
+                    for (auto& r : resolutions) {
+                        ImGui::PushID(r.label);
+                        bool active = (m_GameViewportResW == r.w && m_GameViewportResH == r.h);
+                        if (resRow(r.label, active)) {
+                            m_GameViewportResW = r.w;
+                            m_GameViewportResH = r.h;
+                            m_GameRenderer->MarkViewportDirty();
+                        }
+                        ImGui::PopID();
+                    }
+
+                    ImGui::PopFont();
+                    ImGui::End();
+                    ImGui::PopStyleVar(2);
+                    ImGui::PopStyleColor();
+                }
+
+                { // ---- Top-right: [Stats] button ----
+                    ImVec2 sp(vpMin.x + vpSize.x - btnW - 8, vpMin.y + 6);
+                    ImDrawList* dl = ImGui::GetWindowDrawList();
+                    dl->AddRectFilled(sp, ImVec2(sp.x + btnW, sp.y + btnH),
+                        m_ShowGameStats ? IM_COL32(48, 88, 145, 180) : IM_COL32(20, 20, 25, 180), 10.0f);
+                    dl->AddRect(sp, ImVec2(sp.x + btnW, sp.y + btnH),
+                        IM_COL32(10, 10, 15, 180), 10.0f, 0, 1.0f);
+                    ImGui::SetCursorScreenPos(sp);
+                    ImVec4 atxt = ImVec4(0.40f, 0.65f, 1.00f, 1.0f);
+                    ImVec4 itxt = ImVec4(0.65f, 0.65f, 0.68f, 1.0f);
+                    ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+                    ImGui::PushID("GamePerfStats");
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
+                    ImGui::PushStyleColor(ImGuiCol_Text, m_ShowGameStats ? atxt : itxt);
+                    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
+                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+                    if (ImGui::Button(ICON_FA_CHART_LINE, ImVec2(btnW, btnH)))
+                        m_ShowGameStats = !m_ShowGameStats;
+                    ImGui::PopStyleVar(2);
+                    ImGui::PopStyleColor(2);
+                    ImGui::PopID();
+                    ImGui::PopFont();
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                        ImGui::SetTooltip("Performance Stats");
+                }
+
+                // ---- Game Stats Overlay ----
+                if (m_ShowGameStats) {
+                    static ImVec2 s_OverlaySize = ImVec2(375.0f, 340.0f);
+
+                    ImVec2 vpMinRel = ImVec2(vpMin.x - ImGui::GetWindowPos().x, vpMin.y - ImGui::GetWindowPos().y);
+                    float statsY = vpMinRel.y + 6.0f + 32.0f + 3.0f * 2.0f + 4.0f;
+                    ImGui::SetCursorPos(ImVec2(vpMinRel.x + vpSize.x - s_OverlaySize.x - 10.0f, statsY));
+
+                    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.15f, 0.9f));
+                    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 4.0f);
+
+                    ImGui::BeginChild("StatsOverlay", s_OverlaySize, false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+                    ImGui::SetCursorPosY(10.0f);
+                    ImGui::Indent(10.0f);
+
+                    auto& io = ImGui::GetIO();
+                    auto boldFont = io.Fonts->Fonts.Size > 1 ? io.Fonts->Fonts[1] : io.Fonts->Fonts[0];
+
+                    float memoryMB = GetPhysicalMemoryUsageMB();
+                    float uiScale = io.FontGlobalScale;
+                    float alignOffset = 100.0f * uiScale;
+
+                    // --- Graphics ---
+                    ImGui::PushFont(boldFont);
+                    ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Graphics");
+                    ImGui::PopFont();
+                    ImGui::Separator();
+                    ImGui::Text("%.1f FPS (%.1f ms)", io.Framerate, 1000.0f / io.Framerate);
+                    ImGui::Text("CPU Time:"); ImGui::SameLine(alignOffset);
+                    ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%8.2f ms", m_GameStats.CPUTime);
+                    ImGui::Text("GPU Time:"); ImGui::SameLine(alignOffset);
+                    ImGui::TextColored(ImVec4(0.9f, 0.4f, 0.2f, 1.0f), "%8.2f ms", m_GameStats.GPUTime);
+                    ImGui::Text("RAM Usage:"); ImGui::SameLine(alignOffset);
+                    ImGui::TextColored(ImVec4(0.2f, 0.7f, 0.9f, 1.0f), "%8.1f MB", memoryMB);
+                    ImGui::Text("Screen Size: %dx%d",
+                        (m_GameViewportResW > 0 && m_GameViewportResH > 0)
+                            ? m_GameViewportResW : (int)m_GameViewportSize.x,
+                        (m_GameViewportResW > 0 && m_GameViewportResH > 0)
+                            ? m_GameViewportResH : (int)m_GameViewportSize.y);
+                    ImGui::Spacing();
+
+                    ImGui::PushFont(boldFont);
+                    ImGui::TextColored(ImVec4(0.8f, 0.6f, 0.2f, 1.0f), "Rendering");
+                    ImGui::PopFont();
+                    ImGui::Separator();
+                    ImGui::Text("Draw Calls:"); ImGui::SameLine(alignOffset);
+                    ImGui::Text("%d", m_GameStats.DrawCalls);
+                    ImGui::Text("Shader Binds:"); ImGui::SameLine(alignOffset);
+                    ImGui::Text("%d", m_GameStats.ShaderBinds);
+                    ImGui::Spacing();
+
+                    ImGui::PushFont(boldFont);
+                    ImGui::TextColored(ImVec4(0.3f, 0.6f, 0.9f, 1.0f), "Geometry");
+                    ImGui::PopFont();
+                    ImGui::Separator();
+                    ImGui::Text("Triangles:"); ImGui::SameLine(alignOffset);
+                    ImGui::Text("%d", m_GameStats.TriangleCount);
+                    ImGui::Text("Vertices:"); ImGui::SameLine(alignOffset);
+                    ImGui::Text("%d", m_GameStats.VertexCount);
+
+                    if (m_ActiveScene) {
+                        size_t entityCount = 0;
+                        auto view = m_ActiveScene->Reg().view<IDComponent>();
+                        for (auto e : view) entityCount++;
+                        ImGui::Text("Active Entities:"); ImGui::SameLine(alignOffset);
+                        ImGui::Text("%zu", entityCount);
+                    }
+
+                    ImGui::Unindent(10.0f);
+
+                    // Dynamic sizing for stats overlay
+                    float currentLineHeight = ImGui::GetTextLineHeight();
+                    s_OverlaySize.x = 375.0f * (currentLineHeight / 16.0f);
+                    s_OverlaySize.y = ImGui::GetCursorPosY() + 10.0f;
+
+                    ImGui::EndChild();
+
+                    ImGui::PopStyleVar();
+                    ImGui::PopStyleColor();
+                }
             } else {
                 ImGui::Text("Game is initializing...");
             }
-        }
-
-        // ==========================================
-        // Game Viewport Toolbar Overlay
-        // ==========================================
-        if (vpMin.x > 0.0f && m_GameRenderer) {
-            float btnW = 38.0f, btnH = 32.0f;
-
-            // ---- Top-left: [Options] button ----
-            {
-                ImVec4 inactiveTxt = ImVec4(0.65f, 0.65f, 0.68f, 1.0f);
-                ImVec4 activeTxt   = ImVec4(0.40f, 0.65f, 1.00f, 1.0f);
-                ImDrawList* dl = ImGui::GetWindowDrawList();
-                ImU32 borderCol = IM_COL32(10, 10, 15, 180);
-                ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
-
-                auto oneBtn = [&](float x, const char* icon, const char* tip, bool* toggle) {
-                    bool active = toggle ? *toggle : false;
-                    ImVec2 bMin(x, vpMin.y + 6);
-                    ImVec2 bMax(x + btnW, vpMin.y + 6 + btnH);
-                    dl->AddRectFilled(bMin, bMax,
-                        active ? IM_COL32(48, 88, 145, 180) : IM_COL32(20, 20, 25, 180), 10.0f);
-                    dl->AddRect(bMin, bMax, borderCol, 10.0f, 0, 1.0f);
-                    ImGui::SetCursorScreenPos(bMin);
-                    ImGui::PushID(tip);
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
-                    ImGui::PushStyleColor(ImGuiCol_Text, active ? activeTxt : inactiveTxt);
-                    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
-                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-                    bool pressed = ImGui::Button(icon, ImVec2(btnW, btnH));
-                    ImGui::PopStyleVar(2);
-                    ImGui::PopStyleColor(2);
-                    ImGui::PopID();
-                    if (pressed && toggle) *toggle = !*toggle;
-                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-                        ImGui::SetTooltip("%s", tip);
-                };
-
-                float ox  = vpMin.x + 8;
-                float pjx = ox  + btnW + 4;
-                oneBtn(ox, ICON_FA_BARS, "Options", &m_ShowGameOptions);
-                if (m_ShowGameOptions) {
-                    m_ShowViewportOptions = false;
-                    m_ShowViewportGizmos   = false;
-                    m_ShowViewportCameraSpeed = false;
-                }
-
-                // Projection mode toggle (icon + text)
-                {
-                    bool isPersp = true;
-                    if (m_ActiveScene) {
-                        auto camView = m_ActiveScene->Reg().view<CameraComponent>();
-                        for (auto e : camView) {
-                            auto& cc = camView.get<CameraComponent>(e);
-                            isPersp = (cc.Camera.GetProjectionType()
-                                       == SceneCamera::ProjectionType::Perspective);
-                            break;
-                        }
-                    }
-
-                    const char* projLabel = isPersp
-                        ? ICON_FA_CUBE " Persp" : ICON_FA_BORDER_ALL " Ortho";
-                    float projW = ImGui::CalcTextSize(projLabel).x
-                                  + ImGui::GetStyle().FramePadding.x * 2.0f + 8.0f;
-                    ImVec2 pMin(pjx, vpMin.y + 6);
-                    ImVec2 pMax(pjx + projW, vpMin.y + 6 + btnH);
-                    dl->AddRectFilled(pMin, pMax, IM_COL32(20, 20, 25, 180), 10.0f);
-                    dl->AddRect(pMin, pMax, IM_COL32(10, 10, 15, 180), 10.0f, 0, 1.0f);
-                    ImGui::SetCursorScreenPos(pMin);
-                    ImGui::PushID("GameProjToggle");
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f,0.65f,0.68f,1.0f));
-                    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
-                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-                    if (ImGui::Button(projLabel, ImVec2(projW, btnH)) && m_ActiveScene) {
-                        auto camView = m_ActiveScene->Reg().view<CameraComponent>();
-                        for (auto e : camView) {
-                            auto& cc = camView.get<CameraComponent>(e);
-                            cc.Camera.SetProjectionType(isPersp
-                                ? SceneCamera::ProjectionType::Orthographic
-                                : SceneCamera::ProjectionType::Perspective);
-                            break;
-                        }
-                    }
-                    ImGui::PopStyleVar(2);
-                    ImGui::PopStyleColor(2);
-                    ImGui::PopID();
-                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-                        ImGui::SetTooltip("Projection: %s",
-                            isPersp ? "Perspective" : "Orthographic");
-                }
-
-                ImGui::PopFont();
-            }
-
-            // ---- Game Viewport Resolution Panel ----
-            if (m_ShowGameOptions) {
-                float panelW = 352.0f, rowH = 32.0f;
-                float titleTop = 10.0f, titleH = 20.0f, sepGap = 10.0f;
-                float rowsTop = 8.0f, bottomPad = 10.0f;
-                int rowCount = 4;
-                float panelH = titleTop + titleH + sepGap + rowsTop + rowH * rowCount + bottomPad;
-                ImVec2 panelPos(vpMin.x + 8, vpMin.y + 6 + btnH + 4);
-                ImDrawList* odl = ImGui::GetWindowDrawList();
-                odl->AddRectFilled(panelPos, ImVec2(panelPos.x + panelW, panelPos.y + panelH),
-                    IM_COL32(20, 20, 25, 230), 8.0f);
-                odl->AddRect(panelPos, ImVec2(panelPos.x + panelW, panelPos.y + panelH),
-                    IM_COL32(10, 10, 15, 180), 8.0f, 0, 1.0f);
-
-                ImGui::SetNextWindowPos(panelPos);
-                ImGui::SetNextWindowSize(ImVec2(panelW, panelH));
-                ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0,0,0,0));
-                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-                ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-                ImGui::Begin("##GameViewportOptions", nullptr,
-                    ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-                    ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove |
-                    ImGuiWindowFlags_NoSavedSettings);
-
-                ImGui::SetCursorPos(ImVec2(16.0f, titleTop));
-                ImGui::TextDisabled("Game Viewport Options");
-                ImGui::SetCursorPos(ImVec2(16.0f, titleTop + titleH + sepGap));
-                ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.30f,0.35f,0.40f,0.60f));
-                ImGui::Separator();
-                ImGui::PopStyleColor();
-
-                ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
-
-                struct ResEntry { const char* label; int w, h; };
-                ResEntry resolutions[] = {
-                    {"1920 x 1080  (1080p)", 1920, 1080},
-                    {"2560 x 1440  (2K)",    2560, 1440},
-                    {"3840 x 2160  (4K)",    3840, 2160},
-                    {"Fit Window",            0,    0},
-                };
-
-                auto resRow = [&](const char* label, bool active) {
-                    float rowY = ImGui::GetCursorPosY();
-                    ImVec2 rMin(panelPos.x, panelPos.y + rowY);
-                    ImVec2 rMax(panelPos.x + panelW, panelPos.y + rowY + rowH);
-                    bool hovered = ImGui::IsMouseHoveringRect(rMin, rMax);
-                    if (hovered) {
-                        odl->AddRectFilled(rMin, rMax, IM_COL32(0,112,255,100), 2.0f);
-                    }
-                    ImGui::SetCursorPos(ImVec2(0, rowY));
-                    ImGui::InvisibleButton("##resHit", ImVec2(panelW, rowH));
-                    if (active) {
-                        ImGui::SetCursorPos(ImVec2(16.0f, rowY + (rowH - ImGui::GetTextLineHeight()) * 0.5f));
-                        ImGui::Text("%s", ICON_FA_CHECK);
-                    }
-                    ImGui::SetCursorPos(ImVec2(40.0f, rowY + (rowH - ImGui::GetTextLineHeight()) * 0.5f));
-                    ImGui::Text("%s", label);
-                    return hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
-                };
-
-                for (auto& r : resolutions) {
-                    ImGui::PushID(r.label);
-                    bool active = (m_GameViewportResW == r.w && m_GameViewportResH == r.h);
-                    if (resRow(r.label, active)) {
-                        m_GameViewportResW = r.w;
-                        m_GameViewportResH = r.h;
-                        m_GameRenderer->MarkViewportDirty();
-                    }
-                    ImGui::PopID();
-                }
-
-                ImGui::PopFont();
-                ImGui::End();
-                ImGui::PopStyleVar(2);
-                ImGui::PopStyleColor();
-            }
-
-            // ---- Top-right: [Stats] button ----
-            {
-                ImVec2 sp(vpMin.x + vpSize.x - btnW - 8, vpMin.y + 6);
-                ImDrawList* dl = ImGui::GetWindowDrawList();
-                dl->AddRectFilled(sp, ImVec2(sp.x + btnW, sp.y + btnH),
-                    m_ShowGameStats ? IM_COL32(48, 88, 145, 180) : IM_COL32(20, 20, 25, 180), 10.0f);
-                dl->AddRect(sp, ImVec2(sp.x + btnW, sp.y + btnH),
-                    IM_COL32(10, 10, 15, 180), 10.0f, 0, 1.0f);
-                ImGui::SetCursorScreenPos(sp);
-                ImVec4 atxt = ImVec4(0.40f, 0.65f, 1.00f, 1.0f);
-                ImVec4 itxt = ImVec4(0.65f, 0.65f, 0.68f, 1.0f);
-                ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
-                ImGui::PushID("GamePerfStats");
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
-                ImGui::PushStyleColor(ImGuiCol_Text, m_ShowGameStats ? atxt : itxt);
-                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-                if (ImGui::Button(ICON_FA_CHART_LINE, ImVec2(btnW, btnH)))
-                    m_ShowGameStats = !m_ShowGameStats;
-                ImGui::PopStyleVar(2);
-                ImGui::PopStyleColor(2);
-                ImGui::PopID();
-                ImGui::PopFont();
-                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-                    ImGui::SetTooltip("Performance Stats");
-            }
-        }
-
-        // ==========================================
-        // Game 窗口内置 Stats 悬浮层 (完美动态适配版)
-        // ==========================================
-        if (m_ShowGameStats) {
-            static ImVec2 s_OverlaySize = ImVec2(375.0f, 340.0f);
-
-            // Position below the toolbar buttons (avoid overlapping them)
-            ImVec2 vpMinRel = (vpMin.x > 0.0f)
-                ? ImVec2(vpMin.x - ImGui::GetWindowPos().x, vpMin.y - ImGui::GetWindowPos().y)
-                : cursorStartPos;
-            float statsY = vpMinRel.y + 6.0f + 32.0f + 3.0f * 2.0f + 4.0f; // btnY + btnH + pad*2 + margin
-            ImGui::SetCursorPos(ImVec2(vpMinRel.x + vpSize.x - s_OverlaySize.x - 10.0f, statsY));
-
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.15f, 0.9f));
-            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 4.0f);
-            
-            // 3. 开启 Child，传入动态的外框尺寸
-            ImGui::BeginChild("StatsOverlay", s_OverlaySize, false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-            
-            ImGui::SetCursorPosY(10.0f); 
-            ImGui::Indent(10.0f);        
-
-            auto& io = ImGui::GetIO();
-            auto boldFont = io.Fonts->Fonts.Size > 1 ? io.Fonts->Fonts[1] : io.Fonts->Fonts[0];
-
-            // 获取我们刚刚写好的内存数据和渲染统计数据
-            float memoryMB = GetPhysicalMemoryUsageMB();
-            float uiScale = io.FontGlobalScale;
-            float alignOffset = 100.0f * uiScale;
-
-            // --- 显卡信息大类 ---
-            ImGui::PushFont(boldFont);
-            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Graphics");
-            ImGui::PopFont();
-            ImGui::Separator();
-            ImGui::Text("%.1f FPS (%.1f ms)", io.Framerate, 1000.0f / io.Framerate);
-            ImGui::Text("CPU Time:"); ImGui::SameLine(alignOffset);
-            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%8.2f ms", m_GameStats.CPUTime);
-            ImGui::Text("GPU Time:"); ImGui::SameLine(alignOffset);
-            ImGui::TextColored(ImVec4(0.9f, 0.4f, 0.2f, 1.0f), "%8.2f ms", m_GameStats.GPUTime);
-            ImGui::Text("RAM Usage:"); ImGui::SameLine(alignOffset);
-            ImGui::TextColored(ImVec4(0.2f, 0.7f, 0.9f, 1.0f), "%8.1f MB", memoryMB);
-            ImGui::Text("Screen Size: %dx%d",
-                (m_GameViewportResW > 0 && m_GameViewportResH > 0)
-                    ? m_GameViewportResW : (int)m_GameViewportSize.x,
-                (m_GameViewportResW > 0 && m_GameViewportResH > 0)
-                    ? m_GameViewportResH : (int)m_GameViewportSize.y);
-            ImGui::Spacing();
-            
-            // --- 渲染调用大类 ---
-            ImGui::PushFont(boldFont);
-            ImGui::TextColored(ImVec4(0.8f, 0.6f, 0.2f, 1.0f), "Rendering");
-            ImGui::PopFont();
-            ImGui::Separator();
-            ImGui::Text("Draw Calls: %d", m_GameStats.DrawCalls);
-            ImGui::Text("Shader Binds: %d", m_GameStats.ShaderBinds);
-            ImGui::Spacing();
-
-            ImGui::PushFont(boldFont);
-            ImGui::TextColored(ImVec4(0.3f, 0.6f, 0.9f, 1.0f), "Geometry");
-            ImGui::PopFont();
-            ImGui::Separator();
-            
-            ImGui::Text("Triangle Count: %d", m_GameStats.TriangleCount); 
-            ImGui::SameLine(0.0f, 15.0f * uiScale); 
-            ImGui::Text("Vertex Count: %d", m_GameStats.VertexCount);
-
-            if (m_ActiveScene) {
-                size_t entityCount = 0;
-                auto view = m_ActiveScene->Reg().view<IDComponent>();
-                for (auto e : view) entityCount++;
-                ImGui::Text("Active Entities: %zu", entityCount);
-            }
-
-            ImGui::Unindent(10.0f); 
-
-            // ==========================================
-            // 终极动态适配魔法：在结束绘制前，向 ImGui 索要完美的宽高！
-            // ==========================================
-            
-            // [宽度动态]: 根据当前系统字体的行高，等比缩放你觉得最舒服的 375.0f
-            // (假设你在 Windows 上觉得刚好时，标准行高是 16.0f)
-            float currentLineHeight = ImGui::GetTextLineHeight(); 
-            s_OverlaySize.x = 375.0f * (currentLineHeight / 16.0f);
-            
-            // [高度动态]: 直接获取当前画笔(Cursor)的 Y 坐标，再加上 10 像素作为底部边距！
-            s_OverlaySize.y = ImGui::GetCursorPosY() + 10.0f; 
-
-            ImGui::EndChild();
-            
-            ImGui::PopStyleVar(); 
-            ImGui::PopStyleColor();
         }
 
         ImGui::End();

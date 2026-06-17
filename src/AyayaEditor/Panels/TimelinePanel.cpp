@@ -444,18 +444,14 @@ namespace Ayaya {
                     ImGui::TableSetColumnIndex(0);
                     ImGui::AlignTextToFramePadding();
 
-                    const char* icon = ICON_FA_CUBE;
-                    if (entity.HasComponent<CameraComponent>())           icon = ICON_FA_VIDEO;
-                    else if (entity.HasComponent<PointLightComponent>())  icon = ICON_FA_LIGHTBULB;
-                    else if (entity.HasComponent<DirectionalLightComponent>()) icon = ICON_FA_SUN;
-                    else if (entity.HasComponent<SpriteRendererComponent>())   icon = ICON_FA_IMAGE;
+                    auto iconInfo = UI::GetEntityIconInfo(entity);
 
                     ImGuiTreeNodeFlags fl = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
                     if (expanded) fl |= ImGuiTreeNodeFlags_DefaultOpen;
 
                     ImGui::PushID((int)e);
                     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.80f, 0.84f, 0.92f, 1.0f));
-                    bool nodeOpen = ImGui::TreeNodeEx(name.c_str(), fl, "%s  %s", icon, name.c_str());
+                    bool nodeOpen = ImGui::TreeNodeEx(name.c_str(), fl, "%s  %s", iconInfo.Icon, name.c_str());
                     ImGui::PopStyleColor();
                     if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
                         if (expanded) m_ExpandedEntities.erase(uuid);

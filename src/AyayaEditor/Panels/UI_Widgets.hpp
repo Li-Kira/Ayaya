@@ -7,8 +7,71 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <string>
 
+#include "Engine/Scene/Entity.hpp"
+
 namespace Ayaya {
     namespace UI {
+
+        // ==========================================
+        // Entity type → icon + color (shared by SceneHierarchyPanel & TimelinePanel)
+        // Colors are strictly aligned with PropertiesPanel DrawComponentHeader colors.
+        // ==========================================
+        struct EntityIconInfo {
+            const char* Icon;
+            ImVec4      Color;
+        };
+
+        // Priority order: Camera > Mesh > Sprite > DirLight > PointLight >
+        // Environment > PostProcess > Animation > LuaScript > Rigidbody2D > BoxCollider2D >
+        // Canvas > UIButton > UIText > UIImage > default
+        static EntityIconInfo GetEntityIconInfo(const Entity& entity) {
+            // 1. Camera / Rendering
+            if (entity.HasComponent<CameraComponent>())
+                return { ICON_FA_VIDEO,         ImVec4(0.2f, 0.6f, 0.9f, 1.0f) };  // Blue — Camera header
+            if (entity.HasComponent<MeshRendererComponent>())
+                return { ICON_FA_CUBE,          ImVec4(0.2f, 0.8f, 0.4f, 1.0f) };  // Green — Mesh Renderer header
+            if (entity.HasComponent<SpriteRendererComponent>())
+                return { ICON_FA_IMAGE,         ImVec4(0.8f, 0.3f, 0.8f, 1.0f) };  // Purple — Sprite Renderer header
+
+            // 2. Lights
+            if (entity.HasComponent<DirectionalLightComponent>())
+                return { ICON_FA_SUN,           ImVec4(0.9f, 0.8f, 0.2f, 1.0f) };  // Gold — Directional Light header
+            if (entity.HasComponent<PointLightComponent>())
+                return { ICON_FA_LIGHTBULB,     ImVec4(0.9f, 0.6f, 0.1f, 1.0f) };  // Orange — Point Light header
+
+            // 3. Environment / PostProcess
+            if (entity.HasComponent<EnvironmentComponent>())
+                return { ICON_FA_CLOUD_SUN,     ImVec4(0.4f, 0.8f, 0.9f, 1.0f) };  // Teal — Environment header
+            if (entity.HasComponent<PostProcessVolumeComponent>())
+                return { ICON_FA_MAGIC,         ImVec4(0.7f, 0.4f, 0.9f, 1.0f) };  // Violet — Post Process Volume header
+
+            // 4. Animation
+            if (entity.HasComponent<AnimationControllerComponent>())
+                return { ICON_FA_FILM,          ImVec4(0.3f, 0.9f, 0.8f, 1.0f) };  // Teal — Animation Controller header
+
+            // 5. Scripting
+            if (entity.HasComponent<LuaScriptComponent>())
+                return { ICON_FA_FILE_CODE,     ImVec4(0.9f, 0.2f, 0.5f, 1.0f) };  // Pink — Lua Script header
+
+            // 6. Physics
+            if (entity.HasComponent<Rigidbody2DComponent>())
+                return { ICON_FA_BULLSEYE,      ImVec4(0.9f, 0.3f, 0.3f, 1.0f) };  // Red — Rigidbody 2D header
+            if (entity.HasComponent<BoxCollider2DComponent>())
+                return { ICON_FA_VECTOR_SQUARE, ImVec4(0.5f, 0.9f, 0.3f, 1.0f) };  // Green-Yellow — Box Collider 2D header
+
+            // 7. UI
+            if (entity.HasComponent<CanvasComponent>())
+                return { ICON_FA_DESKTOP,       ImVec4(0.2f, 0.75f, 0.75f, 1.0f) }; // Teal — Canvas header
+            if (entity.HasComponent<UIButtonComponent>())
+                return { ICON_FA_HAND_POINTER,  ImVec4(0.3f, 0.9f, 0.3f, 1.0f) };  // Green — UI Button header
+            if (entity.HasComponent<UITextComponent>())
+                return { ICON_FA_FONT,          ImVec4(0.9f, 0.6f, 0.2f, 1.0f) };  // Orange — UI Text header
+            if (entity.HasComponent<UIImageComponent>())
+                return { ICON_FA_IMAGE,         ImVec4(0.8f, 0.3f, 0.8f, 1.0f) };  // Purple — UI Image header
+
+            // 8. Default
+            return { ICON_FA_CUBE,              ImVec4(0.7f, 0.7f, 0.7f, 1.0f) };  // Gray
+        }
 
         // ==========================================
         // Popup/menu helpers

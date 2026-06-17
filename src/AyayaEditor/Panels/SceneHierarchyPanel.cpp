@@ -34,18 +34,50 @@ namespace Ayaya {
         }
         m_PropertiesPanel.OnImGuiRender();
 
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
         ImGui::Begin("Scene Hierarchy");
         float uiScale = ImGui::GetIO().FontGlobalScale;
 
         m_VisibleNodes.clear();
 
         if (m_Context) {
-            auto rootEntities = m_Context->GetRootEntities();
-            for (auto entityID : rootEntities) {
-                Entity entity{ entityID, m_Context.get() };
-                DrawEntityNode(entity);
+            // -- Match window background to table row colors so empty area blends in --
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.12f, 0.12f, 0.13f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg,  ImVec4(0.12f, 0.12f, 0.13f, 1.0f));
+
+            // Subtle alternating row backgrounds
+            ImGui::PushStyleColor(ImGuiCol_TableRowBg,    ImVec4(0.12f, 0.12f, 0.13f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_TableRowBgAlt, ImVec4(0.10f, 0.10f, 0.11f, 1.0f));
+
+            // -- Engine-blue selection highlight --
+            ImVec4 selBlue = ImVec4(0.20f, 0.38f, 0.82f, 0.70f);
+            ImGui::PushStyleColor(ImGuiCol_Header,        selBlue);
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.45f, 0.90f, 0.80f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.16f, 0.32f, 0.70f, 0.75f));
+
+            static ImGuiTableFlags tableFlags =
+                ImGuiTableFlags_RowBg |
+                ImGuiTableFlags_NoBordersInBody |
+                ImGuiTableFlags_NoSavedSettings;
+
+            if (ImGui::BeginTable("##SceneHierarchyTable", 2, tableFlags))
+            {
+                ImGui::TableSetupColumn("Entity", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("##Vis",   ImGuiTableColumnFlags_WidthFixed,
+                                        28.0f * uiScale);
+
+                auto rootEntities = m_Context->GetRootEntities();
+                for (auto entityID : rootEntities) {
+                    Entity entity{ entityID, m_Context.get() };
+                    DrawEntityNode(entity);
+                }
+
+                ImGui::EndTable();
             }
 
+            ImGui::PopStyleColor(7);  // WindowBg, ChildBg, TableRowBg, TableRowBgAlt, Header x3
+
+            // Empty area below the table (deselect + drop-to-root)
             ImVec2 remainSize = ImGui::GetContentRegionAvail();
             if (remainSize.y < 50.0f) remainSize.y = 50.0f;
             ImGui::InvisibleButton("##HierarchyEmptyArea", remainSize);
@@ -191,6 +223,7 @@ namespace Ayaya {
             }
         }
         ImGui::End();
+        ImGui::PopStyleVar();
 
         // Shift 范围多选
         if (m_ShiftClickTarget) {
@@ -323,38 +356,62 @@ namespace Ayaya {
 
         auto& tagComp = entity.GetComponent<TagComponent>();
         auto& tag = tagComp.Tag;
-
-        std::string icon = ICON_FA_CUBE;
-        if (entity.HasComponent<CameraComponent>()) icon = ICON_FA_VIDEO;
-        else if (entity.HasComponent<SpriteRendererComponent>()) icon = ICON_FA_PAINT_BRUSH;
-        else if (entity.HasComponent<MeshRendererComponent>()) icon = ICON_FA_PAINT_BRUSH;
-        else if (entity.HasComponent<DirectionalLightComponent>()) icon = ICON_FA_SUN;
-        else if (entity.HasComponent<PointLightComponent>()) icon = ICON_FA_LIGHTBULB;
-        else if (entity.HasComponent<EnvironmentComponent>()) icon = ICON_FA_CLOUD_SUN;
-        else if (entity.HasComponent<PostProcessVolumeComponent>()) icon = ICON_FA_MAGIC;
-
-        std::string displayString = icon + " " + tag;
-
+        auto iconInfo = UI::GetEntityIconInfo(entity);
         bool isSelected = IsEntitySelected(entity);
 
         ImGuiTreeNodeFlags flags = (isSelected ? ImGuiTreeNodeFlags_Selected : 0)
             | ImGuiTreeNodeFlags_OpenOnArrow
-            | ImGuiTreeNodeFlags_SpanAvailWidth;
+            | ImGuiTreeNodeFlags_SpanAllColumns
+            | ImGuiTreeNodeFlags_FramePadding;
 
         auto& rel = entity.GetComponent<RelationshipComponent>();
         if (rel.Children.empty()) flags |= ImGuiTreeNodeFlags_Leaf;
 
         bool activeInHierarchy = entity.IsActiveInHierarchy();
-        if (!activeInHierarchy) {
+
+        // -- Begin a new table row --
+        ImGui::TableNextRow();
+
+        // =========================================
+        // Column 1: Eye visibility button
+        // =========================================
+        ImGui::TableSetColumnIndex(1);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.3f, 0.3f, 0.5f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.2f, 0.2f, 0.2f, 0.5f));
+        if (!activeInHierarchy)
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
-        }
 
-        float cursorY = ImGui::GetCursorPosY();
-        ImGui::SetNextItemAllowOverlap();
+        ImGui::PushID((uint32_t)entity);
+        float btnW = 24.0f * ImGui::GetIO().FontGlobalScale;
+        float btnH = ImGui::GetTextLineHeight();
+        bool eyeClicked = ImGui::Button(
+            tagComp.IsActive ? ICON_FA_EYE : ICON_FA_EYE_SLASH,
+            ImVec2(btnW, btnH));
+        if (eyeClicked)
+            tagComp.IsActive = !tagComp.IsActive;
+        ImGui::PopID();
 
-        bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, "%s", displayString.c_str());
+        if (!activeInHierarchy) ImGui::PopStyleColor(); // Text dim
+        ImGui::PopStyleColor(3);  // Button, ButtonHovered, ButtonActive
+        ImGui::PopStyleVar();     // FramePadding
 
-        if (ImGui::IsItemClicked()) {
+        // =========================================
+        // Column 0: Entity TreeNode
+        // =========================================
+        ImGui::TableSetColumnIndex(0);
+
+        if (!activeInHierarchy)
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+
+        // TreeNode with empty label — provides indent, arrow, hitbox & highlight.
+        // Icon + text are rendered afterwards so text always starts at the same
+        // X offset regardless of icon glyph width.
+        bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, "");
+
+        // -- Click handling (guard against eye button clicks) --
+        if (ImGui::IsItemClicked() && !eyeClicked) {
             if (ImGui::GetIO().KeyShift) {
                 m_ShiftClickTarget = entity;
             } else if (ImGui::GetIO().KeyCtrl) {
@@ -366,6 +423,7 @@ namespace Ayaya {
             }
         }
 
+        // -- Drag-drop source (wraps TreeNode) --
         if (ImGui::BeginDragDropSource()) {
             entt::entity entityID = entity;
             ImGui::SetDragDropPayload("ENTITY_PAYLOAD", &entityID, sizeof(entt::entity));
@@ -373,25 +431,29 @@ namespace Ayaya {
             ImGui::EndDragDropSource();
         }
 
+        // -- Drag-drop target (3-zone, uses TreeNode rect) --
         if (ImGui::BeginDragDropTarget()) {
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_PAYLOAD", ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect)) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_PAYLOAD",
+                    ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect)) {
                 float mouseY = ImGui::GetMousePos().y;
                 float itemMinY = ImGui::GetItemRectMin().y;
                 float itemMaxY = ImGui::GetItemRectMax().y;
                 float itemHeight = itemMaxY - itemMinY;
 
                 bool insertBefore = mouseY < itemMinY + itemHeight * 0.25f;
-                bool insertAfter = mouseY > itemMaxY - itemHeight * 0.25f;
-                bool reparent = !insertBefore && !insertAfter;
+                bool insertAfter  = mouseY > itemMaxY - itemHeight * 0.25f;
+                bool reparent     = !insertBefore && !insertAfter;
 
                 ImDrawList* drawList = ImGui::GetWindowDrawList();
                 ImVec2 minRect = ImGui::GetItemRectMin();
                 ImVec2 maxRect = ImGui::GetItemRectMax();
 
                 if (insertBefore) {
-                    drawList->AddLine(ImVec2(minRect.x, itemMinY), ImVec2(maxRect.x, itemMinY), IM_COL32(255, 215, 0, 255), 2.0f);
+                    drawList->AddLine(ImVec2(minRect.x, itemMinY), ImVec2(maxRect.x, itemMinY),
+                                      IM_COL32(255, 215, 0, 255), 2.0f);
                 } else if (insertAfter) {
-                    drawList->AddLine(ImVec2(minRect.x, itemMaxY), ImVec2(maxRect.x, itemMaxY), IM_COL32(255, 215, 0, 255), 2.0f);
+                    drawList->AddLine(ImVec2(minRect.x, itemMaxY), ImVec2(maxRect.x, itemMaxY),
+                                      IM_COL32(255, 215, 0, 255), 2.0f);
                 } else {
                     drawList->AddRect(minRect, maxRect, IM_COL32(255, 215, 0, 255), 0.0f, 0, 2.0f);
                 }
@@ -416,7 +478,8 @@ namespace Ayaya {
             ImGui::EndDragDropTarget();
         }
 
-                UI::PushPopupStyles();
+        // -- Context menu (bound to TreeNode, before icon+text overlay) --
+        UI::PushPopupStyles();
         if (ImGui::BeginPopupContextItem()) {
             if (UI::DrawNativeMenuItem("Duplicate Entity", nullptr, "Ctrl+D")) {
                 if (IsEntitySelected(entity)) m_EntitiesToDuplicate = m_SelectedEntities;
@@ -439,30 +502,26 @@ namespace Ayaya {
         }
         UI::PopPopupStyles();
 
-        // Visibility toggle (eye icon)
-        float uiScaleBtn = ImGui::GetIO().FontGlobalScale;
-        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 24.0f * uiScaleBtn);
-        ImGui::SetCursorPosY(cursorY);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
-        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0, 0, 0, 0));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.3f, 0.3f, 0.5f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.2f, 0.2f, 0.2f, 0.5f));
-        if (!activeInHierarchy) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
-        ImGui::PushID((uint32_t)entity);
-        if (ImGui::Button(tagComp.IsActive ? ICON_FA_EYE : ICON_FA_EYE_SLASH,
-                          ImVec2(24.0f * uiScaleBtn, ImGui::GetTextLineHeight())))
-            tagComp.IsActive = !tagComp.IsActive;
-        ImGui::PopID();
-        if (!activeInHierarchy) ImGui::PopStyleColor();
-        ImGui::PopStyleColor(3);
-        ImGui::PopStyleVar();
+        // --- Icon + text rendered separately for horizontal alignment ---
+        ImGui::SameLine(0, 0);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(iconInfo.Icon);
 
-        if (!activeInHierarchy) {
-            ImGui::PopStyleColor();
-        }
+        // Fixed-width icon column: all entity names start at the same X
+        const float kIconWidth = 28.0f * ImGui::GetIO().FontGlobalScale;
+        float iconStartX = ImGui::GetItemRectMin().x;
+        ImGui::SameLine();
+        ImGui::SetCursorScreenPos(ImVec2(iconStartX + kIconWidth,
+                                         ImGui::GetCursorScreenPos().y));
+        ImGui::TextUnformatted(tag.c_str());
 
+        if (!activeInHierarchy)
+            ImGui::PopStyleColor(); // Text dim
+
+        // -- Render children recursively --
         if (opened) {
-            bool isBeingDestroyed = std::find(m_EntitiesToDestroy.begin(), m_EntitiesToDestroy.end(), entity) != m_EntitiesToDestroy.end();
+            bool isBeingDestroyed = std::find(m_EntitiesToDestroy.begin(), m_EntitiesToDestroy.end(), entity)
+                                    != m_EntitiesToDestroy.end();
             if (!isBeingDestroyed) {
                 std::vector<entt::entity> children = rel.Children;
                 for (auto childID : children) {
