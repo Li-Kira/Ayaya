@@ -1,0 +1,25 @@
+Scene: Untitled
+EditorState:
+  ShowGrid: true
+  ShowSkybox: true
+  CameraPosition: [0, 0, 0]
+  CameraDistance: 10
+  CameraPitch: 0
+  CameraYaw: 0
+  CameraFocalPoint: [0, 0, 0]
+Entities:
+  - Entity: 3306939364551241650
+    TagComponent:
+      Tag: teapot
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [0.1, 0.1, 0.1]
+    MeshRendererComponent:
+      ModelHandle: 7830134091907035699
+      MaterialHandle: 16131022799274907990
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0

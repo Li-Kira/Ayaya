@@ -1,5 +1,6 @@
 #include "ayapch.h"
 #include "VulkanGeometryPool.hpp"
+#include "Renderer/Mesh.hpp"
 #include "Core/Log.hpp"
 #include <cstring>
 
@@ -74,6 +75,26 @@ namespace Ayaya {
             m_Cursor = (m_Cursor + 15) & ~15ull;
         }
 
+        return range;
+    }
+
+    GeometryRange GlobalGeometryPool::GetOrUploadMesh(Mesh* mesh) {
+        if (!mesh) return {};
+        auto it = m_MeshRanges.find(mesh);
+        if (it != m_MeshRanges.end()) return it->second;
+
+        const auto& verts = mesh->GetRawVertices();
+        const auto& inds  = mesh->GetRawIndices();
+        if (verts.empty() || inds.empty()) return {};
+
+        uint32_t vCount = mesh->GetVertexCount();
+        uint32_t iCount = mesh->GetIndexCount();
+        auto range = Upload(verts.data(), vCount * sizeof(Vertex),
+                            inds.data(),  iCount * sizeof(uint32_t),
+                            vCount, iCount);
+        // Convert byte offsets: vertex → uint elements for SSBO, index stays as byte offset
+        range.vertexOffset = range.vertexOffset / 4;
+        m_MeshRanges[mesh] = range;
         return range;
     }
 

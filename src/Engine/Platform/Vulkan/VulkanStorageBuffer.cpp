@@ -5,7 +5,7 @@
 
 namespace Ayaya {
 
-    VulkanStorageBuffer::VulkanStorageBuffer(uint32_t size) : m_Size(size) {
+    VulkanStorageBuffer::VulkanStorageBuffer(uint32_t size, VkBufferUsageFlags extraFlags) : m_Size(size) {
         auto context = std::dynamic_pointer_cast<VulkanContext>(
             Application::Get().GetWindow().GetContext());
         VmaAllocator allocator = context->GetAllocator();
@@ -17,7 +17,7 @@ namespace Ayaya {
         for (uint32_t i = 0; i < m_FramesInFlight; i++) {
             VkBufferCreateInfo bufferInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
             bufferInfo.size  = size;
-            bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+            bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | extraFlags;
             bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
             VmaAllocationCreateInfo allocInfo{};

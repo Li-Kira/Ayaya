@@ -10,7 +10,7 @@ namespace Ayaya {
     // SetData is a plain memcpy — zero Vulkan API overhead per frame.
     class VulkanStorageBuffer {
     public:
-        VulkanStorageBuffer(uint32_t size);
+        VulkanStorageBuffer(uint32_t size, VkBufferUsageFlags extraFlags = 0);
         ~VulkanStorageBuffer();
 
         // Copy data into current-frame buffer (persistent mapped pointer, no vkMap).

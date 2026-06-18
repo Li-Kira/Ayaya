@@ -1,0 +1,73 @@
+#version 450 core
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// ── Input: instance & geometry data (set=2, bindings 0-1) ──
+struct GPUInstance {
+    mat4 transform;
+    vec4 boundingSphere;   // xyz=center, w=radius
+    uint geometryRangeIdx;
+    uint materialIdx;
+    uint entityId;
+    uint _pad;
+};
+layout(std430, set = 2, binding = 0) readonly buffer InstanceBuffer {
+    GPUInstance Instances[];
+};
+
+struct GeometryRange {
+    uint vertexOffset;
+    uint indexOffset;
+    uint vertexCount;
+    uint indexCount;
+};
+layout(std430, set = 2, binding = 1) readonly buffer GeometryRangeBuffer {
+    GeometryRange Ranges[];
+};
+
+// ── Output: indirect draw commands — one per instance, fixed slot = gID ──
+// Culled instances write instanceCount=0 (GPU hardware no-op),
+// visible instances write the real draw command.
+struct DrawCommand {
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    int  vertexOffset;
+    uint firstInstance;
+};
+layout(std430, set = 3, binding = 0) buffer DrawIndirectBuffer {
+    DrawCommand Commands[];
+};
+
+// ── Push constants: frustum planes (Gribb-Hartmann, 6 × vec4 = 96 bytes) + instance count ──
+layout(push_constant) uniform FrustumPC {
+    vec4 u_Planes[6];
+    uint u_InstanceCount;
+} pc;
+
+bool IsVisible(vec4 sphere) {
+    for (int i = 0; i < 6; i++) {
+        if (dot(pc.u_Planes[i].xyz, sphere.xyz) + pc.u_Planes[i].w < -sphere.w)
+            return false;
+    }
+    return true;
+}
+
+void main() {
+    uint gID = gl_GlobalInvocationID.x;
+    if (gID >= pc.u_InstanceCount) return;
+
+    GPUInstance inst = Instances[gID];
+
+    if (IsVisible(inst.boundingSphere)) {
+        GeometryRange range = Ranges[inst.geometryRangeIdx];
+        Commands[gID].indexCount    = range.indexCount;
+        Commands[gID].instanceCount = 1;
+        Commands[gID].firstIndex    = range.indexOffset / 4u;
+        Commands[gID].vertexOffset  = 0;
+        Commands[gID].firstInstance = gID;
+    } else {
+        // Culled: write no-op (instanceCount=0 → GPU hardware skips)
+        Commands[gID].instanceCount = 0;
+    }
+}

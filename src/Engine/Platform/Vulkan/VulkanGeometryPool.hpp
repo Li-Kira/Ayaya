@@ -3,14 +3,15 @@
 #include <vk_mem_alloc.h>
 #include <cstdint>
 #include <vector>
+#include <unordered_map>
 #include <glm/glm.hpp>
 
 namespace Ayaya {
 
     // Per-sub-mesh range within the global geometry buffer
     struct GeometryRange {
-        uint32_t vertexOffset = 0;   // byte offset from start of buffer
-        uint32_t indexOffset  = 0;   // byte offset from start of buffer
+        uint32_t vertexOffset = 0;   // uint element offset into SSBO (byteOffset / 4)
+        uint32_t indexOffset  = 0;   // byte offset for vkCmdBindIndexBuffer / firstIndex
         uint32_t vertexCount  = 0;
         uint32_t indexCount   = 0;
     };
@@ -48,10 +49,15 @@ namespace Ayaya {
         void Init(VkDevice device, VmaAllocator allocator, VkDeviceSize size = kDefaultSize);
         void Shutdown();
 
-        // Append vertex + index data; return the byte-offset range for binding.
+        // Append vertex + index data; return the range for binding.
+        // vertexOffset is uint element offset (byteOffset / 4),
+        // indexOffset is byte offset for vkCmdBindIndexBuffer / firstIndex.
         GeometryRange Upload(const void* vertexData, VkDeviceSize vertexSize,
                              const void* indexData,  VkDeviceSize indexSize,
                              uint32_t vertexCount, uint32_t indexCount);
+
+        // Mesh lookup for GDR — registers the mesh on first call, returns cached range on subsequent.
+        GeometryRange GetOrUploadMesh(class Mesh* mesh);
 
         VkBuffer GetBuffer() const { return m_Buffer; }
 
@@ -62,6 +68,9 @@ namespace Ayaya {
         VkDevice      m_Device = VK_NULL_HANDLE;
         VkDeviceSize  m_Size = 0;
         VkDeviceSize  m_Cursor = 0;  // byte offset, grows linearly
+
+        // O(1) mesh → range lookup; entries added on first upload, queried every frame
+        std::unordered_map<class Mesh*, GeometryRange> m_MeshRanges;
     };
 
 }

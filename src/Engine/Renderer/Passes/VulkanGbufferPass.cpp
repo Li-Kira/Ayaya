@@ -1,5 +1,6 @@
 #include "ayapch.h"
 #include "VulkanGbufferPass.hpp"
+#include <fstream>
 #include "Renderer/RenderGraph.hpp"
 #include "Renderer/RenderQueue.hpp"
 #include "Asset/AssetManager.hpp"
@@ -25,24 +26,18 @@ namespace Ayaya {
             Application::Get().GetWindow().GetContext());
         if (!context) return;
         VkDevice device = context->GetDevice();
-        if (m_InstanceSetLayout) vkDestroyDescriptorSetLayout(device, m_InstanceSetLayout, nullptr);
-        if (m_InstancePool)      vkDestroyDescriptorPool(device, m_InstancePool, nullptr);
+        if (m_GDR_SetLayout)     vkDestroyDescriptorSetLayout(device, m_GDR_SetLayout, nullptr);
+        if (m_GDR_Pool)          vkDestroyDescriptorPool(device, m_GDR_Pool, nullptr);
+        if (m_Cull_Set3Layout)   vkDestroyDescriptorSetLayout(device, m_Cull_Set3Layout, nullptr);
+        if (m_Cull_Set3Pool)     vkDestroyDescriptorPool(device, m_Cull_Set3Pool, nullptr);
+        if (m_Cull_DummyLayout)  vkDestroyDescriptorSetLayout(device, m_Cull_DummyLayout, nullptr);
+        if (m_Cull_PipelineLayout) vkDestroyPipelineLayout(device, m_Cull_PipelineLayout, nullptr);
+        if (m_Cull_Pipeline)     vkDestroyPipeline(device, m_Cull_Pipeline, nullptr);
+        if (m_Cull_ShaderModule) vkDestroyShaderModule(device, m_Cull_ShaderModule, nullptr);
     }
 
     void VulkanGBufferPass::OnAttach() {
-        m_GBufferShader = Shader::Create("Deferred/gbuffer.vert", "Deferred/gbuffer.frag");
-        m_PipeSpec.Shader = m_GBufferShader;
-        m_PipeSpec.Layout = {
-            { ShaderDataType::Float3, "a_Position" },
-            { ShaderDataType::Float3, "a_Normal" },
-            { ShaderDataType::Float2, "a_TexCoord" },
-            { ShaderDataType::Float3, "a_Tangent" }
-        };
-        m_PipeSpec.DepthTest = true;
-        m_PipeSpec.DepthWrite = true;
-        m_PipeSpec.Blend = false;
-        m_PipeSpec.BackfaceCulling = CullMode::None;
-
+        // Create format reference FBO (1280×720 placeholder — actual size from RenderGraph)
         FramebufferSpecification refSpec;
         refSpec.Width = 1280; refSpec.Height = 720; refSpec.Samples = 1;
         refSpec.Attachments = {
@@ -51,240 +46,348 @@ namespace Ayaya {
             FramebufferTextureFormat::Depth
         };
         m_RefFBO = Framebuffer::Create(refSpec);
-        m_PipeSpec.TargetFramebuffer = m_RefFBO;
-        m_Pipeline = Pipeline::Create(m_PipeSpec);
-
-        // ── Instanced pipeline (same gbuffer.frag, SSBO at set=2) ──
-        m_InstancedShader = Shader::Create("Deferred/gbuffer_instanced.vert", "Deferred/gbuffer.frag");
 
         auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
             Application::Get().GetWindow().GetContext());
         VkDevice device = vkCtx->GetDevice();
         uint32_t fiCount = vkCtx->GetFramesInFlight();
 
+        // ── GPU-Driven Rendering (GDR) — SSBO-based instance & material data ──
         {
-            VkDescriptorSetLayoutBinding binding{};
-            binding.binding = 0;
-            binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            binding.descriptorCount = 1;
-            binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-            VkDescriptorSetLayoutCreateInfo layoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-            layoutInfo.bindingCount = 1;
-            layoutInfo.pBindings = &binding;
-            vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_InstanceSetLayout);
-        }
-
-        VulkanPipeline::s_ExtraSetLayouts = { m_InstanceSetLayout };
-        m_InstancedSpec = m_PipeSpec;
-        m_InstancedSpec.Shader = m_InstancedShader;
-        m_InstancedPipeline = Pipeline::Create(m_InstancedSpec);
-
-        m_InstanceBuffer = std::make_unique<VulkanStorageBuffer>(
-            kMaxInstances * sizeof(glm::mat4));
-        m_InstanceDescriptorSets.resize(fiCount);
-
-        {
-            VkDescriptorPoolSize poolSize{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, fiCount };
-            VkDescriptorPoolCreateInfo poolInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
-            poolInfo.maxSets = fiCount;
-            poolInfo.poolSizeCount = 1;
-            poolInfo.pPoolSizes = &poolSize;
-            vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_InstancePool);
-
-            std::vector<VkDescriptorSetLayout> layouts(fiCount, m_InstanceSetLayout);
-            VkDescriptorSetAllocateInfo allocInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
-            allocInfo.descriptorPool = m_InstancePool;
-            allocInfo.descriptorSetCount = fiCount;
-            allocInfo.pSetLayouts = layouts.data();
-            vkAllocateDescriptorSets(device, &allocInfo, m_InstanceDescriptorSets.data());
-        }
-
-        // ── GPU-Driven Rendering (GDR) — deferred pipeline creation ──
-        // Pipeline is NOT created here because gbuffer.frag uses set=1 texture
-        // bindings that conflict with the GDR vertex shader's set=2 SSBO layout.
-        // Will be enabled once a bindless fragment shader replaces set=1.
-        m_GDRShader = Shader::Create("Deferred/gbuffer_gdr.vert", "Deferred/gbuffer_bindless.frag");
-
-        // ── Bindless pipelines (UseBindlessTextures=true) ──
-        // Non-instanced bindless pipeline (no extra set layouts)
-        VulkanPipeline::s_ExtraSetLayouts.clear();
-        m_BindlessShader = Shader::Create("Deferred/gbuffer.vert", "Deferred/gbuffer_bindless.frag");
-        PipelineSpecification bindlessSpec = m_PipeSpec;
-        bindlessSpec.Shader = m_BindlessShader;
-        bindlessSpec.UseBindlessTextures = true;
-        m_BindlessPipeline = Pipeline::Create(bindlessSpec);
-
-        // Instanced bindless pipeline (SSBO at set=2)
-        m_BindlessInstancedShader = Shader::Create("Deferred/gbuffer_instanced.vert", "Deferred/gbuffer_bindless.frag");
-        PipelineSpecification bindlessInstancedSpec = m_InstancedSpec;
-        bindlessInstancedSpec.Shader = m_BindlessInstancedShader;
-        bindlessInstancedSpec.UseBindlessTextures = true;
-        VulkanPipeline::s_ExtraSetLayouts = { m_InstanceSetLayout };
-        m_BindlessInstancedPipeline = Pipeline::Create(bindlessInstancedSpec);
-        VulkanPipeline::s_ExtraSetLayouts.clear();
-    }
-
-    static inline uint64_t GetBatchKey(const DrawPacket& packet) {
-        SortKey k; k.Value = packet.SortKey;
-        return ((uint64_t)packet.MeshAsset.get() << 32) | (k.Bits.MaterialHash & 0xFFFFFFFF);
-    }
-
-    static bool IsInstancable(const DrawPacket& packet) {
-        SortKey k; k.Value = packet.SortKey;
-        return k.Bits.BucketID <= 1 && packet.MeshAsset && packet.MaterialAsset;
-    }
-
-    static void FillPC(GBufferPushConstants& pc, const DrawPacket& packet) {
-        // Defaults: white/black/normal bindless indices for missing textures
-        pc.Albedo_ReceiveShadows = glm::vec4(1.0f, 1.0f, 1.0f, packet.ReceiveShadows ? 1.0f : 0.0f);
-        pc.Metallic_Roughness_AO_Alpha = glm::vec4(0.0f, 0.5f, 1.0f, 1.0f);
-        pc.AlphaCutoff_BlendMode_UseORMMap = glm::vec4(0.5f, 0.0f, 0.0f, 0.0f);
-        pc.AlbedoMapIndex = 1; pc.NormalMapIndex = 3; pc.ORMMapIndex = 2;
-        pc.MetallicMapIndex = 1; pc.RoughnessMapIndex = 1; pc.AOMapIndex = 1;
-        pc.AlphaMapIndex = 1; pc.IsSelected = 0;
-
-        if (packet.MaterialAsset) {
-            auto& b = packet.MaterialAsset->GetBakedPC();
-            float finalMetallic, finalRoughness, finalAO;
-            b.GetRenderScalars(finalMetallic, finalRoughness, finalAO);
-            pc.Albedo_ReceiveShadows = glm::vec4(b.Albedo.r, b.Albedo.g, b.Albedo.b,
-                                                  packet.ReceiveShadows ? 1.0f : 0.0f);
-            pc.Metallic_Roughness_AO_Alpha = glm::vec4(finalMetallic, finalRoughness, finalAO, b.Alpha);
-            pc.AlphaCutoff_BlendMode_UseORMMap = glm::vec4(
-                packet.MaterialAsset->GetAlphaCutoff(),
-                (float)(int)packet.MaterialAsset->GetBlendMode(),
-                (float)b.UseORMMap, 0.0f);
-            pc.AlbedoMapIndex = b.AlbedoMapIndex;
-            pc.NormalMapIndex = b.NormalMapIndex;
-            pc.ORMMapIndex = b.ORMMapIndex;
-            pc.MetallicMapIndex = b.MetallicMapIndex;
-            pc.RoughnessMapIndex = b.RoughnessMapIndex;
-            pc.AOMapIndex = b.AOMapIndex;
-        }
-    }
-
-    void VulkanGBufferPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
-        auto fbo = context.GetFramebuffer("GBuffer");
-        if (!fbo) return;
-
-        auto* queue = context.RenderQueue;
-        cmd.BeginRenderPass(fbo, true, glm::vec4(0.0f));
-
-        if (!queue || queue->Packets.empty()) {
-            cmd.EndRenderPass();
-            return;
-        }
-
-        auto whiteTex = context.GetTexture("WhiteTexture");
-
-        // ── Phase 1: Linear run-length batching ──
-        // Packets are pre-sorted by SortKey → same-key packets are contiguous.
-        // Build batches and transform array in a single linear O(N) pass.
-        struct Batch { const DrawPacket* firstPkt; uint32_t first; uint32_t count; };
-        std::vector<Batch> batches;
-        std::vector<glm::mat4> transforms;
-        batches.reserve(64);
-        transforms.reserve(queue->Packets.size());
-
-        std::unordered_set<const DrawPacket*> instancedSet;  // for Phase 3 skip
-
-        for (size_t i = 0; i < queue->Packets.size(); ++i) {
-            const auto& p = queue->Packets[i];
-            if (!IsInstancable(p)) continue;
-
-            // Single-instance or selected/hovered → skip instancing
-            bool isSingle = (i == 0 || !IsInstancable(queue->Packets[i-1])
-                             || GetBatchKey(p) != GetBatchKey(queue->Packets[i-1]))
-                         && (i+1 >= queue->Packets.size() || !IsInstancable(queue->Packets[i+1])
-                             || GetBatchKey(p) != GetBatchKey(queue->Packets[i+1]));
-            if (isSingle) continue;
-
-            uint64_t key = GetBatchKey(p);
-            if (batches.empty() || key != GetBatchKey(*batches.back().firstPkt)) {
-                batches.push_back({&p, (uint32_t)transforms.size(), 1});
-            } else {
-                batches.back().count++;
-            }
-            transforms.push_back(p.Transform);
-            instancedSet.insert(&p);
-        }
-
-        // ── Phase 2: Issue instanced draws ──
-        if (!batches.empty()) {
-            auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
-                Application::Get().GetWindow().GetContext());
             uint32_t fiCount = vkCtx->GetFramesInFlight();
-            uint32_t frameIdx = vkCtx->GetCurrentFrameIndex() % fiCount;
 
-            m_InstanceBuffer->SetData(transforms.data(),
-                (uint32_t)(transforms.size() * sizeof(glm::mat4)));
+            // Set=2 layout: 4 bindings for GPU-Driven Rendering
+            //   0 = GPUInstance[]      (VERTEX | FRAGMENT)
+            //   1 = GeometryRange[]    (VERTEX)
+            //   2 = GPUMaterial[]      (VERTEX | FRAGMENT)
+            //   3 = GeometryBuffer     (VERTEX) — uint g_Data[] for vertex pulling
+            VkDescriptorSetLayoutBinding gdrBindings[4] = {};
+            gdrBindings[0].binding = 0; gdrBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            gdrBindings[0].descriptorCount = 1; gdrBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
+            gdrBindings[1].binding = 1; gdrBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            gdrBindings[1].descriptorCount = 1; gdrBindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
+            gdrBindings[2].binding = 2; gdrBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            gdrBindings[2].descriptorCount = 1; gdrBindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+            gdrBindings[3].binding = 3; gdrBindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            gdrBindings[3].descriptorCount = 1; gdrBindings[3].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-            VkDescriptorBufferInfo bufInfo{};
-            bufInfo.buffer = m_InstanceBuffer->GetBuffer(frameIdx);
-            bufInfo.offset = 0;
-            bufInfo.range = m_InstanceBuffer->GetSize();
-            VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-            write.dstSet = m_InstanceDescriptorSets[frameIdx];
-            write.dstBinding = 0;
-            write.descriptorCount = 1;
-            write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            write.pBufferInfo = &bufInfo;
-            vkUpdateDescriptorSets(vkCtx->GetDevice(), 1, &write, 0, nullptr);
+            VkDescriptorSetLayoutCreateInfo layoutCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+            layoutCI.bindingCount = 4;
+            layoutCI.pBindings = gdrBindings;
+            vkCreateDescriptorSetLayout(device, &layoutCI, nullptr, &m_GDR_SetLayout);
 
-            cmd.BindPipeline(m_BindlessInstancedPipeline);
-            // Bindless: no BindTexture2D calls needed — texture indices in push constants,
-            // global bindless descriptor set bound automatically by BindPipeline.
+            VkDescriptorPoolSize poolSize{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, fiCount * 4 };
+            VkDescriptorPoolCreateInfo poolCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+            poolCI.maxSets = fiCount;
+            poolCI.poolSizeCount = 1;
+            poolCI.pPoolSizes = &poolSize;
+            vkCreateDescriptorPool(device, &poolCI, nullptr, &m_GDR_Pool);
 
-            // Bind SSBO descriptor set (set=2, instance transforms) after BindPipeline
-            // so the pipeline layout is the bindless one.
+            m_GDR_DescriptorSets.resize(fiCount);
+            std::vector<VkDescriptorSetLayout> layouts(fiCount, m_GDR_SetLayout);
+            VkDescriptorSetAllocateInfo alloc{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+            alloc.descriptorPool = m_GDR_Pool;
+            alloc.descriptorSetCount = fiCount;
+            alloc.pSetLayouts = layouts.data();
+            vkAllocateDescriptorSets(device, &alloc, m_GDR_DescriptorSets.data());
+
+            m_GDR_InstanceSSBO  = std::make_unique<VulkanStorageBuffer>(
+                kGDRMaxInstances * sizeof(GPUInstance));
+            m_GDR_GeometryRangeSSBO = std::make_unique<VulkanStorageBuffer>(
+                kGDRMaxMeshes * sizeof(GeometryRange));
+            m_GDR_MaterialSSBO  = std::make_unique<VulkanStorageBuffer>(
+                kGDRMaxMaterials * sizeof(GPUMaterial));
+
+            // Pre-bind descriptor sets: VkBuffer handles are fixed per frame,
+            // only the mapped data changes via SetData(). Write once at init.
+            VkBuffer geoBuf = vkCtx->GetGeometryPool().GetBuffer();
+            for (uint32_t i = 0; i < fiCount; i++) {
+                VkDescriptorBufferInfo instI{}, rangeI{}, matI{}, geoI{};
+                instI.buffer  = m_GDR_InstanceSSBO->GetBuffer(i);
+                instI.offset  = 0; instI.range  = VK_WHOLE_SIZE;
+                rangeI.buffer = m_GDR_GeometryRangeSSBO->GetBuffer(i);
+                rangeI.offset = 0; rangeI.range = VK_WHOLE_SIZE;
+                matI.buffer   = m_GDR_MaterialSSBO->GetBuffer(i);
+                matI.offset   = 0; matI.range   = VK_WHOLE_SIZE;
+                geoI.buffer   = geoBuf;
+                geoI.offset   = 0; geoI.range   = VK_WHOLE_SIZE;
+
+                VkWriteDescriptorSet w[4]{};
+                w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                w[0].dstSet = m_GDR_DescriptorSets[i]; w[0].dstBinding = 0;
+                w[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                w[0].descriptorCount = 1; w[0].pBufferInfo = &instI;
+                w[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                w[1].dstSet = m_GDR_DescriptorSets[i]; w[1].dstBinding = 1;
+                w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                w[1].descriptorCount = 1; w[1].pBufferInfo = &rangeI;
+                w[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                w[2].dstSet = m_GDR_DescriptorSets[i]; w[2].dstBinding = 2;
+                w[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                w[2].descriptorCount = 1; w[2].pBufferInfo = &matI;
+                w[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                w[3].dstSet = m_GDR_DescriptorSets[i]; w[3].dstBinding = 3;
+                w[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                w[3].descriptorCount = 1; w[3].pBufferInfo = &geoI;
+                vkUpdateDescriptorSets(device, 4, w, 0, nullptr);
+            }
+
+            // Create the GDR pipeline with empty vertex layout (SSBO vertex pulling)
+            m_GDRShader = Shader::Create("Deferred/gbuffer_gdr.vert", "Deferred/gbuffer_gdr_bindless.frag");
+            PipelineSpecification gdrSpec;
+            gdrSpec.Shader = m_GDRShader;
+            gdrSpec.TargetFramebuffer = m_RefFBO;
+            gdrSpec.Layout = {};  // empty — no VBO inputs, vertices pulled from SSBO
+            gdrSpec.DepthTest = true; gdrSpec.DepthWrite = true;
+            gdrSpec.Blend = false;
+            gdrSpec.BackfaceCulling = CullMode::None;
+            gdrSpec.UseBindlessTextures = true;
+            VulkanPipeline::s_ExtraSetLayouts = { m_GDR_SetLayout };
+            m_GDRPipeline = Pipeline::Create(gdrSpec);
+            VulkanPipeline::s_ExtraSetLayouts.clear();
+        }
+
+        // ── Compute Culling pipeline (Step 3) — frustum cull on GPU ──
+        {
+            uint32_t fiCount = vkCtx->GetFramesInFlight();
+
+            // Set=3: single DrawCommands[] SSBO (fixed-slot: Commands[gID], no atomic counter)
+            VkDescriptorSetLayoutBinding cullB{};
+            cullB.binding = 0; cullB.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            cullB.descriptorCount = 1; cullB.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+            VkDescriptorSetLayoutCreateInfo cullLCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+            cullLCI.bindingCount = 1; cullLCI.pBindings = &cullB;
+            vkCreateDescriptorSetLayout(device, &cullLCI, nullptr, &m_Cull_Set3Layout);
+
+            VkDescriptorPoolSize cullPS{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, fiCount };
+            VkDescriptorPoolCreateInfo cullPCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+            cullPCI.maxSets = fiCount; cullPCI.poolSizeCount = 1; cullPCI.pPoolSizes = &cullPS;
+            vkCreateDescriptorPool(device, &cullPCI, nullptr, &m_Cull_Set3Pool);
+            m_Cull_Set3Descriptors.resize(fiCount);
+            std::vector<VkDescriptorSetLayout> cullLayouts(fiCount, m_Cull_Set3Layout);
+            VkDescriptorSetAllocateInfo cullAI{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+            cullAI.descriptorPool = m_Cull_Set3Pool; cullAI.descriptorSetCount = fiCount;
+            cullAI.pSetLayouts = cullLayouts.data();
+            vkAllocateDescriptorSets(device, &cullAI, m_Cull_Set3Descriptors.data());
+
+            // Indirect draw buffer (triple-buffered)
+            m_DrawIndirectBuffer = std::make_unique<VulkanStorageBuffer>(
+                kGDRMaxInstances * sizeof(VkDrawIndexedIndirectCommand),
+                VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+
+            // Pre-bind set=3 descriptor (single binding, VkBuffer handles never change)
+            for (uint32_t i = 0; i < fiCount; i++) {
+                VkDescriptorBufferInfo cmdI{};
+                cmdI.buffer = m_DrawIndirectBuffer->GetBuffer(i); cmdI.range = VK_WHOLE_SIZE;
+                VkWriteDescriptorSet w{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+                w.dstSet = m_Cull_Set3Descriptors[i]; w.dstBinding = 0;
+                w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                w.descriptorCount = 1; w.pBufferInfo = &cmdI;
+                vkUpdateDescriptorSets(device, 1, &w, 0, nullptr);
+            }
+
+            // Build compute shader module from SPIR-V
+            VkShaderModule compModule = VK_NULL_HANDLE;
             {
-                auto instVkPipe = std::dynamic_pointer_cast<VulkanPipeline>(m_BindlessInstancedPipeline);
-                VkCommandBuffer vkCmd = vkCtx->GetCurrentCommandBuffer();
-                if (vkCmd && instVkPipe) {
-                    vkCmdBindDescriptorSets(vkCmd,
-                        VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        instVkPipe->GetVulkanPipelineLayout(), 2, 1,
-                        &m_InstanceDescriptorSets[frameIdx], 0, nullptr);
+                // Load SPIR-V binary directly (bypass Shader factory which expects vert+frag pair)
+                // The shader compiler outputs: cache/vulkan/Deferred/cull.comp.spv
+                auto exePath = std::filesystem::current_path();
+                std::string spvPath = (exePath / "assets/Editor/shaders/cache/vulkan/Deferred/cull.comp.spv").string();
+                std::ifstream file(spvPath, std::ios::ate | std::ios::binary);
+                if (file.is_open()) {
+                    size_t fileSize = (size_t)file.tellg();
+                    std::vector<char> buffer(fileSize);
+                    file.seekg(0);
+                    file.read(buffer.data(), fileSize);
+                    file.close();
+                    VkShaderModuleCreateInfo smCI{ VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
+                    smCI.codeSize = buffer.size();
+                    smCI.pCode = reinterpret_cast<const uint32_t*>(buffer.data());
+                    vkCreateShaderModule(device, &smCI, nullptr, &m_Cull_ShaderModule);
                 }
             }
 
-            uint64_t lastMatHash = 0xFFFFFFFFFFFFFFFF;
+            // Create empty descriptor set layouts for unused sets 0 and 1
+            // (MoltenVK requires valid handles — VK_NULL_HANDLE needs gfxPipelineLibrary ext)
+            VkDescriptorSetLayoutCreateInfo dummyCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+            dummyCI.bindingCount = 0;
+            vkCreateDescriptorSetLayout(device, &dummyCI, nullptr, &m_Cull_DummyLayout);
 
-            for (auto& batch : batches) {
-                const DrawPacket* pkt = batch.firstPkt;
-                GBufferPushConstants pc{};
-                pc.Transform = pkt->Transform;
-                FillPC(pc, *pkt);
+            // Build compute pipeline and layout
+            // Indices must match shader set=N: [0]=dummy, [1]=dummy, [2]=GDR, [3]=Cull
+            VkDescriptorSetLayout compSetLayouts[] = { m_Cull_DummyLayout, m_Cull_DummyLayout,
+                m_GDR_SetLayout, m_Cull_Set3Layout };
+            VkPushConstantRange pcRange{ VK_SHADER_STAGE_COMPUTE_BIT, 0, 112 };
+            VkPipelineLayoutCreateInfo plCI{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+            plCI.setLayoutCount = 4; plCI.pSetLayouts = compSetLayouts;
+            plCI.pushConstantRangeCount = 1; plCI.pPushConstantRanges = &pcRange;
+            vkCreatePipelineLayout(device, &plCI, nullptr, &m_Cull_PipelineLayout);
 
-                cmd.PushConstantData(m_BindlessInstancedPipeline, &pc, sizeof(pc));
-                cmd.DrawIndexedInstanced(pkt->MeshAsset,
-                    pkt->MeshAsset->GetIndexCount(), batch.count, batch.first);
-            }
+            VkComputePipelineCreateInfo cpCI{ VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
+            cpCI.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            cpCI.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+            cpCI.stage.module = m_Cull_ShaderModule;
+            cpCI.stage.pName = "main";
+            cpCI.layout = m_Cull_PipelineLayout;
+            vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpCI, nullptr, &m_Cull_Pipeline);
         }
 
-        // ── Phase 3: Non-instanced fallback (bindless) ──
-        {
-            cmd.BindPipeline(m_BindlessPipeline);
-            // Bindless: no BindTexture2D calls needed. Texture indices in push constants,
-            // global bindless descriptor set bound automatically by BindPipeline.
-
-            for (const auto& packet : queue->Packets) {
-                SortKey key; key.Value = packet.SortKey;
-                if (key.Bits.BucketID > 1) continue;
-
-                // Skip instanced packets
-                if (instancedSet.count(&packet)) continue;
-
-                GBufferPushConstants pc{};
-                pc.Transform = packet.Transform;
-                FillPC(pc, packet);
-
-                cmd.PushConstantData(m_BindlessPipeline, &pc, sizeof(GBufferPushConstants));
-                cmd.DrawIndexed(packet.MeshAsset, packet.MeshAsset->GetIndexCount());
-            }
-        }
-
-        cmd.EndRenderPass();
-        context.Framebuffers["GBuffer"] = fbo;
     }
+
+    // (Phase 1-3 retired — replaced by GDR Phase 4)
+
+    void VulkanGBufferPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
+    auto fbo = context.GetFramebuffer("GBuffer");
+    if (!fbo) return;
+
+    auto* queue = context.RenderQueue;
+    if (!queue || queue->Packets.empty()) return;
+
+    // ── GPU-Driven Rendering — build SSBO data, compute cull, indirect draw ──
+    {
+        auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+            Application::Get().GetWindow().GetContext());
+
+        // Build GDR data vectors
+        std::vector<GPUInstance> gdrInstances;
+        std::vector<GPUMaterial> gdrMaterials;
+        std::vector<GeometryRange> gdrRanges;
+        gdrInstances.reserve(queue->Packets.size());
+        gdrMaterials.reserve(64);
+        gdrRanges.reserve(64);
+
+        if (vkCtx && m_GDRPipeline) {
+            uint32_t frameIdx = vkCtx->GetCurrentFrameIndex() % vkCtx->GetFramesInFlight();
+            VkCommandBuffer vkCmd = vkCtx->GetCurrentCommandBuffer();
+            auto& pool = vkCtx->GetGeometryPool();
+
+            // Resource Staging: ensure all meshes are in the geometry pool
+            for (const auto& pkt : queue->Packets) {
+                if (pkt.MeshAsset) pool.GetOrUploadMesh(pkt.MeshAsset.get());
+            }
+
+            std::unordered_map<Mesh*, uint32_t> meshToRange;
+            std::unordered_map<uint64_t, uint32_t> matMap;
+
+            for (const auto& pkt : queue->Packets) {
+                SortKey k; k.Value = pkt.SortKey;
+                if (k.Bits.BucketID > 1) continue;
+                if (!pkt.MeshAsset || !pkt.MaterialAsset) continue;
+
+                uint32_t rangeIdx;
+                auto rit = meshToRange.find(pkt.MeshAsset.get());
+                if (rit != meshToRange.end()) {
+                    rangeIdx = rit->second;
+                } else {
+                    rangeIdx = (uint32_t)gdrRanges.size();
+                    auto range = pool.GetOrUploadMesh(pkt.MeshAsset.get());
+                    gdrRanges.push_back(range);
+                    meshToRange[pkt.MeshAsset.get()] = rangeIdx;
+                }
+
+                uint64_t matHash = k.Bits.MaterialHash;
+                uint32_t matIdx;
+                auto mit = matMap.find(matHash);
+                if (mit != matMap.end()) {
+                    matIdx = mit->second;
+                } else {
+                    matIdx = (uint32_t)gdrMaterials.size();
+                    matMap[matHash] = matIdx;
+                    GPUMaterial gm{};
+                    auto& b = pkt.MaterialAsset->GetBakedPC();
+                    gm.albedo = b.Albedo; gm.metallic = b.Metallic;
+                    gm.roughness = b.Roughness; gm.ao = b.AO; gm.alpha = b.Alpha;
+                    gm.albedoBindless   = (int)b.AlbedoMapIndex;
+                    gm.normalBindless   = (int)b.NormalMapIndex;
+                    gm.ormBindless      = (int)b.ORMMapIndex;
+                    gm.metallicBindless  = (int)b.MetallicMapIndex;
+                    gm.roughnessBindless = (int)b.RoughnessMapIndex;
+                    gm.aoBindless        = (int)b.AOMapIndex;
+                    gm.useORMMap   = (int)b.UseORMMap;
+                    gm.alphaCutoff = pkt.MaterialAsset->GetAlphaCutoff();
+                    gm.blendMode   = (int)pkt.MaterialAsset->GetBlendMode();
+                    gdrMaterials.push_back(gm);
+                }
+
+                GPUInstance gi{};
+                gi.transform = pkt.Transform;
+                AABB aabb = pkt.MeshAsset->GetAABB();
+                glm::vec3 center = (aabb.Min + aabb.Max) * 0.5f;
+                glm::vec3 worldCenter = glm::vec3(pkt.Transform * glm::vec4(center, 1.0f));
+                float radius = glm::length(aabb.Max - aabb.Min) * 0.5f;
+                gi.boundingSphere = glm::vec4(worldCenter, radius);
+                gi.geometryRangeIdx = rangeIdx;
+                gi.materialIdx = matIdx;
+                gi.entityId = (uint32_t)(k.Bits.EntityID);
+                gi._pad = 0;
+                gdrInstances.push_back(gi);
+            }
+
+            // Upload scene data to SSBOs (memcpy to persistent-mapped buffers)
+            m_GDR_InstanceSSBO->SetData(gdrInstances.data(),
+                (uint32_t)(gdrInstances.size() * sizeof(GPUInstance)));
+            m_GDR_GeometryRangeSSBO->SetData(gdrRanges.data(),
+                (uint32_t)(gdrRanges.size() * sizeof(GeometryRange)));
+            m_GDR_MaterialSSBO->SetData(gdrMaterials.data(),
+                (uint32_t)(gdrMaterials.size() * sizeof(GPUMaterial)));
+
+            uint32_t instanceCount = (uint32_t)gdrInstances.size();
+
+            if (instanceCount > 0) {
+                // ── Compute culling (outside render pass) ──
+                vkCmdBindPipeline(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_Cull_Pipeline);
+                vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                    m_Cull_PipelineLayout, 2, 1, &m_GDR_DescriptorSets[frameIdx], 0, nullptr);
+                vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                    m_Cull_PipelineLayout, 3, 1, &m_Cull_Set3Descriptors[frameIdx], 0, nullptr);
+
+                struct FrustumPush { glm::vec4 planes[6]; uint32_t count; uint32_t _pad[3]; } fpc;
+                glm::mat4 vp = context.ProjectionMatrix * context.ViewMatrix;
+                glm::vec4 rows[4] = { vp[0], vp[1], vp[2], vp[3] };
+                fpc.planes[0] = glm::normalize(glm::vec4(glm::vec3(rows[3] + rows[0]), rows[3].w + rows[0].w));
+                fpc.planes[1] = glm::normalize(glm::vec4(glm::vec3(rows[3] - rows[0]), rows[3].w - rows[0].w));
+                fpc.planes[2] = glm::normalize(glm::vec4(glm::vec3(rows[3] + rows[1]), rows[3].w + rows[1].w));
+                fpc.planes[3] = glm::normalize(glm::vec4(glm::vec3(rows[3] - rows[1]), rows[3].w - rows[1].w));
+                fpc.planes[4] = glm::normalize(glm::vec4(glm::vec3(rows[3] + rows[2]), rows[3].w + rows[2].w));
+                fpc.planes[5] = glm::normalize(glm::vec4(glm::vec3(rows[3] - rows[2]), rows[3].w - rows[2].w));
+                fpc.count = instanceCount;
+                vkCmdPushConstants(vkCmd, m_Cull_PipelineLayout,
+                    VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(fpc), &fpc);
+
+                uint32_t groupCount = (instanceCount + 63) / 64;
+                vkCmdDispatch(vkCmd, groupCount, 1, 1);
+
+                VkBufferMemoryBarrier indirectBarrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
+                indirectBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+                indirectBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+                indirectBarrier.buffer = m_DrawIndirectBuffer->GetBuffer(frameIdx);
+                indirectBarrier.size = VK_WHOLE_SIZE;
+                vkCmdPipelineBarrier(vkCmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0,
+                    0, nullptr, 1, &indirectBarrier, 0, nullptr);
+
+                // ── Render pass + indirect draw ──
+                cmd.BeginRenderPass(fbo, true, glm::vec4(0.0f));
+                vkCmdBindIndexBuffer(vkCmd, pool.GetBuffer(), 0, VK_INDEX_TYPE_UINT32);
+                cmd.BindPipeline(m_GDRPipeline);
+                auto gdrPipe = std::dynamic_pointer_cast<VulkanPipeline>(m_GDRPipeline);
+                if (gdrPipe) {
+                    vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        gdrPipe->GetVulkanPipelineLayout(),
+                        2, 1, &m_GDR_DescriptorSets[frameIdx], 0, nullptr);
+                }
+                vkCmdDrawIndexedIndirect(vkCmd,
+                    m_DrawIndirectBuffer->GetBuffer(frameIdx), 0,
+                    instanceCount,
+                    sizeof(VkDrawIndexedIndirectCommand));
+            } else {
+                // No instances: still clear GBuffer to prevent ghost rendering
+                cmd.BeginRenderPass(fbo, true, glm::vec4(0.0f));
+            }
+        }
+    }
+
+    cmd.EndRenderPass();
+    context.Framebuffers["GBuffer"] = fbo;
+}
 }

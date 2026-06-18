@@ -51,6 +51,10 @@ namespace Ayaya {
         std::shared_ptr<VertexBuffer> GetVertexBuffer() const { return m_VertexBuffer; }
         std::shared_ptr<IndexBuffer> GetIndexBuffer() const { return m_IndexBuffer; }
 
+        // Raw data access for GlobalGeometryPool upload (GDR Step 2)
+        const std::vector<Vertex>& GetRawVertices() const { return m_RawVertices; }
+        const std::vector<uint32_t>& GetRawIndices() const { return m_RawIndices; }
+
         static std::shared_ptr<Mesh> CreateCube(float size = 1.0f);
         static std::shared_ptr<Mesh> CreatePlane(float width = 1.0f, float height = 1.0f);
         static std::shared_ptr<Mesh> CreateSphere(float radius = 1.0f, uint32_t xSegments = 32, uint32_t ySegments = 32);
@@ -66,6 +70,10 @@ namespace Ayaya {
         std::shared_ptr<VertexArray> m_VertexArray;
         std::shared_ptr<VertexBuffer> m_VertexBuffer;
         std::shared_ptr<IndexBuffer> m_IndexBuffer;
+
+        // CPU-side copies for GlobalGeometryPool upload (GDR Step 2)
+        std::vector<Vertex>   m_RawVertices;
+        std::vector<uint32_t> m_RawIndices;
     };
 
 }

@@ -62,6 +62,10 @@ namespace Ayaya {
             m_BoundingBox.Max.y = std::max(m_BoundingBox.Max.y, vertex.Position.y);
             m_BoundingBox.Max.z = std::max(m_BoundingBox.Max.z, vertex.Position.z);
         }
+
+        // Store CPU-side copies for GlobalGeometryPool upload (GDR Step 2)
+        m_RawVertices = vertices;
+        m_RawIndices  = indices;
     }
 
     std::shared_ptr<Mesh> Mesh::CreateCube(float size) {
