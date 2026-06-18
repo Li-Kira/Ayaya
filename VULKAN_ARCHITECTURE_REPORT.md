@@ -1,7 +1,7 @@
 # Ayaya Engine — Vulkan 渲染架构与管线深度分析报告
 
-> **生成日期:** 2026-06-18
-> **分析范围:** `/src/Engine/Platform/Vulkan/` (28 文件), `/src/Engine/Renderer/` (抽象层 + 12 个 Pass), `/assets/Editor/shaders/src/vulkan/` (49 个 Shader 文件)
+> **初始报告:** 2026-06-18 | **更新:** 2026-06-18 (Bindless + GDR + Mipmap + Pass Culling 落地)
+> **分析范围:** `/src/Engine/Platform/Vulkan/` (28 文件), `/src/Engine/Renderer/` (抽象层 + 12 个 Pass), `/assets/Editor/shaders/src/vulkan/` (52 个 Shader)
 
 ---
 
@@ -802,3 +802,317 @@ Phase 3 (Advanced):
   9.10 GPU-Driven Rendering → CPU 解放
   9.12 Async Compute → GPU 占用率
 ```
+
+---
+
+## 10. Bindless Material Texture — 落地实现
+
+### 10.1 架构原理
+
+传统路径每个 Draw Call 需要 7 次 `BindTexture2D()` + 1 次 `FlushDescriptorSets()` 触发 `vkUpdateDescriptorSets` + `vkCmdBindDescriptorSets`。每个 Pipeline 预分配 3000 个 ring-buffer descriptor sets。
+
+Bindless 方案将全部材质纹理注册到一个全局 `sampler2D[]` 数组中，shader 通过 Push Constants 中的 `uint` 索引直接访问——消除 per-draw descriptor 写入。
+
+### 10.2 核心组件
+
+**VulkanBindlessManager** (`VulkanBindlessManager.hpp:9-30`):
+
+```
+固定索引预留:
+  kInvalidIndex        = 0  (哨兵值, 永不分配)
+  kWhiteIndex          = 1  (1x1 white, 乘性单位元)
+  kBlackIndex          = 2  (1x1 black)
+  kDefaultNormalIndex  = 3  (1x1 {128,128,255}, 平坦法线)
+  kFirstFreeIndex      = 4  (AllocateIndex 起始)
+
+AllocateIndex(): FreeList (LIFO) -> m_NextIndex (线性递增)
+FreeIndex(): 仅接受 index >= kFirstFreeIndex (保护固定索引)
+UpdateBinding(): vkUpdateDescriptorSets 写入全局 set 的 arrayElement
+```
+
+**VulkanContext** (`VulkanContext.cpp:890-940`):
+
+```
+CreateDefaultBindlessTextures():
+  直接创建 VkImage/VkImageView/VkSampler (1x1 像素, 不走 VulkanTexture2D)
+  BeginSingleTimeCommands -> Upload -> EndSingleTimeCommands
+  UpdateBinding() 注册到索引 1-3
+
+QueueDeferredBindlessRelease(index):
+  推入 3 帧延迟队列 -> ProcessDeferredBindlessReleases() 在 BeginFrame() 中
+  fence 确认 GPU 完成后调用 FreeIndex()
+```
+
+**BakedPC 重构** (`Material.hpp:123-150`):
+
+```cpp
+struct BakedPC {
+    glm::vec4 Albedo{1.0f};
+    float Metallic=0, Roughness=0.5, AO=1, Alpha=0.5;
+    uint32_t UseORMMap = 0;
+    uint32_t AlbedoMapIndex   = 1;  // white default
+    uint32_t NormalMapIndex   = 3;  // flat normal default
+    uint32_t ORMMapIndex      = 2;  // black default
+    uint32_t MetallicMapIndex  = 1;
+    uint32_t RoughnessMapIndex = 1;
+    uint32_t AOMapIndex        = 1;
+    bool Dirty = true;
+
+    // 贴图存在时 scalar -> 1.0, shader 中 1.0 * texture = texture
+    void GetRenderScalars(float& m, float& r, float& a) const {
+        m = (MetallicMapIndex != 1) ? 1.0f : Metallic;
+        r = (RoughnessMapIndex != 1) ? 1.0f : Roughness;
+        a = (AOMapIndex != 1) ? 1.0f : AO;
+    }
+};
+```
+
+**Shader 改造** (`gbuffer_bindless.frag`, `wboit_gather_bindless.frag`):
+
+```glsl
+#extension GL_EXT_nonuniform_qualifier : require
+layout(set = 1, binding = 0) uniform sampler2D u_GlobalTextures[];
+
+// 无条件采样 — 默认索引指向有效 1x1 纹理
+vec4 albedo = texture(u_GlobalTextures[nonuniformEXT(idx)], uv);
+
+// 全部 Push Constants 使用 vec4/uvec4 打包 (避免 std430 vec3=16B 对齐陷阱)
+```
+
+### 10.3 WBOIT IBL 隔离
+
+WBOIT bindless shader 中 IBL 纹理 (IrradianceMap/PrefilteredMap 为 samplerCube) 迁移到独立 set=3:
+- Set 0: Camera + LightData UBO
+- Set 1: Bindless 2D 数组 (binding=0)
+- Set 2: SSBO 实例化 Transforms
+- Set 3: IBL 纹理 (bindings 0/1=cube, 2=2D) — 每帧绑定一次
+
+---
+
+## 11. Mipmap 自动生成
+
+### 11.1 实现位置 (`VulkanTexture2D.cpp`)
+
+**Mip 层级计算** (`Invalidate()`):
+
+```cpp
+// 压缩格式保护: BCn/ASTC/ETC2 -> m_MipLevels=1
+// 格式特性检查: VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT
+// GenerateMipmaps 设置检查
+if (isCompressed || !supportsLinearBlit || !GenerateMipmaps)
+    m_MipLevels = 1;
+else
+    m_MipLevels = floor(log2(max(w,h))) + 1;
+```
+
+**VkImageCreateInfo**: `mipLevels = m_MipLevels`, `usage |= TRANSFER_SRC_BIT`
+**VkImageViewCreateInfo**: `levelCount = m_MipLevels`
+**VkSamplerCreateInfo**: `maxLod = static_cast<float>(m_MipLevels)`, `mipLodBias = 0`
+
+**SetData() 逐级 Blit 循环**:
+
+```
+初始 barrier: UNDEFINED -> TRANSFER_DST (levelCount = m_MipLevels, 全部 mip)
+for i = 1 to m_MipLevels-1:
+  Step A: Mip[i-1] DST -> SRC (vkCmdPipelineBarrier, levelCount=1)
+  Step B: vkCmdBlitImage Mip[i-1] -> Mip[i] (VK_FILTER_LINEAR, 硬件缩放)
+  Step C: Mip[i-1] SRC -> SHADER_READ_ONLY (本层完成)
+Step D: Mip[last] DST -> SHADER_READ_ONLY (最后一层)
+```
+
+---
+
+## 12. RenderGraph Pass 剔除
+
+### 12.1 核心机制 (`RenderGraph.cpp`)
+
+**标记阶段** (`SceneRenderer::BuildRenderGraph()`, 每帧):
+
+```cpp
+SetPassCulled("SSAOPass", !enableSSAO);
+SetPassCulled("BloomPass", !enableBloom);
+SetPassCulled("WBOIT_Gather", !hasTranslucent);
+SetPassCulled("WBOIT_Resolve", !hasTranslucent);
+```
+
+**编译阶段** (`RenderGraph::Compile()`, 每帧):
+
+```
+Step 0: active = { p | !p->IsCulled }
+Step 1-4: Producer Map -> 依赖图 -> Kahn 排序 -> 全部仅遍历 active
+Step 5: FBO 创建 -> 仅 IsWritten=true 的纹理 (culled producer -> 跳过)
+```
+
+**Fallback 策略**: 被剔除 Pass 产出的纹理不创建 PhysicalFBO -> `context.GetFramebuffer()` 返回 nullptr -> 消费 Pass 自行检测并绑定 WhiteTexture 替代。
+
+**布局追踪修复**: `CurrentLayout/DepthLayout` 仅在 FBO 首次创建时初始化——不再每帧 Compile 重置 (避免与 GPU 端实际布局失配)。
+
+---
+
+## 13. GPU-Driven Rendering — 四步实现
+
+### 13.1 架构全景
+
+```
+CPU (每帧)                 GPU (Compute)              GPU (Graphics)
+─────────                  ─────────────              ──────────────
+Resource Staging
+  -> GetOrUploadMesh()
+
+Build GDR data
+  -> GPUInstance[]
+  -> GPUMaterial[]  --SetData-->  SSBOs
+  -> GeometryRange[]
+
+                        cull.comp                    gbuffer_gdr.vert
+                        Gribb-Hartmann               uint g_Data[] 解包
+                        6-plane sphere cull          TBN via dFdx/dFdy
+                        |
+                        Commands[gID]
+                        (fixed-slot output)          gbuffer_gdr_bindless.frag
+                                                     Materials[] SSBO 直读
+                        vkCmdDrawIndexedIndirect
+                             ^ 单次调用
+```
+
+### 13.2 Step 1 — GPU Scene Data SSBOs
+
+**Set=2 布局** (图形 + compute 共享, 4 bindings):
+
+```
+Binding 0: GPUInstance[4096]   SSBO — mat4 transform(64B) + vec4 boundingSphere(16B) + u32x4(16B)
+Binding 1: GeometryRange[1024] SSBO — vertexOffset(uint elem) + indexOffset(byte) + counts
+Binding 2: GPUMaterial[512]    SSBO — PBR scalars + 6 bindless indices + UseORMMap + flags
+Binding 3: uint g_Data[]       SSBO — GlobalGeometryPool 原始字节
+```
+
+所有 descriptor 在 `OnAttach()` 预绑定 — 每帧零 `vkUpdateDescriptorSets`。
+
+**`gbuffer_gdr_bindless.frag`** (新建, 80 行): Fragment Shader 直接从 `Materials[]` SSBO 读取全部 PBR 参数 + 6 bindless 索引, 内联 `GetRenderScalars()` 逻辑 (`idx!=1 ? 1.0 : scalar`)。
+
+### 13.3 Step 2 — SSBO Vertex Fetch
+
+**`gbuffer_gdr.vert`** 完全重写:
+- 移除 VBO `layout(location=N) in` 输入
+- `uint g_Data[]` SSBO, stride = 11 uint/vertex (44B/4)
+- `uintBitsToFloat` 解包 Position(3) + Normal(3) + TexCoord(2)
+- **Tangent 跳过** — 节省 27% 顶点带宽, TBN 由 fragment shader 通过 `dFdx/dFdy` 重建
+- `v_MaterialIdx` flat uint 传递给 FS
+
+**GlobalGeometryPool 扩展**:
+- `GetOrUploadMesh(Mesh*)`: 惰性上传到 256MB 池, `m_MeshRanges` O(1) 查找
+- `vertexOffset` -> uint 元素索引 (byteOffset/4)
+- CPUSide `m_RawVertices/m_RawIndices` 存储 (Mesh.hpp/.cpp)
+
+**Index Buffer**: 全局 `vkCmdBindIndexBuffer(pool, offset=0)` 一次, `firstIndex = range.indexOffset/4` per draw — Post-Transform Vertex Cache 完整保留。
+
+### 13.4 Step 3 — Compute Frustum Culling
+
+**`cull.comp`** (73 行):
+
+```glsl
+layout(local_size_x = 64) in;
+
+// 输入: Set 2 Binding 0 (InstanceBuffer), Binding 1 (GeometryRangeBuffer)
+// 输出: Set 3 Binding 0 (DrawIndirectBuffer)
+// Push Constants: u_Planes[6] (Gribb-Hartmann) + u_InstanceCount
+
+void main() {
+    uint gID = gl_GlobalInvocationID.x;
+    if (gID >= pc.u_InstanceCount) return;
+
+    if (IsVisible(Instances[gID].boundingSphere)) {
+        Commands[gID] = { indexCount, 1, firstIndex, 0, gID };
+    } else {
+        Commands[gID].instanceCount = 0;  // GPU 硬件 skip
+    }
+}
+```
+
+**固定槽位方案**: 不使用 atomic counter, 不使用 `drawIndirectCount` 扩展 — MoltenVK/M1 兼容。剔除的实例写 `instanceCount=0`, 硬件层面跳过。
+
+**Compute Pipeline 创建** (`VulkanGBufferPass.cpp` OnAttach):
+- SPIR-V 直接从文件加载 (`std::ifstream` -> `vkCreateShaderModule`)
+- Pipeline Layout: Set=2 (GDR) + Set=3 (DrawCommands), 4 元素数组 (0/1=空布局占位)
+- Push Constants: COMPUTE_BIT, 112 bytes (6xvec4 + uint + pad)
+
+### 13.5 Step 4 — Indirect Draw
+
+**旧代码退役**: `GetBatchKey/IsInstancable/FillPC` 静态函数 + Phase 1/2/3 (~180 行) 全部删除。
+`GBufferPushConstants` struct 删除。12 个旧管线成员从 header + OnAttach 移除。
+
+**Execute() 单一路径** — Phase 4:
+
+```
+1. Resource Staging: for pkt -> pool.GetOrUploadMesh() (CPU memcpy, HOST_COHERENT)
+2. 从 RenderQueue 构建 GPUInstance[] + GPUMaterial[] + GeometryRange[]
+3. SetData() -> persistent-mapped SSBO (triple-buffered)
+4. vkCmdDispatch cull.comp (render pass 外)
+5. vkCmdPipelineBarrier COMPUTE_WRITE -> DRAW_INDIRECT
+6. cmd.BeginRenderPass (无条件 — 空场景时清除 GBuffer 防 ghost)
+7. vkCmdBindIndexBuffer(pool, offset=0)
+8. vkCmdBindDescriptorSets(set=2)
+9. vkCmdDrawIndexedIndirect (单次调用, stride=sizeof(VkDrawIndexedIndirectCommand))
+```
+
+---
+
+## 14. 材质系统清理
+
+- 移除全部 `u_UseXxxMap` Bool 属性 (BakedPC, PropertiesPanel, MaterialSerializer, AssetManager, DefaultPBR.mat)
+- 保留 `u_HeightMap`/`u_EmissiveMap` 纹理槽位 (未来实现预留)
+- 移除 `u_UseHeightMap`/`u_UseEmissiveMap` Bool 开关
+- 贴图是否存在由 `tex->GetBindlessIndex() != 0` 判定 (BakeProperties)
+
+---
+
+## 15. Bug 修复清单
+
+| Bug | 根因 | 修复位置 |
+|-----|------|---------|
+| Set 0 Layout 泄漏 | 析构 `!UseBindlessTextures` 守卫了 UBO layout | VulkanPipeline.cpp — 分拆 Set 0/1 |
+| Bindless Layout 双重销毁 | `NoGlobalUBOs` 时 Set 0=bindless layout | bindlessInSet0/1 两路条件 |
+| SSBO Set 2 未绑定 | 用旧 layout 绑 Set 2 后切 bindless 管线 | 先 BindPipeline 再 bind Set 2 |
+| Bindless 容量超限 | WBOIT set=3 IBL samplers 未预留 | maxBindless -= 32 |
+| Mip 1+ UNDEFINED | 初始 barrier levelCount=1 | levelCount=m_MipLevels |
+| Compute layout 索引不匹配 | setLayoutCount=2 但 shader set=2/3 | 4 元素数组含空布局占位 |
+| Compute dispatch inside RP | 动态渲染内不可调 vkCmdDispatch | 移到 BeginRenderPass 之前 |
+| Ghost 渲染 | 空场景时 BeginRenderPass 未调用 | 无条件清除 GBuffer |
+| VkShaderModule 泄漏 | compModule 局部变量未销毁 | 存储 m_Cull_ShaderModule |
+| drawIndirectCount 不支持 | MoltenVK/M1 不支持此特性 | 移除 feature 请求 + 固定槽位方案 |
+
+---
+
+## 16. 更新后的优化评估
+
+### 已完成的优化
+
+| 优化项 | 原始评估 | 落地状态 |
+|--------|---------|---------|
+| 9.1 Bindless Material | Tier 1 — 高影响 | ✅ 完成 — 全局 sampler2D[] + Push Constant 索引 |
+| 9.4 Mipmap 生成 | Tier 1 — 高影响 | ✅ 完成 — vkCmdBlitImage 逐级, 压缩格式保护 |
+| 9.6 Pass Culling | Tier 1 — 高影响 | ✅ 完成 — Compile 阶段 DAG 剪枝 |
+| 9.2 Tile Light Culling | Tier 2 — 中等 | ⚠️ 部分 — Point light 距离 Shader 早期退出 (无 Compute Tile) |
+| 9.3 CSM Shadow Maps | Tier 1 — 高影响 | ❌ 未实现 |
+| 9.10 GPU-Driven Rendering | Tier 3 — 高级 | ✅ 完成 — 四步全部落地, 含 Compute Culling + Indirect Draw |
+
+### 新增优化机会
+
+| 优化项 | 说明 |
+|--------|------|
+| Compute Tile Light Culling | 用 Compute Shader 预计算 per-tile light list (替代当前全屏 point light 循环) |
+| Hi-Z 遮挡剔除 | 生成深度金字塔 + Compute occlusion test -> cull.comp 可扩展 |
+| Mesh 预上传到 GeometryPool | 场景加载时批量上传 (当前惰性触发, 首帧可能卡顿) |
+| TextureCube Mipmap | IBL 环境贴图预过滤时一并生成 mip 层级 |
+| u_AlphaMap 接入 | BakeProperties 中添加 AlphaMapIndex 解析 |
+
+### 性能影响总结
+
+| 指标 | 改进 |
+|------|------|
+| CPU Draw Call 开销 | `vkUpdateDescriptorSets` 消除, FillPC() 移除, 间接绘制替代 CPU 循环 |
+| GPU ALU | Point light 距离剔除, Compute frustum culling 并行化 |
+| 顶点带宽 | Tangent 跳过节省 27% |
+| 纹理 Cache | Mipmap 链减少远处纹理 Cache Miss |
+| 描述符池内存 | Bindless pipelines 0 COMBINED_IMAGE_SAMPLER, 旧 ring buffers 移除 |
+| 代码复杂度 | 12 个旧管线成员 + ~180 行 Phase1-3 代码删除 |
