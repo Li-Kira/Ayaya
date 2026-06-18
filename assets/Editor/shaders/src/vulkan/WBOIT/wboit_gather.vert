@@ -12,17 +12,19 @@ layout(set = 0, binding = 0) uniform Camera {
 };
 
 layout(push_constant) uniform PC {
-    mat4  u_Transform;
-    vec4  u_Albedo;
-    float u_Metallic;
-    float u_Roughness;
-    float u_AO;
-    int   u_UseAlbedoMap;
-    int   u_UseMetallicMap;
-    int   u_UseRoughnessMap;
-    int   u_UseAOMap;
-    int   u_UseNormalMap;
-    float u_Alpha;
+    mat4   u_Transform;                        // offset 0   (64B)
+    vec4   u_Albedo;                           // offset 64  (16B)
+    float  u_Metallic;                         // offset 80  (4B)
+    float  u_Roughness;                        // offset 84  (4B)
+    float  u_AO;                               // offset 88  (4B)
+    uint   u_UseORMMap;                        // offset 92  (4B)
+    uint   u_AlbedoMapIndex;                   // offset 96  (4B)
+    uint   u_NormalMapIndex;                   // offset 100 (4B)
+    uint   u_ORMMapIndex;                      // offset 104 (4B)
+    uint   u_MetallicMapIndex;                 // offset 108 (4B)
+    uint   u_RoughnessMapIndex;                // offset 112 (4B)
+    uint   u_AOMapIndex;                       // offset 116 (4B)
+    float  u_Alpha;                            // offset 120 (4B)
 } pc;
 
 layout(location = 0) out vec3 v_WorldPos;

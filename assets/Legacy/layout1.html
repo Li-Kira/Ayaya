@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ayaya Engine - Ultimate Professional UI</title>
+    <style>
+        :root {
+            /* 现代深色高级调色板 */
+            --bg-base: #0a0a0a;         /* 最深层底色 */
+            --bg-panel: #151515;        /* 面板底色 */
+            --bg-header: #1e1e1e;       /* 标题/TabBar栏 */
+            --bg-hover: #2a2a2a;
+            --bg-active: #0070e0;       /* 引擎强调色 - 蓝 */
+            --bg-active-dim: rgba(0, 112, 224, 0.2);
+            --border-dark: #000000;
+            --border-light: #2c2c2c;
+            
+            --text-main: #d0d0d0;
+            --text-bright: #ffffff;
+            --text-dim: #777777;
+            
+            /* 语义化颜色 */
+            --color-info: #aaa;
+            --color-warn: #eab308;
+            --color-error: #ef4444;
+            --color-mesh: #4ade80;
+            --color-mat: #3b82f6;
+            
+            --radius-sm: 3px;
+            --radius-md: 6px;
+            --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box; margin: 0; padding: 0;
+            font-family: var(--font-ui); font-size: 12px;
+            color: var(--text-main); user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-base); height: 100vh;
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: var(--bg-panel); border-left: 1px solid var(--border-light); }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 5px; border: 2px solid var(--bg-panel); }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+        /* ================= 顶栏 (Main Header) ================= */
+        .main-header {
+            height: 44px; background-color: var(--bg-header);
+            border-bottom: 1px solid var(--border-dark);
+            display: flex; align-items: center; padding: 0 12px; position: relative;
+        }
+        .menu-bar { display: flex; gap: 4px; }
+        .menu-item { padding: 6px 10px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; }
+        .menu-item:hover { background-color: var(--bg-hover); color: var(--text-bright); }
+
+        .play-controls {
+            position: absolute; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 4px; background: rgba(0,0,0,0.2);
+            padding: 4px; border-radius: var(--radius-md); border: 1px solid var(--border-light);
+        }
+        .play-btn {
+            background: transparent; border: none; padding: 6px 14px; border-radius: var(--radius-sm);
+            cursor: pointer; display: flex; align-items: center; gap: 6px; font-weight: 500; font-size: 13px;
+        }
+        .play-btn:hover { background-color: var(--bg-hover); }
+        .play-btn.active { background-color: #1e3a29; color: #4ade80; }
+
+        .header-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+
+        /* ================= 主体工作区 ================= */
+        .workspace { display: flex; flex: 1; overflow: hidden; }
+
+        /* 左侧边栏 (Modes Toolbar) - 为未来预留的地形/画刷/建模工具栏 */
+        .modes-toolbar {
+            width: 48px; background-color: var(--bg-header); border-right: 1px solid var(--border-dark);
+            display: flex; flex-direction: column; align-items: center; padding-top: 8px; gap: 8px;
+        }
+        .mode-icon {
+            width: 32px; height: 32px; border-radius: var(--radius-sm); display: flex;
+            justify-content: center; align-items: center; cursor: pointer; font-size: 16px; color: var(--text-dim);
+        }
+        .mode-icon.active { background-color: var(--bg-active-dim); color: var(--bg-active); border-left: 2px solid var(--bg-active); border-radius: 0 3px 3px 0; }
+        .mode-icon:hover:not(.active) { background-color: var(--bg-hover); color: var(--text-bright); }
+
+        /* 中间区域 (Viewport + Bottom Dock) */
+        .center-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* 视口 */
+        .viewport {
+            flex: 1; position: relative; background: linear-gradient(135deg, #222 0%, #111 100%);
+            box-shadow: inset 0 0 40px rgba(0,0,0,0.8);
+        }
+        
+        .viewport-overlays {
+            position: absolute; top: 12px; left: 12px; right: 12px;
+            display: flex; justify-content: space-between; pointer-events: none;
+        }
+        .overlay-group {
+            display: flex; gap: 4px; background: rgba(20, 20, 20, 0.6);
+            backdrop-filter: blur(8px); border-radius: var(--radius-sm); padding: 4px;
+            border: 1px solid rgba(255,255,255,0.05); pointer-events: auto;
+        }
+        .overlay-btn { padding: 4px 8px; border-radius: 2px; cursor: pointer; color: #bbb; display: flex; align-items: center; gap: 6px;}
+        .overlay-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+        .overlay-btn.active { color: var(--bg-active); font-weight: bold; }
+
+        /* 3D 网格参考线模拟 */
+        .viewport-grid {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+            background-image: 
+                linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+            background-size: 50px 50px; transform: perspective(500px) rotateX(60deg) translateY(-100px) translateZ(-200px);
+        }
+
+        /* 底部 Dock (Content, Log, Timeline) */
+        .bottom-dock {
+            height: 280px; background-color: var(--bg-panel); border-top: 1px solid var(--border-dark);
+            display: flex; flex-direction: column;
+        }
+        .dock-tabs {
+            display: flex; background: var(--bg-header); border-bottom: 1px solid var(--border-dark); padding: 0 8px;
+        }
+        .dock-tab {
+            padding: 8px 16px; cursor: pointer; color: var(--text-dim); display: flex; align-items: center; gap: 6px;
+            border-right: 1px solid transparent; border-left: 1px solid transparent;
+        }
+        .dock-tab:hover { color: var(--text-bright); }
+        .dock-tab.active {
+            background: var(--bg-panel); color: var(--text-bright);
+            border-right: 1px solid var(--border-light); border-left: 1px solid var(--border-light);
+            border-top: 2px solid var(--bg-active); margin-top: -1px; font-weight: 500;
+        }
+        .dock-content { flex: 1; overflow: hidden; display: none; }
+        .dock-content.active { display: flex; }
+
+        /* --- Content Browser 内部 --- */
+        .cb-sidebar { width: 220px; border-right: 1px solid var(--border-light); padding: 8px 0; overflow-y: auto; }
+        .cb-tree-item { padding: 4px 12px 4px 24px; cursor: pointer; display: flex; gap: 8px; align-items: center;}
+        .cb-tree-item:hover { background: var(--bg-hover); }
+        .cb-tree-item.active { background: rgba(255,255,255,0.05); color: #fff; }
+        .cb-main { flex: 1; display: flex; flex-direction: column; }
+        .cb-breadcrumb { padding: 8px 12px; border-bottom: 1px solid var(--border-light); display: flex; gap: 8px; align-items: center; }
+        .cb-grid { padding: 16px; display: flex; gap: 20px; overflow-y: auto; flex-wrap: wrap; align-content: flex-start;}
+        .asset-card { width: 84px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; }
+        .asset-thumb { width: 72px; height: 72px; background: #222; border-radius: var(--radius-sm); border-bottom: 3px solid #555; position: relative; box-shadow: 0 4px 6px rgba(0,0,0,0.3);}
+        .asset-thumb:hover { border-color: #fff; }
+        .asset-thumb.mat { border-bottom-color: var(--color-mat); }
+        .asset-thumb.mesh { border-bottom-color: var(--color-mesh); }
+        .asset-thumb.level { border-bottom-color: #f97316; }
+        .asset-name { text-align: center; font-size: 11px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; width: 100%; }
+
+        /* --- Timeline / Sequencer 内部 --- */
+        .timeline-container { flex: 1; display: flex; flex-direction: column; }
+        .tl-toolbar { padding: 6px 12px; border-bottom: 1px solid var(--border-light); display: flex; gap: 12px; }
+        .tl-body { display: flex; flex: 1; }
+        .tl-outliner { width: 260px; border-right: 1px solid var(--border-light); background: #181818; }
+        .tl-track-header { padding: 6px 12px; display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-light); }
+        .tl-grid { flex: 1; background: #121212; position: relative; overflow: hidden; }
+        /* 时间标尺和网格 */
+        .tl-ruler { height: 26px; border-bottom: 1px solid var(--border-light); background: #1a1a1a; background-image: repeating-linear-gradient(90deg, transparent, transparent 49px, #333 49px, #333 50px); }
+        .tl-tracks-bg { height: 100%; background-image: repeating-linear-gradient(90deg, transparent, transparent 49px, rgba(255,255,255,0.02) 49px, rgba(255,255,255,0.02) 50px); }
+        /* 播放头 */
+        .tl-playhead { position: absolute; left: 150px; top: 0; bottom: 0; width: 1px; background: #ef4444; z-index: 10; }
+        .tl-playhead::before { content: ''; position: absolute; top: 0; left: -4px; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid #ef4444; }
+        /* 关键帧 */
+        .keyframe { position: absolute; width: 8px; height: 8px; background: #ef4444; transform: rotate(45deg); top: 35px; }
+
+        /* --- Output Log 内部 --- */
+        .log-container { flex: 1; display: flex; flex-direction: column; font-family: 'Consolas', 'Courier New', monospace; }
+        .log-toolbar { padding: 6px 12px; border-bottom: 1px solid var(--border-light); display: flex; gap: 12px; }
+        .log-lines { flex: 1; overflow-y: auto; padding: 8px; }
+        .log-line { padding: 2px 4px; border-radius: 2px; display: flex; gap: 12px; }
+        .log-line:hover { background: rgba(255,255,255,0.05); }
+        .log-time { color: #666; }
+        .log-info { color: var(--text-main); }
+        .log-warn { color: var(--color-warn); }
+        .log-error { color: var(--color-error); background: rgba(239, 68, 68, 0.1); }
+
+        /* ================= 右侧边栏 (Hierarchy + Properties) ================= */
+        .right-sidebar { width: 340px; background-color: var(--bg-panel); border-left: 1px solid var(--border-dark); display: flex; flex-direction: column; }
+        .panel-header { padding: 8px 12px; background: var(--bg-header); font-weight: 600; border-bottom: 1px solid var(--border-light); display: flex; justify-content: space-between;}
+
+        /* Scene Hierarchy */
+        .hierarchy-panel { flex: 0.4; display: flex; flex-direction: column; border-bottom: 1px solid var(--border-dark); }
+        .hierarchy-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+        .h-row { display: flex; align-items: center; padding: 4px 8px 4px 20px; cursor: pointer; justify-content: space-between; }
+        .h-row:hover { background: var(--bg-hover); }
+        .h-row.selected { background: var(--bg-active); color: #fff; }
+        .h-label { display: flex; align-items: center; gap: 8px; }
+
+        /* Properties */
+        .properties-panel { flex: 0.6; display: flex; flex-direction: column; }
+        .prop-content { flex: 1; overflow-y: auto; }
+        .comp-header { 
+            background: #1c1c1c; padding: 6px 12px; display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid var(--border-light); border-top: 1px solid var(--border-light); margin-top: -1px;
+            font-weight: 500;
+        }
+        .prop-grid { display: grid; grid-template-columns: 100px 1fr; gap: 6px 8px; padding: 8px 12px; align-items: center; }
+        .prop-label { color: var(--text-dim); }
+        .prop-val-box { background: #0f0f0f; border: 1px solid #2a2a2a; padding: 4px 8px; border-radius: 2px; }
+        
+        /* 极致紧凑的高级 Vec3 */
+        .vec3-group { display: flex; gap: 0; border: 1px solid #2a2a2a; border-radius: 2px; overflow: hidden;}
+        .vec-axis { display: flex; flex: 1; align-items: center; border-right: 1px solid #2a2a2a;}
+        .vec-axis:last-child { border-right: none; }
+        .axis-color { width: 4px; height: 20px; }
+        .axis-color.x { background: #ef4444; }
+        .axis-color.y { background: #4ade80; }
+        .axis-color.z { background: #3b82f6; }
+        .axis-input { flex: 1; background: #0f0f0f; border: none; color: #fff; padding-left: 6px; width: 100%; outline: none;}
+
+        /* ================= 底部状态栏 (Status Bar) ================= */
+        .status-bar {
+            height: 24px; background: var(--bg-active); color: #fff; display: flex; align-items: center; padding: 0 12px; font-size: 11px; justify-content: space-between;
+        }
+        .status-left { display: flex; gap: 16px; align-items: center;}
+        .status-right { display: flex; gap: 16px; align-items: center;}
+    </style>
+</head>
+<body>
+
+    <header class="main-header">
+        <div class="menu-bar">
+            <div class="menu-item">File</div>
+            <div class="menu-item">Edit</div>
+            <div class="menu-item">Window</div>
+            <div class="menu-item">Tools</div>
+            <div class="menu-item">Build</div>
+        </div>
+        
+        <div class="play-controls">
+            <button class="play-btn">⚙️ Simulate</button>
+            <button class="play-btn active">▶ Play</button>
+            <button class="play-btn">⏸ Pause</button>
+        </div>
+
+        <div class="header-right">
+            <span style="color: var(--text-dim);">Project: <span style="color: #fff;">Ayaya Demo</span></span>
+            <div class="menu-item" style="background: rgba(255,255,255,0.1);">⚙ Settings</div>
+        </div>
+    </header>
+
+    <div class="workspace">
+        
+        <div class="modes-toolbar">
+            <div class="mode-icon active" title="Select Mode">↖</div>
+            <div class="mode-icon" title="Landscape Mode">⛰️</div>
+            <div class="mode-icon" title="Foliage Mode">🌿</div>
+            <div class="mode-icon" title="Mesh Modeling">🧊</div>
+            <div class="mode-icon" title="Animation">🎬</div>
+        </div>
+
+        <div class="center-area">
+            
+            <div class="viewport">
+                <div class="viewport-grid"></div>
+                <div class="viewport-overlays">
+                    <div class="overlay-group">
+                        <div class="overlay-btn">≡</div>
+                        <div class="overlay-btn">👁 Perspective</div>
+                        <div class="overlay-btn">Lit</div>
+                        <div class="overlay-btn">Show</div>
+                    </div>
+                    <div class="overlay-group">
+                        <div class="overlay-btn active">↖</div>
+                        <div class="overlay-btn">✛</div>
+                        <div class="overlay-btn">↻</div>
+                        <div class="overlay-btn">⤡</div>
+                        <div style="width: 1px; background: rgba(255,255,255,0.2); margin: 2px 4px;"></div>
+                        <div class="overlay-btn">🌐</div>
+                        <div class="overlay-btn">🧲 10</div>
+                        <div class="overlay-btn">📷 4</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bottom-dock">
+                <div class="dock-tabs">
+                    <div class="dock-tab active">🗂 Content Browser</div>
+                    <div class="dock-tab">🎬 Sequencer</div>
+                    <div class="dock-tab">📝 Output Log</div>
+                    <div class="dock-tab" style="color: #3b82f6;">⛙ Material Graph (Preview)</div>
+                </div>
+
+                <div class="dock-content active">
+                    <div class="cb-sidebar">
+                        <div class="cb-tree-item" style="color: #aaa;">🎮 Content</div>
+                        <div class="cb-tree-item">↳ 📁 Characters</div>
+                        <div class="cb-tree-item active">↳ 📂 Environment</div>
+                        <div class="cb-tree-item">↳ 📁 UI</div>
+                    </div>
+                    <div class="cb-main">
+                        <div class="cb-breadcrumb">
+                            <span style="color: #4ade80; font-weight: bold; cursor: pointer;">+ Add</span>
+                            <span style="color: #3b82f6; font-weight: bold; cursor: pointer; margin-right: 12px;">⇡ Import</span>
+                            <span style="color: #555;">Ayaya Demo > Content > Environment</span>
+                            <input type="text" placeholder="Search Assets..." style="margin-left: auto; background: #000; border: 1px solid #333; padding: 4px 8px; border-radius: 12px; color: #fff;">
+                        </div>
+                        <div class="cb-grid">
+                            <div class="asset-card">
+                                <div class="asset-thumb level"></div>
+                                <div class="asset-name">L_MainScene</div>
+                            </div>
+                            <div class="asset-card">
+                                <div class="asset-thumb mesh"></div>
+                                <div class="asset-name">SM_Rock_01</div>
+                            </div>
+                            <div class="asset-card">
+                                <div class="asset-thumb mesh"></div>
+                                <div class="asset-name">SM_Tree_Pine</div>
+                            </div>
+                            <div class="asset-card">
+                                <div class="asset-thumb mat"></div>
+                                <div class="asset-name">M_Bark_PBR</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dock-content" style="display: none;">
+                    <div class="timeline-container">
+                        <div class="tl-toolbar">
+                            <button class="play-btn">⏮</button>
+                            <button class="play-btn">▶</button>
+                            <button class="play-btn">⏭</button>
+                            <span style="margin-left: 12px; align-self: center; font-family: monospace;">00:01:24</span>
+                        </div>
+                        <div class="tl-body">
+                            <div class="tl-outliner">
+                                <div class="tl-track-header">
+                                    <span>🎥 Main Camera</span>
+                                </div>
+                                <div class="tl-track-header" style="padding-left: 24px; color: #aaa;">
+                                    <span>✛ Transform</span>
+                                </div>
+                            </div>
+                            <div class="tl-grid">
+                                <div class="tl-ruler"></div>
+                                <div class="tl-tracks-bg"></div>
+                                <div class="tl-playhead"></div>
+                                <div class="keyframe" style="left: 150px;"></div>
+                                <div class="keyframe" style="left: 250px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dock-content" style="display: none;">
+                    <div class="log-container">
+                        <div class="log-toolbar">
+                            <span style="color: #fff;">Clear</span>
+                            <span style="color: #aaa;">Info (12)</span>
+                            <span style="color: var(--color-warn);">Warnings (2)</span>
+                            <span style="color: var(--color-error);">Errors (1)</span>
+                        </div>
+                        <div class="log-lines">
+                            <div class="log-line"><span class="log-time">[10:46:01]</span><span class="log-info">Ayaya Engine initialized successfully. Backend: Vulkan 1.3</span></div>
+                            <div class="log-line"><span class="log-time">[10:46:05]</span><span class="log-info">Loaded Scene: Default.ayaya</span></div>
+                            <div class="log-line"><span class="log-time">[10:46:06]</span><span class="log-warn">Warning: Texture 'T_Missing' not found. Using default fallback.</span></div>
+                            <div class="log-line log-error"><span class="log-time">[10:46:12]</span><span class="log-error">Error: Shader compilation failed for 'PostProcess.frag'.</span></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="right-sidebar">
+            <div class="hierarchy-panel">
+                <div class="panel-header">
+                    <span>Scene Outliner</span>
+                    <span style="color: var(--text-dim);">⁝</span>
+                </div>
+                <div class="hierarchy-list">
+                    <div class="h-row">
+                        <div class="h-label"><span style="color: #a855f7;">🎥</span> Main Camera</div>
+                        <div style="color: var(--text-dim);">👁</div>
+                    </div>
+                    <div class="h-row">
+                        <div class="h-label"><span style="color: #fbbf24;">☀️</span> Directional Light</div>
+                        <div style="color: var(--text-dim);">👁</div>
+                    </div>
+                    <div class="h-row">
+                        <div class="h-label"><span style="color: #38bdf8;">🌤️</span> Skybox Environment</div>
+                        <div style="color: var(--text-dim);">👁</div>
+                    </div>
+                    <div class="h-row selected">
+                        <div class="h-label"><span style="color: #4ade80;">📦</span> SciFi Crate (Instance)</div>
+                        <div style="color: #fff;">👁</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="properties-panel">
+                <div class="panel-header">
+                    <span>Details</span>
+                    <span style="color: var(--text-dim);">🔒</span>
+                </div>
+                <div class="prop-content">
+                    <div style="padding: 12px;">
+                        <input type="text" value="SciFi Crate (Instance)" style="width: 100%; padding: 6px; background: #0f0f0f; border: 1px solid #333; color: #fff; font-weight: bold; border-radius: 2px;">
+                    </div>
+
+                    <div class="comp-header">
+                        <span>✛ Transform</span>
+                        <span style="color: var(--text-dim);">⚙</span>
+                    </div>
+                    <div class="prop-grid">
+                        <div class="prop-label">Location</div>
+                        <div class="vec3-group">
+                            <div class="vec-axis"><div class="axis-color x"></div><input class="axis-input" value="0.00"></div>
+                            <div class="vec-axis"><div class="axis-color y"></div><input class="axis-input" value="50.0"></div>
+                            <div class="vec-axis"><div class="axis-color z"></div><input class="axis-input" value="0.00"></div>
+                        </div>
+                        <div class="prop-label">Rotation</div>
+                        <div class="vec3-group">
+                            <div class="vec-axis"><div class="axis-color x"></div><input class="axis-input" value="0.00"></div>
+                            <div class="vec-axis"><div class="axis-color y"></div><input class="axis-input" value="0.00"></div>
+                            <div class="vec-axis"><div class="axis-color z"></div><input class="axis-input" value="0.00"></div>
+                        </div>
+                        <div class="prop-label">Scale</div>
+                        <div class="vec3-group">
+                            <div class="vec-axis"><div class="axis-color x"></div><input class="axis-input" value="1.00"></div>
+                            <div class="vec-axis"><div class="axis-color y"></div><input class="axis-input" value="1.00"></div>
+                            <div class="vec-axis"><div class="axis-color z"></div><input class="axis-input" value="1.00"></div>
+                        </div>
+                    </div>
+
+                    <div class="comp-header">
+                        <span style="color: #4ade80;">📦 Static Mesh Component</span>
+                        <span style="color: var(--text-dim);">⚙</span>
+                    </div>
+                    <div class="prop-grid">
+                        <div class="prop-label">Static Mesh</div>
+                        <div class="prop-val-box">SM_Crate_01</div>
+                    </div>
+                    <div class="prop-grid">
+                        <div class="prop-label">Material 0</div>
+                        <div class="prop-val-box" style="display: flex; gap: 8px; align-items: center;">
+                            <div style="width: 16px; height: 16px; background: #666; border-radius: 2px;"></div>
+                            M_SciFi_Metal
+                        </div>
+                    </div>
+
+                    <div style="padding: 12px; display: flex; justify-content: center;">
+                        <button style="background: rgba(255,255,255,0.05); border: 1px dashed #555; color: #aaa; padding: 6px 24px; border-radius: 12px; cursor: pointer;">+ Add Component</button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <div class="status-left">
+            <span>✔ Ready</span>
+            <span style="color: rgba(255,255,255,0.7);">Shaders Compiled</span>
+        </div>
+        <div class="status-right">
+            <span>Draw Calls: 142</span>
+            <span>Tris: 24.5k</span>
+            <span style="font-weight: bold; color: #fff;">120 FPS (8.3ms)</span>
+        </div>
+    </div>
+
+</body>
+</html>

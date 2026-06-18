@@ -116,3 +116,18 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 0
+  - Entity: 11713674420544560449
+    TagComponent:
+      Tag: Cube (1)
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0.6632251, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000001
+      MaterialHandle: 11403081291251690588
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0

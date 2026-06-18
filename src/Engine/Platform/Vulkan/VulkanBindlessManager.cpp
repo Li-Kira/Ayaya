@@ -73,10 +73,11 @@ namespace Ayaya {
         m_Layout = VK_NULL_HANDLE;
         m_Set = VK_NULL_HANDLE;
         m_FreeList.clear();
-        m_NextIndex = 1;
+        m_NextIndex = kFirstFreeIndex;
     }
 
     uint32_t VulkanBindlessManager::AllocateIndex() {
+        // Reuse from free-list (entries are guaranteed >= kFirstFreeIndex)
         if (!m_FreeList.empty()) {
             uint32_t index = m_FreeList.back();
             m_FreeList.pop_back();
@@ -86,11 +87,15 @@ namespace Ayaya {
             AYAYA_CORE_ERROR("VulkanBindlessManager: Out of texture slots!");
             return 0;
         }
-        return m_NextIndex++;
+        // Belt-and-suspenders: never return reserved indices 0-3
+        uint32_t idx = m_NextIndex++;
+        if (idx < kFirstFreeIndex) idx = kFirstFreeIndex;
+        return idx;
     }
 
     void VulkanBindlessManager::FreeIndex(uint32_t index) {
-        if (index > 0 && index < m_Capacity)
+        // Protect fixed default indices (0-3) from being recycled
+        if (index >= kFirstFreeIndex && index < m_Capacity)
             m_FreeList.push_back(index);
     }
 

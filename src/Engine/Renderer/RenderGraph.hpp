@@ -76,9 +76,15 @@ namespace Ayaya {
         void WriteTexture(const std::string& name, const FramebufferSpecification& spec);
         void ReadWriteTexture(const std::string& name, const FramebufferSpecification& spec);
 
+        // Mark this pass as culled — it will be excluded from the DAG at Compile time.
+        // Consuming passes are responsible for their own fallback textures.
+        void SetCulled(bool culled) { m_Culled = culled; }
+        bool IsCulled() const { return m_Culled; }
+
     private:
         RenderGraph& m_Graph;
         RGPass&      m_Pass;
+        bool m_Culled = false;
     };
 
     // ==========================================
@@ -133,6 +139,7 @@ namespace Ayaya {
             auto pass = std::make_shared<RGPass>(name, execute);
             RGBuilder builder(*this, *pass);
             setup(builder);
+            pass->IsCulled = builder.IsCulled();
             m_Passes.push_back(pass);
             m_Compiled = false;
         }
@@ -149,6 +156,9 @@ namespace Ayaya {
 
         // 获取指定纹理和帧索引的物理 FBO
         std::shared_ptr<Framebuffer> GetPhysicalFBO(const std::string& name, uint32_t frameIndex = 0);
+
+        // Access pass list for per-frame culling updates
+        std::vector<std::shared_ptr<RGPass>>& GetPasses() { return m_Passes; }
 
         bool IsCompiled() const { return m_Compiled; }
 

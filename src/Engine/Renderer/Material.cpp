@@ -108,7 +108,7 @@ namespace Ayaya {
     }
 
     void Material::BakeProperties() {
-        m_BakedPC = BakedPC{};  // reset to defaults
+        m_BakedPC = BakedPC{};  // reset to defaults (indices point to default 1×1 textures)
         for (auto& prop : Properties) {
             if (prop.UniformName == "u_Albedo" && prop.Type == MaterialPropertyType::Vec3) {
                 m_BakedPC.Albedo = glm::vec4(prop.Vec3Value, 1.0f);
@@ -121,33 +121,26 @@ namespace Ayaya {
             } else if (prop.UniformName == "u_Alpha" && prop.Type == MaterialPropertyType::Float) {
                 m_BakedPC.Alpha = prop.FloatValue;
             } else if (prop.Type == MaterialPropertyType::Texture2D) {
-                // Resolve texture pointer once, cache in array
+                // Resolve texture and get its bindless index
                 std::shared_ptr<Texture2D> tex = prop.RuntimeTexture;
                 if (!tex && prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle))
                     tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
                 if (tex) {
+                    uint32_t idx = tex->GetBindlessIndex();
+                    if (idx == 0) continue;  // texture not yet uploaded to GPU
                     if (prop.UniformName == "u_AlbedoMap") {
-                        m_BakedPC.UseAlbedoMap = 1;
-                        m_BakedPC.Textures[0] = tex;
+                        m_BakedPC.AlbedoMapIndex = idx;
                     } else if (prop.UniformName == "u_NormalMap") {
-                        m_BakedPC.UseNormalMap = 1;
-                        m_BakedPC.Textures[1] = tex;
+                        m_BakedPC.NormalMapIndex = idx;
                     } else if (prop.UniformName == "u_ORMMap") {
                         m_BakedPC.UseORMMap = 1;
-                        m_BakedPC.Textures[2] = tex;
-                        // ORM packs AO/Roughness/Metallic into RGB; disable individual maps
-                        m_BakedPC.UseAOMap = 0;
-                        m_BakedPC.UseRoughnessMap = 0;
-                        m_BakedPC.UseMetallicMap = 0;
+                        m_BakedPC.ORMMapIndex = idx;
                     } else if (prop.UniformName == "u_MetallicMap") {
-                        m_BakedPC.UseMetallicMap = 1;
-                        m_BakedPC.Textures[3] = tex;
+                        m_BakedPC.MetallicMapIndex = idx;
                     } else if (prop.UniformName == "u_RoughnessMap") {
-                        m_BakedPC.UseRoughnessMap = 1;
-                        m_BakedPC.Textures[4] = tex;
+                        m_BakedPC.RoughnessMapIndex = idx;
                     } else if (prop.UniformName == "u_AOMap") {
-                        m_BakedPC.UseAOMap = 1;
-                        m_BakedPC.Textures[5] = tex;
+                        m_BakedPC.AOMapIndex = idx;
                     }
                 }
             }

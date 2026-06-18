@@ -7,6 +7,13 @@ namespace Ayaya {
 
     class VulkanBindlessManager {
     public:
+        // Fixed default texture indices (reserved at init, never recycled)
+        static constexpr uint32_t kInvalidIndex        = 0;
+        static constexpr uint32_t kWhiteIndex          = 1;
+        static constexpr uint32_t kBlackIndex          = 2;
+        static constexpr uint32_t kDefaultNormalIndex  = 3;
+        static constexpr uint32_t kFirstFreeIndex      = 4;
+
         void Init(VkDevice device, uint32_t capacity);
         void Shutdown(VkDevice device);
 
@@ -26,7 +33,7 @@ namespace Ayaya {
         VkDescriptorSet m_Set = VK_NULL_HANDLE;
 
         std::vector<uint32_t> m_FreeList;
-        uint32_t m_NextIndex = 1;
+        uint32_t m_NextIndex = kFirstFreeIndex;  // 0-3 reserved for default textures
     };
 
 }

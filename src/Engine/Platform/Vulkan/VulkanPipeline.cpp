@@ -171,7 +171,18 @@ namespace Ayaya {
         depthStencil.depthCompareOp = AyayaToVulkanDepthCompare(spec.DepthOperator);
         
         depthStencil.depthBoundsTestEnable = VK_FALSE;
-        depthStencil.stencilTestEnable = VK_FALSE;
+        depthStencil.stencilTestEnable = spec.StencilTestEnable ? VK_TRUE : VK_FALSE;
+        if (spec.StencilTestEnable) {
+            depthStencil.front.compareOp = AyayaToVulkanDepthCompare(spec.StencilCompareOp);
+            depthStencil.front.failOp      = VK_STENCIL_OP_KEEP;
+            depthStencil.front.depthFailOp = VK_STENCIL_OP_KEEP;
+            if (spec.StencilCompareOp == DepthCompareOperator::Always)
+                depthStencil.front.passOp = VK_STENCIL_OP_REPLACE;  // write ref value
+            else
+                depthStencil.front.passOp = VK_STENCIL_OP_KEEP;     // only test, no write
+            depthStencil.front.reference = spec.StencilReference;
+            depthStencil.back = depthStencil.front;
+        }
 
         // ==========================================
         // 6. 颜色混合 (Color Blend) 动态匹配 FBO 附件
@@ -350,7 +361,7 @@ namespace Ayaya {
         renderingInfo.colorAttachmentCount = (uint32_t)colorFormats.size();
         renderingInfo.pColorAttachmentFormats = colorFormats.data();
         renderingInfo.depthAttachmentFormat = depthFormat;
-        renderingInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+        renderingInfo.stencilAttachmentFormat = spec.StencilTestEnable ? depthFormat : VK_FORMAT_UNDEFINED;
         renderingInfo.pNext = nullptr;
         pipelineInfo.pNext = &renderingInfo;
 
@@ -388,15 +399,18 @@ namespace Ayaya {
             if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_PipelineDescriptorPool) != VK_SUCCESS)
                 AYAYA_CORE_ERROR("Failed to create Descriptor Pool (no-textures) for Pipeline!");
         } else {
+            uint32_t samplerCount = spec.UseBindlessTextures ? 0u : 40000u;
+            uint32_t maxSets = spec.UseBindlessTextures ? 10u : 3100u;
             VkDescriptorPoolSize poolSizes[] = {
                 { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 20 },
-                { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 40000 }
+                { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, samplerCount }
             };
+            uint32_t poolSizeCount = spec.UseBindlessTextures ? 1u : 2u;
             VkDescriptorPoolCreateInfo poolInfo{};
             poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-            poolInfo.poolSizeCount = 2;
+            poolInfo.poolSizeCount = poolSizeCount;
             poolInfo.pPoolSizes = poolSizes;
-            poolInfo.maxSets = 3100;
+            poolInfo.maxSets = maxSets;
             if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_PipelineDescriptorPool) != VK_SUCCESS)
                 AYAYA_CORE_ERROR("Failed to create custom Descriptor Pool for Pipeline!");
         }
@@ -495,10 +509,15 @@ namespace Ayaya {
             if (m_PipelineLayout) vkDestroyPipelineLayout(device, m_PipelineLayout, nullptr);
             if (m_CustomLayout) vkDestroyPipelineLayout(device, m_CustomLayout, nullptr);
             // 不销毁全局 Bindless Layout (由 VulkanContext 管理)
-            if (!m_Specification.UseBindlessTextures) {
-                if (m_DescriptorSetLayouts[0]) vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayouts[0], nullptr);
-                if (m_DescriptorSetLayouts[1]) vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayouts[1], nullptr);
-            }
+            // The bindless layout can be in Set 0 (when NoGlobalUBOs, e.g. UI pass)
+            // or in Set 1 (normal case, e.g. GBuffer/WBOIT).
+            // Only destroy layouts that are NOT the shared bindless layout.
+            bool bindlessInSet0 = m_Specification.NoGlobalUBOs && m_Specification.UseBindlessTextures;
+            bool bindlessInSet1 = !m_Specification.NoGlobalUBOs && m_Specification.UseBindlessTextures;
+            if (m_DescriptorSetLayouts[0] && !bindlessInSet0)
+                vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayouts[0], nullptr);
+            if (m_DescriptorSetLayouts[1] && !bindlessInSet1)
+                vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayouts[1], nullptr);
             if (m_PipelineDescriptorPool) vkDestroyDescriptorPool(device, m_PipelineDescriptorPool, nullptr);
         }
     }

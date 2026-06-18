@@ -119,7 +119,10 @@ namespace Ayaya {
         vkDeviceWaitIdle(device);
 
         if (m_BindlessIndex != 0) {
-            context->GetBindlessManager().FreeIndex(m_BindlessIndex);
+            // Deferred release: the bindless index is freed after 3 frames
+            // to ensure the GPU has finished referencing it in-flight.
+            context->QueueDeferredBindlessRelease(m_BindlessIndex);
+            m_BindlessIndex = 0;
         }
 
         if (m_ImGuiDescriptorSet) {
@@ -141,9 +144,60 @@ namespace Ayaya {
         if (m_Image) vmaDestroyImage(context->GetAllocator(), m_Image, m_Allocation);
     }
 
+    // Check if format is compressed (ASTC/BCn/ETC2) — Vulkan forbids vkCmdBlitImage on these
+    static bool IsCompressedFormat(VkFormat fmt) {
+        switch (fmt) {
+            case VK_FORMAT_BC1_RGB_UNORM_BLOCK:  case VK_FORMAT_BC1_RGB_SRGB_BLOCK:
+            case VK_FORMAT_BC1_RGBA_UNORM_BLOCK: case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:
+            case VK_FORMAT_BC2_UNORM_BLOCK:      case VK_FORMAT_BC2_SRGB_BLOCK:
+            case VK_FORMAT_BC3_UNORM_BLOCK:      case VK_FORMAT_BC3_SRGB_BLOCK:
+            case VK_FORMAT_BC4_UNORM_BLOCK:      case VK_FORMAT_BC4_SNORM_BLOCK:
+            case VK_FORMAT_BC5_UNORM_BLOCK:      case VK_FORMAT_BC5_SNORM_BLOCK:
+            case VK_FORMAT_BC6H_UFLOAT_BLOCK:    case VK_FORMAT_BC6H_SFLOAT_BLOCK:
+            case VK_FORMAT_BC7_UNORM_BLOCK:      case VK_FORMAT_BC7_SRGB_BLOCK:
+            case VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK: case VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK:
+            case VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK: case VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK:
+            case VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK: case VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK:
+            case VK_FORMAT_EAC_R11_UNORM_BLOCK:  case VK_FORMAT_EAC_R11_SNORM_BLOCK:
+            case VK_FORMAT_EAC_R11G11_UNORM_BLOCK: case VK_FORMAT_EAC_R11G11_SNORM_BLOCK:
+            case VK_FORMAT_ASTC_4x4_UNORM_BLOCK:  case VK_FORMAT_ASTC_4x4_SRGB_BLOCK:
+            case VK_FORMAT_ASTC_5x4_UNORM_BLOCK:  case VK_FORMAT_ASTC_5x4_SRGB_BLOCK:
+            case VK_FORMAT_ASTC_5x5_UNORM_BLOCK:  case VK_FORMAT_ASTC_5x5_SRGB_BLOCK:
+            case VK_FORMAT_ASTC_6x5_UNORM_BLOCK:  case VK_FORMAT_ASTC_6x5_SRGB_BLOCK:
+            case VK_FORMAT_ASTC_6x6_UNORM_BLOCK:  case VK_FORMAT_ASTC_6x6_SRGB_BLOCK:
+            case VK_FORMAT_ASTC_8x5_UNORM_BLOCK:  case VK_FORMAT_ASTC_8x5_SRGB_BLOCK:
+            case VK_FORMAT_ASTC_8x6_UNORM_BLOCK:  case VK_FORMAT_ASTC_8x6_SRGB_BLOCK:
+            case VK_FORMAT_ASTC_8x8_UNORM_BLOCK:  case VK_FORMAT_ASTC_8x8_SRGB_BLOCK:
+            case VK_FORMAT_ASTC_10x5_UNORM_BLOCK: case VK_FORMAT_ASTC_10x5_SRGB_BLOCK:
+            case VK_FORMAT_ASTC_10x6_UNORM_BLOCK: case VK_FORMAT_ASTC_10x6_SRGB_BLOCK:
+            case VK_FORMAT_ASTC_10x8_UNORM_BLOCK: case VK_FORMAT_ASTC_10x8_SRGB_BLOCK:
+            case VK_FORMAT_ASTC_10x10_UNORM_BLOCK: case VK_FORMAT_ASTC_10x10_SRGB_BLOCK:
+            case VK_FORMAT_ASTC_12x10_UNORM_BLOCK: case VK_FORMAT_ASTC_12x10_SRGB_BLOCK:
+            case VK_FORMAT_ASTC_12x12_UNORM_BLOCK: case VK_FORMAT_ASTC_12x12_SRGB_BLOCK:
+                return true;
+            default: return false;
+        }
+    }
+
     void VulkanTexture2D::Invalidate() {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         VmaAllocator allocator = context->GetAllocator();
+
+        // Calculate mip levels with safety checks
+        bool isCompressed = IsCompressedFormat(m_Format);
+        if (!isCompressed && m_ImportSettings.GenerateMipmaps) {
+            // Verify hardware supports linear blit for this format
+            VkFormatProperties fmtProps;
+            vkGetPhysicalDeviceFormatProperties(context->GetPhysicalDevice(), m_Format, &fmtProps);
+            bool supportsLinearBlit = (fmtProps.optimalTilingFeatures &
+                VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
+            if (supportsLinearBlit)
+                m_MipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(m_Width, m_Height)))) + 1;
+            else
+                m_MipLevels = 1;
+        } else {
+            m_MipLevels = 1;
+        }
 
         // 1. 创建 VkImage
         VkImageCreateInfo imageInfo{};
@@ -152,12 +206,12 @@ namespace Ayaya {
         imageInfo.extent.width = m_Width;
         imageInfo.extent.height = m_Height;
         imageInfo.extent.depth = 1;
-        imageInfo.mipLevels = 1;
+        imageInfo.mipLevels = m_MipLevels;
         imageInfo.arrayLayers = 1;
         imageInfo.format = m_Format;
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -166,7 +220,7 @@ namespace Ayaya {
 
         vmaCreateImage(allocator, &imageInfo, &allocInfo, &m_Image, &m_Allocation, nullptr);
 
-        // 2. 创建 ImageView
+        // 2. 创建 ImageView (all mip levels)
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = m_Image;
@@ -174,12 +228,12 @@ namespace Ayaya {
         viewInfo.format = m_Format;
         viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.levelCount = m_MipLevels;
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = 1;
 
         vkCreateImageView(context->GetDevice(), &viewInfo, nullptr, &m_ImageView);
-        
+
         CreateSampler();
     }
 
@@ -207,7 +261,8 @@ namespace Ayaya {
         samplerInfo.compareEnable = VK_FALSE;
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
         samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = m_ImportSettings.GenerateMipmaps ? VK_LOD_CLAMP_NONE : 0.0f;
+        samplerInfo.maxLod = static_cast<float>(m_MipLevels);
+        samplerInfo.mipLodBias = 0.0f;
 
         vkCreateSampler(context->GetDevice(), &samplerInfo, nullptr, &m_Sampler);
     }
@@ -270,7 +325,7 @@ namespace Ayaya {
         barrier.image = m_Image;
         barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.levelCount = m_MipLevels;  // all mips → DST for subsequent blit
         barrier.subresourceRange.baseArrayLayer = 0;
         barrier.subresourceRange.layerCount = 1;
         barrier.srcAccessMask = 0;
@@ -294,15 +349,74 @@ namespace Ayaya {
 
         vkCmdCopyBufferToImage(cmdBuffer, stagingBuffer, m_Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-        // 【步骤 C】：将图片布局从 传输目标 转换为 着色器只读 (SHADER_READ_ONLY) —— 解决验证层报错的核心！
-        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        // 【步骤 C-MIP】：逐级 Blit 生成 Mipmap 链，流水线式 Layout 转换
+        // Mip 0 is now TRANSFER_DST_OPTIMAL with the source data.
+        if (m_MipLevels > 1) {
+            int32_t mipW = static_cast<int32_t>(m_Width);
+            int32_t mipH = static_cast<int32_t>(m_Height);
 
-        vkCmdPipelineBarrier(cmdBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            0, 0, nullptr, 0, nullptr, 1, &barrier);
+            for (uint32_t i = 1; i < m_MipLevels; i++) {
+                int32_t nextW = mipW > 1 ? mipW / 2 : 1;
+                int32_t nextH = mipH > 1 ? mipH / 2 : 1;
+
+                // Step A: Mip[i-1]  DST → SRC  (prepare as blit source for current level)
+                VkImageMemoryBarrier mipBarrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+                mipBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                mipBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                mipBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                mipBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                mipBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                mipBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                mipBarrier.image = m_Image;
+                mipBarrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, i - 1, 1, 0, 1 };
+                vkCmdPipelineBarrier(cmdBuffer,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    0, 0, nullptr, 0, nullptr, 1, &mipBarrier);
+
+                // Step B: Blit Mip[i-1] → Mip[i]
+                VkImageBlit blit{};
+                blit.srcOffsets[1] = { mipW, mipH, 1 };
+                blit.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, i - 1, 0, 1 };
+                blit.dstOffsets[1] = { nextW, nextH, 1 };
+                blit.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, i, 0, 1 };
+                vkCmdBlitImage(cmdBuffer,
+                    m_Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    m_Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    1, &blit, VK_FILTER_LINEAR);
+
+                // Step C: Mip[i-1]  SRC → SHADER_READ_ONLY  (this level done)
+                mipBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                mipBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                mipBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                mipBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                vkCmdPipelineBarrier(cmdBuffer,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    0, 0, nullptr, 0, nullptr, 1, &mipBarrier);
+
+                mipW = nextW; mipH = nextH;
+            }
+
+            // Step D: Final mip level  DST → SHADER_READ_ONLY
+            barrier.subresourceRange.baseMipLevel = m_MipLevels - 1;
+            barrier.subresourceRange.levelCount = 1;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            vkCmdPipelineBarrier(cmdBuffer,
+                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                0, 0, nullptr, 0, nullptr, 1, &barrier);
+        } else {
+            // 【步骤 C】：将图片布局从 传输目标 转换为 着色器只读 (单层 mip 路径)
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+            vkCmdPipelineBarrier(cmdBuffer,
+                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                0, 0, nullptr, 0, nullptr, 1, &barrier);
+        }
 
         // 4. 提交命令并阻塞等待 GPU 执行完毕
         context->EndSingleTimeCommands(cmdBuffer);

@@ -1617,21 +1617,26 @@ namespace Ayaya {
             if(r.assetType==1 && s_PbrVk.initialized && prefabMat){
                 prefabMat->BakeProperties(); auto& pBpc=prefabMat->GetBakedPC();
                 // Check if at least Albedo texture is loaded (indicates textures are GPU-ready)
-                bool texReady = pBpc.UseAlbedoMap && pBpc.Textures[0] && pBpc.Textures[0]->GetRendererID();
+                bool texReady = pBpc.AlbedoMapIndex != 1;  // non-default albedo texture present
                 if(texReady){
                     usePBR=true;
                     pbr.ModelMatrix=modelMat; pbr.Albedo=glm::vec4(0.6f,0.6f,0.6f,1.0f); pbr.Roughness=0.5f; pbr.AO=1.0f; pbr.Alpha=1.0f; pbr.AlphaCutoff=0.5f;
                     for(auto& p:prefabMat->Properties){if(p.UniformName=="u_Albedo"&&p.Type==MaterialPropertyType::Vec3)pbr.Albedo=glm::vec4(p.Vec3Value,1.0f); else if(p.UniformName=="u_Metallic"&&p.Type==MaterialPropertyType::Float)pbr.Metallic=p.FloatValue; else if(p.UniformName=="u_Roughness"&&p.Type==MaterialPropertyType::Float)pbr.Roughness=p.FloatValue; else if(p.UniformName=="u_AO"&&p.Type==MaterialPropertyType::Float)pbr.AO=p.FloatValue; else if(p.UniformName=="u_Alpha"&&p.Type==MaterialPropertyType::Float)pbr.Alpha=p.FloatValue; else if(p.UniformName=="u_AlphaCutoff"&&p.Type==MaterialPropertyType::Float)pbr.AlphaCutoff=p.FloatValue; else if(p.UniformName=="u_BlendMode"&&p.Type==MaterialPropertyType::Int)pbr.BlendMode=p.IntValue;}
-                    pbr.UseAlbedoMap=pBpc.UseAlbedoMap?1:0; pbr.UseNormalMap=pBpc.UseNormalMap?1:0; pbr.UseORMMap=pBpc.UseORMMap?1:0; pbr.UseMetallicMap=pBpc.UseMetallicMap?1:0; pbr.UseRoughnessMap=pBpc.UseRoughnessMap?1:0; pbr.UseAOMap=pBpc.UseAOMap?1:0;
-                    auto& bpc=pBpc;
-                    auto getTex=[&](int sl){return(sl>=0&&sl<6)?bpc.Textures[sl]:nullptr;};
+                    bool hasAlbedo=pBpc.AlbedoMapIndex!=1, hasNormal=pBpc.NormalMapIndex!=3, hasORM=pBpc.UseORMMap!=0;
+                    bool hasMetallic=pBpc.MetallicMapIndex!=1, hasRoughness=pBpc.RoughnessMapIndex!=1, hasAO=pBpc.AOMapIndex!=1;
+                    pbr.UseAlbedoMap=hasAlbedo?1:0; pbr.UseNormalMap=hasNormal?1:0; pbr.UseORMMap=hasORM?1:0;
+                    pbr.UseMetallicMap=hasORM?0:(hasMetallic?1:0); pbr.UseRoughnessMap=hasORM?0:(hasRoughness?1:0); pbr.UseAOMap=hasORM?0:(hasAO?1:0);
+                    // Resolve textures from Material Properties for traditional Set=1 binding
+                    auto getTex=[&](const char* name)->std::shared_ptr<Texture2D>{
+                        for(auto&p:prefabMat->Properties){if(p.UniformName==name&&p.Type==MaterialPropertyType::Texture2D){auto t=p.RuntimeTexture;if(!t&&p.TextureHandle!=0&&AssetManager::IsAssetHandleValid(p.TextureHandle))t=AssetManager::GetAsset<Texture2D>(p.TextureHandle);return t;}} return nullptr;
+                    };
                     VkWriteDescriptorSet w[5]{}; VkDescriptorImageInfo im[5]{}; int wc=0;
                     auto addT=[&](int b,std::shared_ptr<Texture2D> t,std::shared_ptr<Texture2D> fb){
                         auto u=t&&t->GetRendererID()?t:fb; if(!u)return; auto vk=std::dynamic_pointer_cast<VulkanTexture2D>(u); if(!vk||!vk->GetImageView()||!vk->GetSampler())return;
                         im[wc].sampler=vk->GetSampler();im[wc].imageView=vk->GetImageView();im[wc].imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                         w[wc].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;w[wc].dstSet=s_PbrVk.set1[fi];w[wc].dstBinding=(uint32_t)b;w[wc].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;w[wc].descriptorCount=1;w[wc].pImageInfo=&im[wc]; wc++;
                     };
-                    addT(0,getTex(0),s_PbrBlackTex);addT(1,getTex(1),s_PbrBlackTex);addT(2,getTex(2),s_PbrBlackTex);addT(3,getTex(3),s_PbrBlackTex);addT(4,getTex(4),s_PbrBlackTex);
+                    addT(0,getTex("u_AlbedoMap"),s_PbrBlackTex);addT(1,getTex("u_NormalMap"),s_PbrBlackTex);addT(2,getTex("u_ORMMap"),s_PbrBlackTex);addT(3,getTex("u_MetallicMap"),s_PbrBlackTex);addT(4,getTex("u_RoughnessMap"),s_PbrBlackTex);
                     if(wc)vkUpdateDescriptorSets(vkCtx->GetDevice(),wc,w,0,nullptr);
                 }
             }
@@ -1649,16 +1654,21 @@ namespace Ayaya {
                 pbr.Albedo=glm::vec4(0.6f,0.6f,0.6f,1.0f); pbr.Roughness=0.5f; pbr.AO=1.0f; pbr.Alpha=1.0f; pbr.AlphaCutoff=0.5f;
                 mat->BakeProperties(); auto&bpc=mat->GetBakedPC();
                 for(auto&p:mat->Properties){if(p.UniformName=="u_Albedo"&&p.Type==MaterialPropertyType::Vec3)pbr.Albedo=glm::vec4(p.Vec3Value,1.0f); else if(p.UniformName=="u_Metallic"&&p.Type==MaterialPropertyType::Float)pbr.Metallic=p.FloatValue; else if(p.UniformName=="u_Roughness"&&p.Type==MaterialPropertyType::Float)pbr.Roughness=p.FloatValue; else if(p.UniformName=="u_AO"&&p.Type==MaterialPropertyType::Float)pbr.AO=p.FloatValue; else if(p.UniformName=="u_Alpha"&&p.Type==MaterialPropertyType::Float)pbr.Alpha=p.FloatValue; else if(p.UniformName=="u_AlphaCutoff"&&p.Type==MaterialPropertyType::Float)pbr.AlphaCutoff=p.FloatValue; else if(p.UniformName=="u_BlendMode"&&p.Type==MaterialPropertyType::Int)pbr.BlendMode=p.IntValue;}
-                pbr.UseAlbedoMap=bpc.UseAlbedoMap?1:0; pbr.UseNormalMap=bpc.UseNormalMap?1:0; pbr.UseORMMap=bpc.UseORMMap?1:0; pbr.UseMetallicMap=bpc.UseMetallicMap?1:0; pbr.UseRoughnessMap=bpc.UseRoughnessMap?1:0; pbr.UseAOMap=bpc.UseAOMap?1:0;
-                // Update Set 1 from material (triple-buffered copy)
-                auto getTex=[&](int sl){return(sl>=0&&sl<6)?bpc.Textures[sl]:nullptr;};
+                bool hasAlbedo=bpc.AlbedoMapIndex!=1, hasNormal=bpc.NormalMapIndex!=3, hasORM=bpc.UseORMMap!=0;
+                bool hasMetallic=bpc.MetallicMapIndex!=1, hasRoughness=bpc.RoughnessMapIndex!=1, hasAO=bpc.AOMapIndex!=1;
+                pbr.UseAlbedoMap=hasAlbedo?1:0; pbr.UseNormalMap=hasNormal?1:0; pbr.UseORMMap=hasORM?1:0;
+                pbr.UseMetallicMap=hasORM?0:(hasMetallic?1:0); pbr.UseRoughnessMap=hasORM?0:(hasRoughness?1:0); pbr.UseAOMap=hasORM?0:(hasAO?1:0);
+                // Resolve textures from Material Properties for traditional Set=1 binding
+                auto getTex=[&](const char* name)->std::shared_ptr<Texture2D>{
+                    for(auto&p:mat->Properties){if(p.UniformName==name&&p.Type==MaterialPropertyType::Texture2D){auto t=p.RuntimeTexture;if(!t&&p.TextureHandle!=0&&AssetManager::IsAssetHandleValid(p.TextureHandle))t=AssetManager::GetAsset<Texture2D>(p.TextureHandle);return t;}} return nullptr;
+                };
                 VkWriteDescriptorSet w[5]{}; VkDescriptorImageInfo im[5]{}; int wc=0;
                 auto addT=[&](int b,std::shared_ptr<Texture2D> t,std::shared_ptr<Texture2D> fb){
                     auto u=t&&t->GetRendererID()?t:fb; if(!u)return; auto vk=std::dynamic_pointer_cast<VulkanTexture2D>(u); if(!vk||!vk->GetImageView()||!vk->GetSampler())return;
                     im[wc].sampler=vk->GetSampler();im[wc].imageView=vk->GetImageView();im[wc].imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                     w[wc].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;w[wc].dstSet=s_PbrVk.set1[fi];w[wc].dstBinding=(uint32_t)b;w[wc].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;w[wc].descriptorCount=1;w[wc].pImageInfo=&im[wc]; wc++;
                 };
-                addT(0,getTex(0),s_PbrBlackTex);addT(1,getTex(1),s_PbrBlackTex);addT(2,getTex(2),s_PbrBlackTex);addT(3,getTex(3),s_PbrBlackTex);addT(4,getTex(4),s_PbrBlackTex);
+                addT(0,getTex("u_AlbedoMap"),s_PbrBlackTex);addT(1,getTex("u_NormalMap"),s_PbrBlackTex);addT(2,getTex("u_ORMMap"),s_PbrBlackTex);addT(3,getTex("u_MetallicMap"),s_PbrBlackTex);addT(4,getTex("u_RoughnessMap"),s_PbrBlackTex);
                 if(wc)vkUpdateDescriptorSets(vkCtx->GetDevice(),wc,w,0,nullptr);
             }else{
                 wm.ModelMatrix=glm::translate(glm::mat4(1.0f),-ComputeModelCenter(s_SphereModel))

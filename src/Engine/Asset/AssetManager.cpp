@@ -862,75 +862,67 @@ namespace Ayaya {
                 material->AssetPath = mat.PhysicalPath;
                 material->ShaderName = "PBR";
 
-                // Helper: assign texture + enable flag
-                auto AssignTex = [&](const std::string& mapProp, const std::string& useProp,
-                                     TexMatch* tm) {
+                // Helper: assign texture (bindless — no UseXxxMap flags needed)
+                auto AssignTex = [&](const std::string& mapProp, TexMatch* tm) {
                     if (!tm) return;
                     material->SetTexture(mapProp, tm->Handle);
-                    material->SetBool(useProp, true);
                 };
 
                 // --- 1. Albedo / BaseColor ---
                 TexMatch* albedo = MatchBySuffix({
                     "_basecolor", "_albedo", "_bc", "_color", "_d", "_diffuse"
                 });
-                AssignTex("u_AlbedoMap", "u_UseAlbedoMap", albedo);
+                AssignTex("u_AlbedoMap", albedo);
 
                 // --- 2. Normal ---
                 TexMatch* normal = MatchBySuffix({
                     "_normal", "_nrm", "_nor", "_n"
                 });
-                AssignTex("u_NormalMap", "u_UseNormalMap", normal);
+                AssignTex("u_NormalMap", normal);
 
                 // --- 3. ORM (packed Occlusion-Roughness-Metallic) — check FIRST ---
                 TexMatch* orm = MatchBySuffix({
                     "_occlusionroughnessmetallic", "_orm", "_arm"
                 });
                 if (orm) {
-                    // Set ORM as a combined texture property
                     material->SetTexture("u_ORMMap", orm->Handle);
-                    material->SetBool("u_UseORMMap", true);
-                    // Disable individual maps to prevent conflicts
-                    material->SetBool("u_UseMetallicMap", false);
-                    material->SetBool("u_UseRoughnessMap", false);
-                    material->SetBool("u_UseAOMap", false);
                 } else {
                     // --- 4a. Metallic (individual) ---
                     TexMatch* metallic = MatchBySuffix({
                         "_metallic", "_metalness", "_metal", "_specular", "_spec", "_mt", "_m"
                     });
-                    AssignTex("u_MetallicMap", "u_UseMetallicMap", metallic);
+                    AssignTex("u_MetallicMap", metallic);
 
                     // --- 4b. Roughness (individual) ---
                     TexMatch* roughness = MatchBySuffix({
                         "_roughness", "_rough", "_r"
                     });
-                    AssignTex("u_RoughnessMap", "u_UseRoughnessMap", roughness);
+                    AssignTex("u_RoughnessMap", roughness);
 
                     // --- 4c. AO (individual) ---
                     TexMatch* ao = MatchBySuffix({
                         "_ambientocclusion", "_ao", "_ambient", "_o"
                     });
-                    AssignTex("u_AOMap", "u_UseAOMap", ao);
+                    AssignTex("u_AOMap", ao);
                 }
 
                 // --- 5. Height / Displacement ---
                 TexMatch* height = MatchBySuffix({
                     "_height", "_displacement", "_disp", "_h"
                 });
-                AssignTex("u_HeightMap", "u_UseHeightMap", height);
+                AssignTex("u_HeightMap", height);
 
                 // --- 6. Emissive ---
                 TexMatch* emissive = MatchBySuffix({
                     "_emissive", "_emission", "_emit", "_e"
                 });
-                AssignTex("u_EmissiveMap", "u_UseEmissiveMap", emissive);
+                AssignTex("u_EmissiveMap", emissive);
 
                 // --- 7. Opacity / Alpha ---
                 TexMatch* opacity = MatchBySuffix({
                     "_opacity", "_alpha", "_op"
                 });
-                AssignTex("u_AlphaMap", "u_UseAlphaMap", opacity);
+                AssignTex("u_AlphaMap", opacity);
 
                 // Write material to disk and register
                 MaterialSerializer::Serialize(material, mat.PhysicalPath);

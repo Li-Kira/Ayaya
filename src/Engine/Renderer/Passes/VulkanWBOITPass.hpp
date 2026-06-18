@@ -10,22 +10,25 @@
 
 namespace Ayaya {
 
-    // WBOIT Gather pass push constants (must match wboit_gather.vert/frag).
+    // WBOIT Gather pass push constants (must match wboit_gather_bindless.frag).
     // In the instanced path, Transform is ignored (SSBO provides it).
     struct alignas(16) WBOITGatherPushConstants {
-        glm::mat4 Transform;
-        glm::vec4 Albedo;
-        float Metallic;
-        float Roughness;
-        float AO;
-        int UseAlbedoMap;
-        int UseNormalMap;
-        int UseORMMap;        // [NEW] UE4-style ORM packed texture (R=AO, G=Roughness, B=Metallic)
-        int UseMetallicMap;
-        int UseRoughnessMap;
-        int UseAOMap;
-        float Alpha;
+        glm::mat4 Transform;                       // offset 0   (64B)
+        glm::vec4 Albedo;                          // offset 64  (16B)
+        float  Metallic;                           // offset 80  (4B)
+        float  Roughness;                          // offset 84  (4B)
+        float  AO;                                 // offset 88  (4B)
+        uint32_t UseORMMap;                        // offset 92  (4B)
+        uint32_t AlbedoMapIndex;                   // offset 96  (4B)
+        uint32_t NormalMapIndex;                   // offset 100 (4B)
+        uint32_t ORMMapIndex;                      // offset 104 (4B)
+        uint32_t MetallicMapIndex;                 // offset 108 (4B)
+        uint32_t RoughnessMapIndex;                // offset 112 (4B)
+        uint32_t AOMapIndex;                       // offset 116 (4B)
+        float  Alpha;                              // offset 120 (4B)
     };
+    static_assert(sizeof(WBOITGatherPushConstants) <= 256,
+        "WBOITGatherPushConstants must fit within push constant limit");
 
     // Maximum translucent instances per frame (SSBO capacity).
     // Increase if you need >2048 overlapping transparent objects.
@@ -79,6 +82,15 @@ namespace Ayaya {
         std::shared_ptr<Pipeline>     m_ResolvePipeline;
         std::shared_ptr<Framebuffer>  m_ResolveRefFBO;
         PipelineSpecification         m_ResolveSpec;
+
+        // IBL descriptor set (set=3) — bound once per frame, not per-material
+        VkDescriptorSetLayout         m_IBLSetLayout = VK_NULL_HANDLE;
+        VkDescriptorPool              m_IBLPool = VK_NULL_HANDLE;
+        std::vector<VkDescriptorSet>  m_IBLDescriptorSets;  // one per frame-in-flight
+
+        // Bindless gather pipeline (UseBindlessTextures=true)
+        std::shared_ptr<Shader>       m_BindlessInstancedShader;
+        std::shared_ptr<Pipeline>     m_BindlessInstancedPipeline;
     };
 
 }

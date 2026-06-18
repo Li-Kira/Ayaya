@@ -68,6 +68,11 @@ namespace Ayaya {
         bool NoTextureDescriptors = false; // 跳过 Set 1 (纹理) 描述符集
         bool NoGlobalUBOs = false;          // 跳过 Set 0 (UBO) 描述符集 — UI 管线专用
         bool UseBindlessTextures = false;   // 使用全局 Bindless 纹理数组替代传统纹理绑定
+
+        // Stencil state (for Lighting pass culling of background pixels)
+        bool StencilTestEnable = false;
+        DepthCompareOperator StencilCompareOp = DepthCompareOperator::Always;
+        uint32_t StencilReference = 0;
     };
 
     // ==========================================

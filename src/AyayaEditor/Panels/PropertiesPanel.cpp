@@ -25,20 +25,14 @@ namespace Ayaya {
         auto mat = std::make_shared<Material>();
         mat->Name = "New Material";
         mat->ShaderName = "PBR";
-        
+
         MaterialProperty p1; p1.UniformName = "u_Albedo"; p1.DisplayName = "Albedo Color"; p1.Type = MaterialPropertyType::Vec3; p1.Vec3Value = glm::vec3(1.0f); mat->Properties.push_back(p1);
-        MaterialProperty p2; p2.UniformName = "u_UseAlbedoMap"; p2.DisplayName = "Enable Albedo Map"; p2.Type = MaterialPropertyType::Bool; p2.BoolValue = false; mat->Properties.push_back(p2);
         MaterialProperty p3; p3.UniformName = "u_Metallic"; p3.DisplayName = "Metallic"; p3.Type = MaterialPropertyType::Float; p3.FloatValue = 0.0f; mat->Properties.push_back(p3);
-        MaterialProperty p4; p4.UniformName = "u_UseMetallicMap"; p4.DisplayName = "Enable Metallic Map"; p4.Type = MaterialPropertyType::Bool; p4.BoolValue = false; mat->Properties.push_back(p4);
         MaterialProperty p5; p5.UniformName = "u_Roughness"; p5.DisplayName = "Roughness"; p5.Type = MaterialPropertyType::Float; p5.FloatValue = 0.5f; mat->Properties.push_back(p5);
-        MaterialProperty p6; p6.UniformName = "u_UseRoughnessMap"; p6.DisplayName = "Enable Roughness Map"; p6.Type = MaterialPropertyType::Bool; p6.BoolValue = false; mat->Properties.push_back(p6);
-        MaterialProperty p7; p7.UniformName = "u_UseNormalMap"; p7.DisplayName = "Enable Normal Map"; p7.Type = MaterialPropertyType::Bool; p7.BoolValue = false; mat->Properties.push_back(p7);
         MaterialProperty p8; p8.UniformName = "u_AO"; p8.DisplayName = "Ambient Occlusion"; p8.Type = MaterialPropertyType::Float; p8.FloatValue = 1.0f; mat->Properties.push_back(p8);
-        MaterialProperty p9; p9.UniformName = "u_UseAOMap"; p9.DisplayName = "Enable AO Map"; p9.Type = MaterialPropertyType::Bool; p9.BoolValue = false; mat->Properties.push_back(p9);
 
         // Alpha / transparency
         MaterialProperty p10; p10.UniformName = "u_Alpha"; p10.DisplayName = "Alpha Multiplier"; p10.Type = MaterialPropertyType::Float; p10.FloatValue = 1.0f; mat->Properties.push_back(p10);
-        MaterialProperty p11; p11.UniformName = "u_UseAlphaMap"; p11.DisplayName = "Enable Alpha Map"; p11.Type = MaterialPropertyType::Bool; p11.BoolValue = false; mat->Properties.push_back(p11);
         MaterialProperty p12; p12.UniformName = "u_AlphaMap"; p12.DisplayName = "Alpha/Opacity Map"; p12.Type = MaterialPropertyType::Texture2D; p12.TextureHandle = 0; mat->Properties.push_back(p12);
 
         return mat;
@@ -1312,11 +1306,7 @@ namespace Ayaya {
                         for (auto& prop : currentMat->Properties) {
                             if (currentMat->GetBlendMode() == MaterialBlendMode::Opaque) {
                                 if (prop.UniformName == "u_Alpha" ||
-                                    prop.UniformName == "u_UseAlphaMap" ||
                                     prop.UniformName == "u_AlphaMap") continue;
-                            }
-                            if (currentMat->GetBlendMode() == MaterialBlendMode::Masked) {
-                                if (prop.UniformName == "u_UseAlphaMap") continue;
                             }
                             if (prop.UniformName == "u_AlphaMap" && prop.TextureHandle != 0)
                                 hasAlphaTex = true;

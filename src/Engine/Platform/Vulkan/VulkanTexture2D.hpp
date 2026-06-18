@@ -61,6 +61,7 @@ namespace Ayaya {
         VkFormat m_Format = VK_FORMAT_R8G8B8A8_UNORM;
         TextureImportSettings m_ImportSettings;
         uint32_t m_BindlessIndex = 0;
+        uint32_t m_MipLevels = 1;
 
         // 【新增】：缓存 ImGui 专用的描述符集 (使用 void* 避免污染头文件)
         mutable void* m_ImGuiDescriptorSet = nullptr;

@@ -80,6 +80,15 @@ namespace Ayaya {
         inline VkDescriptorSet GetBindlessSet() const { return m_BindlessManager.GetSet(); }
         inline GlobalGeometryPool& GetGeometryPool() { return m_GeometryPool; }
 
+        // Default bindless texture indices (fixed, never recycled)
+        uint32_t GetWhiteTextureIndex() const         { return VulkanBindlessManager::kWhiteIndex; }
+        uint32_t GetBlackTextureIndex() const         { return VulkanBindlessManager::kBlackIndex; }
+        uint32_t GetDefaultNormalIndex() const        { return VulkanBindlessManager::kDefaultNormalIndex; }
+
+        // Deferred bindless index release (3-frame delay for GPU safety)
+        void QueueDeferredBindlessRelease(uint32_t index);
+        void ProcessDeferredBindlessReleases();
+
     private:
         GLFWwindow* m_WindowHandle;
 
@@ -116,6 +125,32 @@ namespace Ayaya {
 
         VulkanBindlessManager m_BindlessManager;
         GlobalGeometryPool    m_GeometryPool;
+
+        // Default 1x1 textures for bindless fallback (fixed indices 1-3)
+        VkImage        m_DefaultWhiteImage       = VK_NULL_HANDLE;
+        VkImageView    m_DefaultWhiteView        = VK_NULL_HANDLE;
+        VkSampler      m_DefaultWhiteSampler     = VK_NULL_HANDLE;
+        VmaAllocation  m_DefaultWhiteAllocation  = VK_NULL_HANDLE;
+
+        VkImage        m_DefaultBlackImage       = VK_NULL_HANDLE;
+        VkImageView    m_DefaultBlackView        = VK_NULL_HANDLE;
+        VkSampler      m_DefaultBlackSampler     = VK_NULL_HANDLE;
+        VmaAllocation  m_DefaultBlackAllocation  = VK_NULL_HANDLE;
+
+        VkImage        m_DefaultNormalImage      = VK_NULL_HANDLE;
+        VkImageView    m_DefaultNormalView       = VK_NULL_HANDLE;
+        VkSampler      m_DefaultNormalSampler    = VK_NULL_HANDLE;
+        VmaAllocation  m_DefaultNormalAllocation = VK_NULL_HANDLE;
+
+        void CreateDefaultBindlessTextures();
+        void DestroyDefaultBindlessTextures();
+
+        // Deferred bindless index release (3-frame delay for GPU safety)
+        struct DeferredBindlessRelease {
+            uint32_t Index;
+            uint32_t FramesRemaining = 3;
+        };
+        std::vector<DeferredBindlessRelease> m_DeferredBindlessReleases;
 
         // GPU timestamp queries (16 passes × 2 slots × 3 frames-in-flight)
         static constexpr uint32_t kMaxTimestampQueries = 96;

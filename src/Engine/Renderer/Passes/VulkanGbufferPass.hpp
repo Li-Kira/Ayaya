@@ -9,24 +9,25 @@
 
 namespace Ayaya {
 
+    // Bindless push constant layout — all vec4/uvec4 packed for GLSL std430 alignment
     struct alignas(16) GBufferPushConstants {
-        glm::mat4 Transform;
-        alignas(16) glm::vec3 Albedo;
-        float ReceiveShadows;
-        float Metallic;
-        float Roughness;
-        float AO;
-        float AlphaMultiplier;
-        float AlphaCutoff;
-        int   BlendMode;       // 0=Opaque, 1=Masked
-        int UseAlbedoMap;
-        int UseNormalMap;
-        int UseORMMap;        // UE4-style ORM packed texture
-        int UseMetallicMap;
-        int UseRoughnessMap;
-        int UseAOMap;
-        int UseAlphaMap;
+        glm::mat4 Transform;                       // offset 0   (64B)
+        glm::vec4 Albedo_ReceiveShadows;           // offset 64  (16B): xyz=Albedo, w=ReceiveShadows
+        glm::vec4 Metallic_Roughness_AO_Alpha;     // offset 80  (16B): x=Metallic, y=Roughness, z=AO, w=Alpha
+        glm::vec4 AlphaCutoff_BlendMode_UseORMMap; // offset 96  (16B): x=AlphaCutoff, y=BlendMode, z=UseORMMap
+        // Indices0: AlbedoMap, NormalMap, ORMMap, MetallicMap
+        uint32_t AlbedoMapIndex = 1;
+        uint32_t NormalMapIndex = 3;
+        uint32_t ORMMapIndex = 2;
+        uint32_t MetallicMapIndex = 1;             // offset 112 (16B)
+        // Indices1: RoughnessMap, AOMap, AlphaMap, IsSelected
+        uint32_t RoughnessMapIndex = 1;
+        uint32_t AOMapIndex = 1;
+        uint32_t AlphaMapIndex = 1;
+        uint32_t IsSelected = 0;                   // offset 128 (16B)
     };
+    static_assert(sizeof(GBufferPushConstants) == 144,
+        "GBufferPushConstants must match GLSL layout exactly");
 
     class VulkanGBufferPass : public RenderPass {
     public:
@@ -54,5 +55,11 @@ namespace Ayaya {
 
         // GPU-Driven Rendering (GDR) — deferred (needs bindless fragment shader)
         std::shared_ptr<Shader> m_GDRShader;  // compiled, pipeline created when frag shader ready
+
+        // Bindless texture pipelines (UseBindlessTextures=true)
+        std::shared_ptr<Shader>   m_BindlessShader;
+        std::shared_ptr<Pipeline> m_BindlessPipeline;
+        std::shared_ptr<Shader>   m_BindlessInstancedShader;
+        std::shared_ptr<Pipeline> m_BindlessInstancedPipeline;
     };
 }

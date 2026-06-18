@@ -161,17 +161,13 @@ namespace Ayaya {
                 material->Properties.push_back(p);
             }
         };
-        addFloat("u_Alpha",      "Alpha Multiplier",    1.0f);
-        addBool ("u_UseAlphaMap","Enable Alpha Map",    false);
-        addTex  ("u_AlphaMap",   "Alpha/Opacity Map");
+        addFloat("u_Alpha",   "Alpha Multiplier",  1.0f);
+        addTex  ("u_AlphaMap","Alpha/Opacity Map");
         // ORM packed texture (UE4: R=AO, G=Roughness, B=Metallic)
-        addBool ("u_UseORMMap",  "Enable ORM Map",      false);
-        addTex  ("u_ORMMap",     "ORM Texture (R=AO G=Roughness B=Metallic)");
-        // Height / displacement
-        addBool ("u_UseHeightMap","Enable Height Map",   false);
+        addTex  ("u_ORMMap",  "ORM Texture (R=AO G=Roughness B=Metallic)");
+        // Height / displacement (reserved for future implementation)
         addTex  ("u_HeightMap",  "Height/Displacement Map");
-        // Emissive
-        addBool ("u_UseEmissiveMap","Enable Emissive Map", false);
+        // Emissive (reserved for future implementation)
         addTex  ("u_EmissiveMap","Emissive Map");
 
         return true;

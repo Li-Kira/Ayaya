@@ -103,7 +103,25 @@ namespace Ayaya {
         // Pipeline is NOT created here because gbuffer.frag uses set=1 texture
         // bindings that conflict with the GDR vertex shader's set=2 SSBO layout.
         // Will be enabled once a bindless fragment shader replaces set=1.
-        m_GDRShader = Shader::Create("Deferred/gbuffer_gdr.vert", "Deferred/gbuffer.frag");
+        m_GDRShader = Shader::Create("Deferred/gbuffer_gdr.vert", "Deferred/gbuffer_bindless.frag");
+
+        // ── Bindless pipelines (UseBindlessTextures=true) ──
+        // Non-instanced bindless pipeline (no extra set layouts)
+        VulkanPipeline::s_ExtraSetLayouts.clear();
+        m_BindlessShader = Shader::Create("Deferred/gbuffer.vert", "Deferred/gbuffer_bindless.frag");
+        PipelineSpecification bindlessSpec = m_PipeSpec;
+        bindlessSpec.Shader = m_BindlessShader;
+        bindlessSpec.UseBindlessTextures = true;
+        m_BindlessPipeline = Pipeline::Create(bindlessSpec);
+
+        // Instanced bindless pipeline (SSBO at set=2)
+        m_BindlessInstancedShader = Shader::Create("Deferred/gbuffer_instanced.vert", "Deferred/gbuffer_bindless.frag");
+        PipelineSpecification bindlessInstancedSpec = m_InstancedSpec;
+        bindlessInstancedSpec.Shader = m_BindlessInstancedShader;
+        bindlessInstancedSpec.UseBindlessTextures = true;
+        VulkanPipeline::s_ExtraSetLayouts = { m_InstanceSetLayout };
+        m_BindlessInstancedPipeline = Pipeline::Create(bindlessInstancedSpec);
+        VulkanPipeline::s_ExtraSetLayouts.clear();
     }
 
     static inline uint64_t GetBatchKey(const DrawPacket& packet) {
@@ -117,24 +135,31 @@ namespace Ayaya {
     }
 
     static void FillPC(GBufferPushConstants& pc, const DrawPacket& packet) {
-        pc.Albedo  = glm::vec3(1.0f); pc.Metallic = 0.0f; pc.Roughness = 0.5f;
-        pc.AO = 1.0f; pc.AlphaMultiplier = 1.0f; pc.AlphaCutoff = 0.5f;
-        pc.BlendMode = 0;
-        pc.UseAlbedoMap = 0; pc.UseNormalMap = 0; pc.UseORMMap = 0;
-        pc.UseMetallicMap = 0; pc.UseRoughnessMap = 0; pc.UseAOMap = 0; pc.UseAlphaMap = 0;
-        pc.ReceiveShadows = packet.ReceiveShadows ? 1.0f : 0.0f;
+        // Defaults: white/black/normal bindless indices for missing textures
+        pc.Albedo_ReceiveShadows = glm::vec4(1.0f, 1.0f, 1.0f, packet.ReceiveShadows ? 1.0f : 0.0f);
+        pc.Metallic_Roughness_AO_Alpha = glm::vec4(0.0f, 0.5f, 1.0f, 1.0f);
+        pc.AlphaCutoff_BlendMode_UseORMMap = glm::vec4(0.5f, 0.0f, 0.0f, 0.0f);
+        pc.AlbedoMapIndex = 1; pc.NormalMapIndex = 3; pc.ORMMapIndex = 2;
+        pc.MetallicMapIndex = 1; pc.RoughnessMapIndex = 1; pc.AOMapIndex = 1;
+        pc.AlphaMapIndex = 1; pc.IsSelected = 0;
 
         if (packet.MaterialAsset) {
             auto& b = packet.MaterialAsset->GetBakedPC();
-            pc.Albedo = b.Albedo; pc.Metallic = b.Metallic;
-            pc.Roughness = b.Roughness; pc.AO = b.AO;
-            pc.AlphaMultiplier = b.Alpha; pc.AlphaCutoff = packet.MaterialAsset->GetAlphaCutoff();
-            pc.BlendMode = (int)packet.MaterialAsset->GetBlendMode();
-            pc.UseAlbedoMap = b.UseAlbedoMap; pc.UseNormalMap = b.UseNormalMap;
-            pc.UseORMMap = b.UseORMMap;
-            pc.UseMetallicMap = b.UseORMMap ? 0 : b.UseMetallicMap;
-            pc.UseRoughnessMap = b.UseORMMap ? 0 : b.UseRoughnessMap;
-            pc.UseAOMap = b.UseORMMap ? 0 : b.UseAOMap;
+            float finalMetallic, finalRoughness, finalAO;
+            b.GetRenderScalars(finalMetallic, finalRoughness, finalAO);
+            pc.Albedo_ReceiveShadows = glm::vec4(b.Albedo.r, b.Albedo.g, b.Albedo.b,
+                                                  packet.ReceiveShadows ? 1.0f : 0.0f);
+            pc.Metallic_Roughness_AO_Alpha = glm::vec4(finalMetallic, finalRoughness, finalAO, b.Alpha);
+            pc.AlphaCutoff_BlendMode_UseORMMap = glm::vec4(
+                packet.MaterialAsset->GetAlphaCutoff(),
+                (float)(int)packet.MaterialAsset->GetBlendMode(),
+                (float)b.UseORMMap, 0.0f);
+            pc.AlbedoMapIndex = b.AlbedoMapIndex;
+            pc.NormalMapIndex = b.NormalMapIndex;
+            pc.ORMMapIndex = b.ORMMapIndex;
+            pc.MetallicMapIndex = b.MetallicMapIndex;
+            pc.RoughnessMapIndex = b.RoughnessMapIndex;
+            pc.AOMapIndex = b.AOMapIndex;
         }
     }
 
@@ -206,27 +231,23 @@ namespace Ayaya {
             write.pBufferInfo = &bufInfo;
             vkUpdateDescriptorSets(vkCtx->GetDevice(), 1, &write, 0, nullptr);
 
-            auto instVkPipe = std::dynamic_pointer_cast<VulkanPipeline>(m_InstancedPipeline);
-            VkCommandBuffer vkCmd = vkCtx->GetCurrentCommandBuffer();
-            if (vkCmd && instVkPipe) {
-                vkCmdBindDescriptorSets(vkCmd,
-                    VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    instVkPipe->GetVulkanPipelineLayout(), 2, 1,
-                    &m_InstanceDescriptorSets[frameIdx], 0, nullptr);
+            cmd.BindPipeline(m_BindlessInstancedPipeline);
+            // Bindless: no BindTexture2D calls needed — texture indices in push constants,
+            // global bindless descriptor set bound automatically by BindPipeline.
+
+            // Bind SSBO descriptor set (set=2, instance transforms) after BindPipeline
+            // so the pipeline layout is the bindless one.
+            {
+                auto instVkPipe = std::dynamic_pointer_cast<VulkanPipeline>(m_BindlessInstancedPipeline);
+                VkCommandBuffer vkCmd = vkCtx->GetCurrentCommandBuffer();
+                if (vkCmd && instVkPipe) {
+                    vkCmdBindDescriptorSets(vkCmd,
+                        VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        instVkPipe->GetVulkanPipelineLayout(), 2, 1,
+                        &m_InstanceDescriptorSets[frameIdx], 0, nullptr);
+                }
             }
 
-            cmd.BindPipeline(m_InstancedPipeline);
-
-            // White fallbacks once (must be AFTER BindPipeline which clears PendingImageInfos)
-            if (whiteTex) {
-                cmd.BindTexture2D(m_InstancedPipeline, "u_AlbedoMap",    1, whiteTex);
-                cmd.BindTexture2D(m_InstancedPipeline, "u_MetallicMap",  2, whiteTex);
-                cmd.BindTexture2D(m_InstancedPipeline, "u_RoughnessMap", 3, whiteTex);
-                cmd.BindTexture2D(m_InstancedPipeline, "u_AOMap",        4, whiteTex);
-                cmd.BindTexture2D(m_InstancedPipeline, "u_NormalMap",    5, whiteTex);
-                cmd.BindTexture2D(m_InstancedPipeline, "u_AlphaMap",     6, whiteTex);
-                cmd.BindTexture2D(m_InstancedPipeline, "u_ORMMap",       7, whiteTex);
-            }
             uint64_t lastMatHash = 0xFFFFFFFFFFFFFFFF;
 
             for (auto& batch : batches) {
@@ -235,33 +256,17 @@ namespace Ayaya {
                 pc.Transform = pkt->Transform;
                 FillPC(pc, *pkt);
 
-                uint64_t matKey = GetBatchKey(*pkt) & 0xFFFFFFFF;
-                if (matKey != lastMatHash) {
-                    lastMatHash = matKey;
-                    if (pkt->MaterialAsset)
-                        pkt->MaterialAsset->Bind(cmd, m_InstancedPipeline, whiteTex);
-                }
-
-                cmd.PushConstantData(m_InstancedPipeline, &pc, sizeof(pc));
+                cmd.PushConstantData(m_BindlessInstancedPipeline, &pc, sizeof(pc));
                 cmd.DrawIndexedInstanced(pkt->MeshAsset,
                     pkt->MeshAsset->GetIndexCount(), batch.count, batch.first);
             }
         }
 
-        // ── Phase 3: Non-instanced fallback ──
+        // ── Phase 3: Non-instanced fallback (bindless) ──
         {
-            cmd.BindPipeline(m_Pipeline);
-
-            if (whiteTex) {
-                cmd.BindTexture2D(m_Pipeline, "u_AlbedoMap",    1, whiteTex);
-                cmd.BindTexture2D(m_Pipeline, "u_MetallicMap",  2, whiteTex);
-                cmd.BindTexture2D(m_Pipeline, "u_RoughnessMap", 3, whiteTex);
-                cmd.BindTexture2D(m_Pipeline, "u_AOMap",        4, whiteTex);
-                cmd.BindTexture2D(m_Pipeline, "u_NormalMap",    5, whiteTex);
-                cmd.BindTexture2D(m_Pipeline, "u_AlphaMap",     6, whiteTex);
-                cmd.BindTexture2D(m_Pipeline, "u_ORMMap",       7, whiteTex);
-            }
-            uint64_t currentMaterialHash = 0xFFFFFFFFFFFFFFFF;
+            cmd.BindPipeline(m_BindlessPipeline);
+            // Bindless: no BindTexture2D calls needed. Texture indices in push constants,
+            // global bindless descriptor set bound automatically by BindPipeline.
 
             for (const auto& packet : queue->Packets) {
                 SortKey key; key.Value = packet.SortKey;
@@ -274,28 +279,7 @@ namespace Ayaya {
                 pc.Transform = packet.Transform;
                 FillPC(pc, packet);
 
-                if (key.Bits.MaterialHash != currentMaterialHash) {
-                    currentMaterialHash = key.Bits.MaterialHash;
-                    if (packet.MaterialAsset) {
-                        for (auto& prop : packet.MaterialAsset->Properties) {
-                            if (prop.Type == MaterialPropertyType::Texture2D) {
-                                bool hasTex = (prop.TextureHandle != 0 && AssetManager::IsAssetHandleValid(prop.TextureHandle)) || (prop.RuntimeTexture != nullptr);
-                                if (hasTex) {
-                                    auto tex = prop.RuntimeTexture ? prop.RuntimeTexture : AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
-                                    if (prop.UniformName == "u_AlbedoMap")    { cmd.BindTexture2D(m_Pipeline, "u_AlbedoMap", 1, tex); pc.UseAlbedoMap = 1; }
-                                    else if (prop.UniformName == "u_NormalMap")    { cmd.BindTexture2D(m_Pipeline, "u_NormalMap", 5, tex); pc.UseNormalMap = 1; }
-                                    else if (prop.UniformName == "u_ORMMap")       { cmd.BindTexture2D(m_Pipeline, "u_ORMMap", 7, tex); pc.UseORMMap = 1; pc.UseMetallicMap = 0; pc.UseRoughnessMap = 0; pc.UseAOMap = 0; }
-                                    else if (prop.UniformName == "u_MetallicMap")  { cmd.BindTexture2D(m_Pipeline, "u_MetallicMap", 2, tex); pc.UseMetallicMap = 1; }
-                                    else if (prop.UniformName == "u_RoughnessMap") { cmd.BindTexture2D(m_Pipeline, "u_RoughnessMap", 3, tex); pc.UseRoughnessMap = 1; }
-                                    else if (prop.UniformName == "u_AOMap")        { cmd.BindTexture2D(m_Pipeline, "u_AOMap", 4, tex); pc.UseAOMap = 1; }
-                                    else if (prop.UniformName == "u_AlphaMap")     { cmd.BindTexture2D(m_Pipeline, "u_AlphaMap", 6, tex); pc.UseAlphaMap = 1; }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                cmd.PushConstantData(m_Pipeline, &pc, sizeof(GBufferPushConstants));
+                cmd.PushConstantData(m_BindlessPipeline, &pc, sizeof(GBufferPushConstants));
                 cmd.DrawIndexed(packet.MeshAsset, packet.MeshAsset->GetIndexCount());
             }
         }

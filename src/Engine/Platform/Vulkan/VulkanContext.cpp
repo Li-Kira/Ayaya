@@ -18,6 +18,7 @@ namespace Ayaya {
         }
 
         m_GeometryPool.Shutdown();
+        DestroyDefaultBindlessTextures();
         m_BindlessManager.Shutdown(m_Device);
 
         if (m_Allocator != VK_NULL_HANDLE) {
@@ -126,11 +127,19 @@ namespace Ayaya {
         props2.pNext = &indexingProps;
         vkGetPhysicalDeviceProperties2(m_PhysicalDevice, &props2);
 
+        // Reserve headroom for non-bindless sampler bindings in other descriptor sets
+        // (e.g., WBOIT set=3 IBL, Lighting set=1 GBuffer attachments).
+        // The per-stage and per-set limits count ALL sampler bindings across ALL sets.
+        constexpr uint32_t kSamplerHeadroom = 32;
         uint32_t maxBindless = std::min({
             indexingProps.maxPerStageDescriptorUpdateAfterBindSamplers,
             indexingProps.maxDescriptorSetUpdateAfterBindSamplers,
             100000u
         });
+        if (maxBindless > kSamplerHeadroom)
+            maxBindless -= kSamplerHeadroom;
+        else
+            maxBindless = std::max(maxBindless, 1u);  // at least 1
 
         AYAYA_CORE_INFO("GPU max update-after-bind samplers: perStage={0}, perSet={1}",
             indexingProps.maxPerStageDescriptorUpdateAfterBindSamplers,
@@ -138,6 +147,7 @@ namespace Ayaya {
         AYAYA_CORE_INFO("Bindless texture array capacity: {0}", maxBindless);
 
         m_BindlessManager.Init(m_Device, maxBindless);
+        CreateDefaultBindlessTextures();
         m_GeometryPool.Init(m_Device, m_Allocator);
     }
 
@@ -513,6 +523,10 @@ namespace Ayaya {
     void VulkanContext::BeginFrame() {
         vkWaitForFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
 
+        // Process deferred bindless index releases now that the fence guarantees
+        // the GPU has finished with this frame's resources.
+        ProcessDeferredBindlessReleases();
+
         VkResult result = vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &m_ImageIndex);
 
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
@@ -750,5 +764,191 @@ namespace Ayaya {
         }
         AYAYA_CORE_ASSERT(false, "Failed to find supported depth format!");
         return VK_FORMAT_UNDEFINED;
+    }
+
+    // ── Helper: create a 1×1 RGBA8 texture via staging buffer ──
+    static void CreateDefaultTexture1x1(
+        VkDevice device, VmaAllocator allocator,
+        VkQueue graphicsQueue, VkCommandPool oneTimePool,
+        const uint8_t pixels[4],
+        VkImage& outImage, VkImageView& outView, VkSampler& outSampler,
+        VmaAllocation& outAllocation)
+    {
+        // Staging buffer
+        VkBufferCreateInfo stagingInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+        stagingInfo.size = 4;  // 1×1 RGBA8
+        stagingInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+        VmaAllocationCreateInfo stagingAllocInfo{};
+        stagingAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        stagingAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                                 VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+        VkBuffer stagingBuffer;
+        VmaAllocation stagingAlloc;
+        vmaCreateBuffer(allocator, &stagingInfo, &stagingAllocInfo,
+                        &stagingBuffer, &stagingAlloc, nullptr);
+
+        void* data;
+        vmaMapMemory(allocator, stagingAlloc, &data);
+        memcpy(data, pixels, 4);
+        vmaUnmapMemory(allocator, stagingAlloc);
+
+        // Destination image
+        VkImageCreateInfo imageInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.extent = { 1, 1, 1 };
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        VmaAllocationCreateInfo allocCreateInfo{};
+        allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+
+        vmaCreateImage(allocator, &imageInfo, &allocCreateInfo,
+                       &outImage, &outAllocation, nullptr);
+
+        // One-time command buffer for layout transition + copy
+        VkCommandBufferAllocateInfo cmdAlloc{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+        cmdAlloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        cmdAlloc.commandPool = oneTimePool;
+        cmdAlloc.commandBufferCount = 1;
+
+        VkCommandBuffer cmd;
+        vkAllocateCommandBuffers(device, &cmdAlloc, &cmd);
+
+        VkCommandBufferBeginInfo beginInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        vkBeginCommandBuffer(cmd, &beginInfo);
+
+        // UNDEFINED → TRANSFER_DST_OPTIMAL
+        VkImageMemoryBarrier barrier0{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        barrier0.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier0.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier0.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier0.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier0.image = outImage;
+        barrier0.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+        barrier0.srcAccessMask = 0;
+        barrier0.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                             0, nullptr, 0, nullptr, 1, &barrier0);
+
+        VkBufferImageCopy copyRegion{};
+        copyRegion.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+        copyRegion.imageExtent = { 1, 1, 1 };
+        vkCmdCopyBufferToImage(cmd, stagingBuffer, outImage,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+
+        // TRANSFER_DST_OPTIMAL → SHADER_READ_ONLY_OPTIMAL
+        VkImageMemoryBarrier barrier1{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        barrier1.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier1.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier1.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier1.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier1.image = outImage;
+        barrier1.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+        barrier1.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier1.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                             0, nullptr, 0, nullptr, 1, &barrier1);
+
+        vkEndCommandBuffer(cmd);
+
+        VkSubmitInfo submit{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
+        submit.commandBufferCount = 1;
+        submit.pCommandBuffers = &cmd;
+        vkQueueSubmit(graphicsQueue, 1, &submit, VK_NULL_HANDLE);
+        vkQueueWaitIdle(graphicsQueue);
+
+        vkFreeCommandBuffers(device, oneTimePool, 1, &cmd);
+        vmaDestroyBuffer(allocator, stagingBuffer, stagingAlloc);
+
+        // Image view
+        VkImageViewCreateInfo viewInfo{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+        viewInfo.image = outImage;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+        viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+        vkCreateImageView(device, &viewInfo, nullptr, &outView);
+
+        // Sampler
+        VkSamplerCreateInfo samplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+        samplerInfo.magFilter = VK_FILTER_NEAREST;
+        samplerInfo.minFilter = VK_FILTER_NEAREST;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        vkCreateSampler(device, &samplerInfo, nullptr, &outSampler);
+    }
+
+    void VulkanContext::CreateDefaultBindlessTextures() {
+        const uint8_t whitePx[4]  = { 255, 255, 255, 255 };
+        const uint8_t blackPx[4]  = { 0,   0,   0,   255 };
+        const uint8_t normalPx[4] = { 128, 128, 255, 255 };  // tangent-space Z-up
+
+        CreateDefaultTexture1x1(m_Device, m_Allocator, m_GraphicsQueue,
+                                m_OneTimeCommandPool, whitePx,
+                                m_DefaultWhiteImage, m_DefaultWhiteView,
+                                m_DefaultWhiteSampler, m_DefaultWhiteAllocation);
+        m_BindlessManager.UpdateBinding(m_Device,
+            VulkanBindlessManager::kWhiteIndex,
+            m_DefaultWhiteView, m_DefaultWhiteSampler);
+
+        CreateDefaultTexture1x1(m_Device, m_Allocator, m_GraphicsQueue,
+                                m_OneTimeCommandPool, blackPx,
+                                m_DefaultBlackImage, m_DefaultBlackView,
+                                m_DefaultBlackSampler, m_DefaultBlackAllocation);
+        m_BindlessManager.UpdateBinding(m_Device,
+            VulkanBindlessManager::kBlackIndex,
+            m_DefaultBlackView, m_DefaultBlackSampler);
+
+        CreateDefaultTexture1x1(m_Device, m_Allocator, m_GraphicsQueue,
+                                m_OneTimeCommandPool, normalPx,
+                                m_DefaultNormalImage, m_DefaultNormalView,
+                                m_DefaultNormalSampler, m_DefaultNormalAllocation);
+        m_BindlessManager.UpdateBinding(m_Device,
+            VulkanBindlessManager::kDefaultNormalIndex,
+            m_DefaultNormalView, m_DefaultNormalSampler);
+
+        AYAYA_CORE_INFO("Default bindless textures registered at indices 1-3");
+    }
+
+    void VulkanContext::DestroyDefaultBindlessTextures() {
+        auto destroyTex = [this](VkImage& img, VkImageView& view, VkSampler& samp,
+                                  VmaAllocation& alloc) {
+            if (samp)  { vkDestroySampler(m_Device, samp, nullptr); samp = VK_NULL_HANDLE; }
+            if (view)  { vkDestroyImageView(m_Device, view, nullptr); view = VK_NULL_HANDLE; }
+            if (alloc) { vmaDestroyImage(m_Allocator, img, alloc); img = VK_NULL_HANDLE; alloc = VK_NULL_HANDLE; }
+        };
+
+        destroyTex(m_DefaultWhiteImage,  m_DefaultWhiteView,  m_DefaultWhiteSampler,  m_DefaultWhiteAllocation);
+        destroyTex(m_DefaultBlackImage,  m_DefaultBlackView,  m_DefaultBlackSampler,  m_DefaultBlackAllocation);
+        destroyTex(m_DefaultNormalImage, m_DefaultNormalView, m_DefaultNormalSampler, m_DefaultNormalAllocation);
+    }
+
+    void VulkanContext::QueueDeferredBindlessRelease(uint32_t index) {
+        if (index >= VulkanBindlessManager::kFirstFreeIndex) {
+            m_DeferredBindlessReleases.push_back({ index, 3 });
+        }
+    }
+
+    void VulkanContext::ProcessDeferredBindlessReleases() {
+        for (auto it = m_DeferredBindlessReleases.begin();
+             it != m_DeferredBindlessReleases.end(); ) {
+            if (--it->FramesRemaining == 0) {
+                m_BindlessManager.FreeIndex(it->Index);
+                it = m_DeferredBindlessReleases.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
 }

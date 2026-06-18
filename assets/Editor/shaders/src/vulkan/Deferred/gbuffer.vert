@@ -11,22 +11,12 @@ layout(set = 0, binding = 0) uniform Camera {
 };
 
 layout(push_constant) uniform PushConstants {
-    mat4 u_Transform;
-    vec3 u_Albedo;
-    float u_ReceiveShadows;
-    float u_Metallic;
-    float u_Roughness;
-    float u_AO;
-    float u_AlphaMultiplier;
-    float u_AlphaCutoff;
-    int   u_BlendMode;
-    int u_UseAlbedoMap;
-    int u_UseMetallicMap;
-    int u_UseRoughnessMap;
-    int u_UseAOMap;
-    int u_UseNormalMap;
-    int u_UseAlphaMap;
-    int u_IsSelected;
+    mat4   u_Transform;                        // offset 0   (64B)
+    vec4   u_Albedo_ReceiveShadows;            // offset 64  (16B)
+    vec4   u_Metallic_Roughness_AO_Alpha;      // offset 80  (16B)
+    vec4   u_AlphaCutoff_BlendMode_UseORMMap;  // offset 96  (16B)
+    uvec4  u_Indices0;   // AlbedoMap, NormalMap, ORMMap, MetallicMap  (16B) @112
+    uvec4  u_Indices1;   // RoughnessMap, AOMap, AlphaMap, IsSelected   (16B) @128
 } pc;
 
 layout(location = 0) out vec3 v_FragPos;

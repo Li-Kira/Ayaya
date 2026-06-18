@@ -124,13 +124,26 @@ namespace Ayaya {
             // Scalar values (directly memcpy-able to push constants)
             glm::vec4 Albedo{1.0f};
             float Metallic = 0.0f, Roughness = 0.5f, AO = 1.0f, Alpha = 0.5f;
-            int UseAlbedoMap = 0, UseNormalMap = 0, UseORMMap = 0;
-            int UseMetallicMap = 0, UseRoughnessMap = 0, UseAOMap = 0;
+            uint32_t UseORMMap = 0;
+            // Bindless texture indices (defaults point to fixed 1×1 textures)
+            uint32_t AlbedoMapIndex = 1;      // white (multiplicative identity)
+            uint32_t NormalMapIndex = 3;      // default flat normal (Z-up)
+            uint32_t ORMMapIndex = 2;         // black (unused when UseORMMap=0)
+            uint32_t MetallicMapIndex = 1;    // white → scalar * 1 = scalar
+            uint32_t RoughnessMapIndex = 1;   // white
+            uint32_t AOMapIndex = 1;          // white
             bool Dirty = true;
-            // Pre-resolved texture pointers:
-            //   slot 0=Albedo, 1=Normal, 2=ORM, 3=Metallic, 4=Roughness, 5=AO.
-            // nullptr means "no texture, use white/blue fallback".
-            std::shared_ptr<class Texture2D> Textures[6];
+
+            // Get final scalar values for GPU rendering.
+            // When a texture map is present (index ≠ default white=1), the scalar
+            // is overridden to 1.0 so the shader's `scalar * texture` becomes
+            // `1.0 * texture = texture` — matching the pre-bindless "texture replaces scalar" semantic.
+            // Albedo is intentionally excluded: `albedo * texture` = tint behavior.
+            void GetRenderScalars(float& outMetallic, float& outRoughness, float& outAO) const {
+                outMetallic  = (MetallicMapIndex  != 1) ? 1.0f : Metallic;
+                outRoughness = (RoughnessMapIndex != 1) ? 1.0f : Roughness;
+                outAO        = (AOMapIndex        != 1) ? 1.0f : AO;
+            }
         };
         const BakedPC& GetBakedPC();
         void BakeProperties();  // rebuild BakedPC from Properties vector

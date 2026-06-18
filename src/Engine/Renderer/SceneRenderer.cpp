@@ -711,76 +711,92 @@ namespace Ayaya {
     // ==========================================
     // BuildRenderGraph — 5阶段动态组装
     // ==========================================
+    // Helper: find a pass by name in the compiled pass list and update its IsCulled flag
+    static void SetPassCulled(RenderGraph& graph, const std::string& name, bool culled) {
+        for (auto& p : graph.GetPasses()) {
+            if (p->Name == name) { p->IsCulled = culled; return; }
+        }
+    }
+
     void SceneRenderer::BuildRenderGraph(const RenderViewConfig& config, uint32_t vpW, uint32_t vpH) {
-        if (!m_ViewportDirty) return;
-        m_RenderGraph.Clear();
+        // Pass addition only on viewport resize (expensive — 12 shared_ptr allocations)
+        if (m_ViewportDirty) {
+            m_RenderGraph.Clear();
 
-        // 阶段1: 几何 — Shadow + GBuffer
-        m_RenderGraph.AddPass("ShadowPass",
-            [&](RGBuilder& b) { VulkanShadowPass::DeclareResources(b); },
-            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_ShadowPass) m_ShadowPass->Execute(ctx, c); });
-        m_RenderGraph.AddPass("GBufferPass",
-            [&](RGBuilder& b) { VulkanGBufferPass::DeclareResources(b, vpW, vpH); },
-            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_GBufferPass) m_GBufferPass->Execute(ctx, c); });
+            m_RenderGraph.AddPass("ShadowPass",
+                [&](RGBuilder& b) { VulkanShadowPass::DeclareResources(b); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_ShadowPass) m_ShadowPass->Execute(ctx, c); });
+            m_RenderGraph.AddPass("GBufferPass",
+                [&](RGBuilder& b) { VulkanGBufferPass::DeclareResources(b, vpW, vpH); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_GBufferPass) m_GBufferPass->Execute(ctx, c); });
 
-        // 阶段1.5: SSAO — 屏幕空间环境光遮蔽 (half-res, 3-pass)
-        // Always in graph (like Bloom/FXAA); runtime enable/disable handled inside Execute
-        m_RenderGraph.AddPass("SSAOPass",
-            [&](RGBuilder& b) { VulkanSSAOPass::DeclareResources(b, vpW, vpH); },
-            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_SSAOPass) m_SSAOPass->Execute(ctx, c); });
+            m_RenderGraph.AddPass("SSAOPass",
+                [&](RGBuilder& b) { VulkanSSAOPass::DeclareResources(b, vpW, vpH); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_SSAOPass) m_SSAOPass->Execute(ctx, c); });
 
-        // 阶段2: 光照HDR — Deferred PBR + IBL + Shadow + SSAO + Skybox
-        m_RenderGraph.AddPass("LightingPass",
-            [&](RGBuilder& b) {
-                VulkanLightingPass::DeclareResources(b, vpW, vpH);
-                b.ReadTexture("SSAO_Final");  // always declare — pass handles fallback internally
-            },
-            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_LightingPass) m_LightingPass->Execute(ctx, c); });
+            m_RenderGraph.AddPass("LightingPass",
+                [&](RGBuilder& b) {
+                    VulkanLightingPass::DeclareResources(b, vpW, vpH);
+                    b.ReadTexture("SSAO_Final");
+                },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_LightingPass) m_LightingPass->Execute(ctx, c); });
 
-        // 阶段3: ForwardBlend — Skybox LOAD叠加到 Lighting HDR
-        m_RenderGraph.AddPass("ForwardBlend",
-            [&](RGBuilder& b) { VulkanForwardBlendPass::DeclareResources(b, vpW, vpH); },
-            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_ForwardBlendPass) m_ForwardBlendPass->Execute(ctx, c); });
+            m_RenderGraph.AddPass("ForwardBlend",
+                [&](RGBuilder& b) { VulkanForwardBlendPass::DeclareResources(b, vpW, vpH); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_ForwardBlendPass) m_ForwardBlendPass->Execute(ctx, c); });
 
-        // 阶段3.1: WBOIT Gather — 半透明物体无序累加 (Accumulation + Revealage)
-        m_RenderGraph.AddPass("WBOIT_Gather",
-            [&](RGBuilder& b) { VulkanWBOITPass::DeclareGatherResources(b, vpW, vpH); },
-            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_WBOITPass) m_WBOITPass->ExecuteGather(ctx, c); });
+            m_RenderGraph.AddPass("WBOIT_Gather",
+                [&](RGBuilder& b) { VulkanWBOITPass::DeclareGatherResources(b, vpW, vpH); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_WBOITPass) m_WBOITPass->ExecuteGather(ctx, c); });
 
-        // 阶段3.2: WBOIT Resolve — 合成累加结果到 SceneColor_HDR
-        m_RenderGraph.AddPass("WBOIT_Resolve",
-            [&](RGBuilder& b) { VulkanWBOITPass::DeclareResolveResources(b, vpW, vpH); },
-            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_WBOITPass) m_WBOITPass->ExecuteResolve(ctx, c); });
+            m_RenderGraph.AddPass("WBOIT_Resolve",
+                [&](RGBuilder& b) { VulkanWBOITPass::DeclareResolveResources(b, vpW, vpH); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_WBOITPass) m_WBOITPass->ExecuteResolve(ctx, c); });
 
-        // 阶段3.5: Outline — 选中物体白色遮罩 → Selection FBO (PostProcess Sobel 边缘检测)
-        m_RenderGraph.AddPass("OutlinePass",
-            [&](RGBuilder& b) { VulkanOutlinePass::DeclareResources(b, vpW, vpH); },
-            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_OutlinePass) m_OutlinePass->Execute(ctx, c); });
+            m_RenderGraph.AddPass("OutlinePass",
+                [&](RGBuilder& b) { VulkanOutlinePass::DeclareResources(b, vpW, vpH); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_OutlinePass) m_OutlinePass->Execute(ctx, c); });
 
-        // 阶段4: Bloom — 5级 downsample/upsample → "Bloom" (RGBA16F)
-        m_RenderGraph.AddPass("BloomPass",
-            [&](RGBuilder& b) { VulkanBloomPass::DeclareResources(b, vpW, vpH); },
-            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_BloomPass) m_BloomPass->Execute(ctx, c); });
+            m_RenderGraph.AddPass("BloomPass",
+                [&](RGBuilder& b) { VulkanBloomPass::DeclareResources(b, vpW, vpH); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_BloomPass) m_BloomPass->Execute(ctx, c); });
 
-        // 阶段4: 后处理 — ToneMapping + Bloom合成 + Outline 边缘检测
-        m_RenderGraph.AddPass("PostProcessPass",
-            [&](RGBuilder& b) { VulkanPostProcessPass::DeclareResources(b, vpW, vpH); },
-            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_PostProcessPass) m_PostProcessPass->Execute(ctx, c); });
+            m_RenderGraph.AddPass("PostProcessPass",
+                [&](RGBuilder& b) { VulkanPostProcessPass::DeclareResources(b, vpW, vpH); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_PostProcessPass) m_PostProcessPass->Execute(ctx, c); });
 
-        // 阶段5: FXAA — LDR空间抗锯齿 (必须在tone mapping之后)
-        m_RenderGraph.AddPass("FXAAPass",
-            [&](RGBuilder& b) { VulkanFXAAPass::DeclareResources(b, vpW, vpH); },
-            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_FXAAPass) m_FXAAPass->Execute(ctx, c); });
+            m_RenderGraph.AddPass("FXAAPass",
+                [&](RGBuilder& b) { VulkanFXAAPass::DeclareResources(b, vpW, vpH); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_FXAAPass) m_FXAAPass->Execute(ctx, c); });
 
-        // 阶段5: UI — 内置 UI 元素 (独立透明层, bindless)
-        m_RenderGraph.AddPass("UIPass",
-            [&](RGBuilder& b) { UIPass::DeclareResources(b, vpW, vpH); },
-            [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_UIPass) m_UIPass->Execute(ctx, c); });
+            m_RenderGraph.AddPass("UIPass",
+                [&](RGBuilder& b) { UIPass::DeclareResources(b, vpW, vpH); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_UIPass) m_UIPass->Execute(ctx, c); });
 
-        m_FinalExportTexture = "FXAA";
+            m_FinalExportTexture = "FXAA";
+            m_ViewportDirty = false;
+        }
+
+        // Per-frame: update pass culling based on runtime state, then recompile DAG
+        bool enableSSAO = m_RenderContext.Get<bool>("EnableSSAO", false);
+        SetPassCulled(m_RenderGraph, "SSAOPass", !enableSSAO);
+
+        bool enableBloom = m_RenderContext.Get<bool>("EnableBloom", true);
+        SetPassCulled(m_RenderGraph, "BloomPass", !enableBloom);
+
+        // WBOIT: cull when no translucent objects in the sorted render queue
+        bool hasTranslucent = false;
+        if (m_RenderContext.RenderQueue) {
+            for (auto& p : m_RenderContext.RenderQueue->Packets) {
+                SortKey k; k.Value = p.SortKey;
+                if (k.Bits.BucketID == static_cast<uint64_t>(RenderBucket::Translucent))
+                    { hasTranslucent = true; break; }
+            }
+        }
+        SetPassCulled(m_RenderGraph, "WBOIT_Gather", !hasTranslucent);
+        SetPassCulled(m_RenderGraph, "WBOIT_Resolve", !hasTranslucent);
 
         m_RenderGraph.Compile();
-        m_ViewportDirty = false;
     }
 
     void SceneRenderer::AddCustomPostProcess(std::shared_ptr<CustomPostProcess> pass) {

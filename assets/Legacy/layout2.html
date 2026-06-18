@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ayaya Engine - Ultimate Professional UI</title>
+    <style>
+        :root {
+            /* 现代深色高级调色板 */
+            --bg-base: #0a0a0a; --bg-panel: #151515; --bg-header: #1e1e1e;
+            --bg-hover: #2a2a2a; --bg-active: #0070e0; --bg-active-dim: rgba(0, 112, 224, 0.2);
+            --border-dark: #000000; --border-light: #2c2c2c;
+            --text-main: #d0d0d0; --text-bright: #ffffff; --text-dim: #777777;
+            --color-mesh: #4ade80; --color-mat: #3b82f6; --color-foliage: #22c55e;
+            --radius-sm: 3px;
+            --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-ui); font-size: 12px; color: var(--text-main); user-select: none; }
+        body { background-color: var(--bg-base); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+        /* ================= 1. 顶栏 ================= */
+        .main-header { height: 44px; background-color: var(--bg-header); border-bottom: 1px solid var(--border-dark); display: flex; align-items: center; padding: 0 12px; z-index: 50; position: relative;}
+        .menu-bar { display: flex; gap: 4px; }
+        .menu-item { padding: 6px 10px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; }
+        .menu-item:hover { background-color: var(--bg-hover); color: var(--text-bright); }
+        .play-controls { position: absolute; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 6px; border: 1px solid var(--border-light); }
+        .play-btn { background: transparent; border: none; padding: 6px 14px; border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; gap: 6px; font-weight: 500; font-size: 13px; }
+        .play-btn:hover { background-color: var(--bg-hover); }
+        .play-btn.active { background-color: #1e3a29; color: #4ade80; }
+        .header-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+
+        /* ================= 主工作区 ================= */
+        .workspace { display: flex; flex: 1; overflow: hidden; position: relative; }
+
+        /* 2. 左侧模式工具栏 */
+        .modes-toolbar { width: 48px; background-color: var(--bg-header); border-right: 1px solid var(--border-dark); display: flex; flex-direction: column; align-items: center; padding-top: 8px; gap: 8px; z-index: 20; }
+        .mode-icon { width: 32px; height: 32px; border-radius: var(--radius-sm); display: flex; justify-content: center; align-items: center; cursor: pointer; font-size: 16px; color: var(--text-dim); transition: all 0.2s; }
+        .mode-icon.active { background-color: var(--bg-active-dim); color: var(--bg-active); border-left: 2px solid var(--bg-active); border-radius: 0 3px 3px 0; }
+        .mode-icon.foliage-active { background-color: rgba(34, 197, 94, 0.2); color: var(--color-foliage); border-left: 2px solid var(--color-foliage); border-radius: 0 3px 3px 0; }
+        .mode-icon:hover:not(.active):not(.foliage-active) { background-color: var(--bg-hover); color: var(--text-bright); }
+        .mode-spacer { flex: 1; }
+        .ai-icon { color: #a855f7; margin-bottom: 8px; }
+        .ai-icon.active { background-color: rgba(168, 85, 247, 0.2); border-left: 2px solid #a855f7; color: #d8b4fe; }
+
+        /* 3. AI 面板 */
+        .ai-panel { width: 280px; background-color: var(--bg-panel); border-right: 1px solid var(--border-dark); display: flex; flex-direction: column; transition: margin-left 0.3s cubic-bezier(0.16, 1, 0.3, 1); margin-left: -281px; z-index: 15; }
+        .ai-panel.open { margin-left: 0; }
+        .ai-header { padding: 12px; border-bottom: 1px solid var(--border-light); font-weight: bold; display: flex; align-items: center; gap: 8px; color: #d8b4fe; }
+        .ai-chat { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+        .chat-msg { padding: 10px; border-radius: 6px; line-height: 1.5; }
+        .chat-user { background: #222; align-self: flex-end; border-bottom-right-radius: 0; }
+        .chat-ai { background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.2); align-self: flex-start; border-bottom-left-radius: 0; color: #e9d5ff;}
+        .ai-input-area { padding: 12px; border-top: 1px solid var(--border-light); display: flex; flex-direction: column; gap: 8px; }
+        .ai-input { background: #000; border: 1px solid #333; padding: 8px; border-radius: 4px; color: #fff; outline: none; resize: none; height: 60px; }
+        .ai-btn { background: #a855f7; color: #fff; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+
+        /* 4. 中央视口 */
+        .center-area { flex: 1; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+        .viewport-tabs { display: flex; background: var(--bg-header); border-bottom: 1px solid var(--border-dark); padding-top: 4px; z-index: 10;}
+        .vp-tab { padding: 6px 16px; cursor: pointer; color: var(--text-dim); border-radius: 4px 4px 0 0; margin-left: 8px; }
+        .vp-tab.active { background: var(--bg-panel); color: #fff; box-shadow: inset 0 2px 0 var(--bg-active); }
+        .viewport-container { flex: 1; position: relative; display: flex; overflow: hidden;}
+        .view-editor { flex: 1; background: linear-gradient(135deg, #222 0%, #111 100%); box-shadow: inset 0 0 40px rgba(0,0,0,0.8); position: relative;}
+        .viewport-grid { position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 50px 50px; transform: perspective(500px) rotateX(60deg) translateY(-100px) translateZ(-200px); }
+        .viewport-mode-hint { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); padding: 8px 16px; border-radius: 20px; color: var(--color-foliage); font-weight: bold; pointer-events: none; opacity: 0; transition: opacity 0.3s; display: flex; align-items: center; gap: 8px;}
+        .viewport-mode-hint.visible { opacity: 1; }
+        .viewport-overlays { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; justify-content: space-between; pointer-events: none; z-index: 5;}
+        .overlay-group { display: flex; gap: 4px; background: rgba(20, 20, 20, 0.6); backdrop-filter: blur(8px); border-radius: var(--radius-sm); padding: 4px; border: 1px solid rgba(255,255,255,0.05); pointer-events: auto; }
+        .overlay-btn { padding: 4px 8px; border-radius: 2px; cursor: pointer; color: #bbb; }
+        .overlay-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+        .overlay-btn.active { color: var(--bg-active); font-weight: bold; }
+
+        /* ================= 5. 内容抽屉 (Content Drawer) ================= */
+        .content-drawer { position: absolute; bottom: 0; left: 0; right: 0; height: 360px; background: var(--bg-panel); border-top: 1px solid var(--border-light); box-shadow: 0 -15px 40px rgba(0,0,0,0.6); display: flex; flex-direction: column; z-index: 20; transform: translateY(100%); transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+        .content-drawer.open { transform: translateY(0); }
+        .drawer-tabs { display: flex; background: var(--bg-header); border-bottom: 1px solid var(--border-dark); padding-top: 4px; }
+        .drawer-tab { padding: 8px 16px; cursor: pointer; color: var(--text-dim); margin-left: 4px; border-radius: 4px 4px 0 0; }
+        .drawer-tab.active { background: var(--bg-panel); color: var(--text-bright); box-shadow: inset 0 2px 0 var(--bg-active); font-weight: bold; }
+        .drawer-close { margin-left: auto; padding: 8px 16px; cursor: pointer; color: var(--text-dim); font-size: 14px;}
+        .drawer-close:hover { color: #ef4444; }
+        .drawer-body { flex: 1; display: flex; overflow: hidden; }
+
+        /* 内容抽屉左侧栏 - 全新层级树样式 */
+        .cb-sidebar { width: 240px; border-right: 1px solid var(--border-light); background: #0f0f0f; display: flex; flex-direction: column; }
+        .cb-sidebar-search { padding: 8px; border-bottom: 1px solid var(--border-light); background: #151515; }
+        .cb-sidebar-search input { width: 100%; background: #000; border: 1px solid #333; color: #fff; padding: 6px 8px 6px 28px; border-radius: 4px; outline: none; background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="%23666" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg>'); background-repeat: no-repeat; background-position: 8px center; }
+        .cb-sidebar-search input:focus { border-color: var(--bg-active); }
+        .cb-sidebar-scroll { flex: 1; overflow-y: auto; padding-bottom: 12px; }
+        .cb-section-title { padding: 12px 12px 4px 12px; color: #666; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+        .cb-tree-node { display: flex; align-items: center; padding: 4px 12px; cursor: pointer; color: #ccc; position: relative; }
+        .cb-tree-node:hover { background: rgba(255,255,255,0.05); color: #fff; }
+        .cb-tree-node.active { background: var(--bg-active-dim); color: #fff; border-right: 2px solid var(--bg-active); }
+        .cb-tree-node.active .icon { color: var(--bg-active); }
+        .cb-tree-node.indent-1 { padding-left: 24px; }
+        .cb-tree-node.indent-2 { padding-left: 36px; }
+        .cb-arrow { width: 12px; font-size: 10px; color: #555; text-align: center; margin-right: 4px; transition: transform 0.1s;}
+        .cb-arrow.expanded { transform: rotate(90deg); color: #888; }
+        .cb-arrow.hidden { visibility: hidden; }
+        .cb-tree-node .icon { margin-right: 8px; font-size: 13px; color: #888; }
+
+        /* 内容抽屉网格 */
+        .cb-main { flex: 1; display: flex; flex-direction: column; }
+        .cb-breadcrumb { padding: 8px 12px; border-bottom: 1px solid var(--border-light); display: flex; gap: 12px; background: #161616; align-items: center;}
+        .cb-grid { padding: 16px; display: flex; gap: 20px; overflow-y: auto; align-content: flex-start; flex-wrap: wrap;}
+        .asset-card { display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; width: 72px; }
+        .asset-thumb { width: 72px; height: 72px; background: #222; border-radius: var(--radius-sm); border-bottom: 3px solid #555; box-shadow: 0 4px 6px rgba(0,0,0,0.3);}
+        .asset-thumb.mesh { border-bottom-color: var(--color-mesh); }
+        .asset-thumb.mat { border-bottom-color: var(--color-mat); }
+
+        /* ================= 6. 右侧边栏 (动态切换容器) ================= */
+        .right-sidebar { width: 340px; background-color: var(--bg-panel); border-left: 1px solid var(--border-dark); display: flex; flex-direction: column; z-index: 10; position: relative;}
+        .sidebar-mode { position: absolute; inset: 0; display: flex; flex-direction: column; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+        .sidebar-mode.active { opacity: 1; pointer-events: auto; }
+        .panel-header { padding: 8px 12px; background: var(--bg-header); font-weight: 600; border-bottom: 1px solid var(--border-light); display: flex; justify-content: space-between;}
+        .comp-header { background: #1c1c1c; padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light); border-top: 1px solid var(--border-light); margin-top: -1px; font-weight: 500;}
+        .prop-grid { display: grid; grid-template-columns: 80px 1fr; gap: 8px; padding: 12px; align-items: center; }
+        .prop-label { color: var(--text-dim); }
+
+        /* Select Mode 面板样式 */
+        .hierarchy-panel { flex: 0.4; display: flex; flex-direction: column; border-bottom: 1px solid var(--border-dark); }
+        .hierarchy-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+        .h-row { display: flex; align-items: center; padding: 4px 8px 4px 20px; cursor: pointer; justify-content: space-between; }
+        .h-row:hover { background: var(--bg-hover); }
+        .h-row.selected { background: var(--bg-active); color: #fff; }
+        .properties-panel { flex: 0.6; display: flex; flex-direction: column; }
+
+        /* Foliage Mode 面板样式 */
+        .foliage-panel { flex: 1; display: flex; flex-direction: column; overflow-y: auto;}
+        .foliage-list-area { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+        .foliage-drop-zone { border: 2px dashed #444; border-radius: 6px; padding: 24px 12px; text-align: center; color: #888; background: rgba(255,255,255,0.02); cursor: pointer; transition: all 0.2s;}
+        .foliage-drop-zone:hover { border-color: var(--color-foliage); color: var(--color-foliage); background: rgba(34, 197, 94, 0.05); }
+        .foliage-item { display: flex; align-items: center; gap: 12px; background: #0f0f0f; border: 1px solid #222; padding: 8px; border-radius: 4px; cursor: pointer; transition: all 0.1s;}
+        .foliage-item:hover { border-color: #444; }
+        .foliage-item.selected { border-color: var(--color-foliage); background: rgba(34, 197, 94, 0.1); }
+        .foliage-item-thumb { width: 32px; height: 32px; background: #222; border-radius: 2px; border-bottom: 2px solid var(--color-mesh);}
+        .foliage-checkbox { width: 16px; height: 16px; border: 1px solid #555; border-radius: 2px; display: flex; justify-content: center; align-items: center;}
+        .foliage-item.selected .foliage-checkbox { background: var(--color-foliage); border-color: var(--color-foliage); }
+        .foliage-item.selected .foliage-checkbox::after { content: '✓'; color: #000; font-weight: bold; font-size: 10px;}
+
+        /* 自定义滑动条 */
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; background: #333; border-radius: 2px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 14px; width: 14px; border-radius: 50%; background: var(--text-main); margin-top: -5px; cursor: pointer; }
+        input[type=range]:focus { outline: none; }
+
+        /* ================= 7. 底栏 ================= */
+        .status-bar { height: 28px; background: #0a0a0a; color: #fff; display: flex; align-items: center; padding: 0 12px 0 0; justify-content: space-between; border-top: 1px solid #111; z-index: 60; }
+        .status-left { display: flex; height: 100%; align-items: center;}
+        .drawer-trigger { height: 100%; padding: 0 16px; display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-main); font-weight: bold; transition: all 0.2s; border-right: 1px solid #222; }
+        .drawer-trigger:hover { background: #222; color: #fff; }
+        .drawer-trigger.active { background: var(--bg-active); color: #fff; }
+        .shortcut { color: rgba(255,255,255,0.4); font-size: 10px; font-weight: normal; margin-left: 4px;}
+        .status-right { display: flex; gap: 16px; align-items: center;}
+    </style>
+</head>
+<body>
+
+    <header class="main-header">
+        <div class="menu-bar"><div class="menu-item">文件</div><div class="menu-item">编辑</div><div class="menu-item">窗口</div></div>
+        <div class="play-controls"><button class="play-btn active">▶ 运行 (Play)</button><button class="play-btn">⏸ 暂停</button></div>
+        <div class="header-right"><span style="color: var(--text-dim);">当前项目: <span style="color: #fff;">Ayaya Demo</span></span></div>
+    </header>
+
+    <div class="workspace">
+        <div class="modes-toolbar">
+            <div class="mode-icon active" id="btn-mode-select" onclick="setMode('select')">↖</div>
+            <div class="mode-icon">⛰️</div>
+            <div class="mode-icon" id="btn-mode-foliage" onclick="setMode('foliage')">🌿</div>
+            <div class="mode-spacer"></div>
+            <div class="mode-icon ai-icon" id="aiToggleBtn" onclick="toggleAIPanel()">🤖</div>
+        </div>
+
+        <div class="ai-panel" id="aiPanel">
+            <div class="ai-header">✨ Ayaya Copilot</div>
+            <div class="ai-chat">
+                <div class="chat-msg chat-user">帮我在地形上散布 50 棵松树，随机缩放。</div>
+                <div class="chat-msg chat-ai">已为您生成对应的 ECS 植被生成脚本...</div>
+            </div>
+            <div class="ai-input-area">
+                <textarea class="ai-input" placeholder="输入自然语言指令..."></textarea>
+                <button class="ai-btn">⚡ 应用到场景</button>
+            </div>
+        </div>
+
+        <div class="center-area">
+            <div class="viewport-tabs"><div class="vp-tab active">🖥️ 视口 (Viewport)</div></div>
+            <div class="viewport-container">
+                <div class="view-editor">
+                    <div class="viewport-grid"></div>
+                    <div class="viewport-mode-hint" id="vpModeHint">🌿 植被绘制就绪 - 左键涂抹，Shift+左键擦除</div>
+                    <div class="viewport-overlays">
+                        <div class="overlay-group"><div class="overlay-btn">≡</div><div class="overlay-btn">👁 透视</div></div>
+                        <div class="overlay-group"><div class="overlay-btn active" id="vp-tool-select">↖</div><div class="overlay-btn">🌐</div></div>
+                    </div>
+                </div>
+
+                <div class="content-drawer" id="contentDrawer">
+                    <div class="drawer-tabs">
+                        <div class="drawer-tab active">🗂 内容浏览器 (Content Browser)</div>
+                        <div class="drawer-close" onclick="toggleDrawer()">✖ 收起</div>
+                    </div>
+                    <div class="drawer-body">
+                        
+                        <div class="cb-sidebar">
+                            <div class="cb-sidebar-search"><input type="text" placeholder="搜索路径..."></div>
+                            <div class="cb-sidebar-scroll">
+                                <div class="cb-section-title">⭐ 收藏夹 (Favorites)</div>
+                                <div class="cb-tree-node"><span class="cb-arrow hidden">▶</span><span class="icon">📁</span><span>角色蓝图</span></div>
+                                <div class="cb-tree-node"><span class="cb-arrow hidden">▶</span><span class="icon" style="color:#f59e0b;">📁</span><span>核心材质</span></div>
+                        
+                                <div class="cb-section-title">🗂️ 目录 (Sources)</div>
+                                <div class="cb-tree-node" onclick="toggleNode(this)"><span class="cb-arrow expanded">▶</span><span class="icon" style="color:#d4d4d8;">🎮</span><span style="font-weight: bold; color: #fff;">游戏内容 (Content)</span></div>
+                                <div class="cb-tree-node indent-1" onclick="toggleNode(this)"><span class="cb-arrow expanded">▶</span><span class="icon">📁</span><span>环境 (Environment)</span></div>
+                                <div class="cb-tree-node indent-2 active" onclick="activateNode(this)"><span class="cb-arrow hidden">▶</span><span class="icon">📂</span><span>道具 (Props)</span></div>
+                                <div class="cb-tree-node indent-2" onclick="activateNode(this)"><span class="cb-arrow hidden">▶</span><span class="icon">📁</span><span>地形 (Landscape)</span></div>
+                                <div class="cb-tree-node indent-1" onclick="toggleNode(this)"><span class="cb-arrow">▶</span><span class="icon">📁</span><span>特效 (VFX)</span></div>
+                                
+                                <div class="cb-tree-node" style="margin-top: 4px;" onclick="toggleNode(this)"><span class="cb-arrow">▶</span><span class="icon">⚙️</span><span>引擎内容 (Engine Content)</span></div>
+                                <div class="cb-tree-node" onclick="toggleNode(this)"><span class="cb-arrow">▶</span><span class="icon">🧩</span><span>插件 (Plugins)</span></div>
+                        
+                                <div class="cb-section-title">🏷️ 集合 (Collections)</div>
+                                <div class="cb-tree-node"><span class="cb-arrow hidden">▶</span><span class="icon" style="color:#10b981;">📌</span><span>关卡1 必须加载</span></div>
+                            </div>
+                        </div>
+
+                        <div class="cb-main">
+                            <div class="cb-breadcrumb">
+                                <span style="color: #4ade80; font-weight: bold;">+ 新建</span>
+                                <span style="color: #555; margin-left: 12px;">Ayaya Demo > Content > Environment > Props</span>
+                            </div>
+                            <div class="cb-grid">
+                                <div class="asset-card"><div class="asset-thumb mesh"></div><div class="asset-name" style="text-align: center;">SM_PineTree</div></div>
+                                <div class="asset-card"><div class="asset-thumb mesh"></div><div class="asset-name" style="text-align: center;">SM_Rock</div></div>
+                                <div class="asset-card"><div class="asset-thumb mat"></div><div class="asset-name" style="text-align: center;">M_Bark</div></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="right-sidebar">
+            <div id="mode-select" class="sidebar-mode active">
+                <div class="hierarchy-panel">
+                    <div class="panel-header">场景大纲</div>
+                    <div class="hierarchy-list">
+                        <div class="h-row"><div class="h-label"><span style="color: #a855f7;">🎥</span> 主摄像机</div></div>
+                        <div class="h-row selected"><div class="h-label"><span style="color: #4ade80;">📦</span> 地形网格体</div></div>
+                    </div>
+                </div>
+                <div class="properties-panel">
+                    <div class="panel-header">细节</div>
+                    <div class="comp-header"><span>✛ 变换</span></div>
+                    <div style="padding: 20px; text-align: center; color: #666;">（变换控件在此处）</div>
+                </div>
+            </div>
+            <div id="mode-foliage" class="sidebar-mode">
+                <div class="panel-header" style="color: var(--color-foliage);">🌿 植被散布</div>
+                <div class="foliage-panel">
+                    <div class="comp-header" style="border-top: none;"><span>📦 散布网格体</span><span style="color: var(--color-foliage); cursor: pointer;">+ 添加</span></div>
+                    <div class="foliage-list-area">
+                        <div class="foliage-item selected" onclick="this.classList.toggle('selected')">
+                            <div class="foliage-checkbox"></div><div class="foliage-item-thumb"></div><div style="flex: 1;">SM_PineTree_01</div><div style="color: #666; font-size: 10px;">1.2k</div>
+                        </div>
+                        <div class="foliage-item" onclick="this.classList.toggle('selected')">
+                            <div class="foliage-checkbox"></div><div class="foliage-item-thumb"></div><div style="flex: 1;">SM_Rock_Large</div><div style="color: #666; font-size: 10px;">0</div>
+                        </div>
+                        <div class="foliage-drop-zone">+ 从下方【内容抽屉】<br>拖入静态网格体模型</div>
+                    </div>
+                    <div class="comp-header"><span>🖌️ 笔刷设置</span></div>
+                    <div class="prop-grid">
+                        <div class="prop-label">笔刷大小</div><div style="display: flex; gap: 8px; align-items: center;"><input type="range" min="10" max="1000" value="300"><span style="width: 30px; text-align: right;">300</span></div>
+                        <div class="prop-label">绘制密度</div><div style="display: flex; gap: 8px; align-items: center;"><input type="range" min="0" max="100" value="50"><span style="width: 30px; text-align: right;">0.5</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <div class="status-left">
+            <div class="drawer-trigger" id="drawerBtn" onclick="toggleDrawer()">
+                🗂 内容抽屉 <span class="shortcut">Ctrl+Space</span>
+            </div>
+        </div>
+        <div class="status-right"><span style="color: #666; padding-right: 12px;">Ayaya Engine v0.1</span></div>
+    </div>
+
+    <script>
+        // AI 面板折叠
+        function toggleAIPanel() {
+            document.getElementById('aiPanel').classList.toggle('open');
+            document.getElementById('aiToggleBtn').classList.toggle('active');
+        }
+
+        // 抽屉上滑
+        let isDrawerOpen = false;
+        function toggleDrawer() {
+            isDrawerOpen = !isDrawerOpen;
+            document.getElementById('contentDrawer').classList.toggle('open');
+            document.getElementById('drawerBtn').classList.toggle('active');
+        }
+        document.addEventListener('keydown', e => { if (e.ctrlKey && e.code === 'Space') { e.preventDefault(); toggleDrawer(); }});
+
+        // 模式切换
+        function setMode(modeName) {
+            document.getElementById('btn-mode-select').className = 'mode-icon';
+            document.getElementById('btn-mode-foliage').className = 'mode-icon';
+            document.getElementById('mode-select').classList.remove('active');
+            document.getElementById('mode-foliage').classList.remove('active');
+            document.getElementById('vpModeHint').classList.remove('visible');
+
+            if (modeName === 'select') {
+                document.getElementById('btn-mode-select').classList.add('active');
+                document.getElementById('mode-select').classList.add('active');
+                document.getElementById('vp-tool-select').innerText = '↖';
+            } else if (modeName === 'foliage') {
+                document.getElementById('btn-mode-foliage').classList.add('foliage-active');
+                document.getElementById('mode-foliage').classList.add('active');
+                document.getElementById('vpModeHint').classList.add('visible');
+                document.getElementById('vp-tool-select').innerText = '🖌️';
+            }
+        }
+
+        // 文件夹树状图展开/折叠
+        function toggleNode(element) {
+            const arrow = element.querySelector('.cb-arrow');
+            if (arrow && !arrow.classList.contains('hidden')) {
+                arrow.classList.toggle('expanded');
+                // 真实场景下，这里会隐藏/显示子节点对应的 DOM 元素
+            }
+            activateNode(element);
+        }
+
+        // 激活文件夹
+        function activateNode(element) {
+            // 移除所有 active 类
+            document.querySelectorAll('.cb-tree-node').forEach(node => {
+                node.classList.remove('active');
+                // 如果节点被选中，将其图标变为普通文件夹的颜色
+                const icon = node.querySelector('.icon');
+                if (icon && icon.innerText === '📂') icon.innerText = '📁';
+            });
+            // 激活当前节点
+            element.classList.add('active');
+            // 将选中文件夹的图标变为打开的文件夹
+            const activeIcon = element.querySelector('.icon');
+            if (activeIcon && activeIcon.innerText === '📁') activeIcon.innerText = '📂';
+        }
+    </script>
+</body>
+</html>

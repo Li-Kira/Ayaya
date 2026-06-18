@@ -9,6 +9,8 @@
 #include "Platform/Vulkan/VulkanContext.hpp"
 #include "Platform/Vulkan/VulkanPipeline.hpp"
 #include "Platform/Vulkan/VulkanFramebuffer.hpp"
+#include "Platform/Vulkan/VulkanTexture2D.hpp"
+#include "Platform/Vulkan/VulkanTextureCube.hpp"
 #include "Core/Application.hpp"
 
 namespace Ayaya {
@@ -88,6 +90,8 @@ namespace Ayaya {
             VkDevice device = ctx->GetDevice();
             if (m_InstanceSetLayout) vkDestroyDescriptorSetLayout(device, m_InstanceSetLayout, nullptr);
             if (m_InstancePool) vkDestroyDescriptorPool(device, m_InstancePool, nullptr);
+            if (m_IBLSetLayout) vkDestroyDescriptorSetLayout(device, m_IBLSetLayout, nullptr);
+            if (m_IBLPool) vkDestroyDescriptorPool(device, m_IBLPool, nullptr);
         }
     }
 
@@ -140,6 +144,60 @@ namespace Ayaya {
         m_InstanceDescriptorSets.resize(ctx->GetFramesInFlight());
         AllocSSBODescriptorSets(m_InstanceSetLayout, ctx->GetFramesInFlight(),
                                 m_InstanceDescriptorSets.data(), &m_InstancePool);
+
+        // ── IBL descriptor set (set=3) — cube/cube/2D, bound once per frame ──
+        {
+            VkDescriptorSetLayoutBinding iblBindings[3] = {};
+            iblBindings[0].binding = 0; iblBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            iblBindings[0].descriptorCount = 1; iblBindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+            iblBindings[1].binding = 1; iblBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            iblBindings[1].descriptorCount = 1; iblBindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+            iblBindings[2].binding = 2; iblBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            iblBindings[2].descriptorCount = 1; iblBindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+            VkDescriptorSetLayoutCreateInfo iblLayoutCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+            iblLayoutCI.bindingCount = 3;
+            iblLayoutCI.pBindings = iblBindings;
+            vkCreateDescriptorSetLayout(device, &iblLayoutCI, nullptr, &m_IBLSetLayout);
+
+            uint32_t fiCount = ctx->GetFramesInFlight();
+            VkDescriptorPoolSize iblPoolSize{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, fiCount * 3 };
+            VkDescriptorPoolCreateInfo iblPoolCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+            iblPoolCI.maxSets = fiCount;
+            iblPoolCI.poolSizeCount = 1;
+            iblPoolCI.pPoolSizes = &iblPoolSize;
+            vkCreateDescriptorPool(device, &iblPoolCI, nullptr, &m_IBLPool);
+
+            m_IBLDescriptorSets.resize(fiCount);
+            std::vector<VkDescriptorSetLayout> iblLayouts(fiCount, m_IBLSetLayout);
+            VkDescriptorSetAllocateInfo iblAlloc{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+            iblAlloc.descriptorPool = m_IBLPool;
+            iblAlloc.descriptorSetCount = fiCount;
+            iblAlloc.pSetLayouts = iblLayouts.data();
+            vkAllocateDescriptorSets(device, &iblAlloc, m_IBLDescriptorSets.data());
+        }
+
+        // ── Bindless gather pipeline (UseBindlessTextures=true, SSBO set=2, IBL set=3) ──
+        m_BindlessInstancedShader = Shader::Create("WBOIT/wboit_gather_instanced.vert", "WBOIT/wboit_gather_bindless.frag");
+        {
+            PipelineSpecification bindlessSpec;
+            bindlessSpec.Shader = m_BindlessInstancedShader;
+            bindlessSpec.TargetFramebuffer = m_GatherRefFBO;
+            bindlessSpec.Layout = {
+                {ShaderDataType::Float3, "a_Position"}, {ShaderDataType::Float3, "a_Normal"},
+                {ShaderDataType::Float2, "a_TexCoord"}, {ShaderDataType::Float3, "a_Tangent"}
+            };
+            bindlessSpec.DepthTest = true;
+            bindlessSpec.DepthWrite = false;
+            bindlessSpec.DepthOperator = DepthCompareOperator::LEqual;
+            bindlessSpec.Blend = true;
+            bindlessSpec.BackfaceCulling = CullMode::None;
+            bindlessSpec.UseBindlessTextures = true;
+            bindlessSpec.PerAttachmentBlend = { BlendModeType::Additive, BlendModeType::WBOITRevealage };
+            VulkanPipeline::s_ExtraSetLayouts = { m_InstanceSetLayout, m_IBLSetLayout };
+            m_BindlessInstancedPipeline = Pipeline::Create(bindlessSpec);
+            VulkanPipeline::s_ExtraSetLayouts.clear();
+        }
 
         // Resolve pipeline
         FramebufferSpecification resolveRef;
@@ -284,85 +342,94 @@ namespace Ayaya {
                              m_InstanceBuffer->GetBuffer(frameIdx),
                              m_InstanceBuffer->GetSize());
 
-        // Bind IBL (shared)
-        cmd.BindPipeline(m_InstancedPipeline);
-        auto irrMap = context.Get<std::shared_ptr<TextureCube>>("IrradianceMap");
-        auto preMap = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap");
-        auto brdfLUT = context.GetTexture("BRDFLUT");
-        auto wt2 = context.GetTexture("WhiteTexture");
-        if (irrMap)  cmd.BindTextureCube(m_InstancedPipeline, "u_IrradianceMap",  3, irrMap);
-        if (preMap)  cmd.BindTextureCube(m_InstancedPipeline, "u_PrefilteredMap", 4, preMap);
-        if (brdfLUT) cmd.BindTexture2D(m_InstancedPipeline, "u_BRDFLUT", 5, brdfLUT);
-        else if (wt2) cmd.BindTexture2D(m_InstancedPipeline, "u_BRDFLUT", 5, wt2);
-        // Fallback for new bindings 6-8 (NormalMap, ORMMap, AOMap) — must always have valid descriptors
-        if (wt2) {
-            cmd.BindTexture2D(m_InstancedPipeline, "u_NormalMap", 6, wt2);
-            cmd.BindTexture2D(m_InstancedPipeline, "u_ORMMap",    7, wt2);
-            cmd.BindTexture2D(m_InstancedPipeline, "u_AOMap",     8, wt2);
-        }
-
-        // Bind SSBO descriptor set (set=2 — baked into pipeline layout at creation)
+        // Bind IBL descriptor set (set=3) once — written per frame
         {
-            auto instVkPipe = std::dynamic_pointer_cast<VulkanPipeline>(m_InstancedPipeline);
-            vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                instVkPipe->GetVulkanPipelineLayout(), 2, 1,
-                &m_InstanceDescriptorSets[frameIdx], 0, nullptr);
+            auto irrMap = context.Get<std::shared_ptr<TextureCube>>("IrradianceMap");
+            auto preMap = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap");
+            auto brdfLUT = context.GetTexture("BRDFLUT");
+            auto fallback = context.GetTexture("WhiteTexture");
+
+            auto irrVk = irrMap ? std::dynamic_pointer_cast<VulkanTextureCube>(irrMap) : nullptr;
+            auto preVk = preMap ? std::dynamic_pointer_cast<VulkanTextureCube>(preMap) : nullptr;
+            auto brdfVk = std::dynamic_pointer_cast<VulkanTexture2D>(brdfLUT);
+            auto fallVk = std::dynamic_pointer_cast<VulkanTexture2D>(fallback);
+
+            auto getCubeInfo = [](auto& vkCube) -> VkDescriptorImageInfo {
+                VkDescriptorImageInfo info{};
+                info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                if (vkCube) { info.imageView = vkCube->GetImageView(); info.sampler = vkCube->GetSampler(); }
+                return info;
+            };
+            auto get2DInfo = [](auto& vkTex) -> VkDescriptorImageInfo {
+                VkDescriptorImageInfo info{};
+                info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                if (vkTex) { info.imageView = vkTex->GetImageView(); info.sampler = vkTex->GetSampler(); }
+                return info;
+            };
+
+            VkWriteDescriptorSet writes[3];
+            VkDescriptorImageInfo irrInfo = getCubeInfo(irrVk);
+            VkDescriptorImageInfo preInfo = getCubeInfo(preVk);
+            VkDescriptorImageInfo lutInfo = brdfVk ? get2DInfo(brdfVk) : get2DInfo(fallVk);
+
+            writes[0] = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            writes[0].dstSet = m_IBLDescriptorSets[frameIdx]; writes[0].dstBinding = 0;
+            writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            writes[0].descriptorCount = 1; writes[0].pImageInfo = &irrInfo;
+
+            writes[1] = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            writes[1].dstSet = m_IBLDescriptorSets[frameIdx]; writes[1].dstBinding = 1;
+            writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            writes[1].descriptorCount = 1; writes[1].pImageInfo = &preInfo;
+
+            writes[2] = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            writes[2].dstSet = m_IBLDescriptorSets[frameIdx]; writes[2].dstBinding = 2;
+            writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            writes[2].descriptorCount = 1; writes[2].pImageInfo = &lutInfo;
+
+            vkUpdateDescriptorSets(ctx->GetDevice(), 3, writes, 0, nullptr);
         }
 
-        // Issue batched instanced draws
-        uint64_t currentMatHash = 0xFFFFFFFFFFFFFFFF;
+        // Bind bindless pipeline — auto-binds global bindless set (set=1)
+        cmd.BindPipeline(m_BindlessInstancedPipeline);
+
+        // Bind SSBO descriptor set (set=2) and IBL descriptor set (set=3)
+        {
+            auto instVkPipe = std::dynamic_pointer_cast<VulkanPipeline>(m_BindlessInstancedPipeline);
+            VkPipelineLayout layout = instVkPipe->GetVulkanPipelineLayout();
+            vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                layout, 2, 1, &m_InstanceDescriptorSets[frameIdx], 0, nullptr);
+            vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                layout, 3, 1, &m_IBLDescriptorSets[frameIdx], 0, nullptr);
+        }
+
+        // Issue batched instanced draws (bindless: no per-material BindTexture2D calls)
         for (auto& kv : batches) {
             auto& batch = kv.second;
             const DrawPacket* pkt = batch.firstPkt;
 
-            // Material push constants
             WBOITGatherPushConstants pc{};
             pc.Transform = pkt->Transform;  // unused by instanced shader
             if (pkt->MaterialAsset) {
                 auto& baked = pkt->MaterialAsset->GetBakedPC();
-                pc.Albedo = baked.Albedo;   pc.Metallic = baked.Metallic;
-                pc.Roughness = baked.Roughness; pc.AO = baked.AO;
+                float finalMetallic, finalRoughness, finalAO;
+                baked.GetRenderScalars(finalMetallic, finalRoughness, finalAO);
+                pc.Albedo = baked.Albedo;   pc.Metallic = finalMetallic;
+                pc.Roughness = finalRoughness; pc.AO = finalAO;
                 pc.Alpha = baked.Alpha;
-                pc.UseAlbedoMap = baked.UseAlbedoMap;
-                pc.UseNormalMap = baked.UseNormalMap;
                 pc.UseORMMap = baked.UseORMMap;
-                pc.UseMetallicMap = baked.UseMetallicMap;
-                pc.UseRoughnessMap = baked.UseRoughnessMap;
-                pc.UseAOMap = baked.UseAOMap;
+                pc.AlbedoMapIndex = baked.AlbedoMapIndex;
+                pc.NormalMapIndex = baked.NormalMapIndex;
+                pc.ORMMapIndex = baked.ORMMapIndex;
+                pc.MetallicMapIndex = baked.MetallicMapIndex;
+                pc.RoughnessMapIndex = baked.RoughnessMapIndex;
+                pc.AOMapIndex = baked.AOMapIndex;
             } else {
                 pc.Albedo = glm::vec4(1); pc.Metallic = 0;
                 pc.Roughness = 0.5f; pc.AO = 1; pc.Alpha = 0.5f;
             }
 
-            // Textures — only rebind on material change
-            if (kv.first != currentMatHash) {
-                currentMatHash = kv.first;
-                if (pkt->MaterialAsset) {
-                    auto& baked = pkt->MaterialAsset->GetBakedPC();
-                    // BakedPC slots: 0=Albedo, 1=Normal, 2=ORM, 3=Metallic, 4=Roughness, 5=AO
-                    cmd.BindTexture2D(m_InstancedPipeline, "u_AlbedoMap",    0,
-                        baked.Textures[0] ? baked.Textures[0] : whiteTex);
-                    cmd.BindTexture2D(m_InstancedPipeline, "u_MetallicMap",  1,
-                        baked.Textures[3] ? baked.Textures[3] : whiteTex);
-                    cmd.BindTexture2D(m_InstancedPipeline, "u_RoughnessMap", 2,
-                        baked.Textures[4] ? baked.Textures[4] : whiteTex);
-                    cmd.BindTexture2D(m_InstancedPipeline, "u_NormalMap",    6,
-                        baked.Textures[1] ? baked.Textures[1] : whiteTex);
-                    cmd.BindTexture2D(m_InstancedPipeline, "u_ORMMap",       7,
-                        baked.Textures[2] ? baked.Textures[2] : whiteTex);
-                    cmd.BindTexture2D(m_InstancedPipeline, "u_AOMap",        8,
-                        baked.Textures[5] ? baked.Textures[5] : whiteTex);
-                } else if (whiteTex) {
-                    cmd.BindTexture2D(m_InstancedPipeline, "u_AlbedoMap",    0, whiteTex);
-                    cmd.BindTexture2D(m_InstancedPipeline, "u_MetallicMap",  1, whiteTex);
-                    cmd.BindTexture2D(m_InstancedPipeline, "u_RoughnessMap", 2, whiteTex);
-                    cmd.BindTexture2D(m_InstancedPipeline, "u_NormalMap",    6, whiteTex);
-                    cmd.BindTexture2D(m_InstancedPipeline, "u_ORMMap",       7, whiteTex);
-                    cmd.BindTexture2D(m_InstancedPipeline, "u_AOMap",        8, whiteTex);
-                }
-            }
-
-            cmd.PushConstantData(m_InstancedPipeline, &pc, sizeof(pc));
+            cmd.PushConstantData(m_BindlessInstancedPipeline, &pc, sizeof(pc));
             cmd.DrawIndexedInstanced(pkt->MeshAsset, pkt->MeshAsset->GetIndexCount(),
                                       batch.count, batch.first);
         }

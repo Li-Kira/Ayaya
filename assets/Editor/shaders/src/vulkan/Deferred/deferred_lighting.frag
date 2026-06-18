@@ -112,16 +112,22 @@ void main() {
     float shadow = ShadowCalc(pc.u_LightSpaceMatrix*vec4(FragPos,1.0), NdotL) * RcvShadow;
     Lo += (kD*Albedo/PI+spec)*DirLightColor.rgb*NdotL*(1.0-shadow);
 
-    // Point Lights
+    // Point Lights — distance-culled per pixel
     for(int i=0;i<PointLightCount&&i<4;i++){
         vec3 lp=PointLights[i].Position.xyz; float lr=PointLights[i].Position.w;
+        // Early distance cull: skip expensive PBR math if pixel is outside light radius
+        vec3 toLight = lp - FragPos;
+        float d2 = dot(toLight, toLight);
+        if (d2 > lr * lr) continue;
+        float d = sqrt(d2);
+
         vec3 lc=PointLights[i].Color.rgb; float lf=PointLights[i].Color.w;
-        vec3 Lp=normalize(lp-FragPos); vec3 Hp=normalize(V+Lp);
-        float d=length(lp-FragPos);
+        vec3 Lp=toLight / d; vec3 Hp=normalize(V+Lp);
         float att=1.0/(d*d+0.0001);
         float dbr=d/lr, dbr4=pow(dbr,4.0);
         float w=clamp(1.0-dbr4,0.0,1.0); w=pow(w,lf+1.0); att*=w;
         vec3 rad=lc*att; float NdotLp=max(dot(N,Lp),0.0);
+        if (NdotLp <= 0.0) continue;
         float Dp=D_GGX(N,Hp,Roughness), Gp=G_Smith(N,V,Lp,Roughness);
         vec3 Fp=F_Schlick(max(dot(Hp,V),0.0),F0);
         vec3 sp=(Dp*Gp*Fp)/max(4.0*max(dot(N,V),0.0)*NdotLp,0.001);

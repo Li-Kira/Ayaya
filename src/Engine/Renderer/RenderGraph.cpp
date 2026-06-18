@@ -152,29 +152,55 @@ namespace Ayaya {
     void RenderGraph::Compile() {
         if (m_Passes.empty()) return;
 
-        // Step 1: 建立生产者映射 + 隐式多生产者链
-        //   - 首次 Write: 注册为生产者
-        //   - 重复 Write (ReadWrite / 累加): 记录隐式依赖 → 后写入者依赖先写入者
-        std::unordered_map<std::string, std::string> producers;
-        std::vector<std::pair<std::string, std::string>> implicitEdges; // (from, to)
+        // Step 0: 过滤被剔除的 Pass
+        //   Culled passes are excluded from the DAG entirely. Textures they would have
+        //   written remain unwritten (IsWritten=false). Consuming passes handle
+        //   missing textures via internal fallback (e.g. WhiteTexture binding).
+        std::vector<std::shared_ptr<RGPass>> active;
         for (auto& p : m_Passes) {
-            for (auto& w : p->TextureWrites) {
-                auto it = producers.find(w);
-                if (it != producers.end() && it->second != p->Name) {
-                    AYAYA_CORE_TRACE("[RenderGraph] Texture '{}' written by '{}' and '{}' — adding implicit dependency",
-                        w, it->second, p->Name);
-                    implicitEdges.push_back({it->second, p->Name});
-                }
-                producers[w] = p->Name;
+            if (!p->IsCulled) active.push_back(p);
+        }
+
+        if (active.empty()) {
+            m_Passes.clear();
+            m_Compiled = true;
+            return;
+        }
+
+        // Reset IsWritten flags — only active passes can mark textures as written
+        for (auto& [name, tex] : m_Textures) {
+            tex.IsWritten = false;
+            tex.IsRead = false;
+        }
+        for (auto& p : active) {
+            for (auto& r : p->TextureReads) {
+                auto* tex = GetTexture(r);
+                if (tex) tex->IsRead = true;
             }
         }
 
-        // Step 2: 构建 DAG 边缘和入度
+        // Step 1: 建立生产者映射 + 隐式多生产者链 (仅活跃 Pass)
+        std::unordered_map<std::string, std::string> producers;
+        std::vector<std::pair<std::string, std::string>> implicitEdges;
+        for (auto& p : active) {
+            for (auto& w : p->TextureWrites) {
+                auto it = producers.find(w);
+                if (it != producers.end() && it->second != p->Name) {
+                    implicitEdges.push_back({it->second, p->Name});
+                }
+                producers[w] = p->Name;
+                // Mark texture as written
+                auto* tex = GetTexture(w);
+                if (tex) tex->IsWritten = true;
+            }
+        }
+
+        // Step 2: 构建 DAG 边缘和入度 (仅活跃 Pass)
         std::unordered_map<std::string, std::vector<std::string>> edges;
         std::unordered_map<std::string, int> deg;
-        for (auto& p : m_Passes) deg[p->Name] = 0;
+        for (auto& p : active) deg[p->Name] = 0;
 
-        for (auto& p : m_Passes) {
+        for (auto& p : active) {
             for (auto& r : p->TextureReads) {
                 auto it = producers.find(r);
                 if (it != producers.end() && it->second != p->Name) {
@@ -184,13 +210,12 @@ namespace Ayaya {
             }
         }
 
-        // 隐式多生产者边：先写入者 → 后写入者（ReadWrite / 累加渲染）
         for (auto& [from, to] : implicitEdges) {
             edges[from].push_back(to);
             deg[to]++;
         }
 
-        // Step 3: Kahn 拓扑排序
+        // Step 3: Kahn 拓扑排序 (仅活跃 Pass)
         std::queue<std::string> q;
         for (auto& [name, d] : deg) {
             if (d == 0) q.push(name);
@@ -199,9 +224,9 @@ namespace Ayaya {
         std::vector<std::shared_ptr<RGPass>> sorted;
         while (!q.empty()) {
             auto current = q.front(); q.pop();
-            auto it = std::find_if(m_Passes.begin(), m_Passes.end(),
+            auto it = std::find_if(active.begin(), active.end(),
                 [&](auto& p) { return p->Name == current; });
-            if (it != m_Passes.end()) sorted.push_back(*it);
+            if (it != active.end()) sorted.push_back(*it);
 
             for (auto& neighbor : edges[current]) {
                 if (--deg[neighbor] == 0) q.push(neighbor);
@@ -209,10 +234,10 @@ namespace Ayaya {
         }
 
         // Step 4: 环检测
-        if (sorted.size() != m_Passes.size()) {
+        if (sorted.size() != active.size()) {
             AYAYA_CORE_ERROR("[RenderGraph] Circular dependency detected! {} passes unreachable",
-                m_Passes.size() - sorted.size());
-            for (auto& p : m_Passes) {
+                active.size() - sorted.size());
+            for (auto& p : active) {
                 if (std::find_if(sorted.begin(), sorted.end(),
                         [&](auto& s) { return s->Name == p->Name; }) == sorted.end()) {
                     sorted.push_back(p);
@@ -223,8 +248,12 @@ namespace Ayaya {
         m_Passes = std::move(sorted);
 
         // Step 5: 为每个纹理创建 3 帧缓冲物理 FBO
-        // VulkanFramebuffer::Invalidate 的初始过渡：颜色→SHADER_READ_ONLY，深度→DEPTH_ATTACHMENT
+        //   Only create FBOs for textures that are actually written (IsWritten=true).
+        //   Unwritten textures (culled producer) have null PhysicalFBOs — consumers
+        //   must check with context.GetFramebuffer() and provide their own fallback.
         for (auto& [name, tex] : m_Textures) {
+            if (!tex.IsWritten) continue;
+
             bool depthOnly = true;
             for (auto& att : tex.Spec.Attachments.Attachments) {
                 if (att.TextureFormat != FramebufferTextureFormat::Depth &&
@@ -235,7 +264,6 @@ namespace Ayaya {
             ImageLayout initColorLayout = depthOnly
                 ? ImageLayout::DepthStencilAttachmentOptimal
                 : ImageLayout::ShaderReadOnlyOptimal;
-            // VulkanFramebuffer::Invalidate transitions depth UNDEFINED→DEPTH_STENCIL_ATTACHMENT
             ImageLayout initDepthLayout = tex.HasDepthAttachment()
                 ? ImageLayout::DepthStencilAttachmentOptimal
                 : ImageLayout::Undefined;
@@ -243,9 +271,13 @@ namespace Ayaya {
             for (uint32_t i = 0; i < kRenderGraphFramesInFlight; ++i) {
                 if (!tex.PhysicalFBOs[i]) {
                     tex.PhysicalFBOs[i] = Framebuffer::Create(tex.Spec);
+                    // Layout tracking initialized exactly once at FBO creation.
+                    // Subsequent frames maintain layout via EnsureWritable /
+                    // InsertTileResolveBarrier — NEVER reset here, or the
+                    // tracking will desync from the GPU's actual layout.
+                    tex.CurrentLayout[i] = initColorLayout;
+                    tex.DepthLayout[i]   = initDepthLayout;
                 }
-                tex.CurrentLayout[i] = initColorLayout;
-                tex.DepthLayout[i]   = initDepthLayout;
             }
         }
 
