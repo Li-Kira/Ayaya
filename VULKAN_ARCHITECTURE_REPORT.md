@@ -1,6 +1,6 @@
 # Ayaya Engine — Vulkan 渲染架构与管线深度分析报告
 
-> **初始报告:** 2026-06-18 | **更新:** 2026-06-18 (Bindless + GDR + Mipmap + Pass Culling 落地)
+> **初始报告:** 2026-06-18 | **更新:** 2026-06-20 (GDR CPU 剔除消除 + Transform 缓存 + VSync 接入 + Alpha Map 管线 + Lua 性能脚本)
 > **分析范围:** `/src/Engine/Platform/Vulkan/` (28 文件), `/src/Engine/Renderer/` (抽象层 + 12 个 Pass), `/assets/Editor/shaders/src/vulkan/` (52 个 Shader)
 
 ---
@@ -16,6 +16,7 @@
 7. [Shader 架构](#7-shader-架构)
 8. [材质与资产系统](#8-材质与资产系统)
 9. [深度优化机会评估](#9-深度优化机会评估)
+10. [GDR 性能优化](#18-gdr-性能优化-2026-06-20)
 
 ---
 
@@ -1330,11 +1331,12 @@ deviceFeatures.drawIndirectFirstInstance = VK_TRUE;      // GDR: firstInstance !
 
 | 症状 | 状态 |
 |------|------|
-| **模型面撕裂** | ✅ **Bug H (Topology) 为根因** — TRIANGLE_STRIP→TRIANGLE_LIST 修复后应消失 |
-| **Cube 单三角闪烁** | ✅ 同上，Topology 修复后应消失 |
-| **诊断代码** | ✅ 已清理 — cull.comp 已恢复视锥体剔除，gbuffer_gdr_bindless.frag 已恢复 PBR 渲染 |
+| **模型面撕裂** | ✅ **Bug H (Topology) 为根因** — TRIANGLE_STRIP→TRIANGLE_LIST 修复 |
+| **Cube 单三角闪烁** | ✅ 同上，Topology 修复后消失 |
+| **诊断代码** | ✅ 已清理 — cull.comp 恢复剔除，gbuffer_gdr_bindless.frag 恢复 PBR |
+| **Editor 视口无物体** | ✅ **Bug I (GDRContext 创建两次)** — `s_GDRContext` 被第二次 Init 覆盖，Editor 视口的 pass 持有僵尸 context |
+| **VK_ERROR_DEVICE_LOST** | ✅ **资产缓存在热重载后过期** — 添加 `Scene::InvalidateAssetCache()` 事件驱动作废 |
 
-> **验证建议:** 在修复后的构建中运行 backpack.obj 测试场景，确认面撕裂消失。如仍有问题，使用 RenderDoc 捕获帧进一步排查。
 
 ### 17.6 诊断改动（已全部撤销）
 
@@ -1346,8 +1348,218 @@ deviceFeatures.drawIndirectFirstInstance = VK_TRUE;      // GDR: firstInstance !
 
 ### 17.7 下一步
 
-- [ ] **验证 Topology 修复** — 构建并运行，确认 backpack.obj 面撕裂消失
-- [ ] **Mesh 预上传优化** — 场景加载时批量上传到 GeometryPool（当前惰性触发，首帧可能卡顿）
-- [ ] **Hi-Z 遮挡剔除** — 在 cull.comp 前插入深度金字塔生成 + Compute occlusion test
-- [ ] **GPUMaterial 死字段清理** — `useAlbedoMap`/`useNormalMap`/`useMetallicMap`/`useRoughnessMap`/`useAOMap` 在 C++ 侧始终为 0，frag shader 也不读取——可移除以节省 20 字节/材料
+- [x] **验证 Topology 修复** — ✅ 已确认
+- [x] **CPU 视锥体剔除消除** — ✅ Blind Submit 落地 (Section 18.1)
+- [x] **Transform 缓存** — ✅ 哈希缓存落地 (Section 18.2)
+- [x] **资产指针缓存** — ✅ 事件驱动作废落地 (Section 18.4)
+- [x] **u_AlphaMap 管线接入** — ✅ 落地 (Section 18.5)
+- [ ] **Mesh 预上传优化** — 场景加载时批量上传到 GeometryPool
+- [ ] **Hi-Z 遮挡剔除** — 在 cull.comp 前插入深度金字塔 + Compute occlusion test
+- [ ] **GPUMaterial 死字段清理** — `useAlbedoMap`/`useNormalMap`/`useMetallicMap`/`useRoughnessMap`/`useAOMap` 始终为 0 → 可移除
 - [ ] **Compute Tile Light Culling** — 用 Compute Shader 预计算 per-tile light list
+
+---
+
+## 18. GDR 性能优化 (2026-06-20)
+
+> **优化目标:** 消除 CPU 冗余剔除，引入跨帧缓存，接入 VSync，补全 Alpha Map 管线
+
+### 18.1 盲提交 (Blind Submit) — CPU 视锥体剔除消除
+
+**问题:** CPU 每帧花费 ~1.5ms 做视锥体剔除 + RenderQueue 排序，但 GPU 的 compute
+shader (`cull.comp`) 已经做了一遍同样的剔除。双重视锥体剔除纯属浪费。
+
+**方案:** `GDRContext::BuildFromScene()` 直接遍历 ECS
+(`view<TransformComponent, MeshRendererComponent>`)，将所有 Opaque+Masked 实体
+盲目上传到 SSBO。CPU 不再做任何视锥体剔除或深度排序。GPU compute shader 是唯一
+的可见性仲裁者。
+
+```cpp
+// SceneRenderer::RenderScene() — 盲提交 + 仅半透明走 RenderQueue
+s_GDRContext->BuildFromScene(scene.get(), vkCtx->GetGeometryPool(), frameIdx);
+// RenderQueue 仅处理半透明 (bucket > 1), 用于 WBOIT 后向前排序
+```
+
+**关键改动:**
+- `kMaxInstances` 4096 → 65536 (盲提交需要容纳场景全集)
+- `m_LastBuiltFrame` 防护: 同一帧内 Game + Editor 两个视口只构建一次 SSBO
+- GBuffer 空检查改用 `InstanceCount == 0` 替代 `RenderQueue.Packets.empty()`
+
+**收益:** CPU cull 时间从 1.47ms → ~0.15ms (仅 ECS 遍历 + memcpy)
+
+---
+
+### 18.2 Transform 哈希缓存 — O(1) GetWorldTransform()
+
+**问题:** `Entity::GetWorldTransform()` 每帧递归计算父链矩阵乘法，即使物体完全静止。
+
+**方案:** 基于哈希的跨帧缓存，无需修改任何 write path (不需要 setter)。
+
+```cpp
+// TransformComponent 新增字段 (mutable, const 方法可修改)
+mutable glm::mat4 CachedWorldMatrix  = glm::mat4(1.0f);
+mutable uint64_t  LastLocalHash      = 0;
+mutable uint64_t  LastParentWorldHash = 0;
+
+uint64_t ComputeLocalHash() const;  // 混合 Translation+Rotation+Scale 的 9 个 float
+```
+
+```cpp
+// Entity::GetWorldTransform() — 哈希缓存
+uint64_t localHash = t.ComputeLocalHash();
+uint64_t parentWorldHash = HashMat4(parentWorld);  // 父节点世界矩阵的哈希
+if (localHash == t.LastLocalHash && parentWorldHash == t.LastParentWorldHash)
+    return t.CachedWorldMatrix;  // 缓存命中 — O(1)
+// 缓存未命中: 重算并更新
+t.CachedWorldMatrix = parentWorld * t.GetTransform();
+t.LastLocalHash = localHash;  t.LastParentWorldHash = parentWorldHash;
+```
+
+**关键修复:** 使用 `HashMat4(parentWorld)` (父节点**世界**矩阵哈希)，而非
+`parent.LastLocalHash` (父节点本地哈希)。原始版本用父节点本地哈希，导致祖父节点
+移动时子节点错误命中缓存 (Bug found & fixed 2026-06-20)。
+
+**收益:** 静态物体零矩阵乘法开销，仅 9 个 float 哈希 + 2 个 uint64 比较。
+
+---
+
+### 18.3 O(1) 激活状态检查 — CachedActiveInHierarchy
+
+**问题:** `Entity::IsActiveInHierarchy()` 每帧 O(depth) 递归父链遍历，每实体每帧。
+
+**方案:** 自上而下传播的缓存布尔值。
+
+```cpp
+// RelationshipComponent 新增字段
+bool CachedActiveInHierarchy = true;  // O(1) 只读访问
+
+// Scene::PropagateActiveState() — 自上而下传播
+void Scene::PropagateActiveState(Entity entity) {
+    bool parentActive = /* 父节点缓存值 */;
+    bool selfActive = entity.GetComponent<TagComponent>().IsActive;
+    rel.CachedActiveInHierarchy = parentActive && selfActive;
+    for (auto child : rel.Children) PropagateActiveState(child);  // 递归到子节点
+}
+```
+
+**调用点:** `SetParent()` 后, `TagComponent::IsActive` 切换后,
+场景反序列化完成后 (所有根实体)。每个调用仅影响子树，非全场景。
+
+**收益:** `IsActiveInHierarchy()` 从 O(depth) → O(1)。
+
+---
+
+### 18.4 资产指针缓存 + 事件驱动作废
+
+**问题:** `AssetManager::GetAsset<>()` 每实体每帧做哈希表查找。
+`BuildFromScene()` 遍历 1000+ 实体时此开销显著。
+
+**方案:** `MeshRendererComponent` 中缓存 `shared_ptr<Model/Material>`，
+AssetWatcher 热重载时作废。
+
+```cpp
+// MeshRendererComponent 新增字段
+mutable std::shared_ptr<class Model>    CachedModel    = nullptr;
+mutable std::shared_ptr<class Material> CachedMaterial = nullptr;
+```
+
+```cpp
+// Scene::InvalidateAssetCache() — 热重载时调用
+void Scene::InvalidateAssetCache(UUID assetHandle) {
+    auto view = m_Registry.view<MeshRendererComponent>();
+    for (auto entityID : view) {
+        auto& comp = view.get<MeshRendererComponent>(entityID);
+        if (comp.MaterialHandle == assetHandle) comp.CachedMaterial = nullptr;
+        if (comp.ModelHandle == assetHandle)    comp.CachedModel    = nullptr;
+    }
+}
+```
+
+```cpp
+// AssetWatcher::Update() 现在返回重载的 UUID 列表
+auto reloadedUUIDs = m_AssetWatcher.Update();
+for (auto uuid : reloadedUUIDs)
+    m_ActiveScene->InvalidateAssetCache(uuid);
+```
+
+**Bug 修复:** 初始版本缺少作废机制，导致场景热重载后 `BuildFromScene()` 通过
+过期指针上传了已被释放的 bindless 纹理索引 (GPU 采样到无效 descriptor 槽位)，
+引发 `VK_ERROR_DEVICE_LOST`。事件驱动作废彻底消除此问题。
+
+**收益:** `AssetManager::GetAsset<>()` 哈希表查找 → `shared_ptr` 解引用。
+
+---
+
+### 18.5 u_AlphaMap GPU 管线接入
+
+**问题:** Material 系统有 `u_AlphaMap` 纹理槽 (PropertiesPanel 可配置，
+`.mat` 文件可序列化)，但 `BakeProperties()` 忽略它，`BakedPC` 无对应字段，
+`GPUMaterial` 无 `alphaBindless`。Fragment shader 仅从 `albedo.a` 取 alpha。
+
+**方案:** 全链路接入 alpha map。
+
+| 层 | 改动 |
+|----|------|
+| `BakedPC` | 新增 `AlphaMapIndex = 1` (白色回退) |
+| `BakeProperties()` | 处理 `u_AlphaMap` → 解析 bindless 索引 |
+| `GPUMaterial` | 新增 `useAlphaMap` + `alphaBindless`，`_pad[4]` → `_pad[2]` (sizeof 保持 112) |
+| `GDRContext` | `gm.alphaBindless = (int)b.AlphaMapIndex; gm.useAlphaMap = (AlphaMapIndex != 1) ? 1 : 0;` |
+| `gbuffer_gdr_bindless.frag` | `if (mat.useAlphaMap != 0) a *= texture(..., mat.alphaBindless).r;` (在 discard 之前) |
+| `shadow_gdr_masked.frag` | 同上 |
+| `cull_shadow.comp`, `gbuffer_gdr.vert` | 更新 GPUMaterial struct 定义 |
+
+**收益:** `u_AlphaMap` 纹理槽现在对 masked/alpha-test 材质生效。
+
+---
+
+### 18.6 VSync 接入 Vulkan Present Mode
+
+**问题:** ImGui "Enable VSync" 复选框仅调用 `glfwSwapInterval()` — 对 Vulkan
+swapchain 无效。`VulkanContext::ChooseSwapPresentMode()` 硬编码 `MAILBOX_KHR`。
+
+**方案:**
+- `VulkanContext::m_VSync` + `SetVSync(bool)`: VSync on→`FIFO_KHR`, off→`IMMEDIATE_KHR`→`MAILBOX_KHR`
+- Swapchain 重建延迟到 `BeginFrame()` 安全点 (fence waited 之后)，避免 ImGui 渲染中途销毁 swapchain 导致崩溃
+- `Window::SetVSync()` 对 Vulkan 后端分支到 `VulkanContext::SetVSync()`
+- `PreferencesPanel` 启动时应用 YAML 中的 `EnableVSync` 值
+- Semaphore 改用 `m_ImageIndex` (per-swapchain-image) 索引，swapchain 重建后不再残留旧关联
+
+---
+
+### 18.7 Vulkan 验证层修复
+
+| 修复 | 说明 |
+|------|------|
+| Pipeline Topology (Bug H) | `Triangles` 显式映射为 `TRIANGLE_LIST`，不再依赖空顶点布局启发式 (导致 GDR 面撕裂) |
+| Count Buffer INDIRECT_BIT | `vkCmdDrawIndexedIndirectCount` 的 count buffer 需要 `VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT` |
+| Push Constant stageFlags | VS-only pipeline 使用 `VK_SHADER_STAGE_VERTEX_BIT`；masked pipeline 使用 `VERTEX\|FRAGMENT` |
+| `drawIndirectCount` | `VkPhysicalDeviceVulkan12Features::drawIndirectCount = VK_TRUE` |
+| `NoFragmentShader` | `PipelineSpecification` 新增 flag — depth-only pass 跳过 fragment stage (硬件 Early-Z) |
+| Depth Bias | `PipelineSpecification` 新增 `DepthBiasEnable/ConstantFactor/SlopeFactor/Clamp` 字段，接入 rasterizer |
+| GeometryPool HOST_COHERENT | `requiredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT` |
+| GPU-Assisted Validation | 条件性启用 `VK_EXT_validation_features` + `GPU_ASSISTED_EXT`，用于 shader 级故障检测 |
+
+---
+
+### 18.8 帧耗时打点 (已注释, 可重新启用)
+
+`Application::Run()` 和 `SceneRenderer::RenderScene()` 中已埋入
+`std::chrono::high_resolution_clock` 打点。取消 `if (++s_FrameIdx % 60 == 0)`
+和 `if (++s_SceneFrameIdx % 60 == 0)` 的注释即可启用每 60 帧的性能日志输出。
+
+**日志格式:**
+```
+[Frame 960] total=2.37ms | pre=0.02 beginFrame=0.09 onUpdate=1.60(GDR:0.047) imGui=0.49 endFrame=0.17
+[Scene] gdr=1.400ms queue=0.010ms graph=0.070ms ubo=0.050ms exec=0.500ms gdrInst=80 qPackets=0
+```
+
+---
+
+### 18.9 Lua GDR 性能测试脚本
+
+**文件:** `assets/AyayaProject/testGPU-DrivenRendering/Assets/Scripts/GDRBenchmark.lua`
+
+- 生成 N 个 prefab 实例 (teapot.prefab)，支持 Grid/Line/Circle/RandomSphere 布局
+- 使用 `SetTranslationsBatch` + `SetRotationsBatch` Lua API 进行批量变换更新
+- 键盘控制: Up/Down ±100, Left/Right ±10, W/S ±1, R=reset, G/L/C/X=layout, F=切换FPS
+- 增量重建: count 变化时仅创建/销毁差值

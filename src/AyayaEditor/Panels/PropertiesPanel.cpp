@@ -2309,9 +2309,13 @@ namespace Ayaya {
             ImGui::OpenPopup("AddComponentPopup");
         }
 
+        UI::PushPopupStyles(280.0f);
         if (ImGui::BeginPopup("AddComponentPopup")) {
+            // ===================== RENDERING =====================
+            UI::DrawMenuHeader("Rendering");
+
             if (!referenceEntity.HasComponent<CameraComponent>()) {
-                if (ImGui::MenuItem("Camera")) {
+                if (UI::DrawNativeMenuItem("Camera", ICON_FA_VIDEO)) {
                     for (auto e : m_SelectedEntities) {
                         if (!e.HasComponent<CameraComponent>()) {
                             auto& cc = e.AddComponent<CameraComponent>();
@@ -2333,7 +2337,7 @@ namespace Ayaya {
 
             if (!hasMesh && !hasSprite) {
                 // 如果两个都没有，则两个都可以选
-                if (ImGui::MenuItem("Mesh Renderer")) {
+                if (UI::DrawNativeMenuItem("Mesh Renderer", ICON_FA_CUBE)) {
                     for (auto e : m_SelectedEntities) {
                         if (!e.HasComponent<MeshRendererComponent>() && !e.HasComponent<SpriteRendererComponent>()) {
                             auto& mrc = e.AddComponent<MeshRendererComponent>();
@@ -2344,7 +2348,7 @@ namespace Ayaya {
                     ImGui::CloseCurrentPopup();
                 }
 
-                if (ImGui::MenuItem("Sprite Renderer")) {
+                if (UI::DrawNativeMenuItem("Sprite Renderer", ICON_FA_IMAGE)) {
                     for (auto e : m_SelectedEntities) {
                         if (!e.HasComponent<SpriteRendererComponent>() && !e.HasComponent<MeshRendererComponent>()) {
                             e.AddComponent<SpriteRendererComponent>();
@@ -2353,34 +2357,15 @@ namespace Ayaya {
                     ImGui::CloseCurrentPopup();
                 }
             } else if (hasMesh) {
-                // 如果已经有了 MeshRenderer，菜单里用灰色文本提示互斥
-                ImGui::TextDisabled("Sprite Renderer (Conflicts with Mesh)");
+                // 如果已经有了 MeshRenderer，菜单里用灰色禁用项提示互斥
+                UI::DrawNativeMenuItem("Sprite Renderer (Conflicts with Mesh)", ICON_FA_IMAGE, nullptr, false);
             } else if (hasSprite) {
-                // 如果已经有了 SpriteRenderer，菜单里用灰色文本提示互斥
-                ImGui::TextDisabled("Mesh Renderer (Conflicts with Sprite)");
-            }
-
-            if (!referenceEntity.HasComponent<DirectionalLightComponent>()) {
-                if (ImGui::MenuItem("Directional Light")) {
-                    for (auto e : m_SelectedEntities)
-                    { 
-                        if (!e.HasComponent<DirectionalLightComponent>()) 
-                        {
-                            auto& dlc = e.AddComponent<DirectionalLightComponent>();
-                        }
-                    }
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            if (!referenceEntity.HasComponent<PointLightComponent>()) {
-                if (ImGui::MenuItem("Point Light")) {
-                    for (auto e : m_SelectedEntities) if (!e.HasComponent<PointLightComponent>()) e.AddComponent<PointLightComponent>();
-                    ImGui::CloseCurrentPopup();
-                }
+                // 如果已经有了 SpriteRenderer，菜单里用灰色禁用项提示互斥
+                UI::DrawNativeMenuItem("Mesh Renderer (Conflicts with Sprite)", ICON_FA_CUBE, nullptr, false);
             }
 
             if (!referenceEntity.HasComponent<EnvironmentComponent>()) {
-                if (ImGui::MenuItem("Environment (Skybox)")) {
+                if (UI::DrawNativeMenuItem("Environment (Skybox)", ICON_FA_CLOUD_SUN)) {
                     for (auto e : m_SelectedEntities) {
                         if (!e.HasComponent<EnvironmentComponent>()) {
                             e.AddComponent<EnvironmentComponent>();
@@ -2391,17 +2376,91 @@ namespace Ayaya {
             }
 
             if (!referenceEntity.HasComponent<PostProcessVolumeComponent>()) {
-                if (ImGui::MenuItem("Post Process Volume")) {
+                if (UI::DrawNativeMenuItem("Post Process Volume", ICON_FA_MAGIC)) {
                     for (auto e : m_SelectedEntities) if (!e.HasComponent<PostProcessVolumeComponent>()) e.AddComponent<PostProcessVolumeComponent>();
                     ImGui::CloseCurrentPopup();
                 }
             }
 
-            // ==========================================
-            // 新增：允许用户从菜单中添加 Lua 脚本组件
-            // ==========================================
+            // ===================== LIGHTING =====================
+            UI::DrawMenuHeader("Lighting");
+
+            if (!referenceEntity.HasComponent<DirectionalLightComponent>()) {
+                if (UI::DrawNativeMenuItem("Directional Light", ICON_FA_SUN)) {
+                    for (auto e : m_SelectedEntities)
+                    {
+                        if (!e.HasComponent<DirectionalLightComponent>())
+                        {
+                            auto& dlc = e.AddComponent<DirectionalLightComponent>();
+                        }
+                    }
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!referenceEntity.HasComponent<PointLightComponent>()) {
+                if (UI::DrawNativeMenuItem("Point Light", ICON_FA_LIGHTBULB)) {
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<PointLightComponent>()) e.AddComponent<PointLightComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
+            // ===================== PHYSICS =====================
+            UI::DrawMenuHeader("Physics");
+
+            if (!referenceEntity.HasComponent<Rigidbody2DComponent>()) {
+                if (UI::DrawNativeMenuItem("Rigidbody 2D", ICON_FA_BULLSEYE)) {
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<Rigidbody2DComponent>()) e.AddComponent<Rigidbody2DComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!referenceEntity.HasComponent<BoxCollider2DComponent>()) {
+                if (UI::DrawNativeMenuItem("Box Collider 2D", ICON_FA_VECTOR_SQUARE)) {
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<BoxCollider2DComponent>()) e.AddComponent<BoxCollider2DComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
+            // ===================== UI =====================
+            UI::DrawMenuHeader("UI");
+
+            if (!referenceEntity.HasComponent<CanvasComponent>()) {
+                if (UI::DrawNativeMenuItem("Canvas", ICON_FA_DESKTOP)) {
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<CanvasComponent>()) e.AddComponent<CanvasComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!referenceEntity.HasComponent<RectTransformComponent>()) {
+                if (UI::DrawNativeMenuItem("Rect Transform", ICON_FA_OBJECT_GROUP)) {
+                    for (auto e : m_SelectedEntities) {
+                        if (!e.HasComponent<RectTransformComponent>()) e.AddComponent<RectTransformComponent>();
+                    }
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!referenceEntity.HasComponent<UIImageComponent>()) {
+                if (UI::DrawNativeMenuItem("UI Image", ICON_FA_IMAGE)) {
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<UIImageComponent>()) e.AddComponent<UIImageComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!referenceEntity.HasComponent<UITextComponent>()) {
+                if (UI::DrawNativeMenuItem("UI Text", ICON_FA_FONT)) {
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<UITextComponent>()) e.AddComponent<UITextComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            if (!referenceEntity.HasComponent<UIButtonComponent>()) {
+                if (UI::DrawNativeMenuItem("UI Button", ICON_FA_HAND_POINTER)) {
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<UIButtonComponent>()) e.AddComponent<UIButtonComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
+            // ===================== SCRIPTING & ANIMATION =====================
+            UI::DrawMenuHeader("Scripting & Animation");
+
             if (!referenceEntity.HasComponent<LuaScriptComponent>()) {
-                if (ImGui::MenuItem("Lua Script")) {
+                if (UI::DrawNativeMenuItem("Lua Script", ICON_FA_FILE_CODE)) {
                     for (auto e : m_SelectedEntities) {
                         if (!e.HasComponent<LuaScriptComponent>()) {
                             e.AddComponent<LuaScriptComponent>();
@@ -2411,61 +2470,8 @@ namespace Ayaya {
                 }
             }
 
-            // ==========================================
-            // 新增：允许用户从菜单中添加物理组件
-            // ==========================================
-            if (!referenceEntity.HasComponent<Rigidbody2DComponent>()) {
-                if (ImGui::MenuItem("Rigidbody 2D")) {
-                    for (auto e : m_SelectedEntities) if (!e.HasComponent<Rigidbody2DComponent>()) e.AddComponent<Rigidbody2DComponent>();
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            if (!referenceEntity.HasComponent<BoxCollider2DComponent>()) {
-                if (ImGui::MenuItem("Box Collider 2D")) {
-                    for (auto e : m_SelectedEntities) if (!e.HasComponent<BoxCollider2DComponent>()) e.AddComponent<BoxCollider2DComponent>();
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-
-            ImGui::Separator();
-            ImGui::TextDisabled("UI Components");
-            if (!referenceEntity.HasComponent<CanvasComponent>()) {
-                if (ImGui::MenuItem("Canvas")) {
-                    for (auto e : m_SelectedEntities) if (!e.HasComponent<CanvasComponent>()) e.AddComponent<CanvasComponent>();
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            if (!referenceEntity.HasComponent<RectTransformComponent>()) {
-                if (ImGui::MenuItem("Rect Transform")) {
-                    for (auto e : m_SelectedEntities) {
-                        if (!e.HasComponent<RectTransformComponent>()) e.AddComponent<RectTransformComponent>();
-                    }
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            if (!referenceEntity.HasComponent<UIImageComponent>()) {
-                if (ImGui::MenuItem("UI Image")) {
-                    for (auto e : m_SelectedEntities) if (!e.HasComponent<UIImageComponent>()) e.AddComponent<UIImageComponent>();
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            if (!referenceEntity.HasComponent<UITextComponent>()) {
-                if (ImGui::MenuItem("UI Text")) {
-                    for (auto e : m_SelectedEntities) if (!e.HasComponent<UITextComponent>()) e.AddComponent<UITextComponent>();
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            if (!referenceEntity.HasComponent<UIButtonComponent>()) {
-                if (ImGui::MenuItem("UI Button")) {
-                    for (auto e : m_SelectedEntities) if (!e.HasComponent<UIButtonComponent>()) e.AddComponent<UIButtonComponent>();
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-
-            ImGui::Separator();
-            ImGui::TextDisabled("Animation");
             if (!referenceEntity.HasComponent<AnimationControllerComponent>()) {
-                if (ImGui::MenuItem("Animation Controller")) {
+                if (UI::DrawNativeMenuItem("Animation Controller", ICON_FA_FILM)) {
                     for (auto e : m_SelectedEntities)
                         if (!e.HasComponent<AnimationControllerComponent>())
                             e.AddComponent<AnimationControllerComponent>();
@@ -2475,6 +2481,7 @@ namespace Ayaya {
 
             ImGui::EndPopup();
         }
+        UI::PopPopupStyles();
     }
 
     void PropertiesPanel::DrawAssetInspector() {
