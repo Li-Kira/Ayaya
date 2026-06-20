@@ -211,19 +211,19 @@ Hi, welcome to Ayaya engine♪
 
             auto t6 = std::chrono::high_resolution_clock::now();
 
-            // ── Timing log (every 60 frames) ──
-            if (++s_FrameIdx % 60 == 0) {
-                using ms = std::chrono::duration<float, std::milli>;
-                float total    = std::chrono::duration_cast<ms>(t6 - t0).count();
-                float pre     = std::chrono::duration_cast<ms>(t2 - t1).count();
-                float beginF  = std::chrono::duration_cast<ms>(t3 - t2).count();
-                float onUpd   = std::chrono::duration_cast<ms>(t4 - t3).count();
-                float imgui   = std::chrono::duration_cast<ms>(t5 - t4).count();
-                float endF    = std::chrono::duration_cast<ms>(t6 - t5).count();
-                float gdrBuild = SceneRenderer::s_GDRContext ? SceneRenderer::s_GDRContext->BuildTimeMs : 0.0f;
-                AYAYA_CORE_INFO("[Frame {}] total={:.2f}ms | pre={:.2f} beginFrame={:.2f} onUpdate={:.2f}(GDR:{:.3f}) imGui={:.2f} endFrame={:.2f}",
-                    s_FrameIdx, total, pre, beginF, onUpd, gdrBuild, imgui, endF);
-            }
+            // ── Timing log (every 60 frames) — uncomment to debug frame cost ──
+            //if (++s_FrameIdx % 60 == 0) {
+            //    using ms = std::chrono::duration<float, std::milli>;
+            //    float total    = std::chrono::duration_cast<ms>(t6 - t0).count();
+            //    float pre     = std::chrono::duration_cast<ms>(t2 - t1).count();
+            //    float beginF  = std::chrono::duration_cast<ms>(t3 - t2).count();
+            //    float onUpd   = std::chrono::duration_cast<ms>(t4 - t3).count();
+            //    float imgui   = std::chrono::duration_cast<ms>(t5 - t4).count();
+            //    float endF    = std::chrono::duration_cast<ms>(t6 - t5).count();
+            //    float gdrBuild = SceneRenderer::s_GDRContext ? SceneRenderer::s_GDRContext->BuildTimeMs : 0.0f;
+            //    AYAYA_CORE_INFO("[Frame {}] total={:.2f}ms | pre={:.2f} beginFrame={:.2f} onUpdate={:.2f}(GDR:{:.3f}) imGui={:.2f} endFrame={:.2f}",
+            //        s_FrameIdx, total, pre, beginF, onUpd, gdrBuild, imgui, endF);
+            //}
         }
 
 

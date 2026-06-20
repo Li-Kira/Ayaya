@@ -31,7 +31,7 @@ namespace Ayaya {
     static_assert(sizeof(GPUInstance) == 96, "GPUInstance must be 96 bytes (matches GLSL std430)");
 
     // GPU-side material data (uploaded once, updated on material change)
-    // GLSL std430: vec4(16) + 13×scalar(52) + _pad[4](16) = 104 → padded to 112 (align 16)
+    // GLSL std430: vec4(16) + 14×scalar(56) + _pad[2](8) = 104 → padded to 112 (align 16)
     struct alignas(16) GPUMaterial {
         glm::vec4 albedo;                    // 16
         float metallic, roughness, ao, alpha; // 16
@@ -41,7 +41,9 @@ namespace Ayaya {
         int metallicBindless, roughnessBindless, aoBindless;     // 12
         float alphaCutoff;                   // 4
         int   blendMode;                     // 4
-        int   _pad[4];                       // 16 → total 104, alignas(16) → sizeof=112
+        int   useAlphaMap;                   // 4
+        int   alphaBindless;                 // 4
+        int   _pad[2];                       // 8 → sizeof=112
     };
     static_assert(sizeof(GPUMaterial) == 112, "GPUMaterial must be 112 bytes (matches GLSL std430)");
 

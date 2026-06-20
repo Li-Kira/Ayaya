@@ -141,6 +141,8 @@ namespace Ayaya {
                         m_BakedPC.RoughnessMapIndex = idx;
                     } else if (prop.UniformName == "u_AOMap") {
                         m_BakedPC.AOMapIndex = idx;
+                    } else if (prop.UniformName == "u_AlphaMap") {
+                        m_BakedPC.AlphaMapIndex = idx;
                     }
                 }
             }

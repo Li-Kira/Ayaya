@@ -50,7 +50,9 @@ struct GPUMaterial {
     int metallicBindless, roughnessBindless, aoBindless;
     float alphaCutoff;
     int blendMode;
-    int _pad[4];
+    int useAlphaMap;
+    int alphaBindless;
+    int _pad[2];
 };
 // layout declared in fragment shader; vertex only needs materialIdx
 

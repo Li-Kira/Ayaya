@@ -34,7 +34,9 @@ struct GPUMaterial {
     int metallicBindless, roughnessBindless, aoBindless;
     float alphaCutoff;
     int blendMode;
-    int _pad[4];
+    int useAlphaMap;
+    int alphaBindless;
+    int _pad[2];
 };
 layout(std430, set = 2, binding = 2) readonly buffer MaterialBuffer {
     GPUMaterial Materials[];

@@ -553,20 +553,20 @@ namespace Ayaya {
                 m_RenderGraph.Execute(m_RenderContext, *cmd);
                 auto tExec1 = std::chrono::high_resolution_clock::now();
 
-                // ── Per-RenderScene timing log (every 60 frames) ──
-                static int s_SceneFrameIdx = 0;
-                if (++s_SceneFrameIdx % 60 == 0) {
-                    using ms = std::chrono::duration<float, std::milli>;
-                    float gdrMs   = std::chrono::duration_cast<ms>(tCull1 - tCull0).count();
-                    float queueMs = std::chrono::duration_cast<ms>(tGDR - tCull1).count();
-                    float graphMs = std::chrono::duration_cast<ms>(tGraph1 - tGraph0).count();
-                    float execMs  = std::chrono::duration_cast<ms>(tExec1 - tExec0).count();
-                    float uboMs   = std::chrono::duration_cast<ms>(tExec0 - tGraph1).count();
-                    AYAYA_CORE_INFO("[Scene] gdr={:.3f}ms queue={:.3f}ms graph={:.3f}ms ubo={:.3f}ms exec={:.3f}ms gdrInst={} qPackets={}",
-                        gdrMs, queueMs, graphMs, uboMs, execMs,
-                        s_GDRContext ? (int)s_GDRContext->InstanceCount : 0,
-                        (int)m_RenderQueue.Packets.size());
-                }
+                // ── Per-RenderScene timing log — uncomment to debug pass cost ──
+                //static int s_SceneFrameIdx = 0;
+                //if (++s_SceneFrameIdx % 60 == 0) {
+                //    using ms = std::chrono::duration<float, std::milli>;
+                //    float gdrMs   = std::chrono::duration_cast<ms>(tCull1 - tCull0).count();
+                //    float queueMs = std::chrono::duration_cast<ms>(tGDR - tCull1).count();
+                //    float graphMs = std::chrono::duration_cast<ms>(tGraph1 - tGraph0).count();
+                //    float execMs  = std::chrono::duration_cast<ms>(tExec1 - tExec0).count();
+                //    float uboMs   = std::chrono::duration_cast<ms>(tExec0 - tGraph1).count();
+                //    AYAYA_CORE_INFO("[Scene] gdr={:.3f}ms queue={:.3f}ms graph={:.3f}ms ubo={:.3f}ms exec={:.3f}ms gdrInst={} qPackets={}",
+                //        gdrMs, queueMs, graphMs, uboMs, execMs,
+                //        s_GDRContext ? (int)s_GDRContext->InstanceCount : 0,
+                //        (int)m_RenderQueue.Packets.size());
+                //}
             } else {
                 // OpenGL 线性管线 (保持兼容)
                 m_Pipeline.Execute(m_RenderContext, *cmd);

@@ -1,9 +1,0 @@
-uuid: 3048475791570468418
-type: 2
-virtual_path: project://normal.png
-import_settings:
-  filter: 0
-  wrap: 0
-  srgb: false
-  mipmaps: true
-  flip_y: true

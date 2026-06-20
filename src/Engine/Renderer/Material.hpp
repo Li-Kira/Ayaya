@@ -132,6 +132,7 @@ namespace Ayaya {
             uint32_t MetallicMapIndex = 1;    // white → scalar * 1 = scalar
             uint32_t RoughnessMapIndex = 1;   // white
             uint32_t AOMapIndex = 1;          // white
+            uint32_t AlphaMapIndex = 1;       // white (multiplicative identity)
             bool Dirty = true;
 
             // Get final scalar values for GPU rendering.

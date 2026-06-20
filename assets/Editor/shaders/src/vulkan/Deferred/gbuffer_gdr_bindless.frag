@@ -25,7 +25,9 @@ struct GPUMaterial {
     int metallicBindless, roughnessBindless, aoBindless;
     float alphaCutoff;
     int blendMode;
-    int _pad[4];
+    int useAlphaMap;
+    int alphaBindless;
+    int _pad[2];
 };
 layout(std430, set = 2, binding = 2) readonly buffer MaterialBuffer {
     GPUMaterial Materials[];
@@ -52,6 +54,8 @@ void main() {
 
     vec4 albedoSample = texture(u_GlobalTextures[nonuniformEXT(mat.albedoBindless)], v_TexCoord);
     float a = mat.alpha * albedoSample.a;
+    if (mat.useAlphaMap != 0)
+        a *= texture(u_GlobalTextures[nonuniformEXT(mat.alphaBindless)], v_TexCoord).r;
 
     if (mat.blendMode == 1 && a < mat.alphaCutoff) discard;
 

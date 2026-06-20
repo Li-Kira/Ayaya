@@ -1295,11 +1295,12 @@ namespace Ayaya {
                         }
                         ImGui::Separator();
 
-                        // Ordered categories: Albedo → Normal → Roughness+Metallic → AO → ORM → Other
+                        // Ordered categories: Albedo → ... → ORM → Alpha → Other
                         using CatEntry = std::pair<std::string, std::vector<MaterialProperty*>>;
                         std::vector<CatEntry> orderedCats = {
                             {"Albedo", {}}, {"Normal", {}}, {"Metallic", {}},
-                            {"Roughness", {}}, {"AO", {}}, {"ORM", {}}, {"Other", {}}
+                            {"Roughness", {}}, {"AO", {}}, {"ORM", {}},
+                            {"Alpha", {}}, {"Other", {}}
                         };
                         auto& groups = orderedCats;
                         bool hasAlphaTex = false;
@@ -1326,8 +1327,10 @@ namespace Ayaya {
                                 groups[4].second.push_back(&prop);
                             else if (name.find("ORM") != std::string::npos)
                                 groups[5].second.push_back(&prop);
-                            else
+                            else if (name.find("Alpha") != std::string::npos)
                                 groups[6].second.push_back(&prop);
+                            else
+                                groups[7].second.push_back(&prop);
                         }
 
                         for (auto& [catName, props] : groups) {
@@ -1403,9 +1406,9 @@ namespace Ayaya {
                         }
 
                         // Alpha Cutoff (Masked mode)
-                        if (currentMat->GetBlendMode() == MaterialBlendMode::Masked && hasAlphaTex) {
+                        if (currentMat->GetBlendMode() == MaterialBlendMode::Masked) {
                             ImGui::Spacing();
-                            ImGui::SeparatorText("Alpha");
+                            ImGui::SeparatorText("Alpha Cutoff");
                             if (UI::BeginPropertyTable("AlphaTable", 100.0f, 0.8f)) {
                                 UI::DrawPropertyLabel("Cutoff");
                                 float cutoff = currentMat->GetAlphaCutoff();

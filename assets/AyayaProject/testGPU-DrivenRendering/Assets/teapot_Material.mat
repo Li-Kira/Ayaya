@@ -10,7 +10,7 @@ Properties:
   - UniformName: u_AlbedoMap
     DisplayName: Albedo Texture
     Type: 8
-    TextureHandle: 11519419914334724845
+    TextureHandle: 0
   - UniformName: u_NormalMap
     DisplayName: Normal Map
     Type: 8
@@ -26,7 +26,7 @@ Properties:
   - UniformName: u_Roughness
     DisplayName: Roughness
     Type: 0
-    FloatValue: 0.5
+    FloatValue: 1
   - UniformName: u_RoughnessMap
     DisplayName: Roughness Texture
     Type: 8
