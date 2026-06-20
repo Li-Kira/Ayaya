@@ -391,68 +391,58 @@ namespace Ayaya {
         m_LightUniformBuffer->SetData(&m_Data->LightData, sizeof(struct_LightData));
 
         // ==========================================
-        // RenderQueue: 提取 / 剔除 / 分桶 / 排序
+        // GDR: Blind Submit with 3-suspect diagnostics
         // ==========================================
         auto tCull0 = std::chrono::high_resolution_clock::now();
+        if (s_GDRContext && RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+            auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+                Application::Get().GetWindow().GetContext());
+            if (vkCtx) {
+                uint32_t frameIdx = vkCtx->GetCurrentFrameIndex() % vkCtx->GetFramesInFlight();
+                s_GDRContext->BuildFromScene(scene.get(), vkCtx->GetGeometryPool(), frameIdx);
+            }
+        }
+        auto tCull1 = std::chrono::high_resolution_clock::now();
+
+        // ==========================================
+        // RenderQueue: translucent only
+        // ==========================================
         m_RenderQueue.Clear();
         {
             glm::mat4 viewProj = m_RenderContext.ProjectionMatrix * m_RenderContext.ViewMatrix;
             Frustum frustum(viewProj);
-            glm::vec3 camPos = m_RenderContext.CameraPosition;
-
             auto view = scene->Reg().view<TransformComponent, MeshRendererComponent>();
             for (auto entityID : view) {
+                auto& meshComp = view.get<MeshRendererComponent>(entityID);
+                if (!meshComp.CachedMaterial)
+                    meshComp.CachedMaterial = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
+                auto material = meshComp.CachedMaterial;
+                uint8_t bucket = material ? material->GetRenderBucket() : 0;
+                if (bucket <= 1) continue;
                 Entity entity{ entityID, scene.get() };
                 if (!entity.IsActiveInHierarchy()) continue;
-
-                auto& meshComp = entity.GetComponent<MeshRendererComponent>();
                 auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
                 if (!model) continue;
-                auto material = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
                 glm::mat4 transform = entity.GetWorldTransform();
-
                 for (auto& mesh : model->GetMeshes()) {
                     if (!frustum.IsBoxVisible(mesh->GetAABB(), transform)) continue;
-
                     DrawPacket packet;
                     packet.Transform = transform;
                     packet.CastShadows = meshComp.CastShadows;
                     packet.ReceiveShadows = meshComp.ReceiveShadows;
                     packet.MeshAsset = mesh;
                     packet.MaterialAsset = material;
-
-                    // 64-bit sort key assembly
                     SortKey key; key.Value = 0;
-                    uint8_t bucket = material ? material->GetRenderBucket() : 0;
-                    key.Bits.BucketID     = bucket;
+                    key.Bits.BucketID = bucket;
                     key.Bits.MaterialHash = (meshComp.MaterialHandle & 0xFFF);
-                    key.Bits.EntityID     = static_cast<uint32_t>(entityID) & 0xFFFF;
-
-                    if (bucket == 0 || bucket == 1) { // Opaque or Masked: front-to-back
-                        float dist = glm::distance(camPos, glm::vec3(transform[3]));
-                        key.Bits.Depth = FloatToDepthInt(dist);
-                    } else {
-                        key.Bits.Depth = 0; // Translucent etc.: no depth sort
-                    }
-
+                    key.Bits.EntityID = static_cast<uint32_t>(entityID) & 0xFFFF;
+                    key.Bits.Depth = 0;
                     packet.SortKey = key.Value;
                     m_RenderQueue.Packets.push_back(packet);
                 }
             }
         }
         m_RenderQueue.Sort();
-        auto tCull1 = std::chrono::high_resolution_clock::now();
-
-        // Build shared GDR scene data (GPUInstance[], GeometryRange[], GPUMaterial[])
-        if (s_GDRContext && RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-            auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
-                Application::Get().GetWindow().GetContext());
-            if (vkCtx) {
-                uint32_t frameIdx = vkCtx->GetCurrentFrameIndex() % vkCtx->GetFramesInFlight();
-                s_GDRContext->BuildFromRenderQueue(m_RenderQueue,
-                    vkCtx->GetGeometryPool(), frameIdx);
-            }
-        }
         auto tGDR = std::chrono::high_resolution_clock::now();
 
         // AYAYA_CORE_INFO("[RenderQueue] Extracted {} draw packets from {} entities",
@@ -567,13 +557,15 @@ namespace Ayaya {
                 static int s_SceneFrameIdx = 0;
                 if (++s_SceneFrameIdx % 60 == 0) {
                     using ms = std::chrono::duration<float, std::milli>;
-                    float cullMs  = std::chrono::duration_cast<ms>(tCull1 - tCull0).count();
-                    float gdrMs   = std::chrono::duration_cast<ms>(tGDR - tCull1).count();
+                    float gdrMs   = std::chrono::duration_cast<ms>(tCull1 - tCull0).count();
+                    float queueMs = std::chrono::duration_cast<ms>(tGDR - tCull1).count();
                     float graphMs = std::chrono::duration_cast<ms>(tGraph1 - tGraph0).count();
                     float execMs  = std::chrono::duration_cast<ms>(tExec1 - tExec0).count();
-                    float uboMs   = std::chrono::duration_cast<ms>(tExec0 - tGraph1).count(); // UBO + timestamps
-                    AYAYA_CORE_INFO("[Scene] cull={:.3f}ms gdr={:.3f}ms graph={:.3f}ms ubo={:.3f}ms exec={:.3f}ms packets={}",
-                        cullMs, gdrMs, graphMs, uboMs, execMs, (int)m_RenderQueue.Packets.size());
+                    float uboMs   = std::chrono::duration_cast<ms>(tExec0 - tGraph1).count();
+                    AYAYA_CORE_INFO("[Scene] gdr={:.3f}ms queue={:.3f}ms graph={:.3f}ms ubo={:.3f}ms exec={:.3f}ms gdrInst={} qPackets={}",
+                        gdrMs, queueMs, graphMs, uboMs, execMs,
+                        s_GDRContext ? (int)s_GDRContext->InstanceCount : 0,
+                        (int)m_RenderQueue.Packets.size());
                 }
             } else {
                 // OpenGL 线性管线 (保持兼容)

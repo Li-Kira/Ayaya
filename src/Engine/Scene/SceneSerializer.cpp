@@ -677,9 +677,12 @@ namespace Ayaya {
         for (auto& rel : relationshipsToResolve) {
             if (sceneEntities.find(rel.ParentUUID) != sceneEntities.end()) {
                 Entity parentEntity = sceneEntities[rel.ParentUUID];
-                rel.ChildEntity.SetParent(parentEntity, false); 
+                rel.ChildEntity.SetParent(parentEntity, false);
             }
         }
+
+        for (auto& rootHandle : m_Scene->GetRootEntities())
+            m_Scene->PropagateActiveState(Entity{ rootHandle, m_Scene.get() });
 
         return true;
     }

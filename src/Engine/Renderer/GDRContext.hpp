@@ -14,7 +14,7 @@ namespace Ayaya {
 // Owned by SceneRenderer, referenced by Shadow and GBuffer passes.
 // Builds GPUInstance[], GeometryRange[], GPUMaterial[] once per frame from the sorted RenderQueue.
 struct GDRContext {
-    static constexpr uint32_t kMaxInstances = 4096;
+    static constexpr uint32_t kMaxInstances = 65536;
     static constexpr uint32_t kMaxMaterials = 512;
     static constexpr uint32_t kMaxMeshes    = 1024;
 
@@ -45,13 +45,18 @@ struct GDRContext {
                               GlobalGeometryPool& geoPool,
                               uint32_t frameIndex);
 
+    // Build SSBO data directly from ECS — blind submit (no CPU culling).
+    void BuildFromScene(class Scene* scene,
+                        GlobalGeometryPool& geoPool,
+                        uint32_t frameIndex);
+
     // Convenience: bind set=2 at the given pipeline bind point.
     void BindSet2(VkCommandBuffer cmd, VkPipelineLayout layout,
                   VkPipelineBindPoint bindPoint, uint32_t frameIndex) const;
 
 private:
     VkDevice m_Device = VK_NULL_HANDLE;         // cached for Shutdown (no ctx dependency)
-    uint32_t m_LastBuiltFrame = UINT32_MAX;      // guard against redundant same-frame rebuilds
+    uint32_t m_LastBuiltFrame = UINT32_MAX;   // guard against redundant same-frame rebuilds
 };
 
 } // namespace Ayaya

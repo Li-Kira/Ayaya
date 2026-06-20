@@ -48,16 +48,28 @@ namespace Ayaya {
         glm::vec3 Rotation = { 0.0f, 0.0f, 0.0f }; // 欧拉角
         glm::vec3 Scale = { 1.0f, 1.0f, 1.0f };
 
+        mutable glm::mat4 CachedWorldMatrix  = glm::mat4(1.0f);
+        mutable uint64_t  LastLocalHash      = 0;
+        mutable uint64_t  LastParentWorldHash = 0;
+
         TransformComponent() = default;
         TransformComponent(const TransformComponent&) = default;
         TransformComponent(const glm::vec3& translation) : Translation(translation) {}
 
-        // 动态计算变换矩阵
         glm::mat4 GetTransform() const {
             glm::mat4 rotation = glm::toMat4(glm::quat(Rotation));
             return glm::translate(glm::mat4(1.0f), Translation)
                 * rotation
                 * glm::scale(glm::mat4(1.0f), Scale);
+        }
+
+        uint64_t ComputeLocalHash() const {
+            uint64_t h = 0;
+            auto mix = [&](float v) { h ^= std::hash<float>{}(v) + 0x9e3779b9 + (h << 6) + (h >> 2); };
+            mix(Translation.x); mix(Translation.y); mix(Translation.z);
+            mix(Rotation.x);    mix(Rotation.y);    mix(Rotation.z);
+            mix(Scale.x);       mix(Scale.y);       mix(Scale.z);
+            return h;
         }
     };
 
@@ -92,8 +104,9 @@ namespace Ayaya {
     };
 
     struct RelationshipComponent {
-        entt::entity Parent = entt::null;           // 指向父节点的 ID
-        std::vector<entt::entity> Children;         // 存储所有子节点的 ID
+        entt::entity Parent = entt::null;
+        std::vector<entt::entity> Children;
+        bool CachedActiveInHierarchy = true;
 
         RelationshipComponent() = default;
         RelationshipComponent(const RelationshipComponent&) = default;
@@ -103,11 +116,12 @@ namespace Ayaya {
     // 3D 网格渲染组件
     // ==========================================
     struct MeshRendererComponent {
-        UUID ModelHandle = 0;     // 指向 AssetManager 里的 Model 资产
-        UUID MaterialHandle = 0;  // 指向 AssetManager 里的 Material 资产
-
-        bool CastShadows = true;     // 是否产生阴影
-        bool ReceiveShadows = true;  // 是否接收阴影
+        UUID ModelHandle = 0;
+        UUID MaterialHandle = 0;
+        mutable std::shared_ptr<class Model>    CachedModel    = nullptr;
+        mutable std::shared_ptr<class Material> CachedMaterial = nullptr;
+        bool CastShadows = true;
+        bool ReceiveShadows = true;
 
         MeshRendererComponent() = default;
         MeshRendererComponent(const MeshRendererComponent&) = default;

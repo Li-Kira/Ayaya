@@ -185,7 +185,8 @@ namespace Ayaya {
                     newComp.IsActive = isActive;
                     
                     e.GetComponent<TagComponent>().IsActive = isActive;
-                    
+                    m_Context->PropagateActiveState(e);
+
                     macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<TagComponent>>(e, oldComp, newComp));
                 }
                 EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);

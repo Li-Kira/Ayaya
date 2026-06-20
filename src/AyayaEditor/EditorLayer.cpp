@@ -98,8 +98,12 @@ namespace Ayaya {
             m_ProjectToLoad = "";         // 清空标记
         }
 
-        // Asset hot-reload: process pending file changes
-        m_AssetWatcher.Update();
+        // Asset hot-reload: process pending file changes + invalidate caches
+        auto reloadedUUIDs = m_AssetWatcher.Update();
+        if (!reloadedUUIDs.empty() && m_ActiveScene) {
+            for (auto uuid : reloadedUUIDs)
+                m_ActiveScene->InvalidateAssetCache(uuid);
+        }
 
         // GPU-resident thumbnail generation: one per frame, zero CPU blocking
         AssetPreviewer::ProcessOneThumbnail();

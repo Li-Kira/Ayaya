@@ -26,7 +26,7 @@ namespace Ayaya {
         std::shared_ptr<GDRContext>  m_GDRCtx;   // shared GDR data hub
 
         // GPU-Driven Rendering (GDR) — SSBO-based material & instance data
-        static constexpr uint32_t kGDRMaxInstances = 4096;
+        static constexpr uint32_t kGDRMaxInstances = 65536;
         static constexpr uint32_t kGDRMaxMaterials = 512;
         static constexpr uint32_t kGDRMaxMeshes = 1024;
 

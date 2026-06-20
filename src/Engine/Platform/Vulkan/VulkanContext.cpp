@@ -103,6 +103,32 @@ namespace Ayaya {
         createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         createInfo.ppEnabledLayerNames = validationLayers.data();
 
+        // GPU-Assisted Validation (only if VK_EXT_validation_features is available)
+        VkValidationFeaturesEXT gpuAssisted{};
+        gpuAssisted.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+        gpuAssisted.enabledValidationFeatureCount = 1;
+        VkValidationFeatureEnableEXT feature = VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT;
+        gpuAssisted.pEnabledValidationFeatures = &feature;
+        bool hasGPUAssisted = false;
+        {
+            uint32_t extCount = 0;
+            vkEnumerateInstanceExtensionProperties(nullptr, &extCount, nullptr);
+            std::vector<VkExtensionProperties> availExts(extCount);
+            vkEnumerateInstanceExtensionProperties(nullptr, &extCount, availExts.data());
+            for (auto& e : availExts) {
+                if (strcmp(e.extensionName, VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME) == 0) {
+                    hasGPUAssisted = true;
+                    break;
+                }
+            }
+        }
+        if (hasGPUAssisted) {
+            extensions.push_back(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
+            createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+            gpuAssisted.pNext = createInfo.pNext;
+            createInfo.pNext = &gpuAssisted;
+        }
+
         VkResult result = vkCreateInstance(&createInfo, nullptr, &m_Instance);
         AYAYA_CORE_ASSERT(result == VK_SUCCESS, "Failed to create Vulkan Instance!");
 

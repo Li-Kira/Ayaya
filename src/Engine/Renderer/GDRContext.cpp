@@ -3,6 +3,9 @@
 #include "Renderer/Mesh.hpp"
 #include "Renderer/Material.hpp"
 #include "Asset/AssetManager.hpp"
+#include "Engine/Scene/Scene.hpp"
+#include "Engine/Scene/Components.hpp"
+#include "Engine/Scene/Entity.hpp"
 
 namespace Ayaya {
 
@@ -207,6 +210,122 @@ namespace Ayaya {
             vkCmdBindDescriptorSets(cmd, bindPoint, layout,
                 2, 1, &Set2Descriptors[frameIndex], 0, nullptr);
         }
+    }
+
+    void GDRContext::BuildFromScene(Scene* scene,
+                                    GlobalGeometryPool& geoPool,
+                                    uint32_t frameIndex) {
+        if (!scene) return;
+        if (m_LastBuiltFrame == frameIndex) return;
+        m_LastBuiltFrame = frameIndex;
+
+        auto t0 = std::chrono::high_resolution_clock::now();
+
+        std::vector<GPUInstance> gdrInstances;
+        std::vector<GPUMaterial> gdrMaterials;
+        std::vector<GeometryRange> gdrRanges;
+        gdrInstances.reserve(4096);
+        gdrMaterials.reserve(64);
+        gdrRanges.reserve(64);
+
+        std::unordered_map<Mesh*, uint32_t> meshToRange;
+        std::unordered_map<uint64_t, uint32_t> matMap;
+
+        auto view = scene->Reg().view<TransformComponent, MeshRendererComponent>();
+        for (auto entityID : view) {
+            Entity entity{ entityID, scene };
+            if (!entity.IsActiveInHierarchy()) continue;
+
+            auto& meshComp = entity.GetComponent<MeshRendererComponent>();
+            if (!meshComp.CachedModel)
+                meshComp.CachedModel = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
+            auto model = meshComp.CachedModel;
+            if (!model) continue;
+            if (!meshComp.CachedMaterial)
+                meshComp.CachedMaterial = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
+            auto material = meshComp.CachedMaterial;
+
+            if (material && material->GetBlendMode() == MaterialBlendMode::Translucent) continue;
+
+            glm::mat4 transform = entity.GetWorldTransform();
+            uint64_t matHash = meshComp.MaterialHandle & 0xFFF;
+
+            for (auto& mesh : model->GetMeshes()) {
+                if (gdrInstances.size() >= kMaxInstances) {
+                    AYAYA_CORE_WARN("GDR Instance buffer full! {} instances, max {}.",
+                        (int)gdrInstances.size(), kMaxInstances);
+                    break;
+                }
+
+                geoPool.GetOrUploadMesh(mesh.get());
+
+                uint32_t rangeIdx;
+                auto rit = meshToRange.find(mesh.get());
+                if (rit != meshToRange.end()) {
+                    rangeIdx = rit->second;
+                } else {
+                    rangeIdx = (uint32_t)gdrRanges.size();
+                    auto range = geoPool.GetOrUploadMesh(mesh.get());
+                    gdrRanges.push_back(range);
+                    meshToRange[mesh.get()] = rangeIdx;
+                }
+
+                uint32_t matIdx;
+                auto mit = matMap.find(matHash);
+                if (mit != matMap.end()) {
+                    matIdx = mit->second;
+                } else {
+                    matIdx = (uint32_t)gdrMaterials.size();
+                    matMap[matHash] = matIdx;
+                    GPUMaterial gm{};
+                    if (material) {
+                        auto& b = material->GetBakedPC();
+                        gm.albedo = b.Albedo; gm.metallic = b.Metallic;
+                        gm.roughness = b.Roughness; gm.ao = b.AO; gm.alpha = b.Alpha;
+                        gm.albedoBindless    = (int)b.AlbedoMapIndex;
+                        gm.normalBindless    = (int)b.NormalMapIndex;
+                        gm.ormBindless       = (int)b.ORMMapIndex;
+                        gm.metallicBindless  = (int)b.MetallicMapIndex;
+                        gm.roughnessBindless = (int)b.RoughnessMapIndex;
+                        gm.aoBindless        = (int)b.AOMapIndex;
+                        gm.useORMMap   = (int)b.UseORMMap;
+                        gm.alphaCutoff = material->GetAlphaCutoff();
+                        gm.blendMode   = (int)material->GetBlendMode();
+                    }
+                    gdrMaterials.push_back(gm);
+                }
+
+                GPUInstance gi{};
+                gi.transform = transform;
+                AABB aabb = mesh->GetAABB();
+                glm::vec3 center = (aabb.Min + aabb.Max) * 0.5f;
+                glm::vec3 worldCenter = glm::vec3(transform * glm::vec4(center, 1.0f));
+                glm::vec3 scale(
+                    glm::length(glm::vec3(transform[0])),
+                    glm::length(glm::vec3(transform[1])),
+                    glm::length(glm::vec3(transform[2])));
+                float maxScale = glm::max(scale.x, glm::max(scale.y, scale.z));
+                float radius = glm::length(aabb.Max - aabb.Min) * 0.5f * maxScale;
+                gi.boundingSphere   = glm::vec4(worldCenter, radius);
+                gi.geometryRangeIdx = rangeIdx;
+                gi.materialIdx      = matIdx;
+                gi.entityId         = static_cast<uint32_t>(entityID) & 0xFFFF;
+                gi.flags = 0;
+                if (meshComp.CastShadows) gi.flags |= GPUInstance::kFlag_CastShadows;
+                gdrInstances.push_back(gi);
+            }
+        }
+
+        uint32_t instCount     = std::min((uint32_t)gdrInstances.size(), kMaxInstances);
+        uint32_t rangeCount    = std::min((uint32_t)gdrRanges.size(),    kMaxMeshes);
+        uint32_t materialCount = std::min((uint32_t)gdrMaterials.size(), kMaxMaterials);
+        InstanceSSBO->SetData(gdrInstances.data(), instCount * sizeof(GPUInstance));
+        GeometryRangeSSBO->SetData(gdrRanges.data(), rangeCount * sizeof(GeometryRange));
+        MaterialSSBO->SetData(gdrMaterials.data(), materialCount * sizeof(GPUMaterial));
+        InstanceCount = instCount;
+
+        auto t1 = std::chrono::high_resolution_clock::now();
+        BuildTimeMs = std::chrono::duration<float, std::milli>(t1 - t0).count();
     }
 
 } // namespace Ayaya

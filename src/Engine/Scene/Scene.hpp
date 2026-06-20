@@ -36,6 +36,10 @@ namespace Ayaya {
         Entity DuplicateEntity(Entity entity);
         Entity InstantiatePrefab(class Prefab* prefab);
 
+        void PropagateActiveState(Entity entity);
+
+        void InvalidateAssetCache(UUID assetHandle);
+
         entt::registry& Reg() { return m_Registry; }
 
         // 获取有序的根节点列表
@@ -70,7 +74,7 @@ namespace Ayaya {
         void  SetAnimationTime(float t) { m_AnimationTime = t; }
 
     private:
-        entt::registry m_Registry; 
+        entt::registry m_Registry;
         std::vector<entt::entity> m_RootEntities; 
 
         friend class Entity; 

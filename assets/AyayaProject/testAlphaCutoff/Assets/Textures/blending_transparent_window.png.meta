@@ -1,5 +1,6 @@
 uuid: 8024206714404637536
 type: 2
+virtual_path: project://Textures/blending_transparent_window.png
 import_settings:
   filter: 0
   wrap: 0

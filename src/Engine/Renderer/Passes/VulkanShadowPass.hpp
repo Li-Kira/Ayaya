@@ -67,7 +67,7 @@ namespace Ayaya {
         std::shared_ptr<Shader>       m_GDR_MaskedShader;
         std::shared_ptr<Pipeline>     m_GDR_MaskedPipeline;
 
-        static constexpr uint32_t kGDRMaxInstances = 4096;
+        static constexpr uint32_t kGDRMaxInstances = 65536;
 
         void InitGDR(VkDevice device, uint32_t framesInFlight);
         void ExecuteGDR(RenderContext& context, RenderCommandBuffer& cmd);

@@ -389,8 +389,10 @@ namespace Ayaya {
         bool eyeClicked = ImGui::Button(
             tagComp.IsActive ? ICON_FA_EYE : ICON_FA_EYE_SLASH,
             ImVec2(btnW, btnH));
-        if (eyeClicked)
+        if (eyeClicked) {
             tagComp.IsActive = !tagComp.IsActive;
+            m_Context->PropagateActiveState(entity);
+        }
         ImGui::PopID();
 
         if (!activeInHierarchy) ImGui::PopStyleColor(); // Text dim

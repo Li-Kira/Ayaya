@@ -22,7 +22,7 @@ namespace Ayaya {
 
         void Initialize(const std::filesystem::path& assetRoot);
         void Shutdown();
-        void Update();  // main thread, each frame
+        std::vector<UUID> Update();  // main thread, each frame — returns reloaded asset UUIDs
 
         bool IsEnabled() const { return m_Enabled; }
         void SetEnabled(bool enabled) { m_Enabled = enabled; }
@@ -37,7 +37,7 @@ namespace Ayaya {
         void EnqueueReload(UUID handle, const std::filesystem::path& path);
 
         // Topological sort by asset weight, then process reloads
-        void ProcessPendingReloads();
+        std::vector<UUID> ProcessPendingReloads();
 
         // Resolve dependencies — chain affected assets
         void ResolveDependencies(UUID handle, std::vector<UUID>& outAffected);

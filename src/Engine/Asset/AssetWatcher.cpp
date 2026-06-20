@@ -113,13 +113,14 @@ namespace Ayaya {
             ResolveDependencies(dep, outAffected);
     }
 
-    void AssetWatcher::Update() {
-        if (!m_Enabled || m_Paused) return;
-        ProcessPendingReloads();
+    std::vector<UUID> AssetWatcher::Update() {
+        if (!m_Enabled || m_Paused) return {};
+        return ProcessPendingReloads();
     }
 
-    void AssetWatcher::ProcessPendingReloads() {
+    std::vector<UUID> AssetWatcher::ProcessPendingReloads() {
         std::lock_guard<std::mutex> lock(m_ReloadMutex);
+        std::vector<UUID> allReloaded;
 
         auto it = m_PendingReloads.begin();
         while (it != m_PendingReloads.end()) {
@@ -152,15 +153,17 @@ namespace Ayaya {
 
             // Reload in sorted order
             for (auto depHandle : affected) {
-                // CPU-decode on background thread, GPU upload enqueued to main-thread queue
                 AssetManager::ReloadAsset(depHandle);
             }
+            allReloaded.insert(allReloaded.end(), affected.begin(), affected.end());
 
             AYAYA_CORE_INFO("[AssetWatcher] Reloaded {} asset(s): {}",
                 affected.size(), it->Path.string());
 
             it = m_PendingReloads.erase(it);
         }
+
+        return allReloaded;
     }
 
 }

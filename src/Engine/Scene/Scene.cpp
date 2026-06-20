@@ -81,6 +81,36 @@ namespace Ayaya {
         m_Registry.destroy(entity);
     }
 
+    void Scene::PropagateActiveState(Entity entity) {
+        if (!entity.HasComponent<RelationshipComponent>()) return;
+        auto& rel = entity.GetComponent<RelationshipComponent>();
+
+        bool parentActive = true;
+        if (rel.Parent != entt::null) {
+            Entity p{ rel.Parent, this };
+            if (p.HasComponent<RelationshipComponent>())
+                parentActive = p.GetComponent<RelationshipComponent>().CachedActiveInHierarchy;
+        }
+
+        bool selfActive = true;
+        if (entity.HasComponent<TagComponent>())
+            selfActive = entity.GetComponent<TagComponent>().IsActive;
+
+        rel.CachedActiveInHierarchy = parentActive && selfActive;
+
+        for (auto childHandle : rel.Children)
+            PropagateActiveState(Entity{ childHandle, this });
+    }
+
+    void Scene::InvalidateAssetCache(UUID assetHandle) {
+        auto view = m_Registry.view<MeshRendererComponent>();
+        for (auto entityID : view) {
+            auto& comp = view.get<MeshRendererComponent>(entityID);
+            if (comp.MaterialHandle == assetHandle) comp.CachedMaterial = nullptr;
+            if (comp.ModelHandle == assetHandle)    comp.CachedModel    = nullptr;
+        }
+    }
+
     Entity Scene::GetEntityByUUID(UUID uuid) {
         auto it = m_EntityMap.find(uuid);
         return (it != m_EntityMap.end()) ? Entity{it->second, this} : Entity{};

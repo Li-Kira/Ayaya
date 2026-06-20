@@ -1,5 +1,6 @@
 uuid: 1046272882507206772
 type: 2
+virtual_path: project://Textures/gradient-radial.png
 import_settings:
   filter: 0
   wrap: 0

@@ -27,39 +27,44 @@ namespace Ayaya {
         // 新增：判断实体在层级树中是否真实可见
         // ==============================================
         bool IsActiveInHierarchy() const {
-        // 1. 如果实体本身无效，直接返回 false
-        if (!*this) return false;
-
-        // 2. 检查自己的局部激活状态 (activeSelf)
-        if (HasComponent<TagComponent>()) {
-            if (!GetComponent<TagComponent>().IsActive) {
-                return false; // 自己被隐藏了，直接判定为不可见
-            }
+            if (HasComponent<RelationshipComponent>())
+                return GetComponent<RelationshipComponent>().CachedActiveInHierarchy;
+            if (HasComponent<TagComponent>())
+                return GetComponent<TagComponent>().IsActive;
+            return true;
         }
-
-        // 3. 顺藤摸瓜，问问老父亲是不是被隐藏了
-        if (HasComponent<RelationshipComponent>()) {
-            auto& rel = GetComponent<RelationshipComponent>();
-            if (rel.Parent != entt::null) {
-                // 构建出父实体，并调用它自己的 IsActiveInHierarchy 进行递归
-                Entity parent{ rel.Parent, m_Scene };
-                return parent.IsActiveInHierarchy();
-            }
-        }
-
-        // 4. 一路爬到根节点都没被隐藏，说明是真的可见！
-        return true;
-    }
 
         glm::mat4 GetWorldTransform() const {
-            auto& transform = GetComponent<TransformComponent>();
+            auto& t = GetComponent<TransformComponent>();
             auto& rel = GetComponent<RelationshipComponent>();
-            glm::mat4 localTransform = transform.GetTransform();
+
+            uint64_t localHash = t.ComputeLocalHash();
+            uint64_t parentWorldHash = 0;
+            glm::mat4 parentWorld = glm::mat4(1.0f);
+
             if (rel.Parent != entt::null) {
-                Entity parentEntity{ rel.Parent, m_Scene };
-                return parentEntity.GetWorldTransform() * localTransform;
+                Entity parent{ rel.Parent, m_Scene };
+                parentWorld = parent.GetWorldTransform();
+                parentWorldHash = HashMat4(parentWorld);
             }
-            return localTransform;
+
+            if (localHash == t.LastLocalHash && parentWorldHash == t.LastParentWorldHash)
+                return t.CachedWorldMatrix;
+
+            t.CachedWorldMatrix = parentWorld * t.GetTransform();
+            t.LastLocalHash = localHash;
+            t.LastParentWorldHash = parentWorldHash;
+            return t.CachedWorldMatrix;
+        }
+
+        static uint64_t HashMat4(const glm::mat4& m) {
+            uint64_t h = 0;
+            auto mix = [&](float v) { h ^= std::hash<float>{}(v) + 0x9e3779b9 + (h << 6) + (h >> 2); };
+            mix(m[0].x); mix(m[0].y); mix(m[0].z); mix(m[0].w);
+            mix(m[1].x); mix(m[1].y); mix(m[1].z); mix(m[1].w);
+            mix(m[2].x); mix(m[2].y); mix(m[2].z); mix(m[2].w);
+            mix(m[3].x); mix(m[3].y); mix(m[3].z); mix(m[3].w);
+            return h;
         }
 
         bool IsDescendantOf(Entity potentialAncestor) const {
@@ -104,15 +109,17 @@ namespace Ayaya {
             if (keepWorldTransform) {
                 glm::mat4 newParentWorldTransform = newParent ? newParent.GetWorldTransform() : glm::mat4(1.0f);
                 glm::mat4 newLocalTransform = glm::inverse(newParentWorldTransform) * oldWorldTransform;
-                
+
                 glm::vec3 scale, translation, skew;
                 glm::quat rotation; glm::vec4 perspective;
                 glm::decompose(newLocalTransform, scale, rotation, translation, skew, perspective);
-                
+
                 ourTransform.Translation = translation;
                 ourTransform.Rotation = glm::eulerAngles(rotation);
                 ourTransform.Scale = scale;
             }
+
+            m_Scene->PropagateActiveState(*this);
         }
 
         // ==============================================

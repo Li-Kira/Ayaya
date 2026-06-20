@@ -282,7 +282,7 @@ namespace Ayaya {
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
             0, nullptr, 1, &fillBarrier, 0, nullptr);
 
-        // ── 3. Host → Device barrier (shared SSBO data from BuildFromRenderQueue) ──
+        // ── 3. Host → Device barrier (shared SSBO data from GDRContext::BuildFromScene) ──
         VkMemoryBarrier hostBarrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER };
         hostBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
         hostBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;

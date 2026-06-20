@@ -164,7 +164,8 @@ namespace Ayaya {
     if (!fbo) return;
 
     auto* queue = context.RenderQueue;
-    if (!queue || queue->Packets.empty()) {
+    // Check GDR instance count (blind submit) rather than RenderQueue (translucent-only now).
+    if (!queue || (!m_GDRCtx || m_GDRCtx->InstanceCount == 0)) {
         // Unconditionally clear GBuffer to prevent ghost rendering from previous frame
         cmd.BeginRenderPass(fbo, true, glm::vec4(0.0f));
         cmd.EndRenderPass();
