@@ -52,12 +52,14 @@ namespace Ayaya {
 
         PipelineSpecification gs;
         gs.Shader = m_GenShader; gs.TargetFramebuffer = m_RefFBO; gs.Layout = {};
+        gs.Topology = PrimitiveTopology::TriangleStrip;
         gs.DepthTest = false; gs.DepthWrite = false; gs.Blend = false;
         gs.BackfaceCulling = CullMode::None;
         m_GenPipeline = Pipeline::Create(gs);
 
         PipelineSpecification bs;
         bs.Shader = m_BlurShader; bs.TargetFramebuffer = m_RefFBO; bs.Layout = {};
+        bs.Topology = PrimitiveTopology::TriangleStrip;
         bs.DepthTest = false; bs.DepthWrite = false; bs.Blend = false;
         bs.BackfaceCulling = CullMode::None;
         m_BlurXPipeline = Pipeline::Create(bs);

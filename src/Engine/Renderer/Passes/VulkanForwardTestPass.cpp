@@ -51,6 +51,7 @@ namespace Ayaya {
         m_SpriteShader = Shader::Create("2D/sprite.vert", "2D/sprite.frag");
         m_SpritePipeSpec.Shader = m_SpriteShader;
         m_SpritePipeSpec.Layout = {}; // shader 用 gl_VertexIndex 程序化生成顶点
+        m_SpritePipeSpec.Topology = PrimitiveTopology::TriangleStrip;
         m_SpritePipeSpec.DepthTest = true;
         m_SpritePipeSpec.DepthWrite = false;
         m_SpritePipeSpec.Blend = true;

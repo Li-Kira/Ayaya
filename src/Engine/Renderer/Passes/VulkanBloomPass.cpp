@@ -80,6 +80,7 @@ namespace Ayaya {
             ds.Shader = m_DownsampleShader;
             ds.TargetFramebuffer = bloomFBO;
             ds.Layout = {};
+            ds.Topology = PrimitiveTopology::TriangleStrip;
             ds.DepthTest = false; ds.DepthWrite = false; ds.Blend = false;
             ds.BackfaceCulling = CullMode::None;
             m_DownsamplePipeline = Pipeline::Create(ds);
@@ -88,6 +89,7 @@ namespace Ayaya {
             us.Shader = m_UpsampleShader;
             us.TargetFramebuffer = bloomFBO;
             us.Layout = {};
+            us.Topology = PrimitiveTopology::TriangleStrip;
             us.DepthTest = false; us.DepthWrite = false;
             us.Blend = true; us.BlendMode = BlendModeType::Additive;
             us.BackfaceCulling = CullMode::None;

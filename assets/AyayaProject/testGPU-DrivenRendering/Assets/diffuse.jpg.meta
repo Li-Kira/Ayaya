@@ -1,0 +1,9 @@
+uuid: 3722915302982997157
+type: 2
+virtual_path: project://diffuse.jpg
+import_settings:
+  filter: 0
+  wrap: 0
+  srgb: true
+  mipmaps: true
+  flip_y: true

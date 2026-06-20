@@ -1116,3 +1116,238 @@ void main() {
 | 纹理 Cache | Mipmap 链减少远处纹理 Cache Miss |
 | 描述符池内存 | Bindless pipelines 0 COMBINED_IMAGE_SAMPLER, 旧 ring buffers 移除 |
 | 代码复杂度 | 12 个旧管线成员 + ~180 行 Phase1-3 代码删除 |
+
+---
+
+## 17. GDR Bug 排查与修复记录
+
+> **排查期间:** 2026-06-18 ~ 2026-06-20 | **状态:** ✅ 面撕裂根因已定位并修复 (Bug H)，9 项 Bug 全部修复，诊断代码已清理
+
+### 17.1 已修复的 Bug
+
+#### 🔴 Bug A — Frustum Plane Column/Row 错位
+
+**文件:** `VulkanGbufferPass.cpp:351`
+
+**根因:** `glm::mat4` 是 column-major 存储，`vp[i]` 返回第 i 个**列**。但 Gribb-Hartmann 方法需要**行**。列向量组合 ≠ 行向量组合，near/far 平面完全错误。
+
+```cpp
+// Bug: vp[i] returns COLUMNS, not rows
+glm::vec4 rows[4] = { vp[0], vp[1], vp[2], vp[3] };
+
+// Fix: transpose first so vpT[i] returns row i
+glm::mat4 vpT = glm::transpose(vp);
+glm::vec4 rows[4] = { vpT[0], vpT[1], vpT[2], vpT[3] };
+```
+
+**验证:** CPU 侧 `Frustum` 类（`Frustum.hpp`）使用显式 `viewProjection[col][row]` 双索引逐元素提取，正确实现了 Gribb-Hartmann。两者修复后等价。
+
+**症状:** 相机内物体被错误剔除、边界闪烁。
+
+---
+
+#### 🔴 Bug B — `drawIndirectFirstInstance` 未启用
+
+**文件:** `VulkanContext.cpp:223-226`
+
+**根因:** cull.comp 为每个子网格设置独立 `firstInstance = gID`：
+```glsl
+Commands[gID].firstInstance = gID;
+```
+但 Vulkan 规范规定：未启用 `drawIndirectFirstInstance` 时，`firstInstance` 被**忽略**，强制为 0。全部子网格共享 `Instances[0]` 的 transform + geometryRangeIdx + materialIdx，但各自使用不同的 index buffer offset → 垃圾三角形。
+
+```cpp
+// Fix: add to VkPhysicalDeviceFeatures
+deviceFeatures.drawIndirectFirstInstance = VK_TRUE;
+```
+
+**症状:** 模型面撕裂（所有子网格读 Instance[0] 的顶点区）、Cube 闪烁。
+
+---
+
+#### 🔴 Bug C — `multiDrawIndirect` 未启用
+
+**文件:** `VulkanContext.cpp:225`
+
+**根因:** `vkCmdDrawIndexedIndirect` 的 `drawCount` = `instanceCount` (如 79)。Vulkan 规范：未启用 `multiDrawIndirect` 时 `drawCount` 只能为 0 或 1。
+
+```cpp
+// Fix: add to VkPhysicalDeviceFeatures
+deviceFeatures.multiDrawIndirect = VK_TRUE;
+```
+
+**症状:** Validation Error VUID-vkCmdDrawIndexedIndirect-drawCount-02718。
+
+---
+
+#### 🔴 Bug D — GeometryPool 缺少 VMA HOST_COHERENT
+
+**文件:** `VulkanGeometryPool.cpp:23-26`
+
+**根因:** `VmaAllocationCreateInfo` 缺少 `requiredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT`。对比 `VulkanStorageBuffer` 正确设置。non-coherent 内存上 `memcpy` 后 GPU 可能读到未刷新数据。
+
+```cpp
+// Fix: add requiredFlags
+allocInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+```
+
+**症状:** 顶点/索引数据损坏 → 面撕裂（取决于硬件内存类型）。
+
+---
+
+#### 🟡 Bug E — 包围球半径未乘 World Scale
+
+**文件:** `VulkanGbufferPass.cpp:322`
+
+**根因:** 局部空间半径直接使用，未乘以变换矩阵的 maxScale。CPU 侧 `Frustum::IsBoxVisible` 正确实现了 `maxScale` 乘法。
+
+```cpp
+// Fix: extract scale from transform columns
+glm::vec3 scale(
+    glm::length(glm::vec3(pkt.Transform[0])),
+    glm::length(glm::vec3(pkt.Transform[1])),
+    glm::length(glm::vec3(pkt.Transform[2]))
+);
+float maxScale = glm::max(scale.x, glm::max(scale.y, scale.z));
+float radius = glm::length(aabb.Max - aabb.Min) * 0.5f * maxScale;
+```
+
+**症状:** scale ≠ 1 的实体被错误剔除。
+
+---
+
+#### 🟡 Bug F — 空场景不清理 GBuffer (Ghost 渲染)
+
+**文件:** `VulkanGbufferPass.cpp:243-244`
+
+**根因:** `queue->Packets.empty()` 时直接 return，未调用 `BeginRenderPass`。上一帧 GBuffer 残留。
+
+```cpp
+// Fix: unconditionally clear GBuffer
+if (!queue || queue->Packets.empty()) {
+    cmd.BeginRenderPass(fbo, true, glm::vec4(0.0f));
+    cmd.EndRenderPass();
+    return;
+}
+```
+
+---
+
+#### 🟢 Bug G — 子实体未注册到父 Children 列表
+
+**文件:** `Scene.cpp:162-179`
+
+**根因:** `InstantiateModelNode` 多 mesh 分支中，子实体未加入 `pRel.Children`。
+
+---
+
+#### 🔴 Bug H — Pipeline Topology 错误：TRIANGLE_STRIP 替代 TRIANGLE_LIST **(面撕裂根因)**
+
+**文件:** `VulkanPipeline.cpp:108`
+
+**根因:** `VulkanPipeline` 的 `inputAssembly.topology` 映射中，当 `PrimitiveTopology::Triangles`（默认）且 `attributeDescriptions` 为空时，被错误映射为 `VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP`：
+
+```cpp
+// Bug: empty vertex layout → TRIANGLE_STRIP (heuristic for procedural quads)
+default: inputAssembly.topology = attributeDescriptions.empty()
+    ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP
+    : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+// Fix: explicit Triangles case, always TRIANGLE_LIST
+case PrimitiveTopology::Triangles: inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; break;
+```
+
+GDR pipeline 使用 `Layout = {}`（SSBO vertex pulling 不需要 VBO），导致 `attributeDescriptions.empty() == true`。Mesh 索引缓冲区按 `TRIANGLE_LIST` 构建，但 GPU 按 `TRIANGLE_STRIP` 解析——每 3 个顶点后，下一个三角形复用前一个三角形的最后 2 个顶点。结果：三角形拉伸错位、模型"面撕裂"。
+
+**联动修复:** 同步更新了 9 个依赖隐式启发式规则的全屏 pass（FXAA / Bloom / Lighting / SSAO / WBOIT / PostProcess / ForwardBlend / ForwardTest / Outline），显式设置 `Topology = PrimitiveTopology::TriangleStrip`。`VulkanOutlinePass` 已显式设置，无需修改。
+
+**症状:** 所有 GDR 渲染的模型出现面撕裂（backpack.obj 79 子网格三角形拉伸错位）、Cube 单三角闪烁。
+
+---
+
+#### 🟡 Issue I — vkCtx/m_GDRPipeline 为空时缺少 BeginRenderPass
+
+**文件:** `VulkanGbufferPass.cpp:264-270`
+
+**根因:** 当 `vkCtx` 或 `m_GDRPipeline` 为空时，整个 GDR 代码块被跳过，但 `cmd.EndRenderPass()` 在行 432 始终被调用——导致 `vkCmdEndRenderPass()` 在没有活跃 render pass 的情况下调用，触发 Vulkan validation error。
+
+```cpp
+// Fix: guard clause with explicit BeginRenderPass + EndRenderPass + return
+if (!vkCtx || !m_GDRPipeline) {
+    cmd.BeginRenderPass(fbo, true, glm::vec4(0.0f));
+    cmd.EndRenderPass();
+    context.Framebuffers["GBuffer"] = fbo;
+    return;
+}
+```
+
+**症状:** Validation Error `VUID-vkCmdEndRenderPass-None-00951`（无活跃 render pass 时调用 EndRenderPass）。
+
+---
+
+#### 🟢 附加改进
+
+- **SSBO 上限裁剪:** `VulkanGbufferPass.cpp` — `std::min(count, kMaxCapacity)` 防溢出
+- **GeometryPool 越界检查:** `VulkanGeometryPool.cpp` — `m_Cursor + required > m_Size` 防护 + 错误日志
+- **结构体大小静态断言:** `VulkanGeometryPool.hpp` — 三个 `static_assert` 锁定 C++/GLSL 对齐
+
+---
+
+### 17.2 已排除的嫌疑人
+
+| # | 嫌疑人 | 排查方法 | 结论 |
+|---|--------|---------|------|
+| 1 | 顶点格式对齐 (VBO 44B vs SSBO 11uint) | 逐 byte 对比 BufferLayout vs Vertex struct | ✅ 一致 |
+| 2 | SPIR-V 编译错误 | `spirv-dis` 反汇编验证 `OpUDiv`/`OpIMul`/struct offset/ArrayStride | ✅ 正确 |
+| 3 | 整数溢出 (256MB 池 / 79 子网格) | 计算 `indexOffset/4` 在 uint32 安全范围 | ✅ 安全 |
+| 4 | 16-bit vs 32-bit 索引类型不匹配 | 全链路追踪：Assimp(`unsigned int*`) → Model(`uint32_t`) → Mesh(`uint32_t`) → Pool(`sizeof(uint32_t)`) → Vulkan(`UINT32`) | ✅ 统一 32-bit |
+| 5 | 子网格 Global Index 双偏移 | 验证 Assimp aiMesh 索引为 local 0-based，ProcessMesh 只在 MergeMeshes 时添加 vertOffset | ✅ 无叠加 |
+| 6 | 双重渲染 Z-Fighting | Phase 1-3 已物理删除，`SceneRenderer::RenderScene()` 严格 if-else 隔离 OpenGL/Vulkan | ✅ 无并行 |
+| 7 | Triple-Buffer Descriptor 追尾 | 每帧独立 VkBuffer + 预绑定 Set + 一致 frameIdx + 正确 Barrier + `vkWaitForFences` | ✅ 无竞争 |
+| 8 | GPUInstance/GPUMaterial 内存偏移雪崩 | C++ `alignas(16)` + `_pad` 成员 → sizeof vs GLSL std430 ArrayStride | ✅ 全部一致 |
+
+### 17.3 C++/GLSL 结构体内存对齐验证
+
+| 结构体 | C++ sizeof | GLSL std430 ArrayStride | static_assert |
+|--------|-----------|------------------------|---------------|
+| `GeometryRange` | 16 | 16 | ✅ |
+| `GPUInstance` | 96 | 96 | ✅ |
+| `GPUMaterial` | 112 | 112 | ✅ |
+
+---
+
+### 17.4 已启用的 VkPhysicalDeviceFeatures
+
+```cpp
+deviceFeatures.independentBlend = VK_TRUE;               // WBOIT per-attachment blend
+deviceFeatures.multiDrawIndirect = VK_TRUE;              // GDR: drawCount > 1
+deviceFeatures.drawIndirectFirstInstance = VK_TRUE;      // GDR: firstInstance != 0 per draw
+```
+
+---
+
+### 17.5 当前状态
+
+| 症状 | 状态 |
+|------|------|
+| **模型面撕裂** | ✅ **Bug H (Topology) 为根因** — TRIANGLE_STRIP→TRIANGLE_LIST 修复后应消失 |
+| **Cube 单三角闪烁** | ✅ 同上，Topology 修复后应消失 |
+| **诊断代码** | ✅ 已清理 — cull.comp 已恢复视锥体剔除，gbuffer_gdr_bindless.frag 已恢复 PBR 渲染 |
+
+> **验证建议:** 在修复后的构建中运行 backpack.obj 测试场景，确认面撕裂消失。如仍有问题，使用 RenderDoc 捕获帧进一步排查。
+
+### 17.6 诊断改动（已全部撤销）
+
+以下诊断改动已在 2026-06-20 清理：
+
+- **cull.comp — 临时禁用 Frustum Culling:** ~~`IsVisible()` 调用已移除~~ → **已恢复**完整视锥体剔除逻辑（`IsVisible()` + 可见性分支）
+- **gbuffer_gdr_bindless.frag — UV 诊断颜色:** ~~输出 `v_TexCoord` + `v_MaterialIdx` 作为颜色~~ → **已恢复**完整 bindless PBR 渲染管线（纹理采样、法线贴图、ORM 分支、alpha-cutout）
+- **VulkanGbufferPass.cpp — 每 60 帧日志:** ~~`static int s_GDRFrameCounter` + `AYAYA_CORE_INFO`~~ → **已移除**
+
+### 17.7 下一步
+
+- [ ] **验证 Topology 修复** — 构建并运行，确认 backpack.obj 面撕裂消失
+- [ ] **Mesh 预上传优化** — 场景加载时批量上传到 GeometryPool（当前惰性触发，首帧可能卡顿）
+- [ ] **Hi-Z 遮挡剔除** — 在 cull.comp 前插入深度金字塔生成 + Compute occlusion test
+- [ ] **GPUMaterial 死字段清理** — `useAlbedoMap`/`useNormalMap`/`useMetallicMap`/`useRoughnessMap`/`useAOMap` 在 C++ 侧始终为 0，frag shader 也不读取——可移除以节省 20 字节/材料
+- [ ] **Compute Tile Light Culling** — 用 Compute Shader 预计算 per-tile light list

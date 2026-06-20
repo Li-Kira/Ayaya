@@ -46,6 +46,7 @@ namespace Ayaya {
         m_SpriteShader = Shader::Create("2D/sprite.vert", "2D/sprite.frag");
         m_SpritePipeSpec.Shader = m_SpriteShader;
         m_SpritePipeSpec.Layout = {};
+        m_SpritePipeSpec.Topology = PrimitiveTopology::TriangleStrip;
         m_SpritePipeSpec.TargetFramebuffer = m_RefFBO;
         m_SpritePipeSpec.DepthTest = true;
         m_SpritePipeSpec.DepthWrite = false;

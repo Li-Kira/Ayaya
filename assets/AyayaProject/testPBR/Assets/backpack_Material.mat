@@ -1,0 +1,61 @@
+MaterialName: backpack_Material
+ShaderName: PBR
+BlendMode: 0
+AlphaCutoff: 0.5
+Properties:
+  - UniformName: u_Albedo
+    DisplayName: Albedo Color
+    Type: 4
+    Vec3Value: [1, 1, 1]
+  - UniformName: u_AlbedoMap
+    DisplayName: Albedo Texture
+    Type: 8
+    TextureHandle: 10685934449355817900
+  - UniformName: u_NormalMap
+    DisplayName: Normal Map
+    Type: 8
+    TextureHandle: 18149764656877353374
+  - UniformName: u_Metallic
+    DisplayName: Metallic
+    Type: 0
+    FloatValue: 0
+  - UniformName: u_MetallicMap
+    DisplayName: Metallic Texture
+    Type: 8
+    TextureHandle: 2442032170563422592
+  - UniformName: u_Roughness
+    DisplayName: Roughness
+    Type: 0
+    FloatValue: 0.5
+  - UniformName: u_RoughnessMap
+    DisplayName: Roughness Texture
+    Type: 8
+    TextureHandle: 1598597669983390745
+  - UniformName: u_AO
+    DisplayName: Ambient Occlusion
+    Type: 0
+    FloatValue: 1
+  - UniformName: u_AOMap
+    DisplayName: AO Texture
+    Type: 8
+    TextureHandle: 17589164270876706180
+  - UniformName: u_ORMMap
+    DisplayName: ORM Texture (R=AO G=Roughness B=Metallic)
+    Type: 8
+    TextureHandle: 0
+  - UniformName: u_HeightMap
+    DisplayName: Height/Displacement Map
+    Type: 8
+    TextureHandle: 0
+  - UniformName: u_EmissiveMap
+    DisplayName: Emissive Map
+    Type: 8
+    TextureHandle: 0
+  - UniformName: u_Alpha
+    DisplayName: Alpha Multiplier
+    Type: 0
+    FloatValue: 1
+  - UniformName: u_AlphaMap
+    DisplayName: Alpha/Opacity Map
+    Type: 8
+    TextureHandle: 0

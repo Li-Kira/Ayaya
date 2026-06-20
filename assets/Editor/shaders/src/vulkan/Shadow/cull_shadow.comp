@@ -1,0 +1,114 @@
+#version 450 core
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// ── Input: instance & geometry data (set=2, shared GDRContext) ──
+struct GPUInstance {
+    mat4 transform;
+    vec4 boundingSphere;   // xyz=center, w=radius
+    uint geometryRangeIdx;
+    uint materialIdx;
+    uint entityId;
+    uint flags;
+};
+layout(std430, set = 2, binding = 0) readonly buffer InstanceBuffer {
+    GPUInstance Instances[];
+};
+
+struct GeometryRange {
+    uint vertexOffset;
+    uint indexOffset;
+    uint vertexCount;
+    uint indexCount;
+};
+layout(std430, set = 2, binding = 1) readonly buffer GeometryRangeBuffer {
+    GeometryRange Ranges[];
+};
+
+struct GPUMaterial {
+    vec4 albedo;
+    float metallic, roughness, ao, alpha;
+    int useAlbedoMap, useNormalMap, useORMMap;
+    int useMetallicMap, useRoughnessMap, useAOMap;
+    int albedoBindless, normalBindless, ormBindless;
+    int metallicBindless, roughnessBindless, aoBindless;
+    float alphaCutoff;
+    int blendMode;
+    int _pad[4];
+};
+layout(std430, set = 2, binding = 2) readonly buffer MaterialBuffer {
+    GPUMaterial Materials[];
+};
+
+// ── Output: binned indirect draw commands — one per visible instance ──
+struct DrawCommand {
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    int  vertexOffset;
+    uint firstInstance;
+};
+
+// set=3, binding=0: Opaque indirect commands (no alpha-test)
+layout(std430, set = 3, binding = 0) writeonly buffer OpaqueCommands {
+    DrawCommand OpaqueCmds[];
+};
+// set=3, binding=1: Opaque atomic counter
+layout(std430, set = 3, binding = 1) buffer OpaqueCount {
+    uint OpaqueCnt;
+};
+// set=3, binding=2: Masked indirect commands (alpha-test)
+layout(std430, set = 3, binding = 2) writeonly buffer MaskedCommands {
+    DrawCommand MaskedCmds[];
+};
+// set=3, binding=3: Masked atomic counter
+layout(std430, set = 3, binding = 3) buffer MaskedCount {
+    uint MaskedCnt;
+};
+
+// ── Push constants: light frustum planes (Gribb-Hartmann, 6 × vec4 = 96 bytes) + instance count ──
+layout(push_constant) uniform FrustumPC {
+    vec4 u_Planes[6];
+    uint u_InstanceCount;
+} pc;
+
+bool IsVisible(vec4 sphere) {
+    for (int i = 0; i < 6; i++) {
+        if (dot(pc.u_Planes[i].xyz, sphere.xyz) + pc.u_Planes[i].w < -sphere.w)
+            return false;
+    }
+    return true;
+}
+
+const uint kFlag_CastShadows = 1u;
+
+void main() {
+    uint gID = gl_GlobalInvocationID.x;
+    if (gID >= pc.u_InstanceCount) return;
+
+    GPUInstance inst = Instances[gID];
+
+    // Skip non-shadow-casters
+    if ((inst.flags & kFlag_CastShadows) == 0u) return;
+
+    if (IsVisible(inst.boundingSphere)) {
+        GeometryRange range = Ranges[inst.geometryRangeIdx];
+        GPUMaterial mat = Materials[inst.materialIdx];
+
+        DrawCommand cmd;
+        cmd.indexCount    = range.indexCount;
+        cmd.instanceCount = 1;
+        cmd.firstIndex    = range.indexOffset / 4u;
+        cmd.vertexOffset  = 0;
+        cmd.firstInstance = gID;
+
+        // Bin: Masked (blendMode==1) or Opaque
+        if (mat.blendMode == 1) {
+            uint idx = atomicAdd(MaskedCnt, 1u);
+            MaskedCmds[idx] = cmd;
+        } else {
+            uint idx = atomicAdd(OpaqueCnt, 1u);
+            OpaqueCmds[idx] = cmd;
+        }
+    }
+}

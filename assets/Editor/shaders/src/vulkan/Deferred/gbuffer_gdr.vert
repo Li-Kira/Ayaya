@@ -15,7 +15,7 @@ struct GPUInstance {
     uint geometryRangeIdx;
     uint materialIdx;
     uint entityId;
-    uint _pad;
+    uint flags;
 };
 layout(std430, set = 2, binding = 0) readonly buffer InstanceBuffer {
     GPUInstance Instances[];

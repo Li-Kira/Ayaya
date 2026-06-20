@@ -26,8 +26,7 @@ namespace Ayaya {
             Application::Get().GetWindow().GetContext());
         if (!context) return;
         VkDevice device = context->GetDevice();
-        if (m_GDR_SetLayout)     vkDestroyDescriptorSetLayout(device, m_GDR_SetLayout, nullptr);
-        if (m_GDR_Pool)          vkDestroyDescriptorPool(device, m_GDR_Pool, nullptr);
+        // GDR set=2 layout/pool owned by GDRContext — no need to destroy here
         if (m_Cull_Set3Layout)   vkDestroyDescriptorSetLayout(device, m_Cull_Set3Layout, nullptr);
         if (m_Cull_Set3Pool)     vkDestroyDescriptorPool(device, m_Cull_Set3Pool, nullptr);
         if (m_Cull_DummyLayout)  vkDestroyDescriptorSetLayout(device, m_Cull_DummyLayout, nullptr);
@@ -52,86 +51,10 @@ namespace Ayaya {
         VkDevice device = vkCtx->GetDevice();
         uint32_t fiCount = vkCtx->GetFramesInFlight();
 
-        // ── GPU-Driven Rendering (GDR) — SSBO-based instance & material data ──
-        {
-            uint32_t fiCount = vkCtx->GetFramesInFlight();
-
-            // Set=2 layout: 4 bindings for GPU-Driven Rendering
-            //   0 = GPUInstance[]      (VERTEX | FRAGMENT)
-            //   1 = GeometryRange[]    (VERTEX)
-            //   2 = GPUMaterial[]      (VERTEX | FRAGMENT)
-            //   3 = GeometryBuffer     (VERTEX) — uint g_Data[] for vertex pulling
-            VkDescriptorSetLayoutBinding gdrBindings[4] = {};
-            gdrBindings[0].binding = 0; gdrBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            gdrBindings[0].descriptorCount = 1; gdrBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
-            gdrBindings[1].binding = 1; gdrBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            gdrBindings[1].descriptorCount = 1; gdrBindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
-            gdrBindings[2].binding = 2; gdrBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            gdrBindings[2].descriptorCount = 1; gdrBindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-            gdrBindings[3].binding = 3; gdrBindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            gdrBindings[3].descriptorCount = 1; gdrBindings[3].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-            VkDescriptorSetLayoutCreateInfo layoutCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-            layoutCI.bindingCount = 4;
-            layoutCI.pBindings = gdrBindings;
-            vkCreateDescriptorSetLayout(device, &layoutCI, nullptr, &m_GDR_SetLayout);
-
-            VkDescriptorPoolSize poolSize{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, fiCount * 4 };
-            VkDescriptorPoolCreateInfo poolCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
-            poolCI.maxSets = fiCount;
-            poolCI.poolSizeCount = 1;
-            poolCI.pPoolSizes = &poolSize;
-            vkCreateDescriptorPool(device, &poolCI, nullptr, &m_GDR_Pool);
-
-            m_GDR_DescriptorSets.resize(fiCount);
-            std::vector<VkDescriptorSetLayout> layouts(fiCount, m_GDR_SetLayout);
-            VkDescriptorSetAllocateInfo alloc{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
-            alloc.descriptorPool = m_GDR_Pool;
-            alloc.descriptorSetCount = fiCount;
-            alloc.pSetLayouts = layouts.data();
-            vkAllocateDescriptorSets(device, &alloc, m_GDR_DescriptorSets.data());
-
-            m_GDR_InstanceSSBO  = std::make_unique<VulkanStorageBuffer>(
-                kGDRMaxInstances * sizeof(GPUInstance));
-            m_GDR_GeometryRangeSSBO = std::make_unique<VulkanStorageBuffer>(
-                kGDRMaxMeshes * sizeof(GeometryRange));
-            m_GDR_MaterialSSBO  = std::make_unique<VulkanStorageBuffer>(
-                kGDRMaxMaterials * sizeof(GPUMaterial));
-
-            // Pre-bind descriptor sets: VkBuffer handles are fixed per frame,
-            // only the mapped data changes via SetData(). Write once at init.
-            VkBuffer geoBuf = vkCtx->GetGeometryPool().GetBuffer();
-            for (uint32_t i = 0; i < fiCount; i++) {
-                VkDescriptorBufferInfo instI{}, rangeI{}, matI{}, geoI{};
-                instI.buffer  = m_GDR_InstanceSSBO->GetBuffer(i);
-                instI.offset  = 0; instI.range  = VK_WHOLE_SIZE;
-                rangeI.buffer = m_GDR_GeometryRangeSSBO->GetBuffer(i);
-                rangeI.offset = 0; rangeI.range = VK_WHOLE_SIZE;
-                matI.buffer   = m_GDR_MaterialSSBO->GetBuffer(i);
-                matI.offset   = 0; matI.range   = VK_WHOLE_SIZE;
-                geoI.buffer   = geoBuf;
-                geoI.offset   = 0; geoI.range   = VK_WHOLE_SIZE;
-
-                VkWriteDescriptorSet w[4]{};
-                w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                w[0].dstSet = m_GDR_DescriptorSets[i]; w[0].dstBinding = 0;
-                w[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                w[0].descriptorCount = 1; w[0].pBufferInfo = &instI;
-                w[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                w[1].dstSet = m_GDR_DescriptorSets[i]; w[1].dstBinding = 1;
-                w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                w[1].descriptorCount = 1; w[1].pBufferInfo = &rangeI;
-                w[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                w[2].dstSet = m_GDR_DescriptorSets[i]; w[2].dstBinding = 2;
-                w[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                w[2].descriptorCount = 1; w[2].pBufferInfo = &matI;
-                w[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                w[3].dstSet = m_GDR_DescriptorSets[i]; w[3].dstBinding = 3;
-                w[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                w[3].descriptorCount = 1; w[3].pBufferInfo = &geoI;
-                vkUpdateDescriptorSets(device, 4, w, 0, nullptr);
-            }
-
+        // ── GPU-Driven Rendering (GDR) — SSBO data is in shared GDRContext ──
+        if (!m_GDRCtx) {
+            AYAYA_CORE_ERROR("VulkanGBufferPass: GDRContext is null! GPU-Driven rendering disabled.");
+        } else {
             // Create the GDR pipeline with empty vertex layout (SSBO vertex pulling)
             m_GDRShader = Shader::Create("Deferred/gbuffer_gdr.vert", "Deferred/gbuffer_gdr_bindless.frag");
             PipelineSpecification gdrSpec;
@@ -142,7 +65,7 @@ namespace Ayaya {
             gdrSpec.Blend = false;
             gdrSpec.BackfaceCulling = CullMode::None;
             gdrSpec.UseBindlessTextures = true;
-            VulkanPipeline::s_ExtraSetLayouts = { m_GDR_SetLayout };
+            VulkanPipeline::s_ExtraSetLayouts = { m_GDRCtx->Set2Layout };
             m_GDRPipeline = Pipeline::Create(gdrSpec);
             VulkanPipeline::s_ExtraSetLayouts.clear();
         }
@@ -216,7 +139,7 @@ namespace Ayaya {
             // Build compute pipeline and layout
             // Indices must match shader set=N: [0]=dummy, [1]=dummy, [2]=GDR, [3]=Cull
             VkDescriptorSetLayout compSetLayouts[] = { m_Cull_DummyLayout, m_Cull_DummyLayout,
-                m_GDR_SetLayout, m_Cull_Set3Layout };
+                m_GDRCtx->Set2Layout, m_Cull_Set3Layout };
             VkPushConstantRange pcRange{ VK_SHADER_STAGE_COMPUTE_BIT, 0, 112 };
             VkPipelineLayoutCreateInfo plCI{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
             plCI.setLayoutCount = 4; plCI.pSetLayouts = compSetLayouts;
@@ -241,109 +164,59 @@ namespace Ayaya {
     if (!fbo) return;
 
     auto* queue = context.RenderQueue;
-    if (!queue || queue->Packets.empty()) return;
+    if (!queue || queue->Packets.empty()) {
+        // Unconditionally clear GBuffer to prevent ghost rendering from previous frame
+        cmd.BeginRenderPass(fbo, true, glm::vec4(0.0f));
+        cmd.EndRenderPass();
+        return;
+    }
 
     // ── GPU-Driven Rendering — build SSBO data, compute cull, indirect draw ──
     {
         auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
             Application::Get().GetWindow().GetContext());
 
-        // Build GDR data vectors
-        std::vector<GPUInstance> gdrInstances;
-        std::vector<GPUMaterial> gdrMaterials;
-        std::vector<GeometryRange> gdrRanges;
-        gdrInstances.reserve(queue->Packets.size());
-        gdrMaterials.reserve(64);
-        gdrRanges.reserve(64);
+        // Guard: if context or pipeline is unavailable, clear GBuffer and bail
+        if (!vkCtx || !m_GDRPipeline || !m_GDRCtx) {
+            cmd.BeginRenderPass(fbo, true, glm::vec4(0.0f));
+            cmd.EndRenderPass();
+            context.Framebuffers["GBuffer"] = fbo;
+            return;
+        }
 
-        if (vkCtx && m_GDRPipeline) {
+        {
             uint32_t frameIdx = vkCtx->GetCurrentFrameIndex() % vkCtx->GetFramesInFlight();
             VkCommandBuffer vkCmd = vkCtx->GetCurrentCommandBuffer();
             auto& pool = vkCtx->GetGeometryPool();
 
-            // Resource Staging: ensure all meshes are in the geometry pool
-            for (const auto& pkt : queue->Packets) {
-                if (pkt.MeshAsset) pool.GetOrUploadMesh(pkt.MeshAsset.get());
-            }
-
-            std::unordered_map<Mesh*, uint32_t> meshToRange;
-            std::unordered_map<uint64_t, uint32_t> matMap;
-
-            for (const auto& pkt : queue->Packets) {
-                SortKey k; k.Value = pkt.SortKey;
-                if (k.Bits.BucketID > 1) continue;
-                if (!pkt.MeshAsset || !pkt.MaterialAsset) continue;
-
-                uint32_t rangeIdx;
-                auto rit = meshToRange.find(pkt.MeshAsset.get());
-                if (rit != meshToRange.end()) {
-                    rangeIdx = rit->second;
-                } else {
-                    rangeIdx = (uint32_t)gdrRanges.size();
-                    auto range = pool.GetOrUploadMesh(pkt.MeshAsset.get());
-                    gdrRanges.push_back(range);
-                    meshToRange[pkt.MeshAsset.get()] = rangeIdx;
-                }
-
-                uint64_t matHash = k.Bits.MaterialHash;
-                uint32_t matIdx;
-                auto mit = matMap.find(matHash);
-                if (mit != matMap.end()) {
-                    matIdx = mit->second;
-                } else {
-                    matIdx = (uint32_t)gdrMaterials.size();
-                    matMap[matHash] = matIdx;
-                    GPUMaterial gm{};
-                    auto& b = pkt.MaterialAsset->GetBakedPC();
-                    gm.albedo = b.Albedo; gm.metallic = b.Metallic;
-                    gm.roughness = b.Roughness; gm.ao = b.AO; gm.alpha = b.Alpha;
-                    gm.albedoBindless   = (int)b.AlbedoMapIndex;
-                    gm.normalBindless   = (int)b.NormalMapIndex;
-                    gm.ormBindless      = (int)b.ORMMapIndex;
-                    gm.metallicBindless  = (int)b.MetallicMapIndex;
-                    gm.roughnessBindless = (int)b.RoughnessMapIndex;
-                    gm.aoBindless        = (int)b.AOMapIndex;
-                    gm.useORMMap   = (int)b.UseORMMap;
-                    gm.alphaCutoff = pkt.MaterialAsset->GetAlphaCutoff();
-                    gm.blendMode   = (int)pkt.MaterialAsset->GetBlendMode();
-                    gdrMaterials.push_back(gm);
-                }
-
-                GPUInstance gi{};
-                gi.transform = pkt.Transform;
-                AABB aabb = pkt.MeshAsset->GetAABB();
-                glm::vec3 center = (aabb.Min + aabb.Max) * 0.5f;
-                glm::vec3 worldCenter = glm::vec3(pkt.Transform * glm::vec4(center, 1.0f));
-                float radius = glm::length(aabb.Max - aabb.Min) * 0.5f;
-                gi.boundingSphere = glm::vec4(worldCenter, radius);
-                gi.geometryRangeIdx = rangeIdx;
-                gi.materialIdx = matIdx;
-                gi.entityId = (uint32_t)(k.Bits.EntityID);
-                gi._pad = 0;
-                gdrInstances.push_back(gi);
-            }
-
-            // Upload scene data to SSBOs (memcpy to persistent-mapped buffers)
-            m_GDR_InstanceSSBO->SetData(gdrInstances.data(),
-                (uint32_t)(gdrInstances.size() * sizeof(GPUInstance)));
-            m_GDR_GeometryRangeSSBO->SetData(gdrRanges.data(),
-                (uint32_t)(gdrRanges.size() * sizeof(GeometryRange)));
-            m_GDR_MaterialSSBO->SetData(gdrMaterials.data(),
-                (uint32_t)(gdrMaterials.size() * sizeof(GPUMaterial)));
-
-            uint32_t instanceCount = (uint32_t)gdrInstances.size();
+            // ── Shared GDR scene data already built by SceneRenderer::RenderScene() ──
+            uint32_t instanceCount = m_GDRCtx->InstanceCount;
 
             if (instanceCount > 0) {
+                // ── Host → Device barrier: ensure all CPU writes (SetData, pool uploads) ──
+                VkMemoryBarrier hostBarrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER };
+                hostBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+                hostBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT
+                                           | VK_ACCESS_INDEX_READ_BIT;
+                vkCmdPipelineBarrier(vkCmd,
+                    VK_PIPELINE_STAGE_HOST_BIT,
+                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT
+                        | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0,
+                    1, &hostBarrier, 0, nullptr, 0, nullptr);
+
                 // ── Compute culling (outside render pass) ──
                 vkCmdBindPipeline(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_Cull_Pipeline);
-                vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-                    m_Cull_PipelineLayout, 2, 1, &m_GDR_DescriptorSets[frameIdx], 0, nullptr);
+                m_GDRCtx->BindSet2(vkCmd, m_Cull_PipelineLayout,
+                    VK_PIPELINE_BIND_POINT_COMPUTE, frameIdx);
                 vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE,
                     m_Cull_PipelineLayout, 3, 1, &m_Cull_Set3Descriptors[frameIdx], 0, nullptr);
 
                 struct FrustumPush { glm::vec4 planes[6]; uint32_t count; uint32_t _pad[3]; } fpc;
                 glm::mat4 vp = context.ProjectionMatrix * context.ViewMatrix;
-                glm::vec4 rows[4] = { vp[0], vp[1], vp[2], vp[3] };
+                // Gribb-Hartmann requires ROWS of VP matrix, but glm::mat4[i] returns COLUMNS.
+                // Transpose first so vpT[i] gives row i as a vec4.
+                glm::mat4 vpT = glm::transpose(vp);
+                glm::vec4 rows[4] = { vpT[0], vpT[1], vpT[2], vpT[3] };
                 fpc.planes[0] = glm::normalize(glm::vec4(glm::vec3(rows[3] + rows[0]), rows[3].w + rows[0].w));
                 fpc.planes[1] = glm::normalize(glm::vec4(glm::vec3(rows[3] - rows[0]), rows[3].w - rows[0].w));
                 fpc.planes[2] = glm::normalize(glm::vec4(glm::vec3(rows[3] + rows[1]), rows[3].w + rows[1].w));
@@ -374,7 +247,7 @@ namespace Ayaya {
                 if (gdrPipe) {
                     vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                         gdrPipe->GetVulkanPipelineLayout(),
-                        2, 1, &m_GDR_DescriptorSets[frameIdx], 0, nullptr);
+                        2, 1, &m_GDRCtx->Set2Descriptors[frameIdx], 0, nullptr);
                 }
                 vkCmdDrawIndexedIndirect(vkCmd,
                     m_DrawIndirectBuffer->GetBuffer(frameIdx), 0,

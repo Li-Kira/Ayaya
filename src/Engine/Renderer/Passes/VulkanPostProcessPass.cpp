@@ -10,6 +10,7 @@ namespace Ayaya {
         m_PostProcessShader = Shader::Create("PostProcess/postprocess.vert", "PostProcess/postprocess.frag");
         m_PipeSpec.Shader = m_PostProcessShader;
         m_PipeSpec.Layout = {};
+        m_PipeSpec.Topology = PrimitiveTopology::TriangleStrip;
         m_PipeSpec.DepthTest = false;
         m_PipeSpec.DepthWrite = false;
         m_PipeSpec.Blend = false;

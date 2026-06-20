@@ -51,7 +51,7 @@ namespace Ayaya {
         fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
         fragShaderStageInfo.module = vulkanShader->GetFragmentShaderModule();
         fragShaderStageInfo.pName = "main";
-        if (fragShaderStageInfo.module != VK_NULL_HANDLE) shaderStages.push_back(fragShaderStageInfo);
+        if (fragShaderStageInfo.module != VK_NULL_HANDLE && !spec.NoFragmentShader) shaderStages.push_back(fragShaderStageInfo);
 
         // ==========================================
         // 2. 顶点输入 (Vertex Input) - 动态解析 BufferLayout
@@ -103,9 +103,10 @@ namespace Ayaya {
         VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         switch (spec.Topology) {
+            case PrimitiveTopology::Triangles:     inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; break;
             case PrimitiveTopology::Lines:         inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST; break;
             case PrimitiveTopology::TriangleStrip: inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP; break;
-            default: inputAssembly.topology = attributeDescriptions.empty() ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; break;
+            default:                               inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; break;
         }
         inputAssembly.primitiveRestartEnable = VK_FALSE;
 
@@ -136,6 +137,10 @@ namespace Ayaya {
         else if (spec.PolygonMode == PolygonMode::Point) rasterizer.polygonMode = VK_POLYGON_MODE_POINT;
         else rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer.lineWidth = spec.LineWidth;
+        rasterizer.depthBiasEnable = spec.DepthBiasEnable ? VK_TRUE : VK_FALSE;
+        rasterizer.depthBiasConstantFactor = spec.DepthBiasConstantFactor;
+        rasterizer.depthBiasSlopeFactor = spec.DepthBiasSlopeFactor;
+        rasterizer.depthBiasClamp = spec.DepthBiasClamp;
         
         rasterizer.cullMode = VK_CULL_MODE_NONE;
         if (spec.BackfaceCulling == CullMode::Back) rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
@@ -299,7 +304,9 @@ namespace Ayaya {
         // 8. 管线布局 (Push Constants & Descriptor Sets)
         // ==========================================
         VkPushConstantRange pushConstantRange{};
-        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        pushConstantRange.stageFlags = spec.NoFragmentShader
+            ? VK_SHADER_STAGE_VERTEX_BIT
+            : (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
         pushConstantRange.offset = 0;
         pushConstantRange.size = 256;
 

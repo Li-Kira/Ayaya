@@ -2,6 +2,7 @@
 #include "Window.hpp"
 #include "Core/Log.hpp"
 #include "Renderer/Renderer.hpp" // 【新增】：获取当前激活的 API
+#include "Platform/Vulkan/VulkanContext.hpp"
 
 namespace Ayaya {
 
@@ -119,7 +120,8 @@ namespace Ayaya {
             }
         });
 
-        SetVSync(true);
+        // VSync defaults to false — PreferencesPanel will set the correct value after loading
+        SetVSync(false);
     }
 
     Window::~Window() {
@@ -128,8 +130,13 @@ namespace Ayaya {
     }
 
     void Window::SetVSync(bool enabled) {
-        if (enabled) glfwSwapInterval(1);
-        else glfwSwapInterval(0);
+        if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+            auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(m_Context);
+            if (vkCtx) vkCtx->SetVSync(enabled);
+        } else {
+            if (enabled) glfwSwapInterval(1);
+            else glfwSwapInterval(0);
+        }
         m_Data.VSync = enabled;
     }
 

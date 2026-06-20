@@ -23,6 +23,7 @@ namespace Ayaya {
         VmaAllocationCreateInfo allocInfo{};
         allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
         allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+        allocInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;  // must be coherent: no explicit flush needed
 
         VkResult result = vmaCreateBuffer(allocator, &bufferInfo, &allocInfo,
             &m_Buffer, &m_Allocation, nullptr);
@@ -46,6 +47,14 @@ namespace Ayaya {
         uint32_t vertexCount, uint32_t indexCount)
     {
         GeometryRange range{};
+
+        // Bounds check: ensure pool has space for vertex + index data (with 16-byte alignment padding)
+        VkDeviceSize required = vertexSize + indexSize + 32; // 32 bytes slop for alignment
+        if (m_Cursor + required > m_Size) {
+            AYAYA_CORE_ERROR("GlobalGeometryPool: out of space! Cursor={0} + Required={1} > Size={2} (256MB limit). "
+                "Consider increasing pool size or reducing mesh count.", m_Cursor, required, m_Size);
+            return range;
+        }
 
         // Map and write vertex data
         if (vertexData && vertexSize > 0) {

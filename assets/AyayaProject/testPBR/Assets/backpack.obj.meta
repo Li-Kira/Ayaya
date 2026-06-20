@@ -1,0 +1,333 @@
+uuid: 9157647767236758374
+type: 4
+model_settings:
+  global_scale: 1
+  normals: 0
+  tangents: 0
+  import_materials: true
+  optimize_mesh: true
+  weld_vertices: false
+  mesh_compression: false
+  swap_yz: false
+  material_search_rule: 0
+  import_animations: false
+  merge_meshes: false
+  combine_into_prefab: true
+virtual_path: project://backpack.obj
+sub_assets:
+  - uuid: 18017202118744276211
+    name: backpack_Mesh0
+    sub_mesh_index: 0
+    type: 8
+  - uuid: 5623959323422374965
+    name: backpack_Mesh1
+    sub_mesh_index: 1
+    type: 8
+  - uuid: 13749975899708494703
+    name: backpack_Mesh2
+    sub_mesh_index: 2
+    type: 8
+  - uuid: 5226471735966072861
+    name: backpack_Mesh3
+    sub_mesh_index: 3
+    type: 8
+  - uuid: 5275847428103761607
+    name: backpack_Mesh4
+    sub_mesh_index: 4
+    type: 8
+  - uuid: 5618496282460959139
+    name: backpack_Mesh5
+    sub_mesh_index: 5
+    type: 8
+  - uuid: 13793083007601610938
+    name: backpack_Mesh6
+    sub_mesh_index: 6
+    type: 8
+  - uuid: 2290748268865273201
+    name: backpack_Mesh7
+    sub_mesh_index: 7
+    type: 8
+  - uuid: 2213268100961957911
+    name: backpack_Mesh8
+    sub_mesh_index: 8
+    type: 8
+  - uuid: 18144943400737495912
+    name: backpack_Mesh9
+    sub_mesh_index: 9
+    type: 8
+  - uuid: 6627035028850076876
+    name: backpack_Mesh10
+    sub_mesh_index: 10
+    type: 8
+  - uuid: 5292971025553572959
+    name: backpack_Mesh11
+    sub_mesh_index: 11
+    type: 8
+  - uuid: 1439972891220542625
+    name: backpack_Mesh12
+    sub_mesh_index: 12
+    type: 8
+  - uuid: 11928733496020020768
+    name: backpack_Mesh13
+    sub_mesh_index: 13
+    type: 8
+  - uuid: 14795276621737488941
+    name: backpack_Mesh14
+    sub_mesh_index: 14
+    type: 8
+  - uuid: 300338511758584519
+    name: backpack_Mesh15
+    sub_mesh_index: 15
+    type: 8
+  - uuid: 18373566533324133028
+    name: backpack_Mesh16
+    sub_mesh_index: 16
+    type: 8
+  - uuid: 4812822911092093165
+    name: backpack_Mesh17
+    sub_mesh_index: 17
+    type: 8
+  - uuid: 9664854797406794800
+    name: backpack_Mesh18
+    sub_mesh_index: 18
+    type: 8
+  - uuid: 4176755638100155010
+    name: backpack_Mesh19
+    sub_mesh_index: 19
+    type: 8
+  - uuid: 16100279356202699373
+    name: backpack_Mesh20
+    sub_mesh_index: 20
+    type: 8
+  - uuid: 11849162980957677807
+    name: backpack_Mesh21
+    sub_mesh_index: 21
+    type: 8
+  - uuid: 10460055015190472796
+    name: backpack_Mesh22
+    sub_mesh_index: 22
+    type: 8
+  - uuid: 13855541582571003610
+    name: backpack_Mesh23
+    sub_mesh_index: 23
+    type: 8
+  - uuid: 15773275874799043811
+    name: backpack_Mesh24
+    sub_mesh_index: 24
+    type: 8
+  - uuid: 5986479244567078683
+    name: backpack_Mesh25
+    sub_mesh_index: 25
+    type: 8
+  - uuid: 6508594397592824392
+    name: backpack_Mesh26
+    sub_mesh_index: 26
+    type: 8
+  - uuid: 9766376863256867993
+    name: backpack_Mesh27
+    sub_mesh_index: 27
+    type: 8
+  - uuid: 583942058031210691
+    name: backpack_Mesh28
+    sub_mesh_index: 28
+    type: 8
+  - uuid: 856668421074080411
+    name: backpack_Mesh29
+    sub_mesh_index: 29
+    type: 8
+  - uuid: 2715322506711700275
+    name: backpack_Mesh30
+    sub_mesh_index: 30
+    type: 8
+  - uuid: 4752889413426453395
+    name: backpack_Mesh31
+    sub_mesh_index: 31
+    type: 8
+  - uuid: 16348308257946355625
+    name: backpack_Mesh32
+    sub_mesh_index: 32
+    type: 8
+  - uuid: 11696180141873609342
+    name: backpack_Mesh33
+    sub_mesh_index: 33
+    type: 8
+  - uuid: 2136294278660154549
+    name: backpack_Mesh34
+    sub_mesh_index: 34
+    type: 8
+  - uuid: 543036453755385157
+    name: backpack_Mesh35
+    sub_mesh_index: 35
+    type: 8
+  - uuid: 4751466435840325022
+    name: backpack_Mesh36
+    sub_mesh_index: 36
+    type: 8
+  - uuid: 6752069198489646226
+    name: backpack_Mesh37
+    sub_mesh_index: 37
+    type: 8
+  - uuid: 10796879644918869127
+    name: backpack_Mesh38
+    sub_mesh_index: 38
+    type: 8
+  - uuid: 15426691087286873926
+    name: backpack_Mesh39
+    sub_mesh_index: 39
+    type: 8
+  - uuid: 13679745002245760011
+    name: backpack_Mesh40
+    sub_mesh_index: 40
+    type: 8
+  - uuid: 10244298070241184710
+    name: backpack_Mesh41
+    sub_mesh_index: 41
+    type: 8
+  - uuid: 16858661103990194466
+    name: backpack_Mesh42
+    sub_mesh_index: 42
+    type: 8
+  - uuid: 4116669311355390574
+    name: backpack_Mesh43
+    sub_mesh_index: 43
+    type: 8
+  - uuid: 14608398300363191155
+    name: backpack_Mesh44
+    sub_mesh_index: 44
+    type: 8
+  - uuid: 9085182071299941807
+    name: backpack_Mesh45
+    sub_mesh_index: 45
+    type: 8
+  - uuid: 4777109824254074564
+    name: backpack_Mesh46
+    sub_mesh_index: 46
+    type: 8
+  - uuid: 11337278026301558023
+    name: backpack_Mesh47
+    sub_mesh_index: 47
+    type: 8
+  - uuid: 2968589715725727097
+    name: backpack_Mesh48
+    sub_mesh_index: 48
+    type: 8
+  - uuid: 9881647641059229224
+    name: backpack_Mesh49
+    sub_mesh_index: 49
+    type: 8
+  - uuid: 12675581136920444580
+    name: backpack_Mesh50
+    sub_mesh_index: 50
+    type: 8
+  - uuid: 7038481429924866039
+    name: backpack_Mesh51
+    sub_mesh_index: 51
+    type: 8
+  - uuid: 10556791546231069248
+    name: backpack_Mesh52
+    sub_mesh_index: 52
+    type: 8
+  - uuid: 14806367415046394699
+    name: backpack_Mesh53
+    sub_mesh_index: 53
+    type: 8
+  - uuid: 3461603371109144017
+    name: backpack_Mesh54
+    sub_mesh_index: 54
+    type: 8
+  - uuid: 7822719224834880012
+    name: backpack_Mesh55
+    sub_mesh_index: 55
+    type: 8
+  - uuid: 9469266038083875234
+    name: backpack_Mesh56
+    sub_mesh_index: 56
+    type: 8
+  - uuid: 4042022583148265628
+    name: backpack_Mesh57
+    sub_mesh_index: 57
+    type: 8
+  - uuid: 526456319507955688
+    name: backpack_Mesh58
+    sub_mesh_index: 58
+    type: 8
+  - uuid: 14374512612179653667
+    name: backpack_Mesh59
+    sub_mesh_index: 59
+    type: 8
+  - uuid: 5422463895962826673
+    name: backpack_Mesh60
+    sub_mesh_index: 60
+    type: 8
+  - uuid: 2746255072819170122
+    name: backpack_Mesh61
+    sub_mesh_index: 61
+    type: 8
+  - uuid: 8001688569434954519
+    name: backpack_Mesh62
+    sub_mesh_index: 62
+    type: 8
+  - uuid: 4901568796054032413
+    name: backpack_Mesh63
+    sub_mesh_index: 63
+    type: 8
+  - uuid: 9129547081039203968
+    name: backpack_Mesh64
+    sub_mesh_index: 64
+    type: 8
+  - uuid: 5932970092050534126
+    name: backpack_Mesh65
+    sub_mesh_index: 65
+    type: 8
+  - uuid: 3727367012414915982
+    name: backpack_Mesh66
+    sub_mesh_index: 66
+    type: 8
+  - uuid: 8762635541954762173
+    name: backpack_Mesh67
+    sub_mesh_index: 67
+    type: 8
+  - uuid: 11579007606180750604
+    name: backpack_Mesh68
+    sub_mesh_index: 68
+    type: 8
+  - uuid: 17039042276370490986
+    name: backpack_Mesh69
+    sub_mesh_index: 69
+    type: 8
+  - uuid: 15407117763551543389
+    name: backpack_Mesh70
+    sub_mesh_index: 70
+    type: 8
+  - uuid: 8551195302048196265
+    name: backpack_Mesh71
+    sub_mesh_index: 71
+    type: 8
+  - uuid: 4909007226769495374
+    name: backpack_Mesh72
+    sub_mesh_index: 72
+    type: 8
+  - uuid: 12407548435573239971
+    name: backpack_Mesh73
+    sub_mesh_index: 73
+    type: 8
+  - uuid: 18223352198204406893
+    name: backpack_Mesh74
+    sub_mesh_index: 74
+    type: 8
+  - uuid: 2092604746151636992
+    name: backpack_Mesh75
+    sub_mesh_index: 75
+    type: 8
+  - uuid: 5038191324879960968
+    name: backpack_Mesh76
+    sub_mesh_index: 76
+    type: 8
+  - uuid: 5348355009723739452
+    name: backpack_Mesh77
+    sub_mesh_index: 77
+    type: 8
+  - uuid: 343779822124055261
+    name: backpack_Mesh78
+    sub_mesh_index: 78
+    type: 8

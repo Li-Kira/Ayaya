@@ -68,6 +68,13 @@ namespace Ayaya {
         bool NoTextureDescriptors = false; // 跳过 Set 1 (纹理) 描述符集
         bool NoGlobalUBOs = false;          // 跳过 Set 0 (UBO) 描述符集 — UI 管线专用
         bool UseBindlessTextures = false;   // 使用全局 Bindless 纹理数组替代传统纹理绑定
+        bool NoFragmentShader = false;      // VS-only pipeline (depth-only, no fragment stage — enables hardware Early-Z)
+
+        // Depth bias (shadow acne prevention, depth-only passes)
+        bool DepthBiasEnable = false;
+        float DepthBiasConstantFactor = 0.0f;
+        float DepthBiasSlopeFactor = 0.0f;
+        float DepthBiasClamp = 0.0f;
 
         // Stencil state (for Lighting pass culling of background pixels)
         bool StencilTestEnable = false;

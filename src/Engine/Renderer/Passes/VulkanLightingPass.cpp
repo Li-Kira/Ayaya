@@ -24,6 +24,7 @@ namespace Ayaya {
 
         m_DeferredShader = Shader::Create("Deferred/deferred_lighting.vert", "Deferred/deferred_lighting.frag");
         m_DeferredPipeSpec.Shader = m_DeferredShader; m_DeferredPipeSpec.Layout = {};
+        m_DeferredPipeSpec.Topology = PrimitiveTopology::TriangleStrip;
         m_DeferredPipeSpec.TargetFramebuffer = m_RefFBO;
         m_DeferredPipeSpec.DepthTest = true; m_DeferredPipeSpec.DepthWrite = true; // writes gl_FragDepth
         m_DeferredPipeSpec.Blend = false; m_DeferredPipeSpec.BackfaceCulling = CullMode::None;

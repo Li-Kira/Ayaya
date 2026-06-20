@@ -31,12 +31,6 @@ namespace Ayaya {
             AYAYA_CORE_INFO("Vulkan Descriptor Pool destroyed.");
         }
 
-        for (size_t i = 0; i < m_RenderFinishedSemaphores.size(); i++) {
-            vkDestroySemaphore(m_Device, m_RenderFinishedSemaphores[i], nullptr);
-            vkDestroySemaphore(m_Device, m_ImageAvailableSemaphores[i], nullptr);
-            vkDestroyFence(m_Device, m_InFlightFences[i], nullptr);
-        }
-
         if (m_CommandPool != VK_NULL_HANDLE) {
             vkDestroyCommandPool(m_Device, m_CommandPool, nullptr);
         }
@@ -47,7 +41,20 @@ namespace Ayaya {
             vkDestroyQueryPool(m_Device, m_TimestampPool, nullptr);
         }
 
-        CleanupSwapChain();
+        CleanupSwapChain();  // destroys swapchain + image views
+
+        // Destroy sync objects (not in CleanupSwapChain — presentation engine may
+        // hold stale references across swapchain recreations; safe to destroy only at shutdown)
+        for (size_t i = 0; i < m_ImageAvailableSemaphores.size(); i++) {
+            if (m_ImageAvailableSemaphores[i]) vkDestroySemaphore(m_Device, m_ImageAvailableSemaphores[i], nullptr);
+            if (m_RenderFinishedSemaphores[i])  vkDestroySemaphore(m_Device, m_RenderFinishedSemaphores[i], nullptr);
+        }
+        for (size_t i = 0; i < m_InFlightFences.size(); i++) {
+            if (m_InFlightFences[i]) vkDestroyFence(m_Device, m_InFlightFences[i], nullptr);
+        }
+        m_ImageAvailableSemaphores.clear();
+        m_RenderFinishedSemaphores.clear();
+        m_InFlightFences.clear();
 
         if (m_Device != VK_NULL_HANDLE) {
             vkDestroyDevice(m_Device, nullptr);
@@ -221,7 +228,9 @@ namespace Ayaya {
         }
 
         VkPhysicalDeviceFeatures deviceFeatures{};
-        deviceFeatures.independentBlend = VK_TRUE;  // WBOIT per-attachment blend
+        deviceFeatures.independentBlend = VK_TRUE;               // WBOIT per-attachment blend
+        deviceFeatures.multiDrawIndirect = VK_TRUE;              // GDR: drawCount > 1
+        deviceFeatures.drawIndirectFirstInstance = VK_TRUE;      // GDR: firstInstance != 0 per draw
 
         // Vulkan 1.2 features (bindless descriptors)
         VkPhysicalDeviceVulkan12Features vk12Features{};
@@ -231,6 +240,7 @@ namespace Ayaya {
         vk12Features.descriptorBindingVariableDescriptorCount = VK_TRUE;
         vk12Features.runtimeDescriptorArray = VK_TRUE;
         vk12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+        vk12Features.drawIndirectCount = VK_TRUE;                 // GDR: vkCmdDrawIndexedIndirectCount
 
         // Vulkan 1.3 feature: dynamic rendering
         VkPhysicalDeviceVulkan13Features vk13Features{};
@@ -322,6 +332,15 @@ namespace Ayaya {
     }
 
     VkPresentModeKHR VulkanContext::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
+        if (m_VSync) {
+            return VK_PRESENT_MODE_FIFO_KHR;  // VSync: guaranteed available, no tearing
+        }
+        // Uncapped: prefer IMMEDIATE, fallback MAILBOX, then FIFO
+        for (const auto& availablePresentMode : availablePresentModes) {
+            if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
+                return availablePresentMode;
+            }
+        }
         for (const auto& availablePresentMode : availablePresentModes) {
             if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
                 return availablePresentMode;
@@ -432,22 +451,38 @@ namespace Ayaya {
     }
 
     void VulkanContext::CreateSyncObjects() {
-        m_ImageAvailableSemaphores.resize(m_FramesInFlight);
-        m_RenderFinishedSemaphores.resize(m_FramesInFlight);
-        m_InFlightFences.resize(m_FramesInFlight);
+        // Per-swapchain-image semaphores — avoids stale associations after swapchain recreation.
+        uint32_t imageCount = (uint32_t)m_SwapChainImages.size();
+        uint32_t oldSemCount = (uint32_t)m_ImageAvailableSemaphores.size();
+
+        // Destroy any excess semaphores if swapchain image count shrunk
+        for (uint32_t i = imageCount; i < oldSemCount; i++) {
+            if (m_ImageAvailableSemaphores[i]) vkDestroySemaphore(m_Device, m_ImageAvailableSemaphores[i], nullptr);
+            if (m_RenderFinishedSemaphores[i])  vkDestroySemaphore(m_Device, m_RenderFinishedSemaphores[i], nullptr);
+        }
+
+        m_ImageAvailableSemaphores.resize(imageCount, VK_NULL_HANDLE);
+        m_RenderFinishedSemaphores.resize(imageCount, VK_NULL_HANDLE);
 
         VkSemaphoreCreateInfo semaphoreInfo{};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-        VkFenceCreateInfo fenceInfo{};
-        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-        for (size_t i = 0; i < m_FramesInFlight; i++) {
+        // Create only the new slots (existing ones remain valid)
+        for (uint32_t i = oldSemCount; i < imageCount; i++) {
             if (vkCreateSemaphore(m_Device, &semaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(m_Device, &semaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS ||
-                vkCreateFence(m_Device, &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS) {
-                AYAYA_CORE_ERROR("Failed to create synchronization objects for a frame!");
+                vkCreateSemaphore(m_Device, &semaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS) {
+                AYAYA_CORE_ERROR("Failed to create semaphore for swapchain image {}", i);
+            }
+        }
+
+        // Fences: per-frame-in-flight (3), indexed by m_CurrentFrame
+        if (m_InFlightFences.empty()) {
+            m_InFlightFences.resize(m_FramesInFlight);
+            VkFenceCreateInfo fenceInfo{};
+            fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+            fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+            for (uint32_t i = 0; i < m_FramesInFlight; i++) {
+                vkCreateFence(m_Device, &fenceInfo, nullptr, &m_InFlightFences[i]);
             }
         }
     }
@@ -526,6 +561,13 @@ namespace Ayaya {
         // Process deferred bindless index releases now that the fence guarantees
         // the GPU has finished with this frame's resources.
         ProcessDeferredBindlessReleases();
+
+        // Deferred swapchain rebuild (e.g., VSync toggle mid-frame).
+        // Safe point: GPU is idle (fence waited), no command buffer recording active.
+        if (m_VSyncPending) {
+            m_VSyncPending = false;
+            RecreateSwapChain();
+        }
 
         VkResult result = vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &m_ImageIndex);
 
@@ -642,7 +684,7 @@ namespace Ayaya {
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &m_CommandBuffers[m_CurrentFrame];
 
-        VkSemaphore signalSemaphores[] = { m_RenderFinishedSemaphores[m_CurrentFrame] };
+        VkSemaphore signalSemaphores[] = { m_RenderFinishedSemaphores[m_ImageIndex] };
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
@@ -719,7 +761,13 @@ namespace Ayaya {
         }
         if (m_SwapChain != VK_NULL_HANDLE) {
             vkDestroySwapchainKHR(m_Device, m_SwapChain, nullptr);
+            m_SwapChain = VK_NULL_HANDLE;
         }
+        // NOTE: Do NOT destroy semaphores/fences here.
+        // The presentation engine may still hold references to semaphores
+        // from the old swapchain. They are resized (if needed) in CreateSyncObjects
+        // after the new swapchain is built. vkDeviceWaitIdle drains GPU queues,
+        // but not the presentation engine.
     }
 
     void VulkanContext::RecreateSwapChain() {
@@ -737,7 +785,18 @@ namespace Ayaya {
 
         CreateSwapChain();
         CreateImageViews();
+        CreateSyncObjects();   // fresh semaphores + fences for the new swapchain
+        m_CurrentFrame = 0;    // reset frame ring-buffer index
         // 动态渲染：不再需要 CreateFramebuffers
+    }
+
+    void VulkanContext::SetVSync(bool vsync) {
+        if (m_VSync == vsync) return;
+        m_VSync = vsync;
+
+        // Defer swapchain rebuild to BeginFrame() — cannot destroy swapchain
+        // mid-frame (e.g., during ImGui rendering) or GPU will crash.
+        if (m_SwapChain != VK_NULL_HANDLE) m_VSyncPending = true;
     }
 
     uint32_t VulkanContext::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {

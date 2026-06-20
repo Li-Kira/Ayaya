@@ -1,0 +1,9 @@
+uuid: 15855101045699267844
+type: 2
+virtual_path: project://specular.jpg
+import_settings:
+  filter: 0
+  wrap: 0
+  srgb: false
+  mipmaps: true
+  flip_y: true

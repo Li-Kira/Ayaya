@@ -54,6 +54,9 @@ namespace Ayaya {
 
         void Init();
         static void Shutdown();
+
+        // Shared GDR data hub (GPUInstance[], GeometryRange[], GPUMaterial[] + set=2 descriptors)
+        static std::shared_ptr<struct GDRContext> s_GDRContext;
         void OnWindowResize(uint32_t width, uint32_t height);
         void MarkViewportDirty() { m_ViewportDirty = true; }
         void* GetFinalColorAttachmentRendererID();

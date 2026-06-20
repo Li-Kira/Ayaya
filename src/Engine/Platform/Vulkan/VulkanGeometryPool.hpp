@@ -15,18 +15,23 @@ namespace Ayaya {
         uint32_t vertexCount  = 0;
         uint32_t indexCount   = 0;
     };
+    static_assert(sizeof(GeometryRange) == 16, "GeometryRange must be 16 bytes (matches GLSL std430)");
 
     // GPU-side instance data (per-frame SSBO)
+    // GLSL std430: mat4(64) + vec4(16) + 3×uint(12) = 92 → padded to 96 (align 16)
     struct alignas(16) GPUInstance {
         glm::mat4 transform;         // 64 bytes
         glm::vec4 boundingSphere;    // 16 bytes — xyz=center, w=radius
         uint32_t geometryRangeIdx;   // index into geometryRanges[] SSBO
         uint32_t materialIdx;        // index into materials[] SSBO
         uint32_t entityId;           // for selection/hover
-        uint32_t _pad;
+        uint32_t flags;              // bit 0 = CastShadows (replaces _pad, still 96 bytes)
+        static constexpr uint32_t kFlag_CastShadows = 1u << 0;
     };
+    static_assert(sizeof(GPUInstance) == 96, "GPUInstance must be 96 bytes (matches GLSL std430)");
 
     // GPU-side material data (uploaded once, updated on material change)
+    // GLSL std430: vec4(16) + 13×scalar(52) + _pad[4](16) = 104 → padded to 112 (align 16)
     struct alignas(16) GPUMaterial {
         glm::vec4 albedo;                    // 16
         float metallic, roughness, ao, alpha; // 16
@@ -36,8 +41,9 @@ namespace Ayaya {
         int metallicBindless, roughnessBindless, aoBindless;     // 12
         float alphaCutoff;                   // 4
         int   blendMode;                     // 4
-        int   _pad[4];                       // 16
+        int   _pad[4];                       // 16 → total 104, alignas(16) → sizeof=112
     };
+    static_assert(sizeof(GPUMaterial) == 112, "GPUMaterial must be 112 bytes (matches GLSL std430)");
 
     // Single global VkBuffer for ALL vertex + index data.
     // Bound via vkCmdBindVertexBuffers / vkCmdBindIndexBuffer with per-mesh offsets.

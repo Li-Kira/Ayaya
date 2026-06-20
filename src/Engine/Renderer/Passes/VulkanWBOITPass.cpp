@@ -208,6 +208,7 @@ namespace Ayaya {
         m_ResolveSpec.Shader = m_ResolveShader;
         m_ResolveSpec.TargetFramebuffer = m_ResolveRefFBO;
         m_ResolveSpec.Layout = {};
+        m_ResolveSpec.Topology = PrimitiveTopology::TriangleStrip;
         m_ResolveSpec.DepthTest = false; m_ResolveSpec.DepthWrite = false;
         m_ResolveSpec.Blend = true; m_ResolveSpec.BlendMode = BlendModeType::Alpha;
         m_ResolveSpec.BackfaceCulling = CullMode::None;

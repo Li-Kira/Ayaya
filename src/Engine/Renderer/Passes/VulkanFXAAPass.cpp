@@ -34,6 +34,7 @@ namespace Ayaya {
         pipeSpec.Shader = m_FXAAShader;
         pipeSpec.TargetFramebuffer = m_RefFBO;
         pipeSpec.Layout = {};
+        pipeSpec.Topology = PrimitiveTopology::TriangleStrip;
         pipeSpec.DepthTest = false;
         pipeSpec.DepthWrite = false;
         pipeSpec.Blend = false;

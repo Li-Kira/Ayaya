@@ -128,6 +128,8 @@ namespace Ayaya {
                 // 【更新】：读取全局底层配置
                 if (prefs["GraphicsAPI"]) GraphicsAPI = prefs["GraphicsAPI"].as<int>();
             }
+            // Apply loaded values
+            Application::Get().GetWindow().SetVSync(EnableVSync);
         } catch (YAML::ParserException e) {
             AYAYA_CORE_ERROR("Failed to load preferences: {0}", e.what());
         }

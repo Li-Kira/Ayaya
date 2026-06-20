@@ -121,7 +121,7 @@ Entities:
       Tag: Cube (1)
       IsActive: true
     TransformComponent:
-      Translation: [0, 0, 0]
+      Translation: [2.7, 0, 0]
       Rotation: [0, 0.6632251, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
@@ -131,3 +131,1198 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 0
+  - Entity: 14651614738435552104
+    TagComponent:
+      Tag: backpack
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 5119675196529882078
+    TagComponent:
+      Tag: Cube.028__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 18017202118744276211
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 2176076177921026273
+    TagComponent:
+      Tag: Plane.008__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 5623959323422374965
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 4110385753499924482
+    TagComponent:
+      Tag: Cube.029__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 13749975899708494703
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 14789819274725711184
+    TagComponent:
+      Tag: Plane.009__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 5226471735966072861
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 13306598040857952524
+    TagComponent:
+      Tag: Plane.010__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 5275847428103761607
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 10852973037273452043
+    TagComponent:
+      Tag: Plane.011__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 5618496282460959139
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 4949426324202325906
+    TagComponent:
+      Tag: Cylinder.029__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 13793083007601610938
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 18405288651145045282
+    TagComponent:
+      Tag: Cube.030__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 2290748268865273201
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 3593844567555811190
+    TagComponent:
+      Tag: Plane.012__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 2213268100961957911
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 17154771280408023709
+    TagComponent:
+      Tag: Plane.013__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 18144943400737495912
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 10762359428618953959
+    TagComponent:
+      Tag: Cylinder.030__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 6627035028850076876
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 14465271636253511476
+    TagComponent:
+      Tag: Plane.014__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 5292971025553572959
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 18116090344305560847
+    TagComponent:
+      Tag: Cube.031__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 1439972891220542625
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 7008977132692286884
+    TagComponent:
+      Tag: Cylinder.031__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 11928733496020020768
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 7156384517915085298
+    TagComponent:
+      Tag: Cube.032__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 14795276621737488941
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 9927497337006374275
+    TagComponent:
+      Tag: Cylinder.032__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 300338511758584519
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 7453809239128257845
+    TagComponent:
+      Tag: Cube.033__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 18373566533324133028
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 10508924827263261275
+    TagComponent:
+      Tag: Cube.034__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 4812822911092093165
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 17166275133148230632
+    TagComponent:
+      Tag: Cube.035__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 9664854797406794800
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 1782961843154282900
+    TagComponent:
+      Tag: Cube.036__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 4176755638100155010
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 14411140076986352024
+    TagComponent:
+      Tag: Cylinder.033__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 16100279356202699373
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 7542698458179051492
+    TagComponent:
+      Tag: Cube.037__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 11849162980957677807
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 13935234327455119872
+    TagComponent:
+      Tag: Cylinder.034__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 10460055015190472796
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 9392448905954116551
+    TagComponent:
+      Tag: Cylinder.035__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 13855541582571003610
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 10621200778836911797
+    TagComponent:
+      Tag: Cube.038__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 15773275874799043811
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 18221768423636103262
+    TagComponent:
+      Tag: Cube.039__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 5986479244567078683
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 9540497921357496770
+    TagComponent:
+      Tag: Cylinder.036__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 6508594397592824392
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 11867907936624046800
+    TagComponent:
+      Tag: Cylinder.037__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 9766376863256867993
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 4453312545610443346
+    TagComponent:
+      Tag: Cylinder.038__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 583942058031210691
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 11547601164535381260
+    TagComponent:
+      Tag: Cylinder.039__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 856668421074080411
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 17067165866445747937
+    TagComponent:
+      Tag: Cylinder.040__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 2715322506711700275
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 3443652346414677781
+    TagComponent:
+      Tag: Cylinder.041__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 4752889413426453395
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 4517509796044079816
+    TagComponent:
+      Tag: Cylinder.042__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 16348308257946355625
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 5329987975054590936
+    TagComponent:
+      Tag: Cylinder.043__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 11696180141873609342
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 3612672810439781766
+    TagComponent:
+      Tag: Cylinder.044__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 2136294278660154549
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 11195552547775084993
+    TagComponent:
+      Tag: Cylinder.045__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 543036453755385157
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 4256568155426670587
+    TagComponent:
+      Tag: Cylinder.046__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 4751466435840325022
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 449726142972934884
+    TagComponent:
+      Tag: Cylinder.047__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 6752069198489646226
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 6328849300474350374
+    TagComponent:
+      Tag: Cylinder.048__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 10796879644918869127
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 1644830849376788143
+    TagComponent:
+      Tag: Cylinder.049__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 15426691087286873926
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 750574111682218988
+    TagComponent:
+      Tag: Cube.040__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 13679745002245760011
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 11860431746706974596
+    TagComponent:
+      Tag: Cube.041__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 10244298070241184710
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 15783800050395889673
+    TagComponent:
+      Tag: Cube.042__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 16858661103990194466
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 1087659541976770256
+    TagComponent:
+      Tag: Cube.043__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 4116669311355390574
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 14006432756956016297
+    TagComponent:
+      Tag: Cube.044__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 14608398300363191155
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 7873654264332991109
+    TagComponent:
+      Tag: Cube.045__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 9085182071299941807
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 2879577355775660390
+    TagComponent:
+      Tag: Plane.015__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 4777109824254074564
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 236197012041545733
+    TagComponent:
+      Tag: Cube.046__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 11337278026301558023
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 9263804945790691906
+    TagComponent:
+      Tag: Cube.047__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 2968589715725727097
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 15654938225836083083
+    TagComponent:
+      Tag: Cylinder.050__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 9881647641059229224
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 1791552192211249817
+    TagComponent:
+      Tag: Cube.048__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 12675581136920444580
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 14550449999067521013
+    TagComponent:
+      Tag: Cylinder.051__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 7038481429924866039
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 3916862307384585030
+    TagComponent:
+      Tag: Cylinder.052__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 10556791546231069248
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 9407652501669001374
+    TagComponent:
+      Tag: Cylinder.053__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 14806367415046394699
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 16978849588460463831
+    TagComponent:
+      Tag: Cylinder.054__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 3461603371109144017
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 12931749834168793573
+    TagComponent:
+      Tag: BezierCurve.003__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 7822719224834880012
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 7659890726918448393
+    TagComponent:
+      Tag: Cube.049__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 9469266038083875234
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 15622130254033719513
+    TagComponent:
+      Tag: Cylinder.055__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 4042022583148265628
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 14520056996637702331
+    TagComponent:
+      Tag: Cylinder.056__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 526456319507955688
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 3282530295854526210
+    TagComponent:
+      Tag: Cube.050__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 14374512612179653667
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 2072903860493548964
+    TagComponent:
+      Tag: Sphere.014__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 5422463895962826673
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 9843332214020590368
+    TagComponent:
+      Tag: Sphere.015__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 2746255072819170122
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 14518084233370363535
+    TagComponent:
+      Tag: Sphere.016__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 8001688569434954519
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 9147252251498630593
+    TagComponent:
+      Tag: Sphere.017__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 4901568796054032413
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 12542749822145600317
+    TagComponent:
+      Tag: Cube.051__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 9129547081039203968
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 8819869524596610766
+    TagComponent:
+      Tag: Sphere.018__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 5932970092050534126
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 6573755157186715519
+    TagComponent:
+      Tag: Sphere.019__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 3727367012414915982
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 17800805955078079955
+    TagComponent:
+      Tag: Sphere.020__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 8762635541954762173
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 9400642627927870105
+    TagComponent:
+      Tag: Sphere.021__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 11579007606180750604
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 15202457903669676874
+    TagComponent:
+      Tag: Cube.052__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 17039042276370490986
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 108529932678689752
+    TagComponent:
+      Tag: Cube.053__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 15407117763551543389
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 1918457719267904876
+    TagComponent:
+      Tag: Cube.054__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 8551195302048196265
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 5942683767514655589
+    TagComponent:
+      Tag: Sphere.022__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 4909007226769495374
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 10291758594108447445
+    TagComponent:
+      Tag: Sphere.023__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 12407548435573239971
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 4018643150841787958
+    TagComponent:
+      Tag: Sphere.024__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 18223352198204406893
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 4033320816634913216
+    TagComponent:
+      Tag: Sphere.025__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 2092604746151636992
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 1622483245455155789
+    TagComponent:
+      Tag: Sphere.026__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 5038191324879960968
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 18223542498888767374
+    TagComponent:
+      Tag: Sphere.027__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 5348355009723739452
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104
+  - Entity: 416884346243275558
+    TagComponent:
+      Tag: Cube.055__0
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 343779822124055261
+      MaterialHandle: 17469292800394175558
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 14651614738435552104

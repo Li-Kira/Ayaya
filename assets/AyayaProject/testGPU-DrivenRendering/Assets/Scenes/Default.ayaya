@@ -2,18 +2,18 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition: [-12.575161, 3.3576448, 22.86293]
-  CameraDistance: 33.251686
-  CameraPitch: -0.027828269
-  CameraYaw: -0.42226696
-  CameraFocalPoint: [1.04708, 2.4324274, -7.456257]
+  CameraPosition: [-10.49912, 1.439335, 13.592507]
+  CameraDistance: 14.929918
+  CameraPitch: -0.15217744
+  CameraYaw: -0.036858305
+  CameraFocalPoint: [-9.955311, -0.8239027, -1.1548481]
 Entities:
   - Entity: 1301454633958121573
     TagComponent:
       Tag: Main Camera
       IsActive: true
     TransformComponent:
-      Translation: [0, 0, 5]
+      Translation: [-0.6, 0, 21]
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     CameraComponent:
@@ -72,6 +72,21 @@ Entities:
     MeshRendererComponent:
       ModelHandle: 7830134091907035699
       MaterialHandle: 16131022799274907990
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 10710849774673010631
+    TagComponent:
+      Tag: backpack
+      IsActive: true
+    TransformComponent:
+      Translation: [-9.521576, 0, 0]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 4999622674143822874
+      MaterialHandle: 132542665822425552
       CastShadows: true
       ReceiveShadows: true
     RelationshipComponent:

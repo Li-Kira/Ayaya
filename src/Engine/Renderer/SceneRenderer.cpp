@@ -38,6 +38,7 @@
 #include "Renderer/Passes/VulkanFXAAPass.hpp"
 #include "Renderer/Passes/VulkanSSAOPass.hpp"
 #include "Renderer/Passes/VulkanWBOITPass.hpp"
+#include "Renderer/GDRContext.hpp"
 #include "Renderer/RenderQueue.hpp"
 #include "Renderer/Frustum.hpp"
 
@@ -81,6 +82,8 @@ namespace Ayaya {
 
     static std::shared_ptr<Mesh> s_SkyboxMesh;
     static std::shared_ptr<Shader> s_SkyboxShader;
+
+    std::shared_ptr<GDRContext> SceneRenderer::s_GDRContext;
     static std::shared_ptr<TextureCube> s_DefaultEnvironmentMap;
     static std::shared_ptr<TextureCube> s_DefaultIrradianceMap;
     static std::shared_ptr<TextureCube> s_DefaultPrefilterMap;
@@ -213,6 +216,23 @@ namespace Ayaya {
             m_UIPass          = std::make_shared<UIPass>();
             m_WBOITPass       = std::make_shared<VulkanWBOITPass>();
 
+            // ── Create shared GDR data hub before pass OnAttach() ──
+            auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+                Application::Get().GetWindow().GetContext());
+            if (vkCtx) {
+                // Create GDRContext once (static, shared across all SceneRenderer instances)
+                if (!s_GDRContext) {
+                    s_GDRContext = std::make_shared<GDRContext>();
+                    s_GDRContext->Init(vkCtx->GetDevice(), vkCtx->GetFramesInFlight(),
+                                       vkCtx->GetGeometryPool().GetBuffer());
+                }
+                // Pass shared context to GDR-enabled passes (every renderer's passes share the same one)
+                auto shadowPass = std::dynamic_pointer_cast<VulkanShadowPass>(m_ShadowPass);
+                auto gbufferPass = std::dynamic_pointer_cast<VulkanGBufferPass>(m_GBufferPass);
+                if (shadowPass) shadowPass->SetGDRContext(s_GDRContext);
+                if (gbufferPass) gbufferPass->SetGDRContext(s_GDRContext);
+            }
+
             m_ShadowPass->OnAttach();
             m_GBufferPass->OnAttach();
             m_SSAOPass->OnAttach();
@@ -238,6 +258,11 @@ namespace Ayaya {
         s_DefaultIrradianceMap.reset();
         s_DefaultPrefilterMap.reset();
         s_DefaultBRDFLUT.reset();
+        // 释放 GDR 共享资源 (SSBO, descriptor sets, layouts, pools)
+        if (s_GDRContext) {
+            s_GDRContext->Shutdown();
+            s_GDRContext.reset();
+        }
         if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
             // 销毁所有烘焙出来的 IBL 环境贴图显存
             VulkanIBLBuilder::ClearResources();
@@ -368,6 +393,7 @@ namespace Ayaya {
         // ==========================================
         // RenderQueue: 提取 / 剔除 / 分桶 / 排序
         // ==========================================
+        auto tCull0 = std::chrono::high_resolution_clock::now();
         m_RenderQueue.Clear();
         {
             glm::mat4 viewProj = m_RenderContext.ProjectionMatrix * m_RenderContext.ViewMatrix;
@@ -415,6 +441,19 @@ namespace Ayaya {
             }
         }
         m_RenderQueue.Sort();
+        auto tCull1 = std::chrono::high_resolution_clock::now();
+
+        // Build shared GDR scene data (GPUInstance[], GeometryRange[], GPUMaterial[])
+        if (s_GDRContext && RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+            auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+                Application::Get().GetWindow().GetContext());
+            if (vkCtx) {
+                uint32_t frameIdx = vkCtx->GetCurrentFrameIndex() % vkCtx->GetFramesInFlight();
+                s_GDRContext->BuildFromRenderQueue(m_RenderQueue,
+                    vkCtx->GetGeometryPool(), frameIdx);
+            }
+        }
+        auto tGDR = std::chrono::high_resolution_clock::now();
 
         // AYAYA_CORE_INFO("[RenderQueue] Extracted {} draw packets from {} entities",
         //     m_RenderQueue.Packets.size(),
@@ -505,7 +544,9 @@ namespace Ayaya {
                 uint32_t vpW = m_Data->ViewportWidth;
                 uint32_t vpH = m_Data->ViewportHeight;
 
+                auto tGraph0 = std::chrono::high_resolution_clock::now();
                 BuildRenderGraph(config, vpW, vpH);
+                auto tGraph1 = std::chrono::high_resolution_clock::now();
 
                 VulkanPipeline::ClearGlobalUBOs();
                 auto camUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_CameraUniformBuffer);
@@ -518,7 +559,22 @@ namespace Ayaya {
                     Application::Get().GetWindow().GetContext());
                 if (tsCtx) tsCtx->ReadTimestampResults();
 
+                auto tExec0 = std::chrono::high_resolution_clock::now();
                 m_RenderGraph.Execute(m_RenderContext, *cmd);
+                auto tExec1 = std::chrono::high_resolution_clock::now();
+
+                // ── Per-RenderScene timing log (every 60 frames) ──
+                static int s_SceneFrameIdx = 0;
+                if (++s_SceneFrameIdx % 60 == 0) {
+                    using ms = std::chrono::duration<float, std::milli>;
+                    float cullMs  = std::chrono::duration_cast<ms>(tCull1 - tCull0).count();
+                    float gdrMs   = std::chrono::duration_cast<ms>(tGDR - tCull1).count();
+                    float graphMs = std::chrono::duration_cast<ms>(tGraph1 - tGraph0).count();
+                    float execMs  = std::chrono::duration_cast<ms>(tExec1 - tExec0).count();
+                    float uboMs   = std::chrono::duration_cast<ms>(tExec0 - tGraph1).count(); // UBO + timestamps
+                    AYAYA_CORE_INFO("[Scene] cull={:.3f}ms gdr={:.3f}ms graph={:.3f}ms ubo={:.3f}ms exec={:.3f}ms packets={}",
+                        cullMs, gdrMs, graphMs, uboMs, execMs, (int)m_RenderQueue.Packets.size());
+                }
             } else {
                 // OpenGL 线性管线 (保持兼容)
                 m_Pipeline.Execute(m_RenderContext, *cmd);

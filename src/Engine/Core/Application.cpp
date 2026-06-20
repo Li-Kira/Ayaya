@@ -6,6 +6,7 @@
 #include "KeyCodes.hpp"
 #include "Renderer/Renderer.hpp"
 #include "Renderer/SceneRenderer.hpp"
+#include "Renderer/GDRContext.hpp"
 #include "Asset/AssetManager.hpp"
 #include "Core/VFS.hpp"
 
@@ -164,10 +165,16 @@ Hi, welcome to Ayaya engine♪
     }
 
     void Application::Run() {
+        static int s_FrameIdx = 0;
+
         while (m_Running) {
+            auto t0 = std::chrono::high_resolution_clock::now();
+
             float time = (float)glfwGetTime();
             Timestep timestep = time - m_LastFrameTime;
             m_LastFrameTime = time;
+
+            auto t1 = std::chrono::high_resolution_clock::now();
 
             // 处理异步加载的 GPU 上传回调（后台线程完成 stbi_load 后在此提交纹理）
             AssetManager::Update();
@@ -177,14 +184,20 @@ Hi, welcome to Ayaya engine♪
             ProcessDeferredActions();
             if (s_PreFrameCallback) s_PreFrameCallback();
 
+            auto t2 = std::chrono::high_resolution_clock::now();
+
             // ==========================================
             // 【核心架构升级】：在所有业务与渲染管线执行前，开启 Vulkan 帧录制！
             // ==========================================
             m_Window->GetContext()->BeginFrame();
 
+            auto t3 = std::chrono::high_resolution_clock::now();
+
             // 1. 逻辑更新（渲染场景）
             for (Layer* layer : m_LayerStack)
                 layer->OnUpdate(timestep);
+
+            auto t4 = std::chrono::high_resolution_clock::now();
 
             // 2. ImGui 渲染阶段
             m_ImGuiLayer->Begin();
@@ -192,10 +205,28 @@ Hi, welcome to Ayaya engine♪
                 layer->OnImGuiRender(); // 每个层渲染自己的 UI
             m_ImGuiLayer->End();
 
+            auto t5 = std::chrono::high_resolution_clock::now();
+
             m_Window->OnUpdate();
+
+            auto t6 = std::chrono::high_resolution_clock::now();
+
+            // ── Timing log (every 60 frames) ──
+            if (++s_FrameIdx % 60 == 0) {
+                using ms = std::chrono::duration<float, std::milli>;
+                float total    = std::chrono::duration_cast<ms>(t6 - t0).count();
+                float pre     = std::chrono::duration_cast<ms>(t2 - t1).count();
+                float beginF  = std::chrono::duration_cast<ms>(t3 - t2).count();
+                float onUpd   = std::chrono::duration_cast<ms>(t4 - t3).count();
+                float imgui   = std::chrono::duration_cast<ms>(t5 - t4).count();
+                float endF    = std::chrono::duration_cast<ms>(t6 - t5).count();
+                float gdrBuild = SceneRenderer::s_GDRContext ? SceneRenderer::s_GDRContext->BuildTimeMs : 0.0f;
+                AYAYA_CORE_INFO("[Frame {}] total={:.2f}ms | pre={:.2f} beginFrame={:.2f} onUpdate={:.2f}(GDR:{:.3f}) imGui={:.2f} endFrame={:.2f}",
+                    s_FrameIdx, total, pre, beginF, onUpd, gdrBuild, imgui, endF);
+            }
         }
 
-        
+
     }
 
     // =========================================================================

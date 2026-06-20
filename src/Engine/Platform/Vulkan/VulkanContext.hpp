@@ -58,6 +58,7 @@ namespace Ayaya {
         void EndSingleTimeCommands(VkCommandBuffer commandBuffer);
 
         void RecreateSwapChain();
+        void SetVSync(bool vsync);
 
         uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
         VkFormat FindDepthFormat();
@@ -106,6 +107,8 @@ namespace Ayaya {
         std::vector<VkImageView> m_SwapChainImageViews;
 
         uint32_t m_FramesInFlight = 3;
+        bool m_VSync = false;
+        bool m_VSyncPending = false;  // deferred swapchain rebuild flag
 
         VkCommandPool m_CommandPool = VK_NULL_HANDLE;
         VkCommandPool m_OneTimeCommandPool = VK_NULL_HANDLE;

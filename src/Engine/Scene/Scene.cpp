@@ -161,11 +161,17 @@ namespace Ayaya {
             } else {
                 for (size_t i = 0; i < node.Meshes.size(); i++) {
                     Entity subEntity = CreateEntity(node.Name + "_SubMesh_" + std::to_string(i));
-                    
+
                     auto& subRel = subEntity.AddComponent<RelationshipComponent>();
                     subRel.Parent = entity.GetEntityHandle();
                     auto it = std::find(m_RootEntities.begin(), m_RootEntities.end(), subEntity.GetEntityHandle());
                     if (it != m_RootEntities.end()) m_RootEntities.erase(it);
+
+                    // Register sub-entity in parent's Children list (fix: was missing)
+                    auto& pRel = entity.HasComponent<RelationshipComponent>() ?
+                                entity.GetComponent<RelationshipComponent>() :
+                                entity.AddComponent<RelationshipComponent>();
+                    pRel.Children.push_back(subEntity.GetEntityHandle());
 
                     auto& meshComp = subEntity.AddComponent<MeshRendererComponent>();
                     
