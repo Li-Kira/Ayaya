@@ -1,0 +1,20 @@
+#version 450
+
+// Hi-Z Depth Pyramid Builder — Level 0 Copy
+// Samples GBuffer depth (D32_SFLOAT) → writes R32_SFLOAT Hi-Z level 0
+// The Hi-Z pyramid uses a separate R32_SFLOAT image because Vulkan does not
+// support imageStore on combined depth-stencil formats.
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0) uniform sampler2D u_DepthMap;
+layout(set = 0, binding = 1, r32f) uniform writeonly image2D u_HiZMip0;
+
+void main() {
+    ivec2 uv = ivec2(gl_GlobalInvocationID.xy);
+    vec2 imgSize = vec2(imageSize(u_HiZMip0));
+    if (uv.x >= int(imgSize.x) || uv.y >= int(imgSize.y)) return;
+
+    float d = texelFetch(u_DepthMap, uv, 0).r;
+    imageStore(u_HiZMip0, uv, vec4(d));
+}

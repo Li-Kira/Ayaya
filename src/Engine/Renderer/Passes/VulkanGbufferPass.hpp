@@ -8,6 +8,7 @@
 #include "Platform/Vulkan/VulkanStorageBuffer.hpp"
 #include "Platform/Vulkan/VulkanGeometryPool.hpp"
 #include "Renderer/GDRContext.hpp"
+#include <array>
 
 namespace Ayaya {
 
@@ -44,6 +45,47 @@ namespace Ayaya {
 
         // Indirect draw buffer — compute writes per-instance draw commands, graphics consumes
         std::unique_ptr<VulkanStorageBuffer> m_DrawIndirectBuffer;
+
+        // ── Hi-Z Occlusion Culling (Temporal: previous-frame depth pyramid) ──
+        // Ring-buffered per frame-in-flight to avoid GPU Write-After-Read hazards.
+        struct HiZFrameResources {
+            VkImage image = VK_NULL_HANDLE;
+            VmaAllocation alloc = VK_NULL_HANDLE;
+            VkImageView view = VK_NULL_HANDLE;     // full mip chain
+            VkSampler sampler = VK_NULL_HANDLE;     // NEAREST, CLAMP_TO_EDGE
+            std::vector<VkImageView> mipSrcViews;   // per-mip SRC views for downsample
+            std::vector<VkImageView> mipDstViews;   // per-mip DST views for downsample
+            std::vector<VkDescriptorSet> mipDescSets; // per-mip descriptor sets (src+dst)
+        };
+        std::array<HiZFrameResources, 3> m_HiZFrames;
+        std::array<glm::mat4, 3> m_HiZPrevView;       // camera matrices when this Hi-Z was built
+        std::array<glm::mat4, 3> m_HiZPrevProj;
+        uint32_t m_HiZViewportW = 0, m_HiZViewportH = 0;
+        uint32_t m_HiZMipLevels = 0;
+        uint32_t m_HiZFrameCount = 0;  // skips occlusion cull on first frame
+
+        // Hi-Z build compute (copy depth → R32 level 0 + downsample chain)
+        VkPipelineLayout m_HiZBuildLayout = VK_NULL_HANDLE;
+        VkPipeline m_HiZBuildPipeline = VK_NULL_HANDLE;
+        VkShaderModule m_HiZBuildShader = VK_NULL_HANDLE;
+        VkShaderModule m_HiZDownsampleShader = VK_NULL_HANDLE;
+        VkDescriptorSetLayout m_HiZBuildSetLayout = VK_NULL_HANDLE;
+        VkDescriptorPool m_HiZBuildPool = VK_NULL_HANDLE;
+        std::vector<VkDescriptorSet> m_HiZBuildSet0s;    // per mip: {sampler2D src, image2D dst}
+
+        // Hi-Z occlusion cull compute
+        VkPipelineLayout m_HiZCullLayout = VK_NULL_HANDLE;
+        VkPipeline m_HiZCullPipeline = VK_NULL_HANDLE;
+        VkShaderModule m_HiZCullShader = VK_NULL_HANDLE;
+        VkDescriptorSetLayout m_HiZCullSet4Layout = VK_NULL_HANDLE;
+        VkDescriptorPool m_HiZCullSet4Pool = VK_NULL_HANDLE;
+        std::vector<VkDescriptorSet> m_HiZCullSet4s;    // per frame-in-flight (reader side)
+
+        void InitHiZResources(VkDevice device, VmaAllocator allocator, uint32_t framesInFlight,
+                              uint32_t viewportW, uint32_t viewportH);
+        void BuildHiZ(VkCommandBuffer vkCmd, uint32_t writeIdx,
+                      std::shared_ptr<class VulkanFramebuffer> gbufferFBO);
+        void CleanupHiZ();
 
     };
 }

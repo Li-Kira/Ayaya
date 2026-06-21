@@ -583,6 +583,13 @@ namespace Ayaya {
         m_Data->Stats.TriangleCount = m_RenderContext.Stats.TriangleCount;
         m_Data->Stats.VertexCount = m_RenderContext.Stats.VertexCount;
 
+        // ── GDR diagnostics ──
+        if (s_GDRContext) {
+            m_Data->Stats.GDRInstanceCount = s_GDRContext->InstanceCount;
+            m_Data->Stats.GDRRangeCount    = s_GDRContext->RangeCount;
+            m_Data->Stats.GDRMaterialCount = s_GDRContext->MaterialCount;
+        }
+
         // 性能统计
         float totalGPUTime = 0.0f;
         for (const auto& [name, profile] : m_RenderContext.PassProfiles) {

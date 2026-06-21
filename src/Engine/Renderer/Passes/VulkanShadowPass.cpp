@@ -379,6 +379,19 @@ namespace Ayaya {
             kGDRMaxInstances,
             sizeof(VkDrawIndexedIndirectCommand));
 
+        // ── GDR debug stats ──
+        if (m_GDRCtx) {
+            context.Stats.DrawCalls += 2;  // opaque + masked
+            context.Stats.ShaderBinds += 2;
+            context.Stats.TriangleCount += m_GDRCtx->TotalTriangles;
+            context.Stats.VertexCount += m_GDRCtx->TotalVertices;
+            context.RecordAndCheckDrawCall("Shadow Pass", "GDR Opaque", "shadow_gdr_opaque",
+                m_GDRCtx->TotalTriangles);
+            context.RecordAndCheckDrawCall("Shadow Pass", "GDR Masked", "shadow_gdr_masked",
+                m_GDRCtx->TotalTriangles);
+            cmd.RecordIndirectDraw(2, m_GDRCtx->TotalTriangles * 2);
+        }
+
         cmd.EndRenderPass();
 
         context.Set("LightSpaceMatrix", lightSpaceMatrix);

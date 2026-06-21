@@ -202,6 +202,14 @@ namespace Ayaya {
         MaterialSSBO->SetData(gdrMaterials.data(), materialCount * sizeof(GPUMaterial));
         InstanceCount = instCount;
 
+        RangeCount = rangeCount;
+        MaterialCount = materialCount;
+        TotalTriangles = 0; TotalVertices = 0;
+        for (auto& r : gdrRanges) {
+            TotalTriangles += r.indexCount / 3;
+            TotalVertices  += r.vertexCount;
+        }
+
         auto t1 = std::chrono::high_resolution_clock::now();
         BuildTimeMs = std::chrono::duration<float, std::milli>(t1 - t0).count();
     }
@@ -327,6 +335,14 @@ namespace Ayaya {
         GeometryRangeSSBO->SetData(gdrRanges.data(), rangeCount * sizeof(GeometryRange));
         MaterialSSBO->SetData(gdrMaterials.data(), materialCount * sizeof(GPUMaterial));
         InstanceCount = instCount;
+
+        RangeCount = rangeCount;
+        MaterialCount = materialCount;
+        TotalTriangles = 0; TotalVertices = 0;
+        for (auto& r : gdrRanges) {
+            TotalTriangles += r.indexCount / 3;
+            TotalVertices  += r.vertexCount;
+        }
 
         auto t1 = std::chrono::high_resolution_clock::now();
         BuildTimeMs = std::chrono::duration<float, std::milli>(t1 - t0).count();

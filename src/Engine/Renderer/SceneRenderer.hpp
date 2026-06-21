@@ -82,6 +82,8 @@ namespace Ayaya {
         struct Statistics {
             uint32_t DrawCalls = 0, ShaderBinds = 0, VertexCount = 0, TriangleCount = 0;
             float CPUTime = 0.0f, GPUTime = 0.0f;
+            // GDR diagnostics
+            uint32_t GDRInstanceCount = 0, GDRRangeCount = 0, GDRMaterialCount = 0;
         };
         void ResetStats();
         Statistics GetStats();

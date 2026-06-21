@@ -1969,6 +1969,16 @@ namespace Ayaya {
                         ImGui::Text("Active Entities: %zu", entityCount);
                     }
 
+                    // GDR diagnostics
+                    if (stats.GDRInstanceCount > 0) {
+                        ImGui::PushFont(boldFont);
+                        ImGui::TextColored(ImVec4(0.9f, 0.5f, 0.2f, 1.0f), "GDR");
+                        ImGui::PopFont();
+                        ImGui::Separator();
+                        ImGui::Text("Instances: %u  |  Meshes: %u  |  Materials: %u",
+                            stats.GDRInstanceCount, stats.GDRRangeCount, stats.GDRMaterialCount);
+                    }
+
                     ImGui::Unindent(10.0f);
 
                     float currentLineHeight = ImGui::GetTextLineHeight();
@@ -2257,7 +2267,7 @@ namespace Ayaya {
                         ImGui::SetTooltip("Performance Stats");
                 }
 
-                // ---- Game Stats Overlay ----
+                // ---- Game Stats Overlay (mirrors Viewport stats layout) ----
                 if (m_ShowGameStats) {
                     static ImVec2 s_OverlaySize = ImVec2(375.0f, 340.0f);
 
@@ -2268,67 +2278,75 @@ namespace Ayaya {
                     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.15f, 0.9f));
                     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 4.0f);
 
-                    ImGui::BeginChild("StatsOverlay", s_OverlaySize, false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+                    ImGui::BeginChild("GameStatsOverlay", s_OverlaySize, false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
                     ImGui::SetCursorPosY(10.0f);
                     ImGui::Indent(10.0f);
 
                     auto& io = ImGui::GetIO();
                     auto boldFont = io.Fonts->Fonts.Size > 1 ? io.Fonts->Fonts[1] : io.Fonts->Fonts[0];
-
                     float memoryMB = GetPhysicalMemoryUsageMB();
                     float uiScale = io.FontGlobalScale;
                     float alignOffset = 100.0f * uiScale;
 
-                    // --- Graphics ---
+                    const auto& stats = m_GameStats;
+
+                    // ── Graphics ──
                     ImGui::PushFont(boldFont);
                     ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Graphics");
                     ImGui::PopFont();
                     ImGui::Separator();
                     ImGui::Text("%.1f FPS (%.1f ms)", io.Framerate, 1000.0f / io.Framerate);
                     ImGui::Text("CPU Time:"); ImGui::SameLine(alignOffset);
-                    ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%8.2f ms", m_GameStats.CPUTime);
+                    ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%8.2f ms", stats.CPUTime);
                     ImGui::Text("GPU Time:"); ImGui::SameLine(alignOffset);
-                    ImGui::TextColored(ImVec4(0.9f, 0.4f, 0.2f, 1.0f), "%8.2f ms", m_GameStats.GPUTime);
+                    ImGui::TextColored(ImVec4(0.9f, 0.4f, 0.2f, 1.0f), "%8.2f ms", stats.GPUTime);
                     ImGui::Text("RAM Usage:"); ImGui::SameLine(alignOffset);
                     ImGui::TextColored(ImVec4(0.2f, 0.7f, 0.9f, 1.0f), "%8.1f MB", memoryMB);
-                    ImGui::Text("Screen Size: %dx%d",
-                        (m_GameViewportResW > 0 && m_GameViewportResH > 0)
-                            ? m_GameViewportResW : (int)m_GameViewportSize.x,
-                        (m_GameViewportResW > 0 && m_GameViewportResH > 0)
-                            ? m_GameViewportResH : (int)m_GameViewportSize.y);
+                    if (m_GameViewportResW > 0 && m_GameViewportResH > 0)
+                        ImGui::Text("Screen Size: %dx%d (custom)", m_GameViewportResW, m_GameViewportResH);
+                    else
+                        ImGui::Text("Screen Size: %dx%d", (int)m_GameViewportSize.x, (int)m_GameViewportSize.y);
                     ImGui::Spacing();
 
+                    // ── Rendering ──
                     ImGui::PushFont(boldFont);
                     ImGui::TextColored(ImVec4(0.8f, 0.6f, 0.2f, 1.0f), "Rendering");
                     ImGui::PopFont();
                     ImGui::Separator();
-                    ImGui::Text("Draw Calls:"); ImGui::SameLine(alignOffset);
-                    ImGui::Text("%d", m_GameStats.DrawCalls);
-                    ImGui::Text("Shader Binds:"); ImGui::SameLine(alignOffset);
-                    ImGui::Text("%d", m_GameStats.ShaderBinds);
+                    ImGui::Text("Draw Calls: %d", stats.DrawCalls);
+                    ImGui::Text("Shader Binds: %d", stats.ShaderBinds);
                     ImGui::Spacing();
 
+                    // ── Geometry ──
                     ImGui::PushFont(boldFont);
                     ImGui::TextColored(ImVec4(0.3f, 0.6f, 0.9f, 1.0f), "Geometry");
                     ImGui::PopFont();
                     ImGui::Separator();
-                    ImGui::Text("Triangles:"); ImGui::SameLine(alignOffset);
-                    ImGui::Text("%d", m_GameStats.TriangleCount);
-                    ImGui::Text("Vertices:"); ImGui::SameLine(alignOffset);
-                    ImGui::Text("%d", m_GameStats.VertexCount);
+                    ImGui::Text("Triangle Count: %d", stats.TriangleCount);
+                    ImGui::SameLine(0.0f, 15.0f * uiScale);
+                    ImGui::Text("Vertex Count: %d", stats.VertexCount);
 
                     if (m_ActiveScene) {
                         size_t entityCount = 0;
                         auto view = m_ActiveScene->Reg().view<IDComponent>();
                         for (auto e : view) entityCount++;
-                        ImGui::Text("Active Entities:"); ImGui::SameLine(alignOffset);
-                        ImGui::Text("%zu", entityCount);
+                        ImGui::Text("Active Entities: %zu", entityCount);
+                    }
+
+                    // ── GDR diagnostics ──
+                    if (stats.GDRInstanceCount > 0) {
+                        ImGui::PushFont(boldFont);
+                        ImGui::TextColored(ImVec4(0.9f, 0.5f, 0.2f, 1.0f), "GDR");
+                        ImGui::PopFont();
+                        ImGui::Separator();
+                        ImGui::Text("Instances: %u  |  Meshes: %u  |  Materials: %u",
+                            stats.GDRInstanceCount, stats.GDRRangeCount, stats.GDRMaterialCount);
                     }
 
                     ImGui::Unindent(10.0f);
 
-                    // Dynamic sizing for stats overlay
+                    // Dynamic sizing
                     float currentLineHeight = ImGui::GetTextLineHeight();
                     s_OverlaySize.x = 375.0f * (currentLineHeight / 16.0f);
                     s_OverlaySize.y = ImGui::GetCursorPosY() + 10.0f;

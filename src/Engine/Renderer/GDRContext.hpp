@@ -35,6 +35,12 @@ struct GDRContext {
     uint32_t InstanceCount = 0;
     float BuildTimeMs = 0.0f;  // CPU time of last BuildFromRenderQueue call
 
+    // ── Aggregate debug statistics (populated during Build) ──
+    uint32_t RangeCount = 0;      // unique meshes this frame
+    uint32_t MaterialCount = 0;   // unique materials this frame
+    uint32_t TotalTriangles = 0;  // sum of indexCount/3 across ranges
+    uint32_t TotalVertices = 0;   // sum of vertexCount across ranges
+
     ~GDRContext() { Shutdown(); }
 
     void Init(VkDevice device, uint32_t framesInFlight, VkBuffer geoPoolBuffer);

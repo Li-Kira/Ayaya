@@ -90,6 +90,9 @@ namespace Ayaya {
         uint32_t GetDrawCallCount() const { return m_DrawCallCount; }
         uint32_t GetTriangleCount() const { return m_TriangleCount; }
         void ResetDrawStats() { m_DrawCallCount = 0; m_TriangleCount = 0; }
+        void RecordIndirectDraw(uint32_t drawCount, uint32_t triangleCount) {
+            m_DrawCallCount += drawCount; m_TriangleCount += triangleCount;
+        }
 
     private:
         std::shared_ptr<VulkanPipeline> m_BoundPipeline;

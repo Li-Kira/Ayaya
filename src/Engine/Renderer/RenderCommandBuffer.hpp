@@ -64,6 +64,7 @@ namespace Ayaya {
         virtual uint32_t GetDrawCallCount() const { return 0; }
         virtual uint32_t GetTriangleCount() const { return 0; }
         virtual void ResetDrawStats() {}
+        virtual void RecordIndirectDraw(uint32_t drawCount, uint32_t triangleCount) {}
 
         // --- 推送常量 ---
         virtual void PushConstant(const std::shared_ptr<Pipeline>& pipeline, const std::string& name, float data) = 0;
