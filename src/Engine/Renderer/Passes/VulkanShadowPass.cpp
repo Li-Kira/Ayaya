@@ -150,8 +150,9 @@ namespace Ayaya {
         opaqueSpec.BackfaceCulling = CullMode::Back;
         opaqueSpec.NoFragmentShader = true;  // VS-only — hardware Early-Z
         opaqueSpec.DepthBiasEnable = true;
-        opaqueSpec.DepthBiasConstantFactor = 1.25f;
-        opaqueSpec.DepthBiasSlopeFactor = 1.75f;
+        opaqueSpec.DepthBiasConstantFactor = 0.8f;
+        opaqueSpec.DepthBiasSlopeFactor = 0.5f;
+        opaqueSpec.DepthBiasClamp = 0.001f;
         VulkanPipeline::s_ExtraSetLayouts = { m_GDRCtx->Set2Layout };
         m_GDR_OpaquePipeline = Pipeline::Create(opaqueSpec);
         VulkanPipeline::s_ExtraSetLayouts.clear();
@@ -167,8 +168,9 @@ namespace Ayaya {
         maskedSpec.BackfaceCulling = CullMode::None;  // double-sided foliage
         maskedSpec.UseBindlessTextures = true;  // needs set=1 for bindless array
         maskedSpec.DepthBiasEnable = true;
-        maskedSpec.DepthBiasConstantFactor = 1.25f;
-        maskedSpec.DepthBiasSlopeFactor = 1.75f;
+        maskedSpec.DepthBiasConstantFactor = 0.8f;
+        maskedSpec.DepthBiasSlopeFactor = 0.5f;
+        maskedSpec.DepthBiasClamp = 0.001f;
         VulkanPipeline::s_ExtraSetLayouts = { m_GDRCtx->Set2Layout };
         m_GDR_MaskedPipeline = Pipeline::Create(maskedSpec);
         VulkanPipeline::s_ExtraSetLayouts.clear();
@@ -187,11 +189,16 @@ namespace Ayaya {
         m_PipeSpec.DepthTest = true;
         m_PipeSpec.DepthWrite = true;
         m_PipeSpec.BackfaceCulling = CullMode::Back;
+        m_PipeSpec.DepthBiasEnable = true;
+        m_PipeSpec.DepthBiasConstantFactor = 0.8f;
+        m_PipeSpec.DepthBiasSlopeFactor = 0.5f;
+        m_PipeSpec.DepthBiasClamp = 0.001f;
 
-        // ── GDR shadow reference FBO (2048×2048 depth-only, same as DeclareResources) ──
+        // ── GDR shadow reference FBO (4096×4096 depth-only, same as DeclareResources) ──
         FramebufferSpecification refSpec;
-        refSpec.Width = 2048; refSpec.Height = 2048; refSpec.Samples = 1;
+        refSpec.Width = 4096; refSpec.Height = 4096; refSpec.Samples = 1;
         refSpec.Attachments = { FramebufferTextureFormat::Depth };
+        refSpec.IsShadowMap = true;
         m_ShadowRefFBO = Framebuffer::Create(refSpec);
 
         // ── Init GDR path if context is available ──
@@ -211,10 +218,11 @@ namespace Ayaya {
 
     void VulkanShadowPass::DeclareResources(RGBuilder& builder) {
         FramebufferSpecification spec;
-        spec.Width  = 2048;
-        spec.Height = 2048;
+        spec.Width  = 4096;
+        spec.Height = 4096;
         spec.Samples = 1;
         spec.Attachments = { FramebufferTextureFormat::Depth };
+        spec.IsShadowMap = true;
         builder.WriteTexture("ShadowMap", spec);
     }
 
@@ -334,7 +342,7 @@ namespace Ayaya {
         cmd.BeginRenderPass(shadowFBO, true, glm::vec4(1.0f));
         vkCmdBindIndexBuffer(vkCmd, pool.GetBuffer(), 0, VK_INDEX_TYPE_UINT32);
 
-        // Push light space matrix (shared by both pipelines)
+        // Push light space matrix (64 bytes, within 128-byte guarantee)
         struct { glm::mat4 lsm; } shadowPC{ lightSpaceMatrix };
 
         // 6A. Opaque draw (VS-only, hardware Early-Z)

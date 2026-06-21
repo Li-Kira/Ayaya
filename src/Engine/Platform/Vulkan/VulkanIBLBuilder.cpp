@@ -31,7 +31,23 @@ namespace Ayaya {
         auto allocator = context->GetAllocator();
 
         uint32_t dim = 1024;
-        VkFormat fbFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+        uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(dim))) + 1; // 11
+
+        // Format feature check: prefer RGBA16F, fall back to RGBA32F if unsupported
+        VkFormat fbFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+        FramebufferTextureFormat fboFmt = FramebufferTextureFormat::RGBA16F;
+        {
+            VkFormatProperties props;
+            vkGetPhysicalDeviceFormatProperties(context->GetPhysicalDevice(), fbFormat, &props);
+            bool supportsBlit = (props.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) &&
+                                (props.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT);
+            bool supportsLinear = (props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT);
+            if (!supportsBlit || !supportsLinear) {
+                AYAYA_CORE_WARN("VulkanIBLBuilder: RGBA16F blit/linear not supported, falling back to RGBA32F");
+                fbFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+                fboFmt = FramebufferTextureFormat::RGBA32F;
+            }
+        }
 
         // ==========================================
         // 1. 创建最终目标的 TextureCube 显存与视图
@@ -43,12 +59,12 @@ namespace Ayaya {
         imageInfo.imageType = VK_IMAGE_TYPE_2D;
         imageInfo.format = fbFormat;
         imageInfo.extent = { dim, dim, 1 };
-        imageInfo.mipLevels = 1;
+        imageInfo.mipLevels = mipLevels;
         imageInfo.arrayLayers = 6;
         imageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         // ==========================================
         // 【核心修复】：必须告诉 VMA 怎么分配这块内存，不能传 nullptr！
@@ -66,7 +82,7 @@ namespace Ayaya {
         viewInfo.format = fbFormat;
         viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.levelCount = mipLevels;
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = 6;
         VkImageView cubeView;
@@ -79,7 +95,7 @@ namespace Ayaya {
         // ==========================================
         FramebufferSpecification fboSpec;
         fboSpec.Width = dim; fboSpec.Height = dim;
-        fboSpec.Attachments = { FramebufferTextureFormat::RGBA32F };
+        fboSpec.Attachments = { fboFmt };
         auto tempFbo = Framebuffer::Create(fboSpec);
         auto vulkanFbo = std::dynamic_pointer_cast<VulkanFramebuffer>(tempFbo);
 
@@ -157,7 +173,7 @@ namespace Ayaya {
         cubeBarrier.image = cubeImage;
         cubeBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         cubeBarrier.subresourceRange.baseMipLevel = 0;
-        cubeBarrier.subresourceRange.levelCount = 1;
+        cubeBarrier.subresourceRange.levelCount = mipLevels;
         cubeBarrier.subresourceRange.baseArrayLayer = 0;
         cubeBarrier.subresourceRange.layerCount = 6;
         cubeBarrier.srcAccessMask = 0;
@@ -278,9 +294,71 @@ namespace Ayaya {
             vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &copyBarrier);
         }
 
-        // 6. 最终将填满 6 面的 Cubemap 设置为只读模式供给场景采样
+        // 6. Generate mipmap chain via vkCmdBlitImage (prefilter.frag needs mips for correct LOD)
+        int32_t mipWidth = static_cast<int32_t>(dim);
+        int32_t mipHeight = static_cast<int32_t>(dim);
+        for (uint32_t mip = 1; mip < mipLevels; mip++) {
+            int32_t nextW = mipWidth > 1 ? mipWidth / 2 : 1;
+            int32_t nextH = mipHeight > 1 ? mipHeight / 2 : 1;
+
+            // Barrier: mip-1 from TRANSFER_DST to TRANSFER_SRC
+            VkImageMemoryBarrier srcBarrier{};
+            srcBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            srcBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            srcBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            srcBarrier.image = cubeImage;
+            srcBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            srcBarrier.subresourceRange.baseMipLevel = mip - 1;
+            srcBarrier.subresourceRange.levelCount = 1;
+            srcBarrier.subresourceRange.baseArrayLayer = 0;
+            srcBarrier.subresourceRange.layerCount = 6;
+            srcBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            srcBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                0, 0, nullptr, 0, nullptr, 1, &srcBarrier);
+
+            // Blit: mip-1 → mip (LINEAR filter, all 6 layers)
+            VkImageBlit blit{};
+            blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.srcSubresource.mipLevel = mip - 1;
+            blit.srcSubresource.baseArrayLayer = 0;
+            blit.srcSubresource.layerCount = 6;
+            blit.srcOffsets[0] = { 0, 0, 0 };
+            blit.srcOffsets[1] = { mipWidth, mipHeight, 1 };
+            blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.dstSubresource.mipLevel = mip;
+            blit.dstSubresource.baseArrayLayer = 0;
+            blit.dstSubresource.layerCount = 6;
+            blit.dstOffsets[0] = { 0, 0, 0 };
+            blit.dstOffsets[1] = { nextW, nextH, 1 };
+            vkCmdBlitImage(cmd, cubeImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                cubeImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+
+            // Barrier: mip-1 from TRANSFER_SRC to SHADER_READ_ONLY (done with this mip)
+            VkImageMemoryBarrier doneBarrier{};
+            doneBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            doneBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            doneBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            doneBarrier.image = cubeImage;
+            doneBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            doneBarrier.subresourceRange.baseMipLevel = mip - 1;
+            doneBarrier.subresourceRange.levelCount = 1;
+            doneBarrier.subresourceRange.baseArrayLayer = 0;
+            doneBarrier.subresourceRange.layerCount = 6;
+            doneBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            doneBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                0, 0, nullptr, 0, nullptr, 1, &doneBarrier);
+
+            mipWidth = nextW;
+            mipHeight = nextH;
+        }
+
+        // 7. Final barrier: last mip (still in TRANSFER_DST) → SHADER_READ_ONLY
         cubeBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         cubeBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        cubeBarrier.subresourceRange.baseMipLevel = mipLevels - 1;
+        cubeBarrier.subresourceRange.levelCount = 1;
         cubeBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         cubeBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &cubeBarrier);
@@ -300,7 +378,7 @@ namespace Ayaya {
         auto allocator = context->GetAllocator();
 
         uint32_t dim = 32; // 辐照度图极度模糊，32x32 足够
-        VkFormat fbFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+        VkFormat fbFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 
         // 1. 创建最终目标的 TextureCube 显存与视图
         VkImage cubeImage;
@@ -339,7 +417,7 @@ namespace Ayaya {
         // 2. 创建临时 FBO 和 Pipeline
         FramebufferSpecification fboSpec;
         fboSpec.Width = dim; fboSpec.Height = dim;
-        fboSpec.Attachments = { FramebufferTextureFormat::RGBA32F };
+        fboSpec.Attachments = { FramebufferTextureFormat::RGBA16F };
         auto tempFbo = Framebuffer::Create(fboSpec);
         auto vulkanFbo = std::dynamic_pointer_cast<VulkanFramebuffer>(tempFbo);
 
@@ -522,7 +600,7 @@ namespace Ayaya {
 
         uint32_t dim = 128;
         uint32_t maxMipLevels = 5;
-        VkFormat fbFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+        VkFormat fbFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 
         // 1. 创建包含 5 级 Mipmap 的目标 TextureCube
         VkImage cubeImage;
@@ -561,7 +639,7 @@ namespace Ayaya {
         // 2. 创建临时 FBO 管线 (以最高分辨率 128x128 创建即可)
         FramebufferSpecification fboSpec;
         fboSpec.Width = dim; fboSpec.Height = dim;
-        fboSpec.Attachments = { FramebufferTextureFormat::RGBA32F };
+        fboSpec.Attachments = { FramebufferTextureFormat::RGBA16F };
         auto tempFbo = Framebuffer::Create(fboSpec);
         auto vulkanFbo = std::dynamic_pointer_cast<VulkanFramebuffer>(tempFbo);
 

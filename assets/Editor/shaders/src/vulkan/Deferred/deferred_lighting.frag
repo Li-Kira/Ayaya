@@ -7,7 +7,7 @@ layout(set = 1, binding = 1) uniform sampler2D g_Albedo;
 layout(set = 1, binding = 2) uniform sampler2D g_PBR;
 layout(set = 1, binding = 3) uniform sampler2D g_CustomData;
 layout(set = 1, binding = 4) uniform sampler2D g_Normal;
-layout(set = 1, binding = 5) uniform sampler2D u_ShadowMap;
+layout(set = 1, binding = 5) uniform sampler2DShadow u_ShadowMap;
 layout(set = 1, binding = 8) uniform samplerCube u_IrradianceMap;
 layout(set = 1, binding = 9) uniform samplerCube u_PrefilteredMap;
 layout(set = 1, binding = 10) uniform sampler2D u_BRDFLUT;
@@ -46,14 +46,28 @@ vec3 F_Schlick(float c,vec3 F0){return F0+(1.0-F0)*pow(clamp(1.0-c,0.0,1.0),5.0)
 vec3 F_SchlickR(float c,vec3 F0,float r){return F0+(max(vec3(1.0-r),F0)-F0)*pow(clamp(1.0-c,0.0,1.0),5.0);}
 
 float ShadowCalc(vec4 fl, float NdotL) {
-    vec3 p = fl.xyz/fl.w;
+    vec3 p = fl.xyz / fl.w;
     p.x = p.x * 0.5 + 0.5;  p.y = p.y * (-0.5) + 0.5;  // Vulkan viewport Y-flip compensation
-    if(p.z>1.0||p.x<0.0||p.x>1.0||p.y<0.0||p.y>1.0) return 0.0;
-    float bias=max(0.001*(1.0-NdotL),0.0001);
-    float s=0.0; vec2 ts=1.0/textureSize(u_ShadowMap,0);
-    for(int x=-1;x<=1;x++) for(int y=-1;y<=1;y++)
-        s+=p.z-bias>texture(u_ShadowMap,p.xy+vec2(x,y)*ts).r?1.0:0.0;
-    return s/9.0;
+
+    // Fragment beyond shadow far plane → fully shadowed (conservative)
+    if (p.z >= 1.0) return 1.0;
+
+    // Fragment behind shadow near plane or outside XY → no shadow (light reaches here)
+    if (p.z <= 0.0 || p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0) return 0.0;
+
+    // Minimal bias — rasterizer handles most of the work at 4096²
+    float bias = max(0.0003 * (1.0 - NdotL), 0.0001);
+    float refZ = p.z - bias;
+
+    // 3×3 hardware PCF: each texture() call does 4-tap bilinear = 36 total comparisons
+    float shadow = 0.0;
+    vec2 ts = 1.0 / textureSize(u_ShadowMap, 0);
+    for (int x = -1; x <= 1; x++) {
+        for (int y = -1; y <= 1; y++) {
+            shadow += texture(u_ShadowMap, vec3(p.xy + vec2(x, y) * ts, refZ));
+        }
+    }
+    return shadow / 9.0;
 }
 
 void main() {

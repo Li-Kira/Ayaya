@@ -43,7 +43,7 @@ void main() {
     GPUInstance inst = Instances[gl_InstanceIndex];
     GeometryRange range = Ranges[inst.geometryRangeIdx];
 
-    // SSBO vertex pulling — unpack Position only (3 uints), skip Normal+UV+Tangent
+    // SSBO vertex pulling — unpack Position only (3 uints)
     uint base = range.vertexOffset + gl_VertexIndex * VERTEX_STRIDE;
     vec3 pos = vec3(
         uintBitsToFloat(g_Data[base + 0]),

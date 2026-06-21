@@ -14,7 +14,7 @@ layout(set = 1, binding = 4) uniform sampler2D u_MetallicMap;
 layout(set = 1, binding = 5) uniform sampler2D u_RoughnessMap;
 layout(set = 1, binding = 6) uniform sampler2D u_AOMap;
 layout(set = 1, binding = 7) uniform sampler2D u_NormalMap;
-layout(set = 1, binding = 8) uniform sampler2D u_ShadowMap;
+layout(set = 1, binding = 8) uniform sampler2DShadow u_ShadowMap;
 
 // Set 0: 引擎 UBO
 layout(set = 0, binding = 0) uniform CameraData {
@@ -113,13 +113,15 @@ float ShadowCalculation(vec4 fragPosLightSpace, float NdotL) {
     if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
         return 0.0;
 
-    float bias = max(0.001 * (1.0 - NdotL), 0.0001);
+    // Minimal bias — rasterizer handles most of the work at 4096²
+    float bias = max(0.0003 * (1.0 - NdotL), 0.0001);
+    float refZ = projCoords.z - bias;
+
     float shadow = 0.0;
     vec2 texelSize = 1.0 / textureSize(u_ShadowMap, 0);
     for (int x = -1; x <= 1; ++x) {
         for (int y = -1; y <= 1; ++y) {
-            float pcfDepth = texture(u_ShadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
-            shadow += projCoords.z - bias > pcfDepth ? 1.0 : 0.0;
+            shadow += texture(u_ShadowMap, vec3(projCoords.xy + vec2(x, y) * texelSize, refZ));
         }
     }
     return shadow / 9.0;

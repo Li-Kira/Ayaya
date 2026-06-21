@@ -45,6 +45,7 @@ namespace Ayaya {
         inline VkImage GetDepthAttachmentImage() const { return m_DepthImage; }
         inline VkImageView GetDepthAttachmentImageView() const { return m_DepthImageView; }
         inline VkSampler GetSampler() const { return m_Sampler; }
+        inline VkSampler GetShadowSampler() const { return m_ShadowSampler; }
 
     private:
         FramebufferSpecification m_Specification;
@@ -62,5 +63,6 @@ namespace Ayaya {
         VkImageView m_DepthImageView = VK_NULL_HANDLE;
 
         VkSampler m_Sampler = VK_NULL_HANDLE;
+        VkSampler m_ShadowSampler = VK_NULL_HANDLE;     // hardware PCF for shadow maps
     };
 }

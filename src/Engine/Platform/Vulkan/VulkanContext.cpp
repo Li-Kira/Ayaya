@@ -257,6 +257,7 @@ namespace Ayaya {
         deviceFeatures.independentBlend = VK_TRUE;               // WBOIT per-attachment blend
         deviceFeatures.multiDrawIndirect = VK_TRUE;              // GDR: drawCount > 1
         deviceFeatures.drawIndirectFirstInstance = VK_TRUE;      // GDR: firstInstance != 0 per draw
+        deviceFeatures.depthBiasClamp = VK_TRUE;                 // Shadow: clamp slope-scaled bias
 
         // Vulkan 1.2 features (bindless descriptors)
         VkPhysicalDeviceVulkan12Features vk12Features{};

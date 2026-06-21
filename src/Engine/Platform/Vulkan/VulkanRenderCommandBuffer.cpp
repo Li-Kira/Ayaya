@@ -172,7 +172,10 @@ namespace Ayaya {
 
         // 深度附件使用 DEPTH_STENCIL_READ_ONLY_OPTIMAL，颜色附件使用 SHADER_READ_ONLY_OPTIMAL
         VkImageLayout layout = isDepth ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        m_PendingImageInfos[slot] = { vulkanFBO->GetSampler(), view, layout };
+        // Prefer shadow sampler (hardware PCF) for depth FBOs that have one
+        VkSampler sampler = vulkanFBO->GetShadowSampler();
+        if (sampler == VK_NULL_HANDLE) sampler = vulkanFBO->GetSampler();
+        m_PendingImageInfos[slot] = { sampler, view, layout };
         m_DescriptorSetDirty = true;
     }
 

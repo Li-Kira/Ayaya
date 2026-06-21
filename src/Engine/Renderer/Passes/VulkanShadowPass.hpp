@@ -11,9 +11,10 @@
 
 namespace Ayaya {
 
-    struct alignas(16) VulkanShadowPushConstants {
+    struct VulkanShadowPushConstants {
         glm::mat4 LightSpaceMatrix;
         glm::mat4 Transform;
+        // NormalOffsetScale hardcoded in shader (1.5) to stay within 128-byte push constant guarantee
     };
 
     class VulkanShadowPass : public RenderPass {

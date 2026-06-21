@@ -54,6 +54,7 @@ namespace Ayaya {
         FramebufferAttachmentSpecification Attachments; 
         
         bool SwapChainTarget = false;
+        bool IsShadowMap = false;   // enables hardware PCF shadow sampler
     };
 
     class Framebuffer {

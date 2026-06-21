@@ -78,6 +78,7 @@ namespace Ayaya {
         }
 
         if (m_Sampler) { vkDestroySampler(device, m_Sampler, nullptr); m_Sampler = VK_NULL_HANDLE; }
+        if (m_ShadowSampler) { vkDestroySampler(device, m_ShadowSampler, nullptr); m_ShadowSampler = VK_NULL_HANDLE; }
     }
 
     void VulkanFramebuffer::Invalidate() {
@@ -237,6 +238,21 @@ namespace Ayaya {
             samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
             samplerInfo.maxAnisotropy = 1.0f;
             vkCreateSampler(device, &samplerInfo, nullptr, &m_Sampler);
+        }
+
+        // Shadow map hardware PCF sampler — comparison-filtered, white border for out-of-frustum
+        if (m_Specification.IsShadowMap && !m_ShadowSampler) {
+            VkSamplerCreateInfo shadowInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+            shadowInfo.magFilter = VK_FILTER_LINEAR;
+            shadowInfo.minFilter = VK_FILTER_LINEAR;
+            shadowInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+            shadowInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+            shadowInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+            shadowInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+            shadowInfo.compareEnable = VK_TRUE;
+            shadowInfo.compareOp = VK_COMPARE_OP_GREATER;
+            shadowInfo.maxAnisotropy = 1.0f;
+            vkCreateSampler(device, &shadowInfo, nullptr, &m_ShadowSampler);
         }
 
         for (auto& view : m_ColorImageViews) {
