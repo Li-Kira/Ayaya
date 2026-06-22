@@ -7,7 +7,11 @@ layout(set = 1, binding = 1) uniform sampler2D g_Albedo;
 layout(set = 1, binding = 2) uniform sampler2D g_PBR;
 layout(set = 1, binding = 3) uniform sampler2D g_CustomData;
 layout(set = 1, binding = 4) uniform sampler2D g_Normal;
+#ifdef USE_HARDWARE_PCF
 layout(set = 1, binding = 5) uniform sampler2DShadow u_ShadowMap;
+#else
+layout(set = 1, binding = 5) uniform sampler2D u_ShadowMap;
+#endif
 layout(set = 1, binding = 8) uniform samplerCube u_IrradianceMap;
 layout(set = 1, binding = 9) uniform samplerCube u_PrefilteredMap;
 layout(set = 1, binding = 10) uniform sampler2D u_BRDFLUT;
@@ -59,12 +63,19 @@ float ShadowCalc(vec4 fl, float NdotL) {
     float bias = max(0.0003 * (1.0 - NdotL), 0.0001);
     float refZ = p.z - bias;
 
-    // 3×3 hardware PCF: each texture() call does 4-tap bilinear = 36 total comparisons
+    // 3×3 PCF
     float shadow = 0.0;
     vec2 ts = 1.0 / textureSize(u_ShadowMap, 0);
     for (int x = -1; x <= 1; x++) {
         for (int y = -1; y <= 1; y++) {
+#ifdef USE_HARDWARE_PCF
+            // Hardware: each texture() call does 4-tap bilinear = 36 total comparisons
             shadow += texture(u_ShadowMap, vec3(p.xy + vec2(x, y) * ts, refZ));
+#else
+            // Software: manual depth comparison (MoltenVK/M1 fallback)
+            float pcfDepth = texture(u_ShadowMap, p.xy + vec2(x, y) * ts).r;
+            shadow += (refZ > pcfDepth) ? 1.0 : 0.0;
+#endif
         }
     }
     return shadow / 9.0;

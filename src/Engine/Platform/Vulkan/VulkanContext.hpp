@@ -13,6 +13,14 @@ struct GLFWwindow;
 
 namespace Ayaya {
 
+    // GPU capability flags queried at device selection time.
+    // Passes and subsystems use these to route between fast-path and fallback implementations.
+    struct VulkanCapabilities {
+        bool HasDrawIndirectCount = false;
+        bool HasBindlessTextures = false;
+        bool HasHardwarePCF = false;  // reserved for future sampler2DShadow filtering support
+    };
+
     struct QueueFamilyIndices {
         std::optional<uint32_t> GraphicsFamily;
         std::optional<uint32_t> PresentFamily;
@@ -81,6 +89,9 @@ namespace Ayaya {
         inline VkDescriptorSet GetBindlessSet() const { return m_BindlessManager.GetSet(); }
         inline GlobalGeometryPool& GetGeometryPool() { return m_GeometryPool; }
 
+        // GPU capabilities queried at device creation (see VulkanCapabilities)
+        const VulkanCapabilities& GetCapabilities() const { return m_Capabilities; }
+
         // Default bindless texture indices (fixed, never recycled)
         uint32_t GetWhiteTextureIndex() const         { return VulkanBindlessManager::kWhiteIndex; }
         uint32_t GetBlackTextureIndex() const         { return VulkanBindlessManager::kBlackIndex; }
@@ -126,6 +137,7 @@ namespace Ayaya {
         uint32_t m_ImageIndex = 0;
         uint32_t m_GraphicsQueueFamily = 0;
 
+        VulkanCapabilities     m_Capabilities;
         VulkanBindlessManager m_BindlessManager;
         GlobalGeometryPool    m_GeometryPool;
 

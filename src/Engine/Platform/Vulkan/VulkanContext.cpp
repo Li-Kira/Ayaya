@@ -253,13 +253,37 @@ namespace Ayaya {
             queueCreateInfos.push_back(queueCreateInfo);
         }
 
+        // ── Query supported Vulkan 1.2 features ──
+        VkPhysicalDeviceVulkan12Features availableVk12{};
+        availableVk12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+        VkPhysicalDeviceFeatures2 availableFeatures2{};
+        availableFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        availableFeatures2.pNext = &availableVk12;
+        vkGetPhysicalDeviceFeatures2(m_PhysicalDevice, &availableFeatures2);
+
+        // Populate engine capability flags
+        m_Capabilities.HasDrawIndirectCount = (availableVk12.drawIndirectCount == VK_TRUE);
+        m_Capabilities.HasBindlessTextures  = (availableVk12.shaderSampledImageArrayNonUniformIndexing == VK_TRUE);
+        // Hardware PCF (sampler2DShadow + comparison sampler): always available on desktop GPUs.
+        // On MoltenVK (macOS), hardware PCF requires mutableComparisonSamplers portability feature,
+        // which is unavailable on M1/M2. Use manual PCF fallback on Apple Silicon.
+#ifdef __APPLE__
+        m_Capabilities.HasHardwarePCF = false;
+#else
+        m_Capabilities.HasHardwarePCF = true;
+#endif
+
+        AYAYA_CORE_INFO("GPU Capabilities: drawIndirectCount={0}, bindless={1}, hardwarePCF={2}",
+            m_Capabilities.HasDrawIndirectCount, m_Capabilities.HasBindlessTextures,
+            m_Capabilities.HasHardwarePCF);
+
         VkPhysicalDeviceFeatures deviceFeatures{};
         deviceFeatures.independentBlend = VK_TRUE;               // WBOIT per-attachment blend
         deviceFeatures.multiDrawIndirect = VK_TRUE;              // GDR: drawCount > 1
         deviceFeatures.drawIndirectFirstInstance = VK_TRUE;      // GDR: firstInstance != 0 per draw
         deviceFeatures.depthBiasClamp = VK_TRUE;                 // Shadow: clamp slope-scaled bias
 
-        // Vulkan 1.2 features (bindless descriptors)
+        // Vulkan 1.2 features (bindless descriptors + optional drawIndirectCount)
         VkPhysicalDeviceVulkan12Features vk12Features{};
         vk12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
         vk12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
@@ -267,7 +291,7 @@ namespace Ayaya {
         vk12Features.descriptorBindingVariableDescriptorCount = VK_TRUE;
         vk12Features.runtimeDescriptorArray = VK_TRUE;
         vk12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
-        vk12Features.drawIndirectCount = VK_TRUE;                 // GDR: vkCmdDrawIndexedIndirectCount
+        vk12Features.drawIndirectCount = m_Capabilities.HasDrawIndirectCount ? VK_TRUE : VK_FALSE;
 
         // Vulkan 1.3 feature: dynamic rendering
         VkPhysicalDeviceVulkan13Features vk13Features{};

@@ -4,6 +4,8 @@
 #include "Renderer/Mesh.hpp"
 #include "Renderer/TextureCube.hpp"
 #include "Asset/AssetManager.hpp"
+#include "Platform/Vulkan/VulkanContext.hpp"
+#include "Core/Application.hpp"
 
 namespace Ayaya {
 
@@ -22,7 +24,11 @@ namespace Ayaya {
         ref.Attachments = { FramebufferTextureFormat::RGBA16F, FramebufferTextureFormat::Depth };
         m_RefFBO = Framebuffer::Create(ref);
 
-        m_DeferredShader = Shader::Create("Deferred/deferred_lighting.vert", "Deferred/deferred_lighting.frag");
+        bool hasHWPCF = true;
+        if (auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext()))
+            hasHWPCF = vkCtx->GetCapabilities().HasHardwarePCF;
+        std::string fragName = hasHWPCF ? "Deferred/deferred_lighting.frag" : "Deferred/deferred_lighting_nohwpc.frag";
+        m_DeferredShader = Shader::Create("Deferred/deferred_lighting.vert", fragName);
         m_DeferredPipeSpec.Shader = m_DeferredShader; m_DeferredPipeSpec.Layout = {};
         m_DeferredPipeSpec.Topology = PrimitiveTopology::TriangleStrip;
         m_DeferredPipeSpec.TargetFramebuffer = m_RefFBO;

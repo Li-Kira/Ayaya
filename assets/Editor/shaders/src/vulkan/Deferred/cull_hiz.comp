@@ -86,10 +86,16 @@ void main() {
     nearestView.z += radius;  // pull sphere toward camera → more conservative
 
     vec4 nearestClip = pc.u_PrevProj * vec4(nearestView, 1.0);
+    if (nearestClip.w <= 0.0) return; // sphere hits near plane — conservatively keep
     float instanceDepth = nearestClip.z / nearestClip.w;  // [0, 1] Vulkan NDC
 
     // Clamp to valid depth range
     instanceDepth = clamp(instanceDepth, 0.0, 1.0);
+
+    // If instance is at or very near the near plane, conservatively keep it.
+    // Floating-point error in nearestClip.z / nearestClip.w amplifies when w is small,
+    // producing inflated depths that incorrectly fail the occlusion test.
+    if (instanceDepth <= 1e-4) return;
 
     // ── 3. Compute screen-space AABB for mip selection ──
     vec3 ndc = prevClip.xyz / prevClip.w;
@@ -101,15 +107,31 @@ void main() {
     vec2 rectSize = vec2(max(screenRadius * 2.0, 1.0));
 
     // ── 4. Select mip level based on AABB size ──
-    // Larger on-screen → coarser mip → better cache + more conservative
-    float mip = max(0.0, ceil(log2(max(rectSize.x, rectSize.y))));
+    // Larger on-screen → coarser mip. Drop one level to improve spatial
+    // precision: prevents a single coarse-mip texel (covering a large screen
+    // region) from incorrectly occluding objects visible around its edges.
+    float mip = max(0.0, ceil(log2(max(rectSize.x, rectSize.y))) - 1.0);
     mip = min(mip, float(pc.u_HiZMipCount - 1u));
 
     // ── 5. Sample Hi-Z and compare ──
     float hizDepth = textureLod(u_HiZTexture, screenUV, mip).r;
 
-    // Occlusion test: instance nearest depth BEHIND Hi-Z max depth → fully hidden
-    if (instanceDepth > hizDepth) {
+    // Depth bias: compensate for temporal reprojection error when camera moves
+    // away from objects between frames.
+    float bias = 0.01 + 0.01 * mip;
+
+    bool occluded = instanceDepth > hizDepth + bias;
+
+    // At coarser mips, the sample center may land on a nearby occluder even
+    // though the object is visible around its edges.  Verify with an edge sample
+    // offset by the screen-space radius to avoid false occlusion.
+    if (occluded && mip >= 2.0) {
+        vec2 edgeUV = clamp(screenUV + vec2(screenRadius, 0.0) / viewportSize, 0.0, 1.0);
+        float hizEdge = textureLod(u_HiZTexture, edgeUV, mip).r;
+        occluded = instanceDepth > hizEdge + bias;
+    }
+
+    if (occluded) {
         Commands[gID].instanceCount = 0u;
     }
 }

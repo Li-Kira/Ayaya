@@ -547,7 +547,10 @@ namespace Ayaya {
             newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
             srcAccess = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
             dstAccess = VK_ACCESS_SHADER_READ_BIT;
-            srcStage  = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+            // TBDR: include TRANSFER stage to cover implicit tile→memory store
+            // that MoltenVK performs between vkCmdEndRendering and shader reads.
+            srcStage  = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT
+                      | VK_PIPELINE_STAGE_TRANSFER_BIT;
             aspect    = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
             barriers[0].image = vkFBO->GetDepthAttachmentImage();
         } else {

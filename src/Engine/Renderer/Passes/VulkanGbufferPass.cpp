@@ -98,6 +98,7 @@ namespace Ayaya {
             viewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             viewCI.subresourceRange.baseMipLevel = 0;
             viewCI.subresourceRange.levelCount = m_HiZMipLevels;
+            viewCI.subresourceRange.layerCount = 1;
             vkCreateImageView(device, &viewCI, nullptr, &hz.view);
 
             VkSamplerCreateInfo sampCI{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
@@ -119,6 +120,7 @@ namespace Ayaya {
             initBarrier.image = hz.image;
             initBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             initBarrier.subresourceRange.levelCount = m_HiZMipLevels;
+            initBarrier.subresourceRange.layerCount = 1;
             initBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
             vkCmdPipelineBarrier(initCmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                 VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &initBarrier);
@@ -127,6 +129,7 @@ namespace Ayaya {
             VkImageSubresourceRange clearRange{};
             clearRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             clearRange.levelCount = m_HiZMipLevels;
+            clearRange.layerCount = 1;
             vkCmdClearColorImage(initCmd, hz.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 &clearVal, 1, &clearRange);
 
@@ -136,6 +139,7 @@ namespace Ayaya {
             finalBarrier.image = hz.image;
             finalBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             finalBarrier.subresourceRange.levelCount = m_HiZMipLevels;
+            finalBarrier.subresourceRange.layerCount = 1;
             finalBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
             finalBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
             vkCmdPipelineBarrier(initCmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -152,6 +156,7 @@ namespace Ayaya {
                 mipCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
                 mipCI.subresourceRange.baseMipLevel = mip;
                 mipCI.subresourceRange.levelCount = 1;
+                mipCI.subresourceRange.layerCount = 1;
                 vkCreateImageView(device, &mipCI, nullptr, &hz.mipSrcViews[mip]);
 
                 // DST views are the same as SRC — just separate view objects for clarity
@@ -525,11 +530,11 @@ namespace Ayaya {
 
                 VkBufferMemoryBarrier indirectBarrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
                 indirectBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-                indirectBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+                indirectBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
                 indirectBarrier.buffer = m_DrawIndirectBuffer->GetBuffer(frameIdx);
                 indirectBarrier.size = VK_WHOLE_SIZE;
                 vkCmdPipelineBarrier(vkCmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0,
+                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
                     0, nullptr, 1, &indirectBarrier, 0, nullptr);
 
                 // ── Hi-Z Occlusion Culling (temporal: uses previous frame's depth pyramid) ──
@@ -653,6 +658,7 @@ void VulkanGBufferPass::BuildHiZ(VkCommandBuffer vkCmd, uint32_t writeIdx,
     preHiZ.image = hz.image;
     preHiZ.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     preHiZ.subresourceRange.levelCount = m_HiZMipLevels;
+    preHiZ.subresourceRange.layerCount = 1;
     preHiZ.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
     vkCmdPipelineBarrier(vkCmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
@@ -698,6 +704,7 @@ void VulkanGBufferPass::BuildHiZ(VkCommandBuffer vkCmd, uint32_t writeIdx,
         srcBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         srcBarrier.subresourceRange.baseMipLevel = mip - 1;
         srcBarrier.subresourceRange.levelCount = 1;
+        srcBarrier.subresourceRange.layerCount = 1;
         srcBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
         srcBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         vkCmdPipelineBarrier(vkCmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
@@ -719,6 +726,7 @@ void VulkanGBufferPass::BuildHiZ(VkCommandBuffer vkCmd, uint32_t writeIdx,
     finalHiZ.image = hz.image;
     finalHiZ.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     finalHiZ.subresourceRange.levelCount = m_HiZMipLevels;
+    finalHiZ.subresourceRange.layerCount = 1;
     finalHiZ.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
     finalHiZ.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     vkCmdPipelineBarrier(vkCmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,

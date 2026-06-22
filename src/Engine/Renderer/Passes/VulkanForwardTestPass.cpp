@@ -23,7 +23,11 @@ namespace Ayaya {
     }
 
     void VulkanForwardTestPass::OnAttach() {
-        m_ForwardShader = Shader::Create("Debug/pbr_forward.vert", "Debug/pbr_forward.frag");
+        bool hasHWPCF = true;
+        if (auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext()))
+            hasHWPCF = vkCtx->GetCapabilities().HasHardwarePCF;
+        std::string fragName = hasHWPCF ? "Debug/pbr_forward.frag" : "Debug/pbr_forward_nohwpc.frag";
+        m_ForwardShader = Shader::Create("Debug/pbr_forward.vert", fragName);
 
         m_DefaultMaterial = std::make_shared<Material>();
         m_DefaultMaterial->Name = "Forward Default Material";

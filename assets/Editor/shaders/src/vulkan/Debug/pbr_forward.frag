@@ -14,7 +14,11 @@ layout(set = 1, binding = 4) uniform sampler2D u_MetallicMap;
 layout(set = 1, binding = 5) uniform sampler2D u_RoughnessMap;
 layout(set = 1, binding = 6) uniform sampler2D u_AOMap;
 layout(set = 1, binding = 7) uniform sampler2D u_NormalMap;
+#ifdef USE_HARDWARE_PCF
 layout(set = 1, binding = 8) uniform sampler2DShadow u_ShadowMap;
+#else
+layout(set = 1, binding = 8) uniform sampler2D u_ShadowMap;
+#endif
 
 // Set 0: 引擎 UBO
 layout(set = 0, binding = 0) uniform CameraData {
@@ -121,7 +125,12 @@ float ShadowCalculation(vec4 fragPosLightSpace, float NdotL) {
     vec2 texelSize = 1.0 / textureSize(u_ShadowMap, 0);
     for (int x = -1; x <= 1; ++x) {
         for (int y = -1; y <= 1; ++y) {
+#ifdef USE_HARDWARE_PCF
             shadow += texture(u_ShadowMap, vec3(projCoords.xy + vec2(x, y) * texelSize, refZ));
+#else
+            float pcfDepth = texture(u_ShadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += (refZ > pcfDepth) ? 1.0 : 0.0;
+#endif
         }
     }
     return shadow / 9.0;

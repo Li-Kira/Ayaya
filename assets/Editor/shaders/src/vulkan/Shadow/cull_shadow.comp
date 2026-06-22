@@ -1,4 +1,5 @@
 #version 450 core
+#extension GL_EXT_shader_atomic_int64 : enable   // silently ignored if unsupported
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
@@ -42,7 +43,7 @@ layout(std430, set = 2, binding = 2) readonly buffer MaterialBuffer {
     GPUMaterial Materials[];
 };
 
-// ── Output: binned indirect draw commands — one per visible instance ──
+// ── Output: indirect draw commands ──
 struct DrawCommand {
     uint indexCount;
     uint instanceCount;
@@ -51,22 +52,32 @@ struct DrawCommand {
     uint firstInstance;
 };
 
-// set=3, binding=0: Opaque indirect commands (no alpha-test)
-layout(std430, set = 3, binding = 0) writeonly buffer OpaqueCommands {
+// set=3, binding=0: Opaque indirect commands (both paths)
+layout(std430, set = 3, binding = 0) buffer OpaqueCommands {
     DrawCommand OpaqueCmds[];
 };
-// set=3, binding=1: Opaque atomic counter
+
+#ifdef USE_INDIRECT_COUNT
+// ── Atomic path: compacted binning with count buffers ──
+// Set=3, binding=1: Opaque atomic count
 layout(std430, set = 3, binding = 1) buffer OpaqueCount {
     uint OpaqueCnt;
 };
-// set=3, binding=2: Masked indirect commands (alpha-test)
-layout(std430, set = 3, binding = 2) writeonly buffer MaskedCommands {
+// Set=3, binding=2: Masked indirect commands
+layout(std430, set = 3, binding = 2) buffer MaskedCommands {
     DrawCommand MaskedCmds[];
 };
-// set=3, binding=3: Masked atomic counter
+// Set=3, binding=3: Masked atomic count
 layout(std430, set = 3, binding = 3) buffer MaskedCount {
     uint MaskedCnt;
 };
+#else
+// ── Fixed-slot path: contiguous bindings (MoltenVK/Metal compat) ──
+// Set=3, binding=1: Masked indirect commands
+layout(std430, set = 3, binding = 1) buffer MaskedCommands {
+    DrawCommand MaskedCmds[];
+};
+#endif
 
 // ── Push constants: light frustum planes (Gribb-Hartmann, 6 × vec4 = 96 bytes) + instance count ──
 layout(push_constant) uniform FrustumPC {
@@ -91,7 +102,14 @@ void main() {
     GPUInstance inst = Instances[gID];
 
     // Skip non-shadow-casters
-    if ((inst.flags & kFlag_CastShadows) == 0u) return;
+    if ((inst.flags & kFlag_CastShadows) == 0u) {
+#ifndef USE_INDIRECT_COUNT
+        // Fixed-slot path: must write no-op to avoid reading garbage from uninitialized slots
+        OpaqueCmds[gID].instanceCount = 0;
+        MaskedCmds[gID].instanceCount = 0;
+#endif
+        return;
+    }
 
     if (IsVisible(inst.boundingSphere)) {
         GeometryRange range = Ranges[inst.geometryRangeIdx];
@@ -104,7 +122,10 @@ void main() {
         cmd.vertexOffset  = 0;
         cmd.firstInstance = gID;
 
-        // Bin: Masked (blendMode==1) or Opaque
+#ifdef USE_INDIRECT_COUNT
+        // ── Atomic-compacted binning ──
+        // Compact visible instances into contiguous slots via atomicAdd.
+        // drawCount = actual populated slots; vkCmdDrawIndexedIndirectCount reads counts.
         if (mat.blendMode == 1) {
             uint idx = atomicAdd(MaskedCnt, 1u);
             MaskedCmds[idx] = cmd;
@@ -112,5 +133,26 @@ void main() {
             uint idx = atomicAdd(OpaqueCnt, 1u);
             OpaqueCmds[idx] = cmd;
         }
+#else
+        // ── Fixed-slot binning (MoltenVK/M1 compatible) ──
+        // Each invocation writes to OpaqueCmds[gID] or MaskedCmds[gID].
+        // The other bin gets instanceCount=0 → GPU hardware no-op.
+        // vkCmdDrawIndexedIndirect draws ALL slots; culled ones are skipped by hardware.
+        if (mat.blendMode == 1) {
+            MaskedCmds[gID] = cmd;
+            OpaqueCmds[gID].instanceCount = 0;
+        } else {
+            OpaqueCmds[gID] = cmd;
+            MaskedCmds[gID].instanceCount = 0;
+        }
+#endif
     }
+#ifndef USE_INDIRECT_COUNT
+    else {
+        // Culled: write no-op to BOTH bins (instanceCount=0 → GPU hardware skips)
+        OpaqueCmds[gID].instanceCount = 0;
+        MaskedCmds[gID].instanceCount = 0;
+    }
+    // (USE_INDIRECT_COUNT path: culled instances write nothing; slots left unpopulated)
+#endif
 }

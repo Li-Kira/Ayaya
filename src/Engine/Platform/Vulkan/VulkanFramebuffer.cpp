@@ -240,8 +240,12 @@ namespace Ayaya {
             vkCreateSampler(device, &samplerInfo, nullptr, &m_Sampler);
         }
 
-        // Shadow map hardware PCF sampler — comparison-filtered, white border for out-of-frustum
+        // Shadow map hardware PCF sampler — comparison-filtered, white border for out-of-frustum.
+        // On MoltenVK portability subset without mutableComparisonSamplers, fall back to
+        // a non-comparison sampler (manual PCF in shader).
         if (m_Specification.IsShadowMap && !m_ShadowSampler) {
+            bool hasHWPCF = context->GetCapabilities().HasHardwarePCF;
+
             VkSamplerCreateInfo shadowInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
             shadowInfo.magFilter = VK_FILTER_LINEAR;
             shadowInfo.minFilter = VK_FILTER_LINEAR;
@@ -249,7 +253,7 @@ namespace Ayaya {
             shadowInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
             shadowInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
             shadowInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-            shadowInfo.compareEnable = VK_TRUE;
+            shadowInfo.compareEnable = hasHWPCF ? VK_TRUE : VK_FALSE;
             shadowInfo.compareOp = VK_COMPARE_OP_GREATER;
             shadowInfo.maxAnisotropy = 1.0f;
             vkCreateSampler(device, &shadowInfo, nullptr, &m_ShadowSampler);

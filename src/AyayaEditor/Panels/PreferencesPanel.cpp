@@ -126,7 +126,13 @@ namespace Ayaya {
                 if (prefs["EnableVSync"]) EnableVSync = prefs["EnableVSync"].as<bool>();
 
                 // 【更新】：读取全局底层配置
-                if (prefs["GraphicsAPI"]) GraphicsAPI = prefs["GraphicsAPI"].as<int>();
+                if (prefs["GraphicsAPI"]) {
+                    try {
+                        GraphicsAPI = prefs["GraphicsAPI"].as<int>();
+                    } catch (...) {
+                        GraphicsAPI = static_cast<int>(prefs["GraphicsAPI"].as<float>());
+                    }
+                }
             }
             // Apply loaded values
             Application::Get().GetWindow().SetVSync(EnableVSync);
