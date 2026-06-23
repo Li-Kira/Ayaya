@@ -97,41 +97,73 @@ void main() {
     // producing inflated depths that incorrectly fail the occlusion test.
     if (instanceDepth <= 1e-4) return;
 
-    // ── 3. Compute screen-space AABB for mip selection ──
-    vec3 ndc = prevClip.xyz / prevClip.w;
-    vec2 screenUV = ndc.xy * 0.5 + 0.5;
-    vec2 viewportSize = vec2(textureSize(u_HiZTexture, 0));
-    vec2 screenCenter = screenUV * viewportSize;
-    // Approximate screen-space radius from NDC extent
-    float screenRadius = (radius / abs(prevClip.w)) * (viewportSize.x * 0.5);
-    vec2 rectSize = vec2(max(screenRadius * 2.0, 1.0));
+    // ── 3. Analytic screen-space AABB (exact sphere projection) ──
+    // Computes the true min/max NDC bounds of the projected sphere via the
+    // tangent-cone intersection with the Z=1 image plane.  Accounts for
+    // perspective distortion (projected center ≠ sphere-center projection)
+    // that radius/w approximations miss for close, off-axis spheres.
+    vec3 C = viewPos.xyz;
+    float R = radius;
+    float d2 = dot(C, C);
+    float r2 = R * R;
+    if (d2 <= r2 || C.z * C.z <= r2) return; // camera in/near sphere — keep
 
-    // ── 4. Select mip level based on AABB size ──
-    // Larger on-screen → coarser mip. Drop one level to improve spatial
-    // precision: prevents a single coarse-mip texel (covering a large screen
-    // region) from incorrectly occluding objects visible around its edges.
-    float mip = max(0.0, ceil(log2(max(rectSize.x, rectSize.y))) - 1.0);
+    float z2 = C.z * C.z;
+    float x2 = C.x * C.x;
+    float y2 = C.y * C.y;
+
+    float tx = sqrt(x2 + z2 - r2);
+    float minX = (C.x * C.z - R * tx) / (z2 - r2);
+    float maxX = (C.x * C.z + R * tx) / (z2 - r2);
+
+    float ty = sqrt(y2 + z2 - r2);
+    float minY = (C.y * C.z - R * ty) / (z2 - r2);
+    float maxY = (C.y * C.z + R * ty) / (z2 - r2);
+
+    // NDC bounds with correct Vulkan sign (clip.w = -View.z)
+    vec2 ndcMin = -vec2(minX, minY) * vec2(pc.u_PrevProj[0][0], pc.u_PrevProj[1][1]);
+    vec2 ndcMax = -vec2(maxX, maxY) * vec2(pc.u_PrevProj[0][0], pc.u_PrevProj[1][1]);
+    vec2 trueNdcMin = min(ndcMin, ndcMax);
+    vec2 trueNdcMax = max(ndcMin, ndcMax);
+
+    // Convert to UV, apply Y-flip, re-order
+    vec2 uvMin = trueNdcMin * 0.5 + 0.5;
+    vec2 uvMax = trueNdcMax * 0.5 + 0.5;
+    uvMin.y = 1.0 - uvMin.y;
+    uvMax.y = 1.0 - uvMax.y;
+    vec2 trueUvMin = min(uvMin, uvMax);
+    vec2 trueUvMax = max(uvMin, uvMax);
+
+    vec2 uvHalfSize = (trueUvMax - trueUvMin) * 0.5;
+    vec2 screenUV   = (trueUvMin + trueUvMax) * 0.5;
+
+    // ── Pixel-space mip selection ──
+    vec2 viewportSize = vec2(textureSize(u_HiZTexture, 0));
+    vec2 rectSizePixels = uvHalfSize * 2.0 * viewportSize;
+    float mip = max(0.0, floor(log2(max(rectSizePixels.x, rectSizePixels.y))) - 1.0);
     mip = min(mip, float(pc.u_HiZMipCount - 1u));
 
-    // ── 5. Sample Hi-Z and compare ──
-    float hizDepth = textureLod(u_HiZTexture, screenUV, mip).r;
-
-    // Depth bias: compensate for temporal reprojection error when camera moves
-    // away from objects between frames.
+    // ── 9-tap grid MAX sampling (center + 4 edges + 4 corners) ──
+    vec2 e = uvHalfSize * 0.9;
     float bias = 0.01 + 0.01 * mip;
 
-    bool occluded = instanceDepth > hizDepth + bias;
+    vec2 taps[9] = {
+        clamp(screenUV, 0.0, 1.0),                                // center
+        clamp(screenUV + vec2(-e.x, 0.0), 0.0, 1.0),             // left
+        clamp(screenUV + vec2( e.x, 0.0), 0.0, 1.0),             // right
+        clamp(screenUV + vec2(0.0, -e.y), 0.0, 1.0),             // top
+        clamp(screenUV + vec2(0.0,  e.y), 0.0, 1.0),             // bottom
+        clamp(screenUV + vec2(-e.x, -e.y), 0.0, 1.0),            // top-left
+        clamp(screenUV + vec2( e.x, -e.y), 0.0, 1.0),            // top-right
+        clamp(screenUV + vec2(-e.x,  e.y), 0.0, 1.0),            // bottom-left
+        clamp(screenUV + vec2( e.x,  e.y), 0.0, 1.0),            // bottom-right
+    };
 
-    // At coarser mips, the sample center may land on a nearby occluder even
-    // though the object is visible around its edges.  Verify with an edge sample
-    // offset by the screen-space radius to avoid false occlusion.
-    if (occluded && mip >= 2.0) {
-        vec2 edgeUV = clamp(screenUV + vec2(screenRadius, 0.0) / viewportSize, 0.0, 1.0);
-        float hizEdge = textureLod(u_HiZTexture, edgeUV, mip).r;
-        occluded = instanceDepth > hizEdge + bias;
-    }
+    float maxHizDepth = 0.0;
+    for (int i = 0; i < 9; i++)
+        maxHizDepth = max(maxHizDepth, textureLod(u_HiZTexture, taps[i], mip).r);
 
-    if (occluded) {
+    if (instanceDepth > maxHizDepth + bias) {
         Commands[gID].instanceCount = 0u;
     }
 }

@@ -1563,3 +1563,108 @@ swapchain 无效。`VulkanContext::ChooseSwapPresentMode()` 硬编码 `MAILBOX_K
 - 使用 `SetTranslationsBatch` + `SetRotationsBatch` Lua API 进行批量变换更新
 - 键盘控制: Up/Down ±100, Left/Right ±10, W/S ±1, R=reset, G/L/C/X=layout, F=切换FPS
 - 增量重建: count 变化时仅创建/销毁差值
+
+---
+
+## 19. MoltenVK/M1 兼容性 + Hi-Z 鲁棒性修复 (2026-06-23)
+
+> **目标:** 修复 Mac M1 (MoltenVK) 上的 vkCreateDevice 崩溃、Hi-Z 误剔除、Shadow Pass 固定槽位适配
+
+### 19.1 Feature-Driven 能力注册表
+
+**文件:** `VulkanContext.hpp:18-22`, `VulkanContext.cpp:264-294`
+
+新增 `VulkanCapabilities` 结构体，在设备创建时通过 `vkGetPhysicalDeviceFeatures2` 查询并缓存：
+
+| 能力 | macOS (M1) | Windows (RTX3060) | 用途 |
+|------|-----------|-------------------|------|
+| `HasDrawIndirectCount` | false (runtime) | true (runtime) | Shadow Pass: atomic vs fixed-slot 路径 |
+| `HasBindlessTextures` | true (runtime) | true (runtime) | Bindless 纹理数组 |
+| `HasHardwarePCF` | false (`#ifdef __APPLE__`) | true | 阴影采样器: `sampler2DShadow` vs 手动 PCF |
+
+### 19.2 Shadow Pass — 双路径 GPU-Driven 剔除
+
+**文件:** `VulkanShadowPass.hpp`, `VulkanShadowPass.cpp`
+
+- **Atomic 路径** (桌面): `atomicAdd` 压缩到 opaque/masked bin → `vkCmdDrawIndexedIndirectCount`
+- **Fixed-Slot 路径** (MoltenVK/M1): 固定槽位写入，被剔除/非阴影投射者写 `instanceCount=0` → `vkCmdDrawIndexedIndirect` with `drawCount=InstanceCount`
+- 排他性初始化 (`if/else`): 只创建当前路径需要的资源，不浪费 VRAM
+- 连续 descriptor bindings (0,1): 修复 MoltenVK Metal argument buffer 的 sparse binding 问题
+
+**Shader 变体:** `cull_shadow.comp` → `_atomic` / `_fixed` (via `#ifdef USE_INDIRECT_COUNT`)
+
+### 19.3 阴影采样器 — 手动 PCF 回退
+
+**文件:** `VulkanFramebuffer.cpp:246-259`, `deferred_lighting.frag`, `pbr_forward.frag`
+
+- macOS: `compareEnable=VK_FALSE` (非比较采样器) + `sampler2D` + 手动深度比较
+- Desktop: `compareEnable=VK_TRUE` + `sampler2DShadow` 硬件 PCF
+- Shader 变体: `USE_HARDWARE_PCF` → default / `_nohwpc`
+
+### 19.4 Shader 排列系统
+
+**文件:** `compile_shaders.py`
+
+新增 `SHADER_VARIANTS` 字典，支持 `glslc -DKEY=VALUE` 从单一 GLSL 源生成多个 SPIR-V：
+- `cull_shadow.comp` → `_atomic` / `_fixed`
+- `deferred_lighting.frag` → default / `_nohwpc`
+- `pbr_forward.frag` → default / `_nohwpc`
+
+### 19.5 Hi-Z 遮挡剔除 — 鲁棒性强化
+
+**文件:** `cull_hiz.comp`, `hiz_downsample.comp`, `VulkanGbufferPass.cpp`
+
+#### 19.5.1 解析解 AABB (cull_hiz.comp)
+
+- 切线锥面与 Z=1 像平面相交的精确投影 → 真实的 NDC min/max 边界
+- 正确处理透视变形（投影中心 ≠ 球心投影），替代所有 `radius/w` 近似
+- 正确的 Vulkan NDC 符号：`clip.w = -View.z` → `NDC = -(X/Z) * Proj`（修复镜像错位）
+- NDC→UV 半宽: `(max-min) * 0.25`（NDC span=2.0, UV span=1.0，修复双倍膨胀）
+
+#### 19.5.2 近平面防护
+
+- `nearestClip.w ≤ 0` → 球体穿透近平面，保守保留
+- `instanceDepth ≤ 1e-4` → 小 w 除法导致数值不稳定，保守保留
+- `w² ≤ r² 或 C.z² ≤ r²` → 相机在球体内，保守保留
+
+#### 19.5.3 9-Tap 网格采样
+
+- 中心 + 4 个十字边缘中点 + 4 个角落，覆盖整个投影 AABB
+- `safeEdge = uvHalfSize * 0.9` — 10% 安全余量，防止透视精度越界
+- 深度偏置: `0.01 + 0.01 * mip` — 补偿相机远离物体时的帧间深度差
+- Mip: `floor(log2(rectSizePixels)) - 1` — 为保证 9 点空间分辨率降一级
+
+#### 19.5.4 自适应边界降采样 (hiz_downsample.comp)
+
+- 奇数分辨率修复：最后一个目标像素消费源 Mip 所有剩余像素
+- 条件: `uv.x == dstSize.x - 1 → maxX = srcSize.x - 1`
+- 动态循环: 普通 2×2，边缘 3×2/2×3/3×3
+
+#### 19.5.5 Barrier 修复 (VulkanGbufferPass.cpp)
+
+- `cull.comp → cull_hiz.comp` barrier: `dstAccess` 从 `INDIRECT_COMMAND_READ` 改为 `SHADER_READ | SHADER_WRITE`; `dstStage` 从 `DRAW_INDIRECT` 改为 `COMPUTE_SHADER`
+- 8 处 `layerCount=0→1` (image views, barriers, clearColorImage) — Vulkan spec 要求 ≥1
+
+### 19.6 其他修复
+
+- `RenderGraph.cpp`: `InsertTileResolveBarrier` 深度路径 `srcStage` 增加 `TRANSFER_BIT` — 覆盖 MoltenVK TBDR tile→memory store
+- `PreferencesPanel.cpp`: YAML float→int 转换加固（GraphicsAPI 为 float 时不再崩溃）
+- `VulkanLightingPass.cpp` / `VulkanForwardTestPass.cpp`: macOS 加载 `_nohwpc` shader 变体
+
+### 19.7 已知问题（待修复）
+
+**极限情况:** 当画面前面的物体靠近相机最左边时，会触发后面物体的误剔除。
+
+- **症状:** 前景遮挡物占据屏幕左侧区域，位于其右侧的后方物体被 Hi-Z 错误剔除
+- **分析:** 遮挡物在粗 Mip 级别中向外"晕染"（MAX 降采样的固有特性），覆盖了后方物体 AABB 的整个 footprint 区域。即使 footprint 面积采样遍历所有 texel，若遮挡物填充了整个 footprint，后方物体仍会被剔除
+- **方向:** 可能需要进一步提升 Mip 精度（增加降级 offset）或引入深度范围阈值
+
+### 19.8 Hi-Z 完整 Shader 清单
+
+| Shader | 阶段 | 功能 |
+|--------|------|------|
+| `cull.comp` | Compute | Gribb-Hartmann 6-平面视锥体剔除 |
+| `cull_hiz.comp` | Compute | 时间性 Hi-Z 遮挡剔除 (上一帧深度) |
+| `hiz_build.comp` | Compute | GBuffer D32→R32 Hi-Z level-0 拷贝 |
+| `hiz_downsample.comp` | Compute | 2×2 MAX 降采样 Mip 链 (自适应边界) |
+| `cull_shadow.comp` | Compute | 光源视锥体剔除 + Opaque/Masked 分 bin
