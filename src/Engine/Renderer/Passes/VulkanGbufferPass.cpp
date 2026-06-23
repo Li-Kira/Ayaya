@@ -35,6 +35,12 @@ namespace Ayaya {
         if (m_Cull_PipelineLayout) vkDestroyPipelineLayout(device, m_Cull_PipelineLayout, nullptr);
         if (m_Cull_Pipeline)     vkDestroyPipeline(device, m_Cull_Pipeline, nullptr);
         if (m_Cull_ShaderModule) vkDestroyShaderModule(device, m_Cull_ShaderModule, nullptr);
+        // Phase 2
+        if (m_Cull_Set3LayoutV2)       vkDestroyDescriptorSetLayout(device, m_Cull_Set3LayoutV2, nullptr);
+        if (m_Cull_Set3PoolV2)         vkDestroyDescriptorPool(device, m_Cull_Set3PoolV2, nullptr);
+        if (m_HiZCullPhase2Layout)     vkDestroyPipelineLayout(device, m_HiZCullPhase2Layout, nullptr);
+        if (m_HiZCullPhase2Pipeline)   vkDestroyPipeline(device, m_HiZCullPhase2Pipeline, nullptr);
+        if (m_HiZCullPhase2Shader)     vkDestroyShaderModule(device, m_HiZCullPhase2Shader, nullptr);
     }
 
     void VulkanGBufferPass::CleanupHiZ() {
@@ -448,9 +454,91 @@ namespace Ayaya {
             vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpCI, nullptr, &m_Cull_Pipeline);
         }
 
+        // ── Phase 2 (corrective) resources ──
+        {
+            // Phase 2 indirect buffer
+            m_Phase2IndirectBuffer = std::make_unique<VulkanStorageBuffer>(
+                kGDRMaxInstances * sizeof(VkDrawIndexedIndirectCommand),
+                VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+
+            // Set=3 layout V2: binding 0=Main (read), binding 1=Phase2 (write)
+            VkDescriptorSetLayoutBinding v2Bindings[2] = {};
+            v2Bindings[0].binding = 0; v2Bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            v2Bindings[0].descriptorCount = 1; v2Bindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+            v2Bindings[1].binding = 1; v2Bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            v2Bindings[1].descriptorCount = 1; v2Bindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+            VkDescriptorSetLayoutCreateInfo v2LCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+            v2LCI.bindingCount = 2; v2LCI.pBindings = v2Bindings;
+            vkCreateDescriptorSetLayout(device, &v2LCI, nullptr, &m_Cull_Set3LayoutV2);
+
+            VkDescriptorPoolSize v2PS{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, fiCount * 2 };
+            VkDescriptorPoolCreateInfo v2PCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+            v2PCI.maxSets = fiCount; v2PCI.poolSizeCount = 1; v2PCI.pPoolSizes = &v2PS;
+            vkCreateDescriptorPool(device, &v2PCI, nullptr, &m_Cull_Set3PoolV2);
+
+            m_Cull_Set3DescriptorsV2.resize(fiCount);
+            std::vector<VkDescriptorSetLayout> v2Layouts(fiCount, m_Cull_Set3LayoutV2);
+            VkDescriptorSetAllocateInfo v2AI{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+            v2AI.descriptorPool = m_Cull_Set3PoolV2; v2AI.descriptorSetCount = fiCount;
+            v2AI.pSetLayouts = v2Layouts.data();
+            vkAllocateDescriptorSets(device, &v2AI, m_Cull_Set3DescriptorsV2.data());
+
+            for (uint32_t i = 0; i < fiCount; i++) {
+                VkDescriptorBufferInfo mainI{}, phase2I{};
+                mainI.buffer = m_DrawIndirectBuffer->GetBuffer(i);    mainI.range = VK_WHOLE_SIZE;
+                phase2I.buffer = m_Phase2IndirectBuffer->GetBuffer(i); phase2I.range = VK_WHOLE_SIZE;
+                VkWriteDescriptorSet w[2]{};
+                w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                w[0].dstSet = m_Cull_Set3DescriptorsV2[i]; w[0].dstBinding = 0;
+                w[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                w[0].descriptorCount = 1; w[0].pBufferInfo = &mainI;
+                w[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                w[1].dstSet = m_Cull_Set3DescriptorsV2[i]; w[1].dstBinding = 1;
+                w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                w[1].descriptorCount = 1; w[1].pBufferInfo = &phase2I;
+                vkUpdateDescriptorSets(device, 2, w, 0, nullptr);
+            }
+        } // Phase 2 buffer + descriptor sets (no Hi-Z dependency)
+
         // ── Hi-Z Occlusion Culling resources ──
         InitHiZResources(device, vkCtx->GetAllocator(), fiCount,
-            refSpec.Width, refSpec.Height);  // initial size; rebuilt on viewport resize
+            refSpec.Width, refSpec.Height);
+
+        // ── Phase 2 pipeline (depends on m_HiZCullSet4Layout from InitHiZResources) ──
+        if (m_HiZCullSet4Layout != VK_NULL_HANDLE) {
+            // Load Phase 2 SPIR-V
+            auto exePath = std::filesystem::current_path();
+            std::string p2Path = (exePath / "assets/Editor/shaders/cache/vulkan/Deferred/cull_hiz_phase2.comp.spv").string();
+            std::ifstream p2File(p2Path, std::ios::ate | std::ios::binary);
+            if (p2File.is_open()) {
+                size_t fileSize = (size_t)p2File.tellg();
+                std::vector<char> buffer(fileSize);
+                p2File.seekg(0); p2File.read(buffer.data(), fileSize); p2File.close();
+                VkShaderModuleCreateInfo smCI{ VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
+                smCI.codeSize = buffer.size();
+                smCI.pCode = reinterpret_cast<const uint32_t*>(buffer.data());
+                vkCreateShaderModule(device, &smCI, nullptr, &m_HiZCullPhase2Shader);
+            }
+
+            // Phase 2 pipeline layout: [dummy, dummy, GDR Set2, Set3V2, Hi-Z Set4]
+            VkDescriptorSetLayout p2SetLayouts[] = { m_Cull_DummyLayout, m_Cull_DummyLayout,
+                m_GDRCtx->Set2Layout, m_Cull_Set3LayoutV2, m_HiZCullSet4Layout };
+            VkPushConstantRange p2PCRange{ VK_SHADER_STAGE_COMPUTE_BIT, 0, 144 };
+            VkPipelineLayoutCreateInfo p2PLCI{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+            p2PLCI.setLayoutCount = 5; p2PLCI.pSetLayouts = p2SetLayouts;
+            p2PLCI.pushConstantRangeCount = 1; p2PLCI.pPushConstantRanges = &p2PCRange;
+            vkCreatePipelineLayout(device, &p2PLCI, nullptr, &m_HiZCullPhase2Layout);
+
+            if (m_HiZCullPhase2Shader) {
+                VkComputePipelineCreateInfo cpCI{ VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
+                cpCI.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+                cpCI.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+                cpCI.stage.module = m_HiZCullPhase2Shader;
+                cpCI.stage.pName = "main";
+                cpCI.layout = m_HiZCullPhase2Layout;
+                vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpCI, nullptr, &m_HiZCullPhase2Pipeline);
+            }
+        }
 
     }
 
@@ -539,7 +627,7 @@ namespace Ayaya {
 
                 // ── Hi-Z Occlusion Culling (temporal: uses previous frame's depth pyramid) ──
                 // Skip on frame 0: no previous Hi-Z data available yet
-                if (m_HiZFrameCount > 0 && m_HiZCullPipeline != VK_NULL_HANDLE) {
+                if (false && m_HiZFrameCount > 0 && m_HiZCullPipeline != VK_NULL_HANDLE) { // DISABLED
                     uint32_t readIdx = (m_HiZFrameCount - 1) % vkCtx->GetFramesInFlight();
 
                     vkCmdBindPipeline(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_HiZCullPipeline);
@@ -619,6 +707,71 @@ namespace Ayaya {
             m_HiZPrevView[writeIdx] = context.ViewMatrix;
             m_HiZPrevProj[writeIdx] = context.ProjectionMatrix;
             m_HiZFrameCount++;
+        }
+
+        // ── Phase 2: Corrective occlusion culling (current-frame Hi-Z) ──
+        // Re-tests instances culled in Phase 1 against the Hi-Z just built from
+        // Phase 1's depth buffer. Rescues false culls from temporal error or
+        // coarse-mip occluder dilation.
+        if (false && m_HiZFrameCount > 0 && m_HiZCullPhase2Pipeline != VK_NULL_HANDLE // DISABLED
+            && m_GDRCtx && m_GDRCtx->InstanceCount > 0) {
+
+            VkCommandBuffer vkCmd = vkCtx->GetCurrentCommandBuffer();
+            uint32_t frameIdx = vkCtx->GetCurrentFrameIndex() % vkCtx->GetFramesInFlight();
+            auto& pool = vkCtx->GetGeometryPool();
+            uint32_t instanceCount = m_GDRCtx->InstanceCount;
+            uint32_t currHiZIdx = (m_HiZFrameCount - 1) % vkCtx->GetFramesInFlight();
+
+            // Phase 2 cull dispatch
+            vkCmdBindPipeline(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_HiZCullPhase2Pipeline);
+            m_GDRCtx->BindSet2(vkCmd, m_HiZCullPhase2Layout, VK_PIPELINE_BIND_POINT_COMPUTE, frameIdx);
+            vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                m_HiZCullPhase2Layout, 3, 1, &m_Cull_Set3DescriptorsV2[frameIdx], 0, nullptr);
+            vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                m_HiZCullPhase2Layout, 4, 1, &m_HiZCullSet4s[currHiZIdx], 0, nullptr);
+
+            struct HiZCullPC { glm::mat4 currView; glm::mat4 currProj;
+                               uint32_t count; uint32_t mipCount; } p2pc;
+            p2pc.currView = context.ViewMatrix;
+            p2pc.currProj = context.ProjectionMatrix;
+            p2pc.count    = instanceCount;
+            p2pc.mipCount = m_HiZMipLevels;
+            vkCmdPushConstants(vkCmd, m_HiZCullPhase2Layout,
+                VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(p2pc), &p2pc);
+            uint32_t p2GroupCount = (instanceCount + 63) / 64;
+            vkCmdDispatch(vkCmd, p2GroupCount, 1, 1);
+
+            // Compute → Indirect barrier for Phase 2 buffer
+            VkBufferMemoryBarrier p2Barrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
+            p2Barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+            p2Barrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+            p2Barrier.buffer = m_Phase2IndirectBuffer->GetBuffer(frameIdx);
+            p2Barrier.size = VK_WHOLE_SIZE;
+            vkCmdPipelineBarrier(vkCmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0,
+                0, nullptr, 1, &p2Barrier, 0, nullptr);
+
+            // Phase 2 draw (LOAD_OP_LOAD — preserve Phase 1 output)
+            cmd.BeginRenderPass(fbo, /*clear=*/false, glm::vec4(0.0f));
+            vkCmdBindIndexBuffer(vkCmd, pool.GetBuffer(), 0, VK_INDEX_TYPE_UINT32);
+            cmd.BindPipeline(m_GDRPipeline);
+            auto gdrPipe2 = std::dynamic_pointer_cast<VulkanPipeline>(m_GDRPipeline);
+            if (gdrPipe2) {
+                vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    gdrPipe2->GetVulkanPipelineLayout(),
+                    2, 1, &m_GDRCtx->Set2Descriptors[frameIdx], 0, nullptr);
+            }
+            vkCmdDrawIndexedIndirect(vkCmd,
+                m_Phase2IndirectBuffer->GetBuffer(frameIdx), 0,
+                instanceCount,
+                sizeof(VkDrawIndexedIndirectCommand));
+
+            if (m_GDRCtx) {
+                context.Stats.DrawCalls += instanceCount;
+                context.Stats.ShaderBinds += 1;
+                cmd.RecordIndirectDraw(instanceCount, m_GDRCtx->TotalTriangles);
+            }
+            cmd.EndRenderPass();
         }
     }
 }

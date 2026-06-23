@@ -44,7 +44,8 @@ namespace Ayaya {
         VkShaderModule          m_Cull_ShaderModule = VK_NULL_HANDLE; // compute SPIR-V module
 
         // Indirect draw buffer — compute writes per-instance draw commands, graphics consumes
-        std::unique_ptr<VulkanStorageBuffer> m_DrawIndirectBuffer;
+        std::unique_ptr<VulkanStorageBuffer> m_DrawIndirectBuffer;        // Phase 1 (Main)
+        std::unique_ptr<VulkanStorageBuffer> m_Phase2IndirectBuffer;      // Phase 2 (corrective)
 
         // ── Hi-Z Occlusion Culling (Temporal: previous-frame depth pyramid) ──
         // Ring-buffered per frame-in-flight to avoid GPU Write-After-Read hazards.
@@ -73,13 +74,21 @@ namespace Ayaya {
         VkDescriptorPool m_HiZBuildPool = VK_NULL_HANDLE;
         std::vector<VkDescriptorSet> m_HiZBuildSet0s;    // per mip: {sampler2D src, image2D dst}
 
-        // Hi-Z occlusion cull compute
+        // Hi-Z occlusion cull compute (Phase 1 — previous-frame Hi-Z)
         VkPipelineLayout m_HiZCullLayout = VK_NULL_HANDLE;
         VkPipeline m_HiZCullPipeline = VK_NULL_HANDLE;
         VkShaderModule m_HiZCullShader = VK_NULL_HANDLE;
         VkDescriptorSetLayout m_HiZCullSet4Layout = VK_NULL_HANDLE;
         VkDescriptorPool m_HiZCullSet4Pool = VK_NULL_HANDLE;
-        std::vector<VkDescriptorSet> m_HiZCullSet4s;    // per frame-in-flight (reader side)
+        std::vector<VkDescriptorSet> m_HiZCullSet4s;    // per frame-in-flight
+
+        // Hi-Z Phase 2 (corrective — current-frame Hi-Z, re-tests culled instances)
+        VkPipelineLayout m_HiZCullPhase2Layout = VK_NULL_HANDLE;
+        VkPipeline m_HiZCullPhase2Pipeline = VK_NULL_HANDLE;
+        VkShaderModule m_HiZCullPhase2Shader = VK_NULL_HANDLE;
+        VkDescriptorSetLayout m_Cull_Set3LayoutV2 = VK_NULL_HANDLE;  // binding 0=Main, 1=Phase2
+        VkDescriptorPool m_Cull_Set3PoolV2 = VK_NULL_HANDLE;
+        std::vector<VkDescriptorSet> m_Cull_Set3DescriptorsV2;       // per frame-in-flight
 
         void InitHiZResources(VkDevice device, VmaAllocator allocator, uint32_t framesInFlight,
                               uint32_t viewportW, uint32_t viewportH);

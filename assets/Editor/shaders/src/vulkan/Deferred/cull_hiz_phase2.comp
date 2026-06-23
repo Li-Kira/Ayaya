@@ -1,0 +1,159 @@
+#version 450
+
+// Hi-Z Phase 2 Occlusion Culling — Corrective Pass (Current-Frame Hi-Z)
+// Re-tests instances culled in Phase 1 against the CURRENT frame's Hi-Z pyramid
+// (built from Phase 1's draw).  Rescues objects falsely culled by the temporal
+// previous-frame Hi-Z due to camera movement or coarse-mip occluder dilation.
+//
+// Key differences from Phase 1 (cull_hiz.comp):
+//  - Uses CURRENT View/Proj (not previous frame) — no temporal error
+//  - Skips instances already drawn in Phase 1 (instanceCount != 0)
+//  - Writes to IndirectBuffer_Phase2 (separate buffer, Phase 2 draw only)
+//  - Minimal depth bias (1e-5) — no frame-to-frame depth delta to compensate
+
+layout(local_size_x = 64) in;
+
+struct GPUInstance {
+    mat4 transform;
+    vec4 boundingSphere;
+    uint geometryRangeIdx;
+    uint materialIdx;
+    uint entityId;
+    uint flags;
+};
+layout(std430, set = 2, binding = 0) readonly buffer InstanceBuffer { GPUInstance Instances[]; };
+
+struct GeometryRange {
+    uint vertexOffset; uint indexOffset; uint vertexCount; uint indexCount;
+};
+layout(std430, set = 2, binding = 1) readonly buffer GeometryRangeBuffer { GeometryRange Ranges[]; };
+
+struct DrawCommand {
+    uint indexCount; uint instanceCount; uint firstIndex;
+    uint vertexOffset; uint firstInstance;
+};
+// Set=3 binding=0: Phase 1 indirect buffer (read-only — check visibility, copy command)
+layout(std430, set = 3, binding = 0) readonly buffer MainBuffer { DrawCommand MainCommands[]; };
+// Set=3 binding=1: Phase 2 indirect buffer (write-only — emit newly-visible)
+layout(std430, set = 3, binding = 1) buffer Phase2Buffer { DrawCommand Phase2Commands[]; };
+
+// Set=4: Current-frame Hi-Z pyramid (just built from Phase 1 depth)
+layout(set = 4, binding = 0) uniform sampler2D u_HiZTexture;
+
+layout(push_constant) uniform HiZPC {
+    mat4 u_CurrView;
+    mat4 u_CurrProj;
+    uint u_InstanceCount;
+    uint u_HiZMipCount;
+} pc;
+
+void main() {
+    uint gID = gl_GlobalInvocationID.x;
+    if (gID >= pc.u_InstanceCount) return;
+
+    // Unconditionally zero Phase 2 slot (prevents stale instanceCount=1 from
+    // previous frames when this instance was Phase-2 visible but is now Phase-1 visible)
+    Phase2Commands[gID].instanceCount = 0u;
+
+    // Skip instances already drawn in Phase 1 (instanceCount != 0 = visible)
+    if (MainCommands[gID].instanceCount != 0u) return;
+
+    // Skip frustum-culled (instanceCount == 0 with no valid draw command)
+    // Both Phase-1-visible and frustum-culled have instanceCount != 0 check above?
+    // No: Phase-1-visible = instanceCount=1, frustum-culled = instanceCount=0.
+    // Both are caught by != 0u above: Phase-1-visible skips (already drawn),
+    // frustum-culled also skips (was never a valid draw). Wait — we want to
+    // re-test Phase-1-culled instances (those that had instanceCount=1 from
+    // frustum cull but were set to 0 by Phase 1 Hi-Z cull). We can't distinguish
+    // those from frustum-culled instances (also instanceCount=0).
+    //
+    // Solution: Phase 1 Hi-Z cull sets a marker. But simpler: just re-test ALL
+    // instanceCount=0 entries. Frustum-culled ones will fail the occlusion test
+    // anyway (they're outside the frustum, so screenUV is out of bounds, or
+    // the Hi-Z depth is 0=background). The overhead is minimal — one compute
+    // thread per culled instance.
+    //
+    // Actually: cull_hiz.comp already skips frustum-culled instances at the top:
+    //   if (Commands[gID].instanceCount == 0) return;
+    // So Phase 1 Hi-Z cull only processes frustum-survivors. After Phase 1,
+    // instanceCount=0 means EITHER frustum-culled OR Phase-1-Hi-Z-culled.
+    // We can't tell which. We re-test all instanceCount=0 slots.
+
+    GPUInstance inst = Instances[gID];
+    vec3 center = inst.boundingSphere.xyz;
+    float radius = inst.boundingSphere.w;
+
+    // ── 1. Project to CURRENT frame's clip space (no temporal offset) ──
+    mat4 currVP = pc.u_CurrProj * pc.u_CurrView;
+    vec4 currClip = currVP * vec4(center, 1.0);
+    if (currClip.w <= 0.0) return;
+    if (abs(currClip.x) > abs(currClip.w) || abs(currClip.y) > abs(currClip.w)) return;
+
+    // ── 2. Nearest depth in View Space ──
+    vec4 viewPos = pc.u_CurrView * vec4(center, 1.0);
+    vec3 nearestView = viewPos.xyz;
+    nearestView.z += radius;
+    vec4 nearestClip = pc.u_CurrProj * vec4(nearestView, 1.0);
+    if (nearestClip.w <= 0.0) return;
+    float instanceDepth = clamp(nearestClip.z / nearestClip.w, 0.0, 1.0);
+    if (instanceDepth <= 1e-4) return;
+
+    // ── 3. Analytic AABB (same math as Phase 1) ──
+    vec3 C = viewPos.xyz;
+    float R = radius;
+    float d2 = dot(C, C);
+    float r2 = R * R;
+    if (d2 <= r2 || C.z * C.z <= r2) return;
+
+    float z2 = C.z * C.z;
+    float x2 = C.x * C.x;
+    float y2 = C.y * C.y;
+
+    float tx = sqrt(x2 + z2 - r2);
+    float minX = (C.x * C.z - R * tx) / (z2 - r2);
+    float maxX = (C.x * C.z + R * tx) / (z2 - r2);
+
+    float ty = sqrt(y2 + z2 - r2);
+    float minY = (C.y * C.z - R * ty) / (z2 - r2);
+    float maxY = (C.y * C.z + R * ty) / (z2 - r2);
+
+    vec2 ndcMin = -vec2(minX, minY) * vec2(pc.u_CurrProj[0][0], pc.u_CurrProj[1][1]);
+    vec2 ndcMax = -vec2(maxX, maxY) * vec2(pc.u_CurrProj[0][0], pc.u_CurrProj[1][1]);
+    vec2 trueNdcMin = min(ndcMin, ndcMax);
+    vec2 trueNdcMax = max(ndcMin, ndcMax);
+
+    vec2 uvMin = trueNdcMin * 0.5 + 0.5;
+    vec2 uvMax = trueNdcMax * 0.5 + 0.5;
+    uvMin.y = 1.0 - uvMin.y;
+    uvMax.y = 1.0 - uvMax.y;
+    vec2 trueUvMin = min(uvMin, uvMax);
+    vec2 trueUvMax = max(uvMin, uvMax);
+
+    vec2 uvHalfSize = (trueUvMax - trueUvMin) * 0.5;
+    vec2 screenUV   = (trueUvMin + trueUvMax) * 0.5;
+
+    // ── 4. Footprint area sampling (Phase 2: few instances, exact traversal) ──
+    // ceil(log2)-1: AABB covers ≤2×2 pixels at this mip. Phase 2 processes
+    // only false-culled instances (~0-10), so full texel traversal is cheap.
+    vec2 viewportSize = vec2(textureSize(u_HiZTexture, 0));
+    vec2 rectSizePixels = uvHalfSize * 2.0 * viewportSize;
+    float mip = clamp(ceil(log2(max(rectSizePixels.x, rectSizePixels.y))) - 1.0,
+                      0.0, float(pc.u_HiZMipCount - 1u));
+
+    vec2 mipSize = vec2(textureSize(u_HiZTexture, int(mip)));
+    ivec2 texMin = clamp(ivec2(floor(trueUvMin * mipSize)), ivec2(0), ivec2(mipSize) - 1);
+    ivec2 texMax = clamp(ivec2(ceil(trueUvMax * mipSize)),  ivec2(0), ivec2(mipSize) - 1);
+
+    float maxHizDepth = 0.0;
+    for (int y = texMin.y; y <= texMax.y; ++y)
+        for (int x = texMin.x; x <= texMax.x; ++x)
+            maxHizDepth = max(maxHizDepth, texelFetch(u_HiZTexture, ivec2(x, y), int(mip)).r);
+
+    // Minimal bias: current-frame Hi-Z has zero temporal error
+    float bias = 1e-5;
+    if (instanceDepth > maxHizDepth + bias) return;
+
+    // Passed: copy draw command from Phase 1 buffer, mark visible
+    Phase2Commands[gID] = MainCommands[gID];
+    Phase2Commands[gID].instanceCount = 1u;
+}
