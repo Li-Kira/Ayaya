@@ -67,6 +67,7 @@ namespace Ayaya {
         // Curve uses dedicated icon in DrawContentGrid via extension check
         if (meta.Type == AssetType::Curve) return nullptr;
         if (meta.Type == AssetType::LuaScript) return nullptr;
+        if (meta.Type == AssetType::HLSLShader) return nullptr;
         return m_FileIcon;
     }
 

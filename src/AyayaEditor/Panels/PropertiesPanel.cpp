@@ -17,6 +17,7 @@
 #include <imgui_internal.h>
 #include <glm/gtc/type_ptr.hpp>
 #include <cstring>
+#include <thread>
 #include <IconsFontAwesome5.h>
 
 namespace Ayaya {
@@ -3051,6 +3052,33 @@ namespace Ayaya {
                     std::string phys = VFS::ResolveString(meta.VirtualPath);
                     EditorLayer::Get().GetCurveEditorPanel().OpenCurve(curve, phys);
                 }
+            }
+        } else if (meta.VirtualPath.size() > 5 && meta.VirtualPath.substr(meta.VirtualPath.size() - 5) == ".hlsl") {
+            ImGui::TextUnformatted("HLSL Shader");
+            ImGui::Separator();
+            if (!meta.VirtualPath.empty()) {
+                ImGui::TextWrapped("Source: %s", meta.VirtualPath.c_str());
+            }
+            ImGui::Spacing();
+
+            if (ImGui::Button("Compile HLSL", ImVec2(-1, 0))) {
+                std::string projectDir = Project::GetAssetDirectory().string();
+                std::thread([projectDir]() {
+                    // Script is at project root (parent of build/ working dir)
+                    std::string scriptPath = (std::filesystem::current_path().parent_path() / "compile_hlsl.py").string();
+                    std::string cmd = "python3 \"" + scriptPath + "\" \"" + projectDir + "\"";
+                    int result = system(cmd.c_str());
+                    Application::SubmitDeferredAction([result]() {
+                        if (result == 0) {
+                            AYAYA_CORE_INFO("[HLSL] Compilation successful");
+                            auto& editor = EditorLayer::Get();
+                            if (auto sr = editor.GetSceneRenderer()) sr->MarkSRPDirty();
+                            if (auto gr = editor.GetGameRenderer()) gr->MarkSRPDirty();
+                        } else {
+                            AYAYA_CORE_ERROR("[HLSL] Compilation failed. Check console output.");
+                        }
+                    });
+                }).detach();
             }
         } else {
             ImGui::TextDisabled("No import settings available for this asset type");

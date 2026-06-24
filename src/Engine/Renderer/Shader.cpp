@@ -21,6 +21,12 @@ namespace Ayaya {
             if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
                 virtualPath = "engine://Editor/shaders/src/opengl/" + logicalPath;
             } else if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+                // Check project-local shader cache first (TA-authored HLSL/GLSL)
+                std::string projectLocal = "project://Shaders/Cache/" + logicalPath + ".spv";
+                std::string resolved = VFS::ResolveString(projectLocal);
+                if (std::filesystem::exists(resolved))
+                    return resolved;
+                // Fall back to engine global shader cache
                 virtualPath = "engine://Editor/shaders/cache/vulkan/" + logicalPath + ".spv";
             }
         }
