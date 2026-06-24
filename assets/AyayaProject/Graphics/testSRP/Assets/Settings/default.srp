@@ -1,96 +1,55 @@
--- default.srp — Ayaya Engine Default Scriptable Render Pipeline
--- This script produces rendering identical to the hardcoded C++ pipeline.
--- Edit this file to customize the render pipeline without recompiling C++.
+-- testSRP — Grayscale via GenericFullScreenPass (replaces FXAA)
 
 local vpW = Pipeline:GetViewportWidth()
 local vpH = Pipeline:GetViewportHeight()
 
--- ==========================================
--- 1. Texture Declarations
---    Format names: R8, R32F, RGBA8, RG16F, RGBA16F, RGBA32F, Depth
---    Percentage sizing: use Lua arithmetic (vpW / 2, vpW * 0.25)
--- ==========================================
-
 Pipeline:DeclareTexture("ShadowMap", {"Depth"}, 4096, 4096, 1, true)
-
 Pipeline:DeclareTexture("GBuffer",
     {"RG16F", "RGBA8", "RGBA8", "RGBA8", "Depth"}, vpW, vpH)
-
 Pipeline:DeclareTexture("SSAO_Final", {"R8"}, vpW / 2, vpH / 2)
-
 Pipeline:DeclareTexture("Lighting", {"RGBA16F", "Depth"}, vpW, vpH)
-
 Pipeline:DeclareTexture("Selection", {"RGBA8"}, vpW, vpH)
-
 Pipeline:DeclareTexture("WBOIT_Gather", {"RGBA16F", "RG16F"}, vpW, vpH)
-
 Pipeline:DeclareTexture("Bloom", {"RGBA16F"}, vpW / 2, vpH / 2)
-
 Pipeline:DeclareTexture("FinalOutput", {"RGBA8"}, vpW, vpH)
-
 Pipeline:DeclareTexture("FXAA", {"RGBA8"}, vpW, vpH)
 
--- ==========================================
--- 2. Pass Declarations
---    Pipeline:AddPass(nodeName, passType, reads, writes, readWrites, params)
---
---    reads      = { "texture1", "texture2" }  — input textures (read-only)
---    writes     = { "texture1" }              — output textures (exclusive write)
---    readWrites = { "texture1" }              — accumulative read+write (e.g., Lighting)
---    params     = { Enabled = false, LightMode = "GBuffer", Queue = "Opaque" }
---
---    Topological order is derived from read/write dependencies automatically.
---    The order of AddPass calls does NOT matter.
--- ==========================================
-
--- Shadow Pass: renders depth from light's perspective
+-- Standard passes (Shadow→GBuffer→Lighting→Forward→PostProcess)
 Pipeline:AddPass("Shadow", "ShadowPass", {}, {"ShadowMap"}, {},
     { LightMode = "ShadowCaster" })
-
--- GBuffer Pass: writes albedo, normal, PBR params, depth
 Pipeline:AddPass("GBuffer", "GBufferPass", {}, {"GBuffer"}, {},
     { LightMode = "GBuffer", Queue = "Opaque" })
-
--- SSAO: Screen-Space Ambient Occlusion (disabled by default)
 Pipeline:AddPass("SSAO", "SSAOPass", {"GBuffer"}, {"SSAO_Final"}, {},
     { Enabled = false })
-
--- Lighting Pass: deferred PBR lighting into HDR target
 Pipeline:AddPass("Lighting", "LightingPass",
     {"GBuffer", "ShadowMap", "SSAO_Final"}, {"Lighting"}, {})
-
--- Forward Blend: skybox + grid + sprites overlaid onto Lighting HDR
 Pipeline:AddPass("ForwardBlend", "ForwardBlend", {}, {"Lighting"}, {},
     { LightMode = "Forward" })
-
--- WBOIT Gather: weighted blended order-independent transparency (accumulation)
 Pipeline:AddPass("WBOIT_Gather", "WBOIT_Gather",
     {"GBuffer"}, {"WBOIT_Gather"}, {},
     { Queue = "Translucent" })
-
--- WBOIT Resolve: composite translucent accumulation onto Lighting HDR
 Pipeline:AddPass("WBOIT_Resolve", "WBOIT_Resolve",
     {"WBOIT_Gather"}, {}, {"Lighting"})
-
--- Outline Pass: selection highlight mask (disabled by default)
 Pipeline:AddPass("Outline", "OutlinePass", {"GBuffer"}, {"Selection"}, {},
     { Enabled = false })
-
--- Bloom Pass: emissive bloom from HDR (disabled by default)
 Pipeline:AddPass("Bloom", "BloomPass", {"Lighting"}, {"Bloom"}, {},
     { Enabled = false })
-
--- Post Process: tone mapping, exposure, selection outline composite
 Pipeline:AddPass("PostProcess", "PostProcessPass",
     {"Lighting", "Selection", "Bloom"}, {"FinalOutput"}, {})
 
--- FXAA: anti-aliasing
-Pipeline:AddPass("FXAA", "FXAAPass", {"FinalOutput"}, {"FXAA"}, {})
+-- 🌟 Grayscale replaces FXAA — reads FinalOutput, writes FXAA
+Pipeline:AddPass("Grayscale", "GenericFullScreenPass",
+    {"FinalOutput"},
+    {"FXAA"},
+    {},
+    {
+        Shader = "Custom/grayscale.frag",
+        Target = "FXAA",
+        Texture0 = "FinalOutput"
+    }
+)
 
--- UI Pass: editor UI composited on top of FXAA output
+-- UI composited on FXAA
 Pipeline:AddPass("UI", "UIPass", {}, {}, {"FXAA"})
 
--- ==========================================
--- 3. Output
--- ==========================================
 Pipeline:SetOutput("FXAA")

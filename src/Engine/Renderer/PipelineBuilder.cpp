@@ -1,6 +1,9 @@
 #include "ayapch.h"
 #include "PipelineBuilder.hpp"
 #include "Renderer/Passes/VulkanWBOITPass.hpp"
+#include "Renderer/Passes/GenericDrawPass.hpp"
+#include "Renderer/Passes/GenericFullScreenPass.hpp"
+#include "Renderer/SceneRenderer.hpp"
 
 // sol2 — for BakeParams / LuaTableToStringVector
 #define SOL_ALL_SAFETIES_ON 1
@@ -109,15 +112,30 @@ namespace Ayaya {
         }
         m_PassNames.insert(nodeName);
 
-        // 1. Look up pass instance from this renderer's own instances (not global registry)
-        auto it = m_PassInstances.find(passType);
-        if (it == m_PassInstances.end()) {
-            AYAYA_CORE_ERROR("[PipelineBuilder] Unknown pass type '{}' for node '{}'", passType, nodeName);
-            return;
+        // 1. Look up or create pass instance
+        std::shared_ptr<RenderPass> passInstance;
+        // Generic passes create a fresh instance per node (multiple per pipeline)
+        if (passType == "GenericDrawPass") {
+            auto gp = std::make_shared<GenericDrawPass>();
+            gp->SetGDRContext(SceneRenderer::s_GDRContext);
+            gp->OnAttach();
+            gp->SetNodeName(nodeName);
+            passInstance = gp;
+        } else if (passType == "GenericFullScreenPass") {
+            auto gp = std::make_shared<GenericFullScreenPass>();
+            gp->OnAttach();
+            gp->SetNodeName(nodeName);
+            passInstance = gp;
+        } else {
+            auto it = m_PassInstances.find(passType);
+            if (it == m_PassInstances.end()) {
+                AYAYA_CORE_ERROR("[PipelineBuilder] Unknown pass type '{}' for node '{}'", passType, nodeName);
+                return;
+            }
+            passInstance = it->second;
         }
-        auto passInstance = it->second;
 
-        // 2. Build execute function from the local pass instance
+        // 2. Build execute function
         RGExecuteFn execFn;
         if (passType == "WBOIT_Gather" && m_WBOITPass) {
             auto wp = m_WBOITPass;

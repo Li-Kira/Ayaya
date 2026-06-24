@@ -1,4 +1,6 @@
 #include "PassRegistry.hpp"
+#include "Renderer/Passes/GenericDrawPass.hpp"
+#include "Renderer/Passes/GenericFullScreenPass.hpp"
 #include "Renderer/Passes/VulkanShadowPass.hpp"
 #include "Renderer/Passes/VulkanGbufferPass.hpp"
 #include "Renderer/Passes/VulkanLightingPass.hpp"
@@ -11,6 +13,7 @@
 #include "Renderer/Passes/UIPass.hpp"
 #include "Renderer/Passes/VulkanWBOITPass.hpp"
 #include "Renderer/GDRContext.hpp"
+#include "Renderer/SceneRenderer.hpp"
 
 #include <algorithm>
 
@@ -231,6 +234,36 @@ namespace Ayaya {
             using Fn = void(*)(RGBuilder&, uint32_t, uint32_t);
             return std::make_unique<StandardPassFactory<RenderPass, Fn>>(
                 UIPass::DeclareResources, uiPass);
+        });
+
+        // ── Generic passes (Parameter-driven, zero-C++ for custom effects) ──
+        Register("GenericDrawPass", []() -> std::unique_ptr<IPassFactory> {
+            struct Factory : public IPassFactory {
+                std::shared_ptr<RenderPass> pass = std::make_shared<GenericDrawPass>();
+                void DeclareResources(RGBuilder&, uint32_t, uint32_t, const PassBakedParams&) override {}
+                RGExecuteFn GetExecuteFn() override {
+                    auto p = pass;
+                    return [p](RenderContext& ctx, RenderCommandBuffer& cmd) { p->Execute(ctx, cmd); };
+                }
+            };
+            auto f = std::make_unique<Factory>();
+            dynamic_cast<GenericDrawPass*>(f->pass.get())->SetGDRContext(SceneRenderer::s_GDRContext);
+            f->pass->OnAttach();
+            return f;
+        });
+
+        Register("GenericFullScreenPass", []() -> std::unique_ptr<IPassFactory> {
+            struct Factory : public IPassFactory {
+                std::shared_ptr<RenderPass> pass = std::make_shared<GenericFullScreenPass>();
+                void DeclareResources(RGBuilder&, uint32_t, uint32_t, const PassBakedParams&) override {}
+                RGExecuteFn GetExecuteFn() override {
+                    auto p = pass;
+                    return [p](RenderContext& ctx, RenderCommandBuffer& cmd) { p->Execute(ctx, cmd); };
+                }
+            };
+            auto f = std::make_unique<Factory>();
+            f->pass->OnAttach();
+            return f;
         });
     }
 
