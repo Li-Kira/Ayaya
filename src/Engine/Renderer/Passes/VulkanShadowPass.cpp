@@ -443,7 +443,8 @@ namespace Ayaya {
         vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE,
             m_CullLayout, 3, 1, &m_ShadowSet3Descriptors[frameIdx], 0, nullptr);
 
-        struct FrustumPush { glm::vec4 planes[6]; uint32_t count; uint32_t _pad[3]; } fpc;
+        struct FrustumPush { glm::vec4 planes[6]; uint32_t count; uint32_t lightModeMask; uint32_t _pad[2]; } fpc;
+        fpc.lightModeMask = (uint32_t)context.Get<int>("Shadow.LightMode", 2); // default ShadowCaster
         if (hasLight) {
             glm::mat4 vpT = glm::transpose(lightSpaceMatrix);
             glm::vec4 rows[4] = { vpT[0], vpT[1], vpT[2], vpT[3] };
@@ -565,7 +566,8 @@ namespace Ayaya {
         vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE,
             m_CullLayoutFixed, 3, 1, &m_ShadowSet3DescriptorsFixed[frameIdx], 0, nullptr);
 
-        struct FrustumPush { glm::vec4 planes[6]; uint32_t count; uint32_t _pad[3]; } fpc;
+        struct FrustumPush { glm::vec4 planes[6]; uint32_t count; uint32_t lightModeMask; uint32_t _pad[2]; } fpc;
+        fpc.lightModeMask = (uint32_t)context.Get<int>("Shadow.LightMode", 2); // default ShadowCaster
         if (hasLight) {
             glm::mat4 vpT = glm::transpose(lightSpaceMatrix);
             glm::vec4 rows[4] = { vpT[0], vpT[1], vpT[2], vpT[3] };

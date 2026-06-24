@@ -124,7 +124,7 @@ namespace Ayaya {
 
         for (const auto& pkt : queue.Packets) {
             SortKey k; k.Value = pkt.SortKey;
-            if (k.Bits.BucketID > 1) continue;              // Opaque + Masked only
+            // All buckets accepted — GPU masks handle per-pass filtering
             if (!pkt.MeshAsset || !pkt.MaterialAsset) continue;
 
             // Deduplicate meshes → GeometryRange index
@@ -165,7 +165,8 @@ namespace Ayaya {
                 gm.alphaBindless = (int)b.AlphaMapIndex;
                 gm.useAlphaMap   = (b.AlphaMapIndex != 1) ? 1 : 0;
                 gm.alphaCutoff  = pkt.MaterialAsset->GetAlphaCutoff();
-                gm.blendMode    = (int)pkt.MaterialAsset->GetBlendMode();
+                gm.blendMode      = (int)pkt.MaterialAsset->GetBlendMode();
+                gm.lightModeMask  = pkt.MaterialAsset->GetLightModeMask();
                 gdrMaterials.push_back(gm);
             }
 
@@ -255,8 +256,8 @@ namespace Ayaya {
                 meshComp.CachedMaterial = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
             auto material = meshComp.CachedMaterial;
 
-            if (material && material->GetBlendMode() == MaterialBlendMode::Translucent) continue;
-
+            // All blend modes (Opaque, Masked, Translucent) are uploaded to SSBO.
+            // GPU compute shaders filter by required LightMode mask — zero CPU cost.
             glm::mat4 transform = entity.GetWorldTransform();
             uint64_t matHash = meshComp.MaterialHandle & 0xFFF;
 
@@ -302,7 +303,8 @@ namespace Ayaya {
                         gm.alphaBindless = (int)b.AlphaMapIndex;
                         gm.useAlphaMap   = (b.AlphaMapIndex != 1) ? 1 : 0;
                         gm.alphaCutoff = material->GetAlphaCutoff();
-                        gm.blendMode   = (int)material->GetBlendMode();
+                        gm.blendMode     = (int)material->GetBlendMode();
+                        gm.lightModeMask = material->GetLightModeMask();
                     }
                     gdrMaterials.push_back(gm);
                 }

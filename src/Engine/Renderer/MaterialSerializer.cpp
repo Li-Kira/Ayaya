@@ -14,7 +14,9 @@ namespace Ayaya {
         out << YAML::Key << "ShaderName" << YAML::Value << material->ShaderName;
         out << YAML::Key << "BlendMode" << YAML::Value << static_cast<int>(material->GetBlendMode());
         out << YAML::Key << "AlphaCutoff" << YAML::Value << material->GetAlphaCutoff();
-        
+        if (!material->GetLightModeStr().empty())
+            out << YAML::Key << "LightModes" << YAML::Value << material->GetLightModeStr();
+
         out << YAML::Key << "Properties" << YAML::BeginSeq;
         for (auto& prop : material->Properties) {
             out << YAML::BeginMap;
@@ -86,7 +88,13 @@ namespace Ayaya {
         if (data["AlphaCutoff"])
             material->SetAlphaCutoff(data["AlphaCutoff"].as<float>());
 
-        material->Properties.clear();   
+        // LightModes — optional SRP tag (comma-separated or YAML scalar), auto-detect from BlendMode if missing
+        if (data["LightModes"] && data["LightModes"].IsScalar())
+            material->SetLightModeStr(data["LightModes"].as<std::string>());
+        else if (data["LightMode"] && data["LightMode"].IsScalar())
+            material->SetLightModeStr(data["LightMode"].as<std::string>()); // legacy compat
+
+        material->Properties.clear(); 
 
         auto propertiesNode = data["Properties"];
         if (propertiesNode) {

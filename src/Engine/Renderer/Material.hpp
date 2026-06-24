@@ -19,6 +19,15 @@ namespace Ayaya {
         Translucent = 3,  // WBOIT translucent, skips GBuffer
     };
 
+    // SRP LightMode bitmask — a material can participate in multiple passes simultaneously.
+    enum class LightModeFlags : uint32_t {
+        None         = 0,
+        GBuffer      = 1u << 0,  // 1
+        ShadowCaster = 1u << 1,  // 2
+        Forward      = 1u << 2,  // 4
+        DepthPrePass = 1u << 3,  // 8
+    };
+
     enum class MaterialPropertyType {
         Float     = 0,
         Int       = 1,
@@ -68,6 +77,14 @@ namespace Ayaya {
         void SetBlendMode(MaterialBlendMode mode) { m_BlendMode = mode; }
         MaterialBlendMode GetBlendMode() const { return m_BlendMode; }
         uint8_t GetRenderBucket() const { return static_cast<uint8_t>(m_BlendMode); }
+
+        // SRP LightMode bitmask — bitwise OR of LightModeFlags for multi-pass participation.
+        // 0 = auto-detect from BlendMode (Opaque/Masked→GBuffer|ShadowCaster, Translucent→Forward|ShadowCaster)
+        void SetLightModeMask(uint32_t mask) { m_LightModeMask = mask; }
+        uint32_t GetLightModeMask() const;
+        // UI/Serialization: string representation (comma-separated or YAML array)
+        const std::string& GetLightModeStr() const { return m_LightModeStr; }
+        void SetLightModeStr(const std::string& str) { m_LightModeStr = str; }
 
         // Built-in materials are shared read-only templates (e.g. DefaultPBR).
         // Editing them requires an explicit "Create Instance" via the editor.
@@ -151,6 +168,8 @@ namespace Ayaya {
 
     private:
         MaterialBlendMode m_BlendMode = MaterialBlendMode::Opaque;
+        uint32_t m_LightModeMask = 0;     // 0 = auto-detect from BlendMode
+        std::string m_LightModeStr;        // UI/serialization: comma-separated "GBuffer,ShadowCaster"
         float m_AlphaCutoff = 0.5f;
         mutable BakedPC m_BakedPC;  // lazy-baked: rebuilt when Dirty
 

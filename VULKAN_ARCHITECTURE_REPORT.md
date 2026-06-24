@@ -1741,3 +1741,72 @@ SRP 将渲染管线的拓扑定义从 C++ 硬编码迁移到 **Lua 脚本**。Lu
 |--------|------|------|
 | HIGH | 5 | 创建失败不检查返回值、ring buffer 静默 wrap、Vulkan 1.2 特性无条件启用、深度 barrier 错误 stage、池耗尽错误描述符 |
 | MEDIUM | 6 | RefreshDescriptorSets 死代码、析构缺 GPU 同步、单一 bool LoadOp、color TBDR 缺 TRANSFER_BIT、ReadWrite 重复 barrier、Undefined 映射错误 |
+
+### 20.8 详细 Vulkan 健壮性审计（待修复）
+
+#### HIGH-1: vkCreate 返回值未检查
+**文件:** `VulkanPipeline.cpp:276,299,329,375`
+`vkCreateDescriptorSetLayout`、`vkCreatePipelineLayout`、`vkCreateGraphicsPipelines` 返回值未检查。失败后继续执行，下游绑定空 handle → 未定义行为或 VUID 违规。
+**修复方向:** 每个 vkCreate* 调用后加 `VK_SUCCESS` 检查 + early return。
+
+#### HIGH-2: 描述符集 Ring Buffer 静默 wrap-around
+**文件:** `VulkanPipeline.cpp:469`, `VulkanPipeline.hpp:68-75`
+每帧 1000 组预分配描述符集。`GetNextTextureDescriptorSet` 无溢出检测，单帧超过 1000 次 draw 时静默复用仍被 GPU 占用的 set。池未设置 `UPDATE_AFTER_BIND` 标志。
+**修复方向:** 添加 wrap-around 检测 + 日志/断言；或按需分配新池。
+
+#### HIGH-3: Vulkan 1.2 特性无条件启用
+**文件:** `VulkanContext.cpp:289-293`
+`descriptorBindingSampledImageUpdateAfterBind`、`descriptorBindingPartiallyBound`、`descriptorBindingVariableDescriptorCount`、`runtimeDescriptorArray` 设为 `VK_TRUE` 但不检查 `availableVk12` 返回。不支持的 GPU 上 `vkCreateDevice` 直接失败。
+**修复方向:** 参照 `drawIndirectCount` 的模式，先检查 `availableVk12` 再启用。
+
+#### HIGH-4: 混合 FBO 深度 Barrier 使用错误的 Pipeline Stage
+**文件:** `RenderGraph.cpp:620-622`
+`InsertTileResolveBarrier` 对混合 FBO 的深度 barrier 使用 `VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT`，应为 `LATE`。深度写入在 LATE 阶段完成，EARLY barrier 可能早于写入——TBDR (Apple Silicon) 上数据竞争。
+**修复方向:** 改为 `VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT`（与深度-only 路径一致）。
+
+#### HIGH-5: 池耗尽后绑定错误描述符集
+**文件:** `VulkanRenderCommandBuffer.cpp:210-212`
+`FlushDescriptorSets` 中 `newSet == VK_NULL_HANDLE` 时只记录错误、设置 `m_DescriptorSetDirty = false`，然后继续 draw——使用上一个管线的描述符集，画面错乱无诊断。
+**修复方向:** 池耗尽时 skip draw 并记录详细错误信息（当前 pipeline、draw 序号等）。
+
+#### MEDIUM-1: RefreshDescriptorSets 死代码
+**文件:** `VulkanPipeline.cpp:487-505`
+`RefreshDescriptorSets` 从未被调用。UBO 缓冲重建（如 resize）后 Set 0 描述符集会指向过期缓冲。
+**修复方向:** 在 UBO 缓冲变化时调用或删除该方法。
+
+#### MEDIUM-2: 析构时缺 GPU 同步
+**文件:** `VulkanPipeline.cpp:507-531`
+析构直接 `vkDestroyDescriptorPool`，不 `vkDeviceWaitIdle`。3 frame in-flight 下 GPU 可能仍在使用。
+**修复方向:** 析构前调用 `vkDeviceWaitIdle`。
+
+#### MEDIUM-3: 单一 bool LoadOp 无法 per-attachment 控制
+**文件:** `VulkanRenderCommandBuffer.cpp:30,40,60`
+`BeginRenderPass(fbo, bool clear)` 对所有 attachment 统一使用 CLEAR 或 LOAD。无法实现"清颜色但保留深度"的混合操作。
+**修复方向:** 读取 `FramebufferTextureSpecification::LoadOp` 实现 per-attachment 控制。
+
+#### MEDIUM-4: Color TBDR Tile-Resolve 缺 TRANSFER_BIT
+**文件:** `RenderGraph.cpp:581`
+颜色 attachment barrier 的 source stage 只有 `COLOR_ATTACHMENT_OUTPUT_BIT`。深度 barrier（line 573）正确包含了 `TRANSFER_BIT` 以覆盖 Apple Silicon 的 tile→memory 隐式回写，但颜色 barrier 遗漏。
+**修复方向:** 颜色 barrier 也添加 `VK_PIPELINE_STAGE_TRANSFER_BIT`。
+
+#### MEDIUM-5: ReadWrite 纹理重复 Barrier
+**文件:** `RenderGraph.cpp:402-414`
+ReadWrite 纹理先 Exec `EnsureReadable`（transition → read）再 `EnsureWritable`（read → attachment）→ 第一个 barrier 被立即覆盖，浪费 GPU 时间。
+**修复方向:** ReadWrite 纹理跳过 `EnsureReadable`。
+
+#### MEDIUM-6: EnsureWritable 深度 Barrier oldLayout 映射错误
+**文件:** `RenderGraph.cpp:327-330`
+`ImageLayout::Undefined` 映射到 `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL`（颜色布局），而非 `VK_IMAGE_LAYOUT_UNDEFINED`。用于深度 aspect 时布局语义错误。
+**修复方向:** Undefined → `VK_IMAGE_LAYOUT_UNDEFINED`。
+
+#### LOW-1: OnWindowResize 内 vkDeviceWaitIdle
+**文件:** `SceneRenderer.cpp:295`
+每次窗口 resize 都全 GPU drain，造成可感知的 resize 卡顿。可改用 fence 同步。
+
+#### LOW-2: [DBG] 日志前缀残留
+**文件:** `VulkanContext.cpp:626,631,639,650,723,744,759,764,799,825`
+10 处 `[DBG]` 前缀日志，部分为 ERROR 级别但带调试标签。
+
+#### LOW-3: PassRegistry::Get() 死代码
+**文件:** `PassRegistry.cpp:246`
+全局无调用点。整个 `s_Factories`/`s_Instances` 基础设施仅服务此方法。

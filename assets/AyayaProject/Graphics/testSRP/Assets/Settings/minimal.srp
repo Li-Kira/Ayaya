@@ -1,0 +1,13 @@
+local vpW = Pipeline:GetViewportWidth()
+local vpH = Pipeline:GetViewportHeight()
+
+Pipeline:DeclareTexture("GBuffer", {"RG16F", "RGBA8", "RGBA8", "RGBA8", "Depth"}, vpW, vpH)
+Pipeline:DeclareTexture("Lighting", {"RGBA16F", "Depth"}, vpW, vpH)
+Pipeline:DeclareTexture("FinalOutput", {"RGBA8"}, vpW, vpH)
+
+-- 只留 3 个 Pass！
+Pipeline:AddPass("GBuffer", "GBufferPass", {}, {"GBuffer"}, {}, { LightMode = "GBuffer" })
+Pipeline:AddPass("Lighting", "LightingPass", {"GBuffer"}, {"Lighting"}, {})
+Pipeline:AddPass("PostProcess", "PostProcessPass", {"Lighting"}, {"FinalOutput"}, {})
+
+Pipeline:SetOutput("FinalOutput")

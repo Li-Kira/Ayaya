@@ -51,7 +51,7 @@ struct GDRContext {
                               GlobalGeometryPool& geoPool,
                               uint32_t frameIndex);
 
-    // Build SSBO data directly from ECS — blind submit (no CPU culling).
+    // Build SSBO data directly from ECS — all blend modes uploaded, GPU masks handle filtering
     void BuildFromScene(class Scene* scene,
                         GlobalGeometryPool& geoPool,
                         uint32_t frameIndex);

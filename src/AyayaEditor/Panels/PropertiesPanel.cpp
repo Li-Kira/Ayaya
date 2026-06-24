@@ -2870,6 +2870,29 @@ namespace Ayaya {
                 ImGui::Text("Blend: %s", blendIdx < 3 ? blendNames[blendIdx] : "Unknown");
                 if (mat->GetBlendMode() == MaterialBlendMode::Masked)
                     ImGui::Text("Alpha Cutoff: %.2f", mat->GetAlphaCutoff());
+
+                // SRP LightMode bitmask checkboxes
+                uint32_t mask = mat->GetLightModeMask();
+                bool hasGBuffer  = (mask & (uint32_t)LightModeFlags::GBuffer) != 0;
+                bool hasShadow   = (mask & (uint32_t)LightModeFlags::ShadowCaster) != 0;
+                bool hasForward  = (mask & (uint32_t)LightModeFlags::Forward) != 0;
+                ImGui::TextUnformatted("LightModes:");
+                ImGui::SameLine();
+                if (ImGui::Checkbox("GBuffer", &hasGBuffer)) {
+                    if (hasGBuffer) mask |= (uint32_t)LightModeFlags::GBuffer;
+                    else            mask &= ~(uint32_t)LightModeFlags::GBuffer;
+                    mat->SetLightModeMask(mask);
+                } ImGui::SameLine();
+                if (ImGui::Checkbox("Shadow", &hasShadow)) {
+                    if (hasShadow) mask |= (uint32_t)LightModeFlags::ShadowCaster;
+                    else           mask &= ~(uint32_t)LightModeFlags::ShadowCaster;
+                    mat->SetLightModeMask(mask);
+                } ImGui::SameLine();
+                if (ImGui::Checkbox("Forward", &hasForward)) {
+                    if (hasForward) mask |= (uint32_t)LightModeFlags::Forward;
+                    else            mask &= ~(uint32_t)LightModeFlags::Forward;
+                    mat->SetLightModeMask(mask);
+                }
                 ImGui::Separator();
 
                 // Group properties by category

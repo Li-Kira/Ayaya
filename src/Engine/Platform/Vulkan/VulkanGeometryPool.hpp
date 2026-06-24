@@ -43,7 +43,8 @@ namespace Ayaya {
         int   blendMode;                     // 4
         int   useAlphaMap;                   // 4
         int   alphaBindless;                 // 4
-        int   _pad[2];                       // 8 → sizeof=112
+        uint32_t lightModeMask;              // 4  ← SRP LightMode bitmask
+        uint32_t _pad;                       // 4
     };
     static_assert(sizeof(GPUMaterial) == 112, "GPUMaterial must be 112 bytes (matches GLSL std430)");
 

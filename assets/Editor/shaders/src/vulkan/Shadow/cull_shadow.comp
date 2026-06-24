@@ -37,7 +37,8 @@ struct GPUMaterial {
     int blendMode;
     int useAlphaMap;
     int alphaBindless;
-    int _pad[2];
+    uint lightModeMask;
+    uint _pad;
 };
 layout(std430, set = 2, binding = 2) readonly buffer MaterialBuffer {
     GPUMaterial Materials[];
@@ -83,6 +84,7 @@ layout(std430, set = 3, binding = 1) buffer MaskedCommands {
 layout(push_constant) uniform FrustumPC {
     vec4 u_Planes[6];
     uint u_InstanceCount;
+    uint u_LightModeMask;
 } pc;
 
 bool IsVisible(vec4 sphere) {
@@ -114,6 +116,15 @@ void main() {
     if (IsVisible(inst.boundingSphere)) {
         GeometryRange range = Ranges[inst.geometryRangeIdx];
         GPUMaterial mat = Materials[inst.materialIdx];
+
+        // LightMode mask check (GPU routing — zero CPU cost)
+        if ((mat.lightModeMask & pc.u_LightModeMask) == 0u) {
+#ifndef USE_INDIRECT_COUNT
+            OpaqueCmds[gID].instanceCount = 0;
+            MaskedCmds[gID].instanceCount = 0;
+#endif
+            return;
+        }
 
         DrawCommand cmd;
         cmd.indexCount    = range.indexCount;

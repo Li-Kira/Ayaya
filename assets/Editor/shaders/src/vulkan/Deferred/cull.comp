@@ -2,10 +2,10 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-// ── Input: instance & geometry data (set=2, bindings 0-1) ──
+// ── Input: instance & geometry data (set=2, bindings 0-2) ──
 struct GPUInstance {
     mat4 transform;
-    vec4 boundingSphere;   // xyz=center, w=radius
+    vec4 boundingSphere;
     uint geometryRangeIdx;
     uint materialIdx;
     uint entityId;
@@ -25,9 +25,25 @@ layout(std430, set = 2, binding = 1) readonly buffer GeometryRangeBuffer {
     GeometryRange Ranges[];
 };
 
-// ── Output: indirect draw commands — one per instance, fixed slot = gID ──
-// Culled instances write instanceCount=0 (GPU hardware no-op),
-// visible instances write the real draw command.
+struct GPUMaterial {
+    vec4 albedo;
+    float metallic, roughness, ao, alpha;
+    int useAlbedoMap, useNormalMap, useORMMap;
+    int useMetallicMap, useRoughnessMap, useAOMap;
+    int albedoBindless, normalBindless, ormBindless;
+    int metallicBindless, roughnessBindless, aoBindless;
+    float alphaCutoff;
+    int blendMode;
+    int useAlphaMap;
+    int alphaBindless;
+    uint lightModeMask;
+    uint _pad;
+};
+layout(std430, set = 2, binding = 2) readonly buffer MaterialBuffer {
+    GPUMaterial Materials[];
+};
+
+// ── Output: indirect draw commands ──
 struct DrawCommand {
     uint indexCount;
     uint instanceCount;
@@ -39,10 +55,11 @@ layout(std430, set = 3, binding = 0) buffer DrawIndirectBuffer {
     DrawCommand Commands[];
 };
 
-// ── Push constants: frustum planes (Gribb-Hartmann, 6 × vec4 = 96 bytes) + instance count ──
+// ── Push constants ──
 layout(push_constant) uniform FrustumPC {
     vec4 u_Planes[6];
     uint u_InstanceCount;
+    uint u_LightModeMask;
 } pc;
 
 bool IsVisible(vec4 sphere) {
@@ -59,15 +76,23 @@ void main() {
 
     GPUInstance inst = Instances[gID];
 
-    if (IsVisible(inst.boundingSphere)) {
-        GeometryRange range = Ranges[inst.geometryRangeIdx];
-        Commands[gID].indexCount    = range.indexCount;
-        Commands[gID].instanceCount = 1;
-        Commands[gID].firstIndex    = range.indexOffset / 4u;
-        Commands[gID].vertexOffset  = 0;
-        Commands[gID].firstInstance = gID;
-    } else {
-        // Culled: write no-op (instanceCount=0 → GPU hardware skips)
-        Commands[gID].instanceCount = 0;
+    // 🔥 Step 1: ALU-only frustum test (no memory fetch beyond Instances)
+    if (!IsVisible(inst.boundingSphere)) {
+        Commands[gID].instanceCount = 0u;
+        return;
     }
+
+    // 🔥 Step 2: Only read GPUMaterial for frustum-survivors (memory-bound)
+    GPUMaterial mat = Materials[inst.materialIdx];
+    if ((mat.lightModeMask & pc.u_LightModeMask) == 0u) {
+        Commands[gID].instanceCount = 0u;
+        return;
+    }
+
+    GeometryRange range = Ranges[inst.geometryRangeIdx];
+    Commands[gID].indexCount    = range.indexCount;
+    Commands[gID].instanceCount = 1u;
+    Commands[gID].firstIndex    = range.indexOffset / 4u;
+    Commands[gID].vertexOffset  = 0;
+    Commands[gID].firstInstance = gID;
 }

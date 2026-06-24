@@ -1250,13 +1250,16 @@ namespace Ayaya {
                 renderProgressFrame(1.0f, "Done!");
                 AYAYA_CORE_INFO("Project loaded: {0}", Project::GetActive()->GetConfig().Name);
 
-                // SRP: auto-load project-specific pipeline
+                // SRP: auto-load project-specific pipeline (or clear if none)
                 auto& config = Project::GetActive()->GetConfig();
                 if (config.DefaultSRPScript != 0) {
                     UUID srpHandle(config.DefaultSRPScript);
                     m_SceneRenderer->SetSRPScript(srpHandle);
                     m_GameRenderer->SetSRPScript(srpHandle);
                     AYAYA_CORE_INFO("[Editor] Loaded project SRP pipeline: {}", config.DefaultSRPScript);
+                } else {
+                    m_SceneRenderer->SetSRPScript(0);
+                    m_GameRenderer->SetSRPScript(0);
                 }
 
                 // Start asset watcher on the new project

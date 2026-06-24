@@ -215,9 +215,26 @@ namespace Ayaya {
                 for (auto& [k, v] : baked.StrParams)
                     ctx.Set(capturedNodeName + "." + k, v);
 
-                // Inject LightMode and Queue tags
-                if (!baked.LightMode.empty())
-                    ctx.Set(capturedNodeName + ".LightMode", baked.LightMode);
+                // Inject LightMode as bitmask (int) and Queue as string
+                if (!baked.LightMode.empty()) {
+                    // Parse comma-separated or single LightMode → bitmask
+                    uint32_t mask = 0;
+                    std::string remaining = baked.LightMode;
+                    size_t pos;
+                    while ((pos = remaining.find(',')) != std::string::npos) {
+                        std::string tag = remaining.substr(0, pos);
+                        if (tag == "GBuffer")       mask |= 1;
+                        else if (tag == "ShadowCaster") mask |= 2;
+                        else if (tag == "Forward")      mask |= 4;
+                        else if (tag == "DepthPrePass") mask |= 8;
+                        remaining = remaining.substr(pos + 1);
+                    }
+                    if (remaining == "GBuffer")       mask |= 1;
+                    else if (remaining == "ShadowCaster") mask |= 2;
+                    else if (remaining == "Forward")      mask |= 4;
+                    else if (remaining == "DepthPrePass") mask |= 8;
+                    ctx.Set(capturedNodeName + ".LightMode", (int)mask);
+                }
                 if (!baked.Queue.empty())
                     ctx.Set(capturedNodeName + ".Queue", baked.Queue);
 
@@ -319,8 +336,22 @@ namespace Ayaya {
                 baked.Enabled = val.as<bool>();
                 continue;
             }
-            if (keyStr == "LightMode" && val.is<std::string>()) {
-                baked.LightMode = val.as<std::string>();
+            if (keyStr == "LightMode") {
+                if (val.is<std::string>()) {
+                    baked.LightMode = val.as<std::string>();
+                } else if (val.is<sol::table>()) {
+                    // Multi-tag: { "GBuffer", "ShadowCaster" } → coma-separated
+                    sol::table tags = val.as<sol::table>();
+                    std::string combined;
+                    for (size_t i = 1; i <= tags.size(); i++) {
+                        sol::object tag = tags[i];
+                        if (tag.is<std::string>()) {
+                            if (!combined.empty()) combined += ",";
+                            combined += tag.as<std::string>();
+                        }
+                    }
+                    baked.LightMode = combined;
+                }
                 continue;
             }
             if (keyStr == "Queue" && val.is<std::string>()) {

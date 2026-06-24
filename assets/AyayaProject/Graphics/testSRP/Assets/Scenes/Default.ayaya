@@ -2,8 +2,8 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition: [-6.1312575, 2.6395478, -1.5290058]
-  CameraDistance: 10
+  CameraPosition: [-11.758415, 4.8627377, -3.892712]
+  CameraDistance: 16.495737
   CameraPitch: -0.34931436
   CameraYaw: -1.9684695
   CameraFocalPoint: [2.531592, -0.782989, 2.1098518]
@@ -53,9 +53,9 @@ Entities:
       Tag: Directional Light
       IsActive: true
     TransformComponent:
-      Translation: [0, 0, 0]
-      Rotation: [-0.7853982, 0.7853982, 0]
-      Scale: [1, 1, 1]
+      Translation: [-1.1790771, 0.5666502, 3.3398438]
+      Rotation: [-0.78539795, 0.7853979, 6.668752e-07]
+      Scale: [1.26, 1.26, 1.26]
     DirectionalLightComponent:
       Color: [1, 1, 1]
       Illuminance: 100000
@@ -67,11 +67,26 @@ Entities:
       IsActive: true
     TransformComponent:
       Translation: [0, 0.3, 0]
-      Rotation: [0, 0.6335545, 0]
+      Rotation: [0, 0.6335549, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
       ModelHandle: 16140901000000000001
-      MaterialHandle: 16140901000000000004
+      MaterialHandle: 15972461601806397795
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 11561986092693821065
+    TagComponent:
+      Tag: Cube (1)
+      IsActive: true
+    TransformComponent:
+      Translation: [0, -0.7880537, 0]
+      Rotation: [0, -0, 0]
+      Scale: [6.1733546, 1, 4.8344717]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000001
+      MaterialHandle: 15972461601806397795
       CastShadows: true
       ReceiveShadows: true
     RelationshipComponent:

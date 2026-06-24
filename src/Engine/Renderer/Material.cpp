@@ -155,6 +155,20 @@ namespace Ayaya {
         return m_BakedPC;
     }
 
+    uint32_t Material::GetLightModeMask() const {
+        if (m_LightModeMask != 0) return m_LightModeMask;
+        // Backward compat: auto-detect from BlendMode
+        // All materials implicitly participate in ShadowCaster by default
+        uint32_t mask = (uint32_t)LightModeFlags::ShadowCaster;
+        switch (m_BlendMode) {
+            case MaterialBlendMode::Opaque:
+            case MaterialBlendMode::Masked:  mask |= (uint32_t)LightModeFlags::GBuffer; break;
+            case MaterialBlendMode::Translucent: mask |= (uint32_t)LightModeFlags::Forward; break;
+            default: mask |= (uint32_t)LightModeFlags::GBuffer; break;
+        }
+        return mask;
+    }
+
     bool Material::IsBuiltIn() const {
         // Built-in materials share the canonical handle and live under engine://
         return AssetPath.empty() || AssetPath.find("assets/Editor/") != std::string::npos;
