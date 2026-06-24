@@ -688,7 +688,6 @@ namespace Ayaya {
                         VkDescriptorBufferInfo cbi{s_PbrVk.uboBuffer,0,sizeof(PreviewCameraUBO)};
                         VkWriteDescriptorSet w0{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,nullptr,s_PbrVk.set0,0,0,1,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,nullptr,&cbi,nullptr};
                         vkUpdateDescriptorSets(dev,1,&w0,0,nullptr);
-                        // Allocate 3 Set 1 copies (triple-buffered per frame-in-flight)
                         for(int f=0;f<3;f++){
                             VkDescriptorSetAllocateInfo ai1{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,nullptr,s_PbrVk.pool,1,&s_PbrVk.set1Layout};
                             vkAllocateDescriptorSets(dev,&ai1,&s_PbrVk.set1[f]);

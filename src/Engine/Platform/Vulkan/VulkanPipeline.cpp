@@ -466,7 +466,7 @@ namespace Ayaya {
         // 12. 分配 Set 1 (纹理) 按帧隔离环形缓冲 — Bindless 跳过
         // ==========================================
         if (!noTextures && !spec.UseBindlessTextures) {
-            uint32_t perFrameCount = 1000u;  // per-frame pool, ~10x headroom
+            uint32_t perFrameCount = 1000u;
             uint32_t texSlot = noGlobalUBOs ? 0u : 1u;
             for (uint32_t fi = 0; fi < framesInFlight; fi++) {
                 m_TextureDescriptorSets[fi].resize(perFrameCount);

@@ -22,6 +22,7 @@ namespace Ayaya {
         out << YAML::Key << "Name" << YAML::Value << config.Name;
         out << YAML::Key << "StartScene" << YAML::Value << config.StartScene;
         out << YAML::Key << "AssetDirectory" << YAML::Value << config.AssetDirectory;
+        out << YAML::Key << "DefaultSRPScript" << YAML::Value << config.DefaultSRPScript;
         out << YAML::EndMap;
         out << YAML::EndMap;
 
@@ -57,6 +58,8 @@ namespace Ayaya {
         config.Name = projectNode["Name"].as<std::string>();
         config.StartScene = projectNode["StartScene"].as<std::string>();
         config.AssetDirectory = projectNode["AssetDirectory"].as<std::string>();
+        if (projectNode["DefaultSRPScript"])
+            config.DefaultSRPScript = projectNode["DefaultSRPScript"].as<uint64_t>();
 
         return true;
     }

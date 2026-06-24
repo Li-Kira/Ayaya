@@ -15,6 +15,9 @@ namespace Ayaya {
         void SetOpen(bool isOpen);
         bool IsOpen() const { return m_IsOpen; }
 
+        // Immediate save (called from PropertiesPanel when SRP pipeline changes)
+        void SavePreferences();
+
         // 【新增】：全局底层渲染配置 (Hardware / Backend)
         int GraphicsAPI = 0; // 0 = OpenGL, 1 = Vulkan, 2 = DirectX 12
         bool EnableVSync = false;
@@ -23,7 +26,6 @@ namespace Ayaya {
         int MaxUndoSteps = 100;
         
     private:
-        void SavePreferences();
         void LoadPreferences();
 
     private:

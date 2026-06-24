@@ -9,7 +9,8 @@ namespace Ayaya {
     struct ProjectConfig {
         std::string Name = "Untitled";
         std::string StartScene = "Scenes/Default.ayaya";
-        std::string AssetDirectory = "assets"; // 默认资产夹名为 Assets
+        std::string AssetDirectory = "assets";
+        uint64_t DefaultSRPScript = 0;  // 0 = hardcoded default pipeline
     };
 
     class Project {

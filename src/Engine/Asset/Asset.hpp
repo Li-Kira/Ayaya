@@ -14,7 +14,8 @@ namespace Ayaya {
         LuaScript,
         Prefab,      // entity tree template
         SubMesh,     // lightweight: ParentHandle + SubMeshIndex, no own buffers
-        Curve        // Hermite-interpolated animation curve (.curve)
+        Curve,       // Hermite-interpolated animation curve (.curve)
+        SRPipeline   // Scriptable Render Pipeline (.srp Lua file)
     };
 
     class Asset {

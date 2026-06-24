@@ -219,7 +219,8 @@ namespace Ayaya {
                ext == ".bmp"  || ext == ".hdr" ||
                ext == ".obj"  || ext == ".fbx" || ext == ".gltf" || ext == ".glb" ||
                ext == ".mat"  || ext == ".lua" || ext == ".cube" ||
-               ext == ".prefab" || ext == ".ayaya" || ext == ".curve";
+               ext == ".prefab" || ext == ".ayaya" || ext == ".curve" ||
+               ext == ".srp";
     }
 
     void AssetManager::RefreshRegistry() {
@@ -1060,6 +1061,7 @@ namespace Ayaya {
         else if (ext == ".cube")                             type = AssetType::TextureCube;
         else if (ext == ".ayaya")                            type = AssetType::Scene;
         else if (ext == ".curve")                            type = AssetType::Curve;
+        else if (ext == ".srp")                              type = AssetType::SRPipeline;
 
         if (type == AssetType::None) {
             AYAYA_CORE_WARN("AssetManager: Unsupported asset format '{0}'", ext);
@@ -1179,7 +1181,7 @@ namespace Ayaya {
         if (asset) {
             // 将读取成功的资产存入内存池，下次就不需要再读硬盘了
             s_Assets[handle] = asset;
-        } else if (metadata.Type != AssetType::LuaScript) {
+        } else if (metadata.Type != AssetType::LuaScript && metadata.Type != AssetType::SRPipeline) {
             AYAYA_CORE_ERROR("AssetManager: Failed to load asset from path '{0}'", physicalPath);
         }
 

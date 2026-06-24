@@ -1,5 +1,6 @@
 #include "ayapch.h"
 #include <any>
+#include <chrono>
 
 // 1. 核心系统
 #include "Engine/Scene/Scene.hpp"
@@ -39,10 +40,13 @@
 #include "Renderer/Passes/VulkanSSAOPass.hpp"
 #include "Renderer/Passes/VulkanWBOITPass.hpp"
 #include "Renderer/GDRContext.hpp"
+#include "Renderer/PassRegistry.hpp"
+#include "Renderer/PipelineBuilder.hpp"
 #include "Renderer/RenderQueue.hpp"
 #include "Renderer/Frustum.hpp"
 
 #include "Core/Application.hpp"
+#include "Scripting/ScriptEngine.hpp"
 #include "Platform/Vulkan/VulkanContext.hpp"
 #include "Platform/Vulkan/VulkanIBLBuilder.hpp"
 #include "Platform/Vulkan/VulkanTextureCube.hpp"
@@ -125,6 +129,7 @@ namespace Ayaya {
         m_Data = std::make_unique<SceneRendererData>();
         m_CameraUniformBuffer = UniformBuffer::Create(sizeof(struct_CameraData), 0);
         m_LightUniformBuffer = UniformBuffer::Create(sizeof(struct_LightData), 1);
+        m_PipelineBuilder = std::make_unique<PipelineBuilder>(m_RenderGraph);
     }
 
     SceneRenderer::~SceneRenderer() = default;
@@ -244,10 +249,18 @@ namespace Ayaya {
             m_FXAAPass->OnAttach();
             m_UIPass->OnAttach();
             m_WBOITPass->OnAttach();
+
+            // ── Register all passes for SRP (Scriptable Render Pipeline) by-name lookup ──
+            PassRegistry::Init(s_GDRContext,
+                               m_ShadowPass, m_GBufferPass, m_LightingPass, m_ForwardBlendPass,
+                               m_SSAOPass, m_OutlinePass, m_BloomPass,
+                               m_PostProcessPass, m_FXAAPass, m_UIPass,
+                               m_WBOITPass);
         }
     }
 
     void SceneRenderer::Shutdown() {
+        PassRegistry::Shutdown();
         UIPass::Shutdown();
         VulkanSSAOPass::ReleaseNoiseTexture();
         // s_CameraUniformBuffer.reset();
@@ -774,6 +787,13 @@ namespace Ayaya {
     }
 
     void SceneRenderer::BuildRenderGraph(const RenderViewConfig& config, uint32_t vpW, uint32_t vpH) {
+        if (m_SRPScriptHandle != 0)
+            BuildRenderGraph_SRP(vpW, vpH);
+        else
+            BuildRenderGraph_Default(config, vpW, vpH);
+    }
+
+    void SceneRenderer::BuildRenderGraph_Default(const RenderViewConfig& config, uint32_t vpW, uint32_t vpH) {
         // Pass addition only on viewport resize (expensive — 12 shared_ptr allocations)
         if (m_ViewportDirty) {
             m_RenderGraph.Clear();
@@ -852,6 +872,104 @@ namespace Ayaya {
         SetPassCulled(m_RenderGraph, "WBOIT_Resolve", !hasTranslucent);
 
         m_RenderGraph.Compile();
+    }
+
+    // ==========================================
+    // SRP (Scriptable Render Pipeline) — data-driven pipeline from Lua
+    // ==========================================
+    void SceneRenderer::SetSRPScript(UUID handle) {
+        m_SRPScriptHandle = handle;
+        MarkSRPDirty();  // force rebuild even for same-handle "reload"
+    }
+
+    void SceneRenderer::BuildRenderGraph_SRP(uint32_t vpW, uint32_t vpH) {
+        if (!m_SRPScriptHandle) return;
+
+        // ── Resolve script path ──
+        std::string scriptPath = AssetManager::GetAssetPhysicalPath(m_SRPScriptHandle);
+        if (scriptPath.empty()) {
+            AYAYA_CORE_ERROR("[SRP] Pipeline script not found for handle {} — downgrading to default pipeline",
+                (uint64_t)m_SRPScriptHandle);
+            SetSRPScript(0);  // auto-downgrade: prevents permanent black screen on startup
+            return;
+        }
+
+        // ── Fast path: graph is clean, just update culling + recompile ──
+        if (!m_SRPDirty) {
+            ApplyPerFrameCulling();
+            m_RenderGraph.Compile();
+            return;
+        }
+
+        // ── Full rebuild ──
+        // 🔥 Extract existing state BEFORE Clear() so FBOs aren't destroyed.
+        auto snapshot = m_RenderGraph.ExtractState();
+
+        m_PipelineBuilder = std::make_unique<PipelineBuilder>(m_RenderGraph);
+        m_PipelineBuilder->SetViewportSize(vpW, vpH);
+
+        // 🔥 Register THIS renderer's pass instances (not global registry).
+        // Each SceneRenderer has its own passes with per-renderer UBO bindings.
+        m_PipelineBuilder->RegisterPassInstance("ShadowPass",      m_ShadowPass);
+        m_PipelineBuilder->RegisterPassInstance("GBufferPass",     m_GBufferPass);
+        m_PipelineBuilder->RegisterPassInstance("SSAOPass",        m_SSAOPass);
+        m_PipelineBuilder->RegisterPassInstance("LightingPass",    m_LightingPass);
+        m_PipelineBuilder->RegisterPassInstance("ForwardBlend",    m_ForwardBlendPass);
+        m_PipelineBuilder->RegisterPassInstance("WBOIT_Gather",   nullptr, m_WBOITPass);
+        m_PipelineBuilder->RegisterPassInstance("WBOIT_Resolve",  nullptr, m_WBOITPass);
+        m_PipelineBuilder->RegisterPassInstance("OutlinePass",     m_OutlinePass);
+        m_PipelineBuilder->RegisterPassInstance("BloomPass",       m_BloomPass);
+        m_PipelineBuilder->RegisterPassInstance("PostProcessPass", m_PostProcessPass);
+        m_PipelineBuilder->RegisterPassInstance("FXAAPass",        m_FXAAPass);
+        m_PipelineBuilder->RegisterPassInstance("UIPass",          m_UIPass);
+
+        auto& luaState = ScriptEngine::GetLuaState();
+        luaState["Pipeline"] = m_PipelineBuilder.get();
+
+        try {
+            auto result = luaState.safe_script_file(scriptPath, sol::script_pass_on_error);
+            if (!result.valid()) {
+                sol::error err = result;
+                throw std::runtime_error(err.what());
+            }
+
+            m_PipelineBuilder->ValidateTextures();
+            m_PipelineBuilder->Compile();
+
+            m_FinalExportTexture = m_PipelineBuilder->GetOutput();
+            if (m_FinalExportTexture.empty())
+                m_FinalExportTexture = "FXAA";
+
+            m_SRPDirty = false;
+            m_ViewportDirty = false;
+
+        } catch (const std::exception& e) {
+            AYAYA_CORE_ERROR("[SRP] Compilation failed: {}", e.what());
+            AYAYA_CORE_WARN("[SRP] Restoring previous valid render graph.");
+
+            // 🔥 Restore old state — FBOs, passes, and layout tracking intact
+            m_RenderGraph.RestoreState(std::move(snapshot));
+            m_SRPDirty = false;
+        }
+
+        luaState["Pipeline"] = sol::lua_nil;
+    }
+
+    void SceneRenderer::ApplyPerFrameCulling() {
+        // Dynamic culling based on runtime state
+        // (Baked Enabled=false was already applied in setup_lambda via SetCulled)
+
+        // WBOIT: cull when no translucent objects in the sorted render queue
+        bool hasTranslucent = false;
+        if (m_RenderContext.RenderQueue) {
+            for (auto& p : m_RenderContext.RenderQueue->Packets) {
+                SortKey k; k.Value = p.SortKey;
+                if (k.Bits.BucketID == static_cast<uint64_t>(RenderBucket::Translucent))
+                    { hasTranslucent = true; break; }
+            }
+        }
+        SetPassCulled(m_RenderGraph, "WBOIT_Gather", !hasTranslucent);
+        SetPassCulled(m_RenderGraph, "WBOIT_Resolve", !hasTranslucent);
     }
 
     void SceneRenderer::AddCustomPostProcess(std::shared_ptr<CustomPostProcess> pass) {

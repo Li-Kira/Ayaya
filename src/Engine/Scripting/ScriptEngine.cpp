@@ -4,6 +4,7 @@
 #include "Engine/Core/Input.hpp"
 #include "Asset/AssetManager.hpp"
 #include "Asset/Prefab.hpp"
+#include "Renderer/PipelineBuilder.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -171,6 +172,10 @@ namespace Ayaya {
     void ScriptEngine::Shutdown() {
         delete s_Data;
         s_Data = nullptr;
+    }
+
+    sol::state& ScriptEngine::GetLuaState() {
+        return s_Data->LuaState;
     }
 
     // ---- Runtime ----
@@ -490,6 +495,64 @@ namespace Ayaya {
                 }
             }
         });
+
+        // ── SRP: PipelineBuilder (Scriptable Render Pipeline) ──
+        // Note: sol2 does NOT forward C++ default arg values to Lua.
+        // We use sol::overload with explicit arity overloads for methods with defaults.
+        s_Data->LuaState.new_usertype<PipelineBuilder>("PipelineBuilder",
+            "SetOutput",         &PipelineBuilder::SetOutput,
+            "GetViewportWidth",  &PipelineBuilder::GetViewportWidth,
+            "GetViewportHeight", &PipelineBuilder::GetViewportHeight,
+
+            // DeclareTexture — 4/5/6 arg overloads
+            // Width/height/samples accept Lua number (int or float), cast to uint32_t internally.
+            "DeclareTexture", sol::overload(
+                [](PipelineBuilder& self, const std::string& name, sol::table formats,
+                   double w, double h) {
+                    self.DeclareTexture(name, formats, (uint32_t)w, (uint32_t)h);
+                },
+                [](PipelineBuilder& self, const std::string& name, sol::table formats,
+                   double w, double h, double samples) {
+                    self.DeclareTexture(name, formats, (uint32_t)w, (uint32_t)h, (uint32_t)samples);
+                },
+                [](PipelineBuilder& self, const std::string& name, sol::table formats,
+                   double w, double h, double samples, bool isShadowMap) {
+                    self.DeclareTexture(name, formats, (uint32_t)w, (uint32_t)h, (uint32_t)samples, isShadowMap);
+                }
+            ),
+
+            // AddPass — 5/6/7/8 arg overloads
+            // params defaults to nil, widthOverride/heightOverride default to 0.
+            "AddPass", sol::overload(
+                // 5 args: no params
+                [](PipelineBuilder& self, const std::string& nodeName,
+                   const std::string& passType, sol::table reads, sol::table writes,
+                   sol::table readWrites) {
+                    self.AddPass(nodeName, passType, reads, writes, readWrites, sol::lua_nil);
+                },
+                // 6 args: with params
+                [](PipelineBuilder& self, const std::string& nodeName,
+                   const std::string& passType, sol::table reads, sol::table writes,
+                   sol::table readWrites, sol::object params) {
+                    self.AddPass(nodeName, passType, reads, writes, readWrites, params);
+                },
+                // 7 args: params + wOverride
+                [](PipelineBuilder& self, const std::string& nodeName,
+                   const std::string& passType, sol::table reads, sol::table writes,
+                   sol::table readWrites, sol::object params,
+                   double wOverride) {
+                    self.AddPass(nodeName, passType, reads, writes, readWrites, params, (uint32_t)wOverride);
+                },
+                // 8 args: params + wOverride + hOverride
+                [](PipelineBuilder& self, const std::string& nodeName,
+                   const std::string& passType, sol::table reads, sol::table writes,
+                   sol::table readWrites, sol::object params,
+                   double wOverride, double hOverride) {
+                    self.AddPass(nodeName, passType, reads, writes, readWrites, params,
+                                (uint32_t)wOverride, (uint32_t)hOverride);
+                }
+            )
+        );
     }
 
 }

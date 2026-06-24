@@ -61,6 +61,11 @@ namespace Ayaya {
         TimelinePanel& GetTimelinePanel() { return m_TimelinePanel; }
         TweenManager& GetTweenManager() { return m_TweenManager; }
 
+        // SRP: Renderer accessors for pipeline assignment from UI
+        std::shared_ptr<class SceneRenderer> GetSceneRenderer() const { return m_SceneRenderer; }
+        std::shared_ptr<class SceneRenderer> GetGameRenderer() const { return m_GameRenderer; }
+        class PreferencesPanel& GetPreferencesPanel() { return m_PreferencesPanel; }
+
 
     private:
         void SetupScene();

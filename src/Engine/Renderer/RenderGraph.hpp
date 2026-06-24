@@ -162,6 +162,16 @@ namespace Ayaya {
 
         bool IsCompiled() const { return m_Compiled; }
 
+        // ── SRP save/restore: extract state without destroying FBOs ──
+        // Used for atomic pipeline rebuild — extract before Clear(), restore on failure.
+        struct StateSnapshot {
+            std::vector<std::shared_ptr<RGPass>> Passes;
+            std::unordered_map<std::string, RGTexture> Textures;
+            bool Compiled = false;
+        };
+        StateSnapshot ExtractState();
+        void RestoreState(StateSnapshot state);
+
         // 获取纹理的可读布局
         static ImageLayout GetReadLayout(const FramebufferSpecification& spec);
 

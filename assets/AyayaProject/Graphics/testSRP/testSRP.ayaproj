@@ -1,5 +1,5 @@
 Project:
-  Name: initProject
+  Name: testSRP
   StartScene: Scenes/Default.ayaya
   AssetDirectory: Assets
-  DefaultSRPScript: 0
+  DefaultSRPScript: 12076663172084456695

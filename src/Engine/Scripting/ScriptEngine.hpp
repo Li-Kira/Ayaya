@@ -6,6 +6,9 @@
 #include <unordered_map>
 #include <unordered_set>
 
+// Forward-declare sol::state to avoid pulling in <sol/sol.hpp> everywhere
+namespace sol { class state; }
+
 namespace Ayaya {
 
     // Metadata for one CONFIG parameter declared by a Lua script.
@@ -48,6 +51,9 @@ namespace Ayaya {
         static void        TriggerRebuild(Entity entity, Scene* scene);
         // Release the Lua environment (call before changing/removing script handle)
         static void        ReleaseScriptEnv(Entity entity);
+
+        // Access the raw Lua state (for pipeline scripting, etc.)
+        static sol::state& GetLuaState();
 
     private:
         static void RegisterComponents();

@@ -19,6 +19,7 @@ namespace Ayaya {
             case AssetType::Model:      return 1;  // composite
             case AssetType::Prefab:     return 2;  // container
             case AssetType::Scene:      return 3;  // root
+            case AssetType::SRPipeline: return 4;  // pipeline (depends on everything)
             default:                    return 0;
         }
     }

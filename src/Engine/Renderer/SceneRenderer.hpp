@@ -15,6 +15,7 @@
 namespace Ayaya {
 
     class RenderPass;
+    class PipelineBuilder;
     struct SceneRendererData;
 
     // ==========================================
@@ -77,6 +78,12 @@ namespace Ayaya {
         void AddCustomPostProcess(std::shared_ptr<CustomPostProcess> pass);
         void RemoveCustomPostProcess(const std::string& name);
 
+        // ── SRP (Scriptable Render Pipeline) ──
+        // Set a pipeline script asset. UUID=0 restores the hardcoded default pipeline.
+        void SetSRPScript(UUID handle);
+        UUID GetSRPScript() const { return m_SRPScriptHandle; }
+        void MarkSRPDirty() { m_SRPDirty = true; m_ViewportDirty = true; }
+
         void* GetBlackboardTextureID(std::string_view key);
 
         struct Statistics {
@@ -128,6 +135,15 @@ namespace Ayaya {
         RenderContext m_RenderContext;
         RenderQueue  m_RenderQueue;
         float m_Exposure = 1.0f;
+
+        // ── SRP (Scriptable Render Pipeline) ──
+        UUID m_SRPScriptHandle = 0;               // 0 = use hardcoded default
+        std::unique_ptr<class PipelineBuilder> m_PipelineBuilder;  // PIMPL — avoids <sol/sol.hpp> in header
+        bool m_SRPDirty = true;                    // re-execute Lua on next build
+
+        void BuildRenderGraph_Default(const RenderViewConfig& config, uint32_t vpW, uint32_t vpH);
+        void BuildRenderGraph_SRP(uint32_t vpW, uint32_t vpH);
+        void ApplyPerFrameCulling();
     };
 
 }

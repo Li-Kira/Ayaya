@@ -105,6 +105,22 @@ namespace Ayaya {
                 m_ActiveScene->InvalidateAssetCache(uuid);
         }
 
+        // SRP hot-reload: if the active pipeline script changed, mark dirty
+        if (!reloadedUUIDs.empty()) {
+            if (m_SceneRenderer) {
+                UUID srpHandle = m_SceneRenderer->GetSRPScript();
+                if (srpHandle != 0) {
+                    for (auto uuid : reloadedUUIDs) {
+                        if (uuid == srpHandle) {
+                            m_SceneRenderer->MarkSRPDirty();
+                            if (m_GameRenderer) m_GameRenderer->MarkSRPDirty();
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         // GPU-resident thumbnail generation: one per frame, zero CPU blocking
         AssetPreviewer::ProcessOneThumbnail();
 
@@ -1233,6 +1249,15 @@ namespace Ayaya {
 
                 renderProgressFrame(1.0f, "Done!");
                 AYAYA_CORE_INFO("Project loaded: {0}", Project::GetActive()->GetConfig().Name);
+
+                // SRP: auto-load project-specific pipeline
+                auto& config = Project::GetActive()->GetConfig();
+                if (config.DefaultSRPScript != 0) {
+                    UUID srpHandle(config.DefaultSRPScript);
+                    m_SceneRenderer->SetSRPScript(srpHandle);
+                    m_GameRenderer->SetSRPScript(srpHandle);
+                    AYAYA_CORE_INFO("[Editor] Loaded project SRP pipeline: {}", config.DefaultSRPScript);
+                }
 
                 // Start asset watcher on the new project
                 auto assetDir = Project::GetAssetDirectory();

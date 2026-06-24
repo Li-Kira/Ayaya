@@ -366,6 +366,26 @@ namespace Ayaya {
     //      e. InsertTileResolveBarrier → attachment→readOnly 布局转换 + TBDR tile sync
     //   2. 全局内存屏障
     // ==========================================
+    // SRP save/restore — extract state without destroying FBOs
+    // ==========================================
+    RenderGraph::StateSnapshot RenderGraph::ExtractState() {
+        StateSnapshot snap;
+        snap.Passes   = std::move(m_Passes);
+        snap.Textures = std::move(m_Textures);
+        snap.Compiled = m_Compiled;
+        m_Passes.clear();
+        m_Textures.clear();
+        m_Compiled = false;
+        return snap;
+    }
+
+    void RenderGraph::RestoreState(StateSnapshot state) {
+        m_Passes   = std::move(state.Passes);
+        m_Textures = std::move(state.Textures);
+        m_Compiled = state.Compiled;
+    }
+
+    // ==========================================
     void RenderGraph::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
         if (!m_Compiled) Compile();
 

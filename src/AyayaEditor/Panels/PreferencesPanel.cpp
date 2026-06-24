@@ -101,7 +101,7 @@ namespace Ayaya {
 
         // 【更新】：保存全局底层配置，删除了旧的后处理配置
         out << YAML::Key << "GraphicsAPI" << YAML::Value << GraphicsAPI;
-        
+
         out << YAML::EndMap;
         out << YAML::EndMap;
 

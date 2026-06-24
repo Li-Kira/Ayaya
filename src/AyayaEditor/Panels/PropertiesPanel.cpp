@@ -2938,6 +2938,65 @@ namespace Ayaya {
                     ImGui::PopID();
                 }
             }
+        } else if (meta.Type == AssetType::SRPipeline) {
+            ImGui::TextUnformatted("Scriptable Render Pipeline");
+            ImGui::Separator();
+
+            auto& editorLayer = EditorLayer::Get();
+            auto sceneRenderer = editorLayer.GetSceneRenderer();
+            auto gameRenderer   = editorLayer.GetGameRenderer();
+            UUID currentSRP = sceneRenderer ? sceneRenderer->GetSRPScript() : UUID();
+            bool isActive = (currentSRP == m_SelectedAsset);
+
+            if (isActive) {
+                ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f), "Active Pipeline");
+            } else {
+                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Inactive");
+            }
+
+            ImGui::Spacing();
+
+            if (ImGui::Button(isActive ? "Reload Pipeline" : "Set as Render Pipeline", ImVec2(-1, 0))) {
+                if (sceneRenderer) {
+                    sceneRenderer->SetSRPScript(m_SelectedAsset);
+                    if (gameRenderer) gameRenderer->SetSRPScript(m_SelectedAsset);
+
+                    // 🔥 Instant save to project config (per-project, not global)
+                    if (auto proj = Project::GetActive()) {
+                        proj->GetConfig().DefaultSRPScript = (uint64_t)m_SelectedAsset;
+                        Project::SaveActive(Project::GetProjectDirectory() /
+                            (proj->GetConfig().Name + ".ayaproj"));
+                    }
+
+                    AYAYA_CORE_INFO("[Editor] SRP script set and saved: {}", (uint64_t)m_SelectedAsset);
+                }
+            }
+
+            if (isActive) {
+                if (ImGui::Button("Restore Default Pipeline", ImVec2(-1, 0))) {
+                    if (sceneRenderer) {
+                        sceneRenderer->SetSRPScript(0);
+                        if (gameRenderer) gameRenderer->SetSRPScript(0);
+
+                        // 🔥 Instant save: clear project pipeline
+                        if (auto proj = Project::GetActive()) {
+                            proj->GetConfig().DefaultSRPScript = 0;
+                            Project::SaveActive(Project::GetProjectDirectory() /
+                                (proj->GetConfig().Name + ".ayaproj"));
+                        }
+
+                        AYAYA_CORE_INFO("[Editor] SRP restored to hardcoded default pipeline");
+                    }
+                }
+            }
+
+            if (!meta.VirtualPath.empty()) {
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::TextUnformatted("Virtual Path:");
+                ImGui::TextWrapped("%s", meta.VirtualPath.c_str());
+            }
+
         } else if (meta.Type == AssetType::Curve) {
             auto curve = AssetManager::GetAsset<CurveAsset>(m_SelectedAsset);
             if (!curve) {

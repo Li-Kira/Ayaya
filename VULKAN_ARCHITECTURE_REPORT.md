@@ -1,7 +1,7 @@
 # Ayaya Engine — Vulkan 渲染架构与管线深度分析报告
 
-> **初始报告:** 2026-06-18 | **更新:** 2026-06-20 (GDR CPU 剔除消除 + Transform 缓存 + VSync 接入 + Alpha Map 管线 + Lua 性能脚本)
-> **分析范围:** `/src/Engine/Platform/Vulkan/` (28 文件), `/src/Engine/Renderer/` (抽象层 + 12 个 Pass), `/assets/Editor/shaders/src/vulkan/` (52 个 Shader)
+> **初始报告:** 2026-06-18 | **更新:** 2026-06-24 (SRP Scriptable Render Pipeline + 描述符集 Frame Allocator 探索)
+> **分析范围:** `/src/Engine/Platform/Vulkan/` (28 文件), `/src/Engine/Renderer/` (抽象层 + 12 个 Pass + SRP), `/assets/Editor/shaders/src/vulkan/` (52 个 Shader)
 
 ---
 
@@ -17,6 +17,7 @@
 8. [材质与资产系统](#8-材质与资产系统)
 9. [深度优化机会评估](#9-深度优化机会评估)
 10. [GDR 性能优化](#18-gdr-性能优化-2026-06-20)
+20. [SRP Scriptable Render Pipeline (2026-06-24)](#20-srp-scriptable-render-pipeline-2026-06-24)
 
 ---
 
@@ -1668,3 +1669,75 @@ swapchain 无效。`VulkanContext::ChooseSwapPresentMode()` 硬编码 `MAILBOX_K
 | `hiz_build.comp` | Compute | GBuffer D32→R32 Hi-Z level-0 拷贝 |
 | `hiz_downsample.comp` | Compute | 2×2 MAX 降采样 Mip 链 (自适应边界) |
 | `cull_shadow.comp` | Compute | 光源视锥体剔除 + Opaque/Masked 分 bin
+
+---
+
+## 20. SRP Scriptable Render Pipeline (2026-06-24)
+
+### 20.1 概述
+
+SRP 将渲染管线的拓扑定义从 C++ 硬编码迁移到 **Lua 脚本**。Lua 在初始化/热重载时声明 Pass 之间的连线关系，C++ RenderGraph 负责编译（Kahn 拓扑排序 + FBO 创建）和每帧执行。热路径零 Lua 调用。
+
+**设计原则：** C++ 负责"跑"，Lua 负责"连"。
+
+### 20.2 新增文件
+
+| 文件 | 用途 |
+|------|------|
+| `src/Engine/Renderer/PassRegistry.hpp` | `PassBakedParams` 纯 C++ 参数结构体 + `IPassFactory` 接口 + `PassRegistry` 单例 |
+| `src/Engine/Renderer/PassRegistry.cpp` | 12 个 Pass 的工厂注册（StandardPassFactory、WBOITGather/ResolveFactory、LightingPassFactory） |
+| `src/Engine/Renderer/PipelineBuilder.hpp` | Lua→RenderGraph 桥接层：`DeclareTexture`、`AddPass`、`SetOutput`、`RegisterPassInstance` |
+| `src/Engine/Renderer/PipelineBuilder.cpp` | 格式映射、`BakeParams` 参数烘焙、纹理验证、LoadOp 烘焙 |
+| `assets/Editor/srp/default.srp` | 默认管线 Lua 脚本（12 个 Pass 完整声明） |
+
+### 20.3 修改的文件
+
+| 文件 | 修改内容 |
+|------|---------|
+| `SceneRenderer.hpp/cpp` | `BuildRenderGraph` 路由（SRP vs 硬编码）、`SetSRPScript()`/`MarkSRPDirty()`、`BuildRenderGraph_SRP`（ExtractState + Lua + Compile）、热重载、双 Renderer 独立 Pass 注册 |
+| `RenderGraph.hpp/cpp` | `ExtractState()` / `RestoreState()` 安全快照 |
+| `ScriptEngine.hpp/cpp` | `GetLuaState()`、PipelineBuilder sol::overload 绑定（默认参数支持） |
+| `Asset.hpp` | `AssetType::SRPipeline = 10` |
+| `AssetManager.cpp` | `.srp` 扩展名注册、加载跳过 |
+| `AssetWatcher.cpp` | 热重载权重 = 4 |
+| `Project.hpp` | `ProjectConfig::DefaultSRPScript` |
+| `ProjectSerializer.cpp` | `.ayaproj` 序列化 `DefaultSRPScript` |
+| `EditorLayer.hpp/cpp` | Renderer 访问器、启动自动加载项目管线、AssetWatcher 热重载 |
+| `PropertiesPanel.cpp` | SRPipeline 资产查看器（Set/Reload/Restore）、即时保存到项目配置 |
+| `PreferencesPanel.hpp/cpp` | 移除 `DefaultSRPScript`（项目级替代全局） |
+
+### 20.4 关键设计
+
+**数据烘焙：** `BakeParams(sol::object)` 在 setup 阶段一次性提取 Lua 表到 `PassBakedParams`。execute_lambda 只捕获 C++ 类型——热路径零 Lua。
+
+**双 Renderer 独立 Pass：** `RegisterPassInstance()` per-renderer 注册，确保编辑器/游戏 viewport 各自使用独立 Pass 实例和 UBO 绑定。
+
+**ReadWrite 保护：** Lua `readWrites` → `RGBuilder::ReadWriteTexture()` 单一调用，不拆分。
+
+**错误恢复：** `ExtractState()`/`RestoreState()` + 文件丢失自动降级到硬编码。
+
+### 20.5 已修复的 Bug
+
+| Bug | 根因 | 修复 |
+|-----|------|------|
+| VUID-01197 | `factory->DeclareResources()` 重复声明 → `InsertTileResolveBarrier` 二次调用 | 移除 setup_lambda 中的 factory 调用 |
+| VUID-03047 + 摄像机冻结 | PassRegistry 第二次 Init 覆盖第一次 → 编辑器用游戏 viewport 的 Pass 实例 | per-renderer `RegisterPassInstance()` |
+| Lua 浮点默认参数 | sol2 不转发 C++ 默认值、`vpW/2` 浮点不匹配 uint32_t | `sol::overload` + `double` 参数 |
+
+### 20.6 VUID-03047 探索记录（已还原）
+
+| 尝试 | 结果 |
+|------|------|
+| Pool UPDATE_AFTER_BIND_BIT | MoltenVK 不支持 |
+| Binding flags pNext + Layout flags | MoltenVK 不支持 |
+| Ring buffer 扩容 1000→10000 | 非容量问题 |
+| Frame-Based Allocator (destroy/recreate) | 句柄回收 |
+| AssetPreviewer per-frame 池 | 非缩略图 |
+| vkDeviceWaitIdle + vkResetCommandPool | 引入新 VUID |
+
+### 20.7 预存健壮性 gap（审计发现，非 SRP 引入）
+
+| 严重度 | 数量 | 要点 |
+|--------|------|------|
+| HIGH | 5 | 创建失败不检查返回值、ring buffer 静默 wrap、Vulkan 1.2 特性无条件启用、深度 barrier 错误 stage、池耗尽错误描述符 |
+| MEDIUM | 6 | RefreshDescriptorSets 死代码、析构缺 GPU 同步、单一 bool LoadOp、color TBDR 缺 TRANSFER_BIT、ReadWrite 重复 barrier、Undefined 映射错误 |
