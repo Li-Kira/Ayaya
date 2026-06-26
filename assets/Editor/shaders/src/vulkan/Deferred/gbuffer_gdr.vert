@@ -52,7 +52,9 @@ struct GPUMaterial {
     int blendMode;
     int useAlphaMap;
     int alphaBindless;
-    int _pad[2];
+    	uint lightModeMask;
+	uint _pad0, _pad1, _pad2;  // align customData to 16-byte boundary (match C++ alignas(16))
+	float customData[16];
 };
 // layout declared in fragment shader; vertex only needs materialIdx
 

@@ -157,6 +157,21 @@ namespace Ayaya {
 
     uint32_t Material::GetLightModeMask() const {
         if (m_LightModeMask != 0) return m_LightModeMask;
+
+        // Parse pure-integer string set by SetLightModeMask for custom-bit masks (e.g. "32").
+        // Named strings like "GBuffer,ShadowCaster" are deliberately NOT parsed —
+        // they fall through to backward-compat auto-detect below.
+        if (!m_LightModeStr.empty()) {
+            bool allDigits = true;
+            for (char c : m_LightModeStr) {
+                if (c < '0' || c > '9') { allDigits = false; break; }
+            }
+            if (allDigits) {
+                uint32_t parsed = (uint32_t)std::stoul(m_LightModeStr);
+                if (parsed != 0) return parsed;
+            }
+        }
+
         // Backward compat: auto-detect from BlendMode
         // All materials implicitly participate in ShadowCaster by default
         uint32_t mask = (uint32_t)LightModeFlags::ShadowCaster;

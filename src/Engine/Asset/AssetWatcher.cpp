@@ -21,6 +21,7 @@ namespace Ayaya {
             case AssetType::Scene:      return 3;  // root
             case AssetType::SRPipeline: return 4;  // pipeline
             case AssetType::HLSLShader: return 0;  // leaf source file
+            case AssetType::AyaShader:  return 0;  // shader definition
             default:                    return 0;
         }
     }

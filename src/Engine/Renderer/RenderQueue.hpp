@@ -45,6 +45,7 @@ namespace Ayaya {
         bool       ReceiveShadows = false;
         std::shared_ptr<Mesh>     MeshAsset;
         std::shared_ptr<Material> MaterialAsset;
+        uint32_t   GPUInstanceIndex = 0;   // index into GDR SSBO instance array
     };
 
     // ==========================================

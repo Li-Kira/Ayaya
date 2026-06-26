@@ -99,6 +99,7 @@ namespace Ayaya {
     class RGPass {
     public:
         std::string Name;
+        std::string PassType;  // 工厂注册名 (e.g. "SSAOPass")，用于按类型 culling
         RGExecuteFn ExecuteCallback;
 
         std::vector<std::string> TextureReads;
@@ -133,10 +134,14 @@ namespace Ayaya {
         // 清除所有 Pass 和纹理，标记为未编译
         void Clear();
 
-        // 添加一个 Pass。setup lambda 用 RGBuilder 声明资源依赖
+        // 添加一个 Pass。setup lambda 用 RGBuilder 声明资源依赖。
+        // passType: 工厂注册名 (e.g. "SSAOPass")，用于按类型 culling 而非按 Name。
+        //           默认空 = 向后兼容，culling 回退到 Name 匹配。
         template<typename SetupFunc, typename ExecuteFunc>
-        void AddPass(const std::string& name, SetupFunc setup, ExecuteFunc execute) {
+        void AddPass(const std::string& name, SetupFunc setup, ExecuteFunc execute,
+                     const std::string& passType = "") {
             auto pass = std::make_shared<RGPass>(name, execute);
+            pass->PassType = passType;
             RGBuilder builder(*this, *pass);
             setup(builder);
             pass->IsCulled = builder.IsCulled();

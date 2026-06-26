@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Compiles .hlsl files in a project to SPIR-V via Microsoft DXC.
 Usage: python3 compile_hlsl.py <project_asset_dir>
-Example: python3 compile_hlsl.py assets/AyayaProject/Graphics/testSRP/Assets
 
+Entry point is always 'main' (matches engine VulkanPipeline expectation).
+Use #ifdef VERTEX_SHADER / #else in HLSL to separate VS and PS code.
 Output: <project_dir>/Shaders/Cache/<name>.<vert|frag|comp>.spv
 """
 import sys, os, subprocess, re
@@ -31,30 +32,39 @@ def compile_hlsl(project_dir):
         content = hlsl_file.read_text(encoding='utf-8')
         stem = hlsl_file.stem
 
-        # Only compile stages whose entry points exist in source
+        # Detect stages from shader content (entry point is always 'main')
         stages = []
-        if re.search(r'\bVSMain\b', content):
-            stages.append(("vert", "VSMain", "vs_6_0"))
-        if re.search(r'\bPSMain\b', content):
-            stages.append(("frag", "PSMain", "ps_6_0"))
-        if re.search(r'\bCSMain\b', content):
-            stages.append(("comp", "CSMain", "cs_6_0"))
+        # VS: SV_VertexID or gl_VertexIndex or VERTEX_SHADER ifdef
+        if re.search(r'SV_VertexID|gl_VertexIndex|VERTEX_SHADER', content):
+            stages.append(("vert", "main", "vs_6_0", {"VERTEX_SHADER": "1"}))
+        # PS: SV_TARGET or Texture2D (and not VERTEX_SHADER-compiled VS section)
+        if re.search(r'SV_TARGET|Texture2D\b', content):
+            stages.append(("frag", "main", "ps_6_0", {}))
+        # CS: numthreads or SV_DispatchThreadID
+        if re.search(r'numthreads|SV_DispatchThreadID|gl_GlobalInvocationID', content):
+            stages.append(("comp", "main", "cs_6_0", {}))
 
         if not stages:
-            print(f"  SKIP: {stem}.hlsl — no VSMain/PSMain/CSMain entry point")
+            print(f"  SKIP: {stem}.hlsl — no recognizable shader stage")
             continue
 
-        for stage, entry, profile in stages:
+        for stage, entry, profile, defines in stages:
             out_path = cache_dir / f"{stem}.{stage}.spv"
+            tmp_path = cache_dir / f"{stem}.{stage}.spv.tmp"
+            include_dir = Path(__file__).parent / "assets/Editor/shaders/src/vulkan"
             cmd = [DXC, "-spirv", "-T", profile, "-E", entry,
-                   str(hlsl_file), "-Fo", str(out_path),
-                   "-fvk-use-dx-layout"]
+                   "-I", str(include_dir),
+                   str(hlsl_file), "-Fo", str(tmp_path)]
+            for dk, dv in defines.items():
+                cmd.extend(["-D", f"{dk}={dv}"])
+            cmd.append("-fvk-use-dx-layout")
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode == 0:
+                tmp_path.replace(out_path)  # atomic: only overwrite on success
                 print(f"  OK: {stem}.{stage}.spv")
                 ok_count += 1
             else:
-                # Print first 300 chars of error
+                tmp_path.unlink(missing_ok=True)  # clean up broken temp file
                 err = result.stderr.strip()
                 if not err:
                     err = result.stdout.strip()

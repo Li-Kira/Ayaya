@@ -1,0 +1,22 @@
+# Hologram.ayashader — Unified shader definition (Phase A demo)
+Name: "Hologram"
+PassType: "GenericDrawPass"
+Tags:
+  LightModeMask: 32
+  Queue: "Transparent"
+RenderState:
+  DepthTest: false
+  DepthWrite: false
+  CullMode: "None"
+  BlendMode: "Additive"
+Properties:
+  - Name: "_Color"
+    DisplayName: "Hologram Color"
+    Type: Color
+    Default: [0.0, 1.0, 1.0, 0.5]
+  - Name: "_ScanSpeed"
+    DisplayName: "Scan Speed"
+    Type: Float
+    Range: [0.1, 10.0]
+    Default: 1.5
+HLSL: "hologram.hlsl"

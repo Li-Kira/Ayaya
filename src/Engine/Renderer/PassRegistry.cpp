@@ -1,6 +1,7 @@
 #include "PassRegistry.hpp"
 #include "Renderer/Passes/GenericDrawPass.hpp"
 #include "Renderer/Passes/GenericFullScreenPass.hpp"
+#include "Renderer/Passes/GenericComputePass.hpp"
 #include "Renderer/Passes/VulkanShadowPass.hpp"
 #include "Renderer/Passes/VulkanGbufferPass.hpp"
 #include "Renderer/Passes/VulkanLightingPass.hpp"
@@ -255,6 +256,20 @@ namespace Ayaya {
         Register("GenericFullScreenPass", []() -> std::unique_ptr<IPassFactory> {
             struct Factory : public IPassFactory {
                 std::shared_ptr<RenderPass> pass = std::make_shared<GenericFullScreenPass>();
+                void DeclareResources(RGBuilder&, uint32_t, uint32_t, const PassBakedParams&) override {}
+                RGExecuteFn GetExecuteFn() override {
+                    auto p = pass;
+                    return [p](RenderContext& ctx, RenderCommandBuffer& cmd) { p->Execute(ctx, cmd); };
+                }
+            };
+            auto f = std::make_unique<Factory>();
+            f->pass->OnAttach();
+            return f;
+        });
+
+        Register("GenericComputePass", []() -> std::unique_ptr<IPassFactory> {
+            struct Factory : public IPassFactory {
+                std::shared_ptr<RenderPass> pass = std::make_shared<GenericComputePass>();
                 void DeclareResources(RGBuilder&, uint32_t, uint32_t, const PassBakedParams&) override {}
                 RGExecuteFn GetExecuteFn() override {
                     auto p = pass;

@@ -425,7 +425,9 @@ namespace Ayaya {
             glm::mat4 viewProj = m_RenderContext.ProjectionMatrix * m_RenderContext.ViewMatrix;
             Frustum frustum(viewProj);
             auto view = scene->Reg().view<TransformComponent, MeshRendererComponent>();
+            uint32_t gpuIdx = 0;  // tracks GDR SSBO instance index (matches BuildFromScene order)
             for (auto entityID : view) {
+                uint32_t instIdx = gpuIdx++;
                 auto& meshComp = view.get<MeshRendererComponent>(entityID);
                 if (!meshComp.CachedMaterial)
                     meshComp.CachedMaterial = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
@@ -445,6 +447,7 @@ namespace Ayaya {
                     packet.ReceiveShadows = meshComp.ReceiveShadows;
                     packet.MeshAsset = mesh;
                     packet.MaterialAsset = material;
+                    packet.GPUInstanceIndex = instIdx;
                     SortKey key; key.Value = 0;
                     key.Bits.BucketID = bucket;
                     key.Bits.MaterialHash = (meshComp.MaterialHandle & 0xFFF);
@@ -780,12 +783,6 @@ namespace Ayaya {
     // BuildRenderGraph — 5阶段动态组装
     // ==========================================
     // Helper: find a pass by name in the compiled pass list and update its IsCulled flag
-    static void SetPassCulled(RenderGraph& graph, const std::string& name, bool culled) {
-        for (auto& p : graph.GetPasses()) {
-            if (p->Name == name) { p->IsCulled = culled; return; }
-        }
-    }
-
     void SceneRenderer::BuildRenderGraph(const RenderViewConfig& config, uint32_t vpW, uint32_t vpH) {
         if (m_SRPScriptHandle != 0)
             BuildRenderGraph_SRP(vpW, vpH);
@@ -852,25 +849,8 @@ namespace Ayaya {
             m_ViewportDirty = false;
         }
 
-        // Per-frame: update pass culling based on runtime state, then recompile DAG
-        bool enableSSAO = m_RenderContext.Get<bool>("EnableSSAO", false);
-        SetPassCulled(m_RenderGraph, "SSAOPass", !enableSSAO);
-
-        bool enableBloom = m_RenderContext.Get<bool>("EnableBloom", true);
-        SetPassCulled(m_RenderGraph, "BloomPass", !enableBloom);
-
-        // WBOIT: cull when no translucent objects in the sorted render queue
-        bool hasTranslucent = false;
-        if (m_RenderContext.RenderQueue) {
-            for (auto& p : m_RenderContext.RenderQueue->Packets) {
-                SortKey k; k.Value = p.SortKey;
-                if (k.Bits.BucketID == static_cast<uint64_t>(RenderBucket::Translucent))
-                    { hasTranslucent = true; break; }
-            }
-        }
-        SetPassCulled(m_RenderGraph, "WBOIT_Gather", !hasTranslucent);
-        SetPassCulled(m_RenderGraph, "WBOIT_Resolve", !hasTranslucent);
-
+        // Per-frame: unified dynamic culling (SSAO/Bloom/Outline/WBOIT)
+        ApplyPerFrameCulling();
         m_RenderGraph.Compile();
     }
 
@@ -936,6 +916,11 @@ namespace Ayaya {
             m_PipelineBuilder->ValidateTextures();
             m_PipelineBuilder->Compile();
 
+            // Apply per-frame culling immediately so the first frame after rebuild is correct.
+            // FBOs already created by Compile() above → second Compile() is O(N+E) topology only.
+            ApplyPerFrameCulling();
+            m_RenderGraph.Compile();
+
             m_FinalExportTexture = m_PipelineBuilder->GetOutput();
             if (m_FinalExportTexture.empty())
                 m_FinalExportTexture = "FXAA";
@@ -956,10 +941,14 @@ namespace Ayaya {
     }
 
     void SceneRenderer::ApplyPerFrameCulling() {
-        // Dynamic culling based on runtime state
-        // (Baked Enabled=false was already applied in setup_lambda via SetCulled)
+        // Per-frame dynamic culling by PassType — unified for both default and SRP paths.
+        // PassType is the factory registration name (e.g. "SSAOPass"), set during AddPass.
+        // If PassType is empty (hardcoded default path), fall back to Name matching.
 
-        // WBOIT: cull when no translucent objects in the sorted render queue
+        bool enableSSAO    = m_RenderContext.Get<bool>("EnableSSAO", false);
+        bool enableBloom   = m_RenderContext.Get<bool>("EnableBloom", true);
+        bool enableOutline = m_RenderContext.Get<bool>("EnableOutline", false);
+
         bool hasTranslucent = false;
         if (m_RenderContext.RenderQueue) {
             for (auto& p : m_RenderContext.RenderQueue->Packets) {
@@ -968,8 +957,15 @@ namespace Ayaya {
                     { hasTranslucent = true; break; }
             }
         }
-        SetPassCulled(m_RenderGraph, "WBOIT_Gather", !hasTranslucent);
-        SetPassCulled(m_RenderGraph, "WBOIT_Resolve", !hasTranslucent);
+
+        for (auto& pass : m_RenderGraph.GetPasses()) {
+            const std::string& type = pass->PassType.empty() ? pass->Name : pass->PassType;
+            if (type == "SSAOPass")        pass->IsCulled = !enableSSAO;
+            if (type == "BloomPass")       pass->IsCulled = !enableBloom;
+            if (type == "OutlinePass")     pass->IsCulled = !enableOutline;
+            if (type == "WBOIT_Gather")    pass->IsCulled = !hasTranslucent;
+            if (type == "WBOIT_Resolve")   pass->IsCulled = !hasTranslucent;
+        }
     }
 
     void SceneRenderer::AddCustomPostProcess(std::shared_ptr<CustomPostProcess> pass) {

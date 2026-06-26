@@ -139,6 +139,8 @@ namespace Ayaya {
             }
         }
 
+        if (material->FromAyaShader) return true; // skip default PBR injection
+
         // Migrate: ensure alpha properties exist (old .mat files lack them)
         auto hasProp = [&](const std::string& name) {
             for (auto& p : material->Properties)

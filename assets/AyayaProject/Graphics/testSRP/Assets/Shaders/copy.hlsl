@@ -1,4 +1,6 @@
-// grayscale.hlsl — TA-authored HLSL post-processing shader
+// copy.hlsl — Minimal full-screen texture copy shader.
+// Samples Texture0 and outputs it as-is. Used with additive blend
+// to composite custom render targets onto HDR Lighting.
 
 struct VSInput { uint vertexID : SV_VertexID; };
 struct PSInput { float4 position : SV_POSITION; float2 texCoord : TEXCOORD0; };
@@ -19,11 +21,6 @@ SamplerState u_Sampler0 : register(s0);
 void main(PSInput i, out float4 outColor : SV_TARGET) {
     float2 uv = i.texCoord;
     uv.y = 1.0 - uv.y;
-    float4 c = u_Texture0.Sample(u_Sampler0, uv);
-    float g = dot(c.rgb, float3(0.299, 0.587, 0.114));
-    // return float4(g, g, g, c.a);
-    outColor = float4(g, g, g, c.a);
-    // outColor = float4(1.0, 0.0, 1.0, 1.0); // DIAGNOSTIC: solid white
-    outColor = float4(c);
+    outColor = u_Texture0.Sample(u_Sampler0, uv);
 }
 #endif

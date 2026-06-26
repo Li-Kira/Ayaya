@@ -71,7 +71,7 @@ Entities:
       Scale: [1, 1, 1]
     MeshRendererComponent:
       ModelHandle: 16140901000000000001
-      MaterialHandle: 4429339439854575373
+      MaterialHandle: 16140901000000000004
       CastShadows: true
       ReceiveShadows: true
     RelationshipComponent:

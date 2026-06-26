@@ -251,8 +251,16 @@ namespace Ayaya {
         std::vector<const DrawPacket*> tpackets;
         for (const auto& p : queue->Packets) {
             SortKey k; k.Value = p.SortKey;
-            if (k.Bits.BucketID == static_cast<uint64_t>(RenderBucket::Translucent))
+            if (k.Bits.BucketID == static_cast<uint64_t>(RenderBucket::Translucent)) {
+                // SRP: skip objects with custom LightModeMask — rendered by their own passes.
+                // Only draw objects whose LightModeMask includes Forward(4).
+                if (p.MaterialAsset) {
+                    uint32_t lmMask = p.MaterialAsset->GetLightModeMask();
+                    if (!(lmMask & (uint32_t)LightModeFlags::Forward))
+                        continue;
+                }
                 tpackets.push_back(&p);
+            }
         }
         if (tpackets.empty()) return;
 

@@ -44,9 +44,10 @@ namespace Ayaya {
         int   useAlphaMap;                   // 4
         int   alphaBindless;                 // 4
         uint32_t lightModeMask;              // 4  ← SRP LightMode bitmask
-        uint32_t _pad;                       // 4
+        // TA-extensible shader params: 4×vec4=64 bytes for custom material data
+        alignas(16) float customData[16];   // offset 104, size 64 → total 168
     };
-    static_assert(sizeof(GPUMaterial) == 112, "GPUMaterial must be 112 bytes (matches GLSL std430)");
+    static_assert(sizeof(GPUMaterial) == 176, "GPUMaterial must be 176 bytes (matches GLSL std430)");
 
     // Single global VkBuffer for ALL vertex + index data.
     // Bound via vkCmdBindVertexBuffers / vkCmdBindIndexBuffer with per-mesh offsets.

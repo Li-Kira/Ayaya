@@ -15,7 +15,7 @@ namespace Ayaya {
     class GenericFullScreenPass : public RenderPass {
     public:
         GenericFullScreenPass() { m_PassName = "GenericFullScreen"; }
-        ~GenericFullScreenPass() override = default;
+        ~GenericFullScreenPass() override;
 
         void OnAttach() override;
         void Execute(RenderContext& context, RenderCommandBuffer& cmd) override;
@@ -25,10 +25,13 @@ namespace Ayaya {
 
     private:
         std::string m_NodeName;
-        std::shared_ptr<Framebuffer> m_RefFBO;  // reference FBO for pipeline format matching
         std::unordered_map<std::string, std::shared_ptr<Pipeline>> m_PipelineCache;
 
-        std::shared_ptr<Pipeline> GetOrCreatePipeline(const std::string& fragShaderPath);
+        std::shared_ptr<Pipeline> GetOrCreatePipeline(const std::string& fragShaderPath,
+                                                       const std::string& vertShaderPath = "",
+                                                       int blendMode = 0,
+                                                       FramebufferTextureFormat targetFormat = FramebufferTextureFormat::RGBA8,
+                                                       bool hasDepth = false);
     };
 
 } // namespace Ayaya

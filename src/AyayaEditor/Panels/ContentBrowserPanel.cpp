@@ -68,6 +68,7 @@ namespace Ayaya {
         if (meta.Type == AssetType::Curve) return nullptr;
         if (meta.Type == AssetType::LuaScript) return nullptr;
         if (meta.Type == AssetType::HLSLShader) return nullptr;
+        if (meta.Type == AssetType::AyaShader)  return nullptr;
         return m_FileIcon;
     }
 

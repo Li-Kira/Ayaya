@@ -18,6 +18,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <cstring>
 #include <thread>
+#include <yaml-cpp/yaml.h>
 #include <IconsFontAwesome5.h>
 
 namespace Ayaya {
@@ -3051,6 +3052,94 @@ namespace Ayaya {
                 if (ImGui::Button("Open in Curve Editor", ImVec2(-1, 0))) {
                     std::string phys = VFS::ResolveString(meta.VirtualPath);
                     EditorLayer::Get().GetCurveEditorPanel().OpenCurve(curve, phys);
+                }
+            }
+        } else if (meta.VirtualPath.size() > 10 && meta.VirtualPath.substr(meta.VirtualPath.size() - 10) == ".ayashader") {
+            ImGui::TextUnformatted("AyaShader Definition");
+            ImGui::Separator();
+            if (!meta.VirtualPath.empty()) {
+                ImGui::TextWrapped("Source: %s", meta.VirtualPath.c_str());
+            }
+            ImGui::Spacing();
+            if (ImGui::Button("Create Material", ImVec2(-1, 0))) {
+                std::string physPath = VFS::ResolveString(meta.VirtualPath);
+                try {
+                    YAML::Node doc = YAML::LoadFile(physPath);
+                    std::string matName = doc["Name"] ? doc["Name"].as<std::string>() : "New Material";
+                    auto material = std::make_shared<Material>();
+                    material->Name = matName;
+                    material->FromAyaShader = true;  // skip default PBR injection on load
+
+                    // Parse Tags
+                    if (doc["Tags"] && doc["Tags"]["LightModeMask"]) {
+                        uint32_t mask = doc["Tags"]["LightModeMask"].as<uint32_t>();
+                        material->SetLightModeMask(mask);
+                    }
+
+                    // Parse Properties → MaterialProperty with correct type mapping
+                    if (doc["Properties"]) {
+                        for (auto prop : doc["Properties"]) {
+                            MaterialProperty mp;
+                            mp.UniformName = prop["Name"].as<std::string>();
+                            mp.DisplayName = prop["DisplayName"] ? prop["DisplayName"].as<std::string>() : mp.UniformName;
+                            std::string ptype = prop["Type"].as<std::string>();
+                            bool hasDef = prop["Default"] && prop["Default"].size() > 0;
+
+                            if (ptype == "Float") {
+                                mp.Type = MaterialPropertyType::Float;
+                                if (hasDef) mp.FloatValue = prop["Default"][0].as<float>();
+                            } else if (ptype == "Int") {
+                                mp.Type = MaterialPropertyType::Int;
+                                if (hasDef) mp.IntValue = prop["Default"][0].as<int>();
+                            } else if (ptype == "Bool") {
+                                mp.Type = MaterialPropertyType::Bool;
+                                if (hasDef) mp.BoolValue = prop["Default"][0].as<bool>();
+                            } else if (ptype == "Color") {
+                                mp.Type = MaterialPropertyType::Vec4;
+                                if (prop["Default"] && prop["Default"].size() >= 4) {
+                                    mp.Vec4Value = glm::vec4(
+                                        prop["Default"][0].as<float>(), prop["Default"][1].as<float>(),
+                                        prop["Default"][2].as<float>(), prop["Default"][3].as<float>());
+                                } else if (hasDef) {
+                                    float v = prop["Default"][0].as<float>();
+                                    mp.Vec4Value = glm::vec4(v, v, v, 1.0f);
+                                }
+                            } else if (ptype == "Vec2") {
+                                mp.Type = MaterialPropertyType::Vec2;
+                                if (prop["Default"] && prop["Default"].size() >= 2)
+                                    mp.Vec2Value = glm::vec2(prop["Default"][0].as<float>(), prop["Default"][1].as<float>());
+                            } else if (ptype == "Vec3") {
+                                mp.Type = MaterialPropertyType::Vec3;
+                                if (prop["Default"] && prop["Default"].size() >= 3)
+                                    mp.Vec3Value = glm::vec3(prop["Default"][0].as<float>(), prop["Default"][1].as<float>(), prop["Default"][2].as<float>());
+                            } else if (ptype == "Texture2D") {
+                                mp.Type = MaterialPropertyType::Texture2D;
+                            }
+                            material->Properties.push_back(mp);
+                        }
+                    }
+
+                    // Parse RenderState → correct PipelineSpec fields
+                    if (doc["RenderState"]) {
+                        auto rs = doc["RenderState"];
+                        if (rs["BlendMode"]) {
+                            std::string bm = rs["BlendMode"].as<std::string>();
+                            if (bm == "Additive") {
+                                // Blend settings are read by GenericDrawPass from Lua params;
+                                // Material stores base blend mode for default rendering path
+                            }
+                        }
+                    }
+
+                    // Save .mat in same directory as the .ayashader
+                    std::filesystem::path matPath = std::filesystem::path(physPath).parent_path() / (matName + ".mat");
+                    std::filesystem::create_directories(std::filesystem::path(matPath).parent_path());
+                    MaterialSerializer::Serialize(material, matPath.string());
+                    AssetManager::RefreshRegistry(); // register without triggering load+Deserialize migration
+
+                    AYAYA_CORE_INFO("[AyaShader] Material created: {}", matPath.string());
+                } catch (const std::exception& e) {
+                    AYAYA_CORE_ERROR("[AyaShader] Failed to create material: {}", e.what());
                 }
             }
         } else if (meta.VirtualPath.size() > 5 && meta.VirtualPath.substr(meta.VirtualPath.size() - 5) == ".hlsl") {

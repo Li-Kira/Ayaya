@@ -115,6 +115,16 @@ namespace Ayaya {
                 vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     vulkanPipeline->GetVulkanPipelineLayout(), texSet, 1, &bindlessSet, 0, nullptr);
             }
+            // 非 bindless 管线：绑定有效的 Set 1 覆盖可能残留的 bindless set。
+            // bindless set 的 layout 带有 UPDATE_AFTER_BIND_POOL_BIT，与本管线的 Set 1 layout 不兼容。
+            else if (vulkanPipeline->GetDescriptorSetLayoutCount() > 1) {
+                VkDescriptorSet texSet = vulkanPipeline->GetNextTextureDescriptorSet();
+                uint32_t texSlot = vulkanPipeline->GetTextureSetIndex();
+                if (texSet != VK_NULL_HANDLE) {
+                    vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        vulkanPipeline->GetVulkanPipelineLayout(), texSlot, 1, &texSet, 0, nullptr);
+                }
+            }
 
             // 【核心】：切换管线时，清空之前记的小本本，并记住新管线
             if (m_BoundPipeline.get() != vulkanPipeline.get()) {

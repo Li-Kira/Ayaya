@@ -1,6 +1,6 @@
 # Ayaya Engine — Vulkan 渲染架构与管线深度分析报告
 
-> **初始报告:** 2026-06-18 | **更新:** 2026-06-24 (SRP Scriptable Render Pipeline + 描述符集 Frame Allocator 探索)
+> **初始报告:** 2026-06-18 | **更新:** 2026-06-26 (SRP 透明管线 + 引擎加固 10+ Bug 修复 + Queue 分流)
 > **分析范围:** `/src/Engine/Platform/Vulkan/` (28 文件), `/src/Engine/Renderer/` (抽象层 + 12 个 Pass + SRP), `/assets/Editor/shaders/src/vulkan/` (52 个 Shader)
 
 ---
@@ -18,6 +18,7 @@
 9. [深度优化机会评估](#9-深度优化机会评估)
 10. [GDR 性能优化](#18-gdr-性能优化-2026-06-20)
 20. [SRP Scriptable Render Pipeline (2026-06-24)](#20-srp-scriptable-render-pipeline-2026-06-24)
+21. [SRP 透明管线 + 引擎加固 (2026-06-26)](#21-srp-透明管线--引擎加固-2026-06-26)
 
 ---
 
@@ -1810,3 +1811,137 @@ ReadWrite 纹理先 Exec `EnsureReadable`（transition → read）再 `EnsureWri
 #### LOW-3: PassRegistry::Get() 死代码
 **文件:** `PassRegistry.cpp:246`
 全局无调用点。整个 `s_Factories`/`s_Instances` 基础设施仅服务此方法。
+
+---
+
+## 21. SRP 透明管线 + 引擎加固 (2026-06-26)
+
+### 21.1 概述
+
+本阶段在 SRP 基础设施上实现了 LightMode/Queue 解耦的透明渲染架构，并通过全面审计修复了 10+ 个 Vulkan 验证层/崩溃/渲染错误问题。核心改动包括：GPUMaterial 结构体 stride 同步、管线生命周期保护、dynamic rendering 格式匹配、Gribb-Hartmann frustum 提取修正、以及 GenericDrawPass 的双 Queue 分流机制。
+
+**修改规模:** 42 文件, +624/-143 行
+
+### 21.2 新增 PutConstant 统一机制
+
+**文件:** `AyayaGDR.hlsl`, `hologram.hlsl`, `VulkanGBufferPass.cpp`, `VulkanShadowPass.cpp`, `GenericDrawPass.cpp`
+
+将所有 `FrustumPush` 结构的 `_pad[0]` 替换为 `uint32_t overrideInstanceID`:
+- GDR 路径: `overrideInstanceID = 0xFFFFFFFF` → shader 回退到 `SV_InstanceID`
+- CPU 透明路径: `overrideInstanceID = GPUInstanceIndex` → shader 使用 CPU 指定的实例索引
+- `AyayaGDR.hlsl::GetAyayaVertex()` 自动选择，TA 写的 shader 无需任何修改
+- HLSL 的 `FrustumPC` 必须和 C++ `FrustumPush` 字节完全一致(112 bytes)，否则 `vkCmdPushConstants` 大小不匹配会导致 push constant 被 GPU 忽略
+
+### 21.3 GenericDrawPass Queue 分流
+
+**文件:** `GenericDrawPass.hpp`, `GenericDrawPass.cpp`
+
+`Execute()` 读取 Lua `Queue` 参数进行分发:
+- **`Queue = "Opaque"`** (默认): `ExecuteOpaque()` — GDR `cull.comp` + 间接绘制，深度写入 ON
+- **`Queue = "Transparent"`**: `ExecuteTransparent()` — CPU 遍历已排序的 `RenderQueue`，按 `LightModeMask` + `RenderBucket::Translucent` 过滤，用 `vkCmdDrawIndexed` 顺序提交
+
+透明路径复用 GlobalGeometryPool 索引缓冲和 GDR Set2 SSBO 描述符，保持数据管道一致性。每个绘制调用通过 push constant 传入 `overrideInstanceID`。
+
+**DrawPacket 扩展:** 新增 `GPUInstanceIndex` 字段，在 `SceneRenderer::RenderScene()` 中通过追踪 view 迭代索引填充，确保与 `BuildFromScene()` 的 SSBO 实例顺序一致。
+
+### 21.4 遇到的 Bug 及修复
+
+#### BUG-1: GPUMaterial stride 不匹配 (C++ 176B vs GLSL 112B)
+**根因:** C++ `GPUMaterial` 增加了 `lightModeMask` + `customData[16]` (112→176B)，但 3 个 GLSL shader 仍是旧布局 `int _pad[2]` → stride 差 64B → 第二个材质起读取垃圾数据
+**修复:** `gbuffer_gdr_bindless.frag`, `gbuffer_gdr.vert`, `shadow_gdr_masked.frag` struct 同步 + `glslc` 重编译
+**症状:** testIBL 5 个材质球只有第一个正确渲染
+
+#### BUG-2: VUID-vkDestroyPipeline-pipeline-00765 (管线使用中析构)
+**根因:** SRP 重建时 `PipelineBuilder` 销毁旧的 `GenericDrawPass` 实例，其析构函数直接 `vkDestroyPipeline` → GPU 命令缓冲仍在引用
+**修复:** 三个通用 Pass 析构前调用 `vkDeviceWaitIdle()`
+**症状:** 切换/重建 SRP 时崩溃 + 绿色画面
+
+#### BUG-3: VUID-colorAttachmentCount-06179 (管线格式不匹配)
+**根因:** `GenericDrawPass::GetOrCreatePipeline` 未设置 `spec.TargetFramebuffer` → `colorAttachmentCount=0` → 与 render pass 不匹配
+**修复:** PipelineKey 增加 `colorFormat` + `hasDepth`，根据运行时 FBO 创建匹配的参考 FBO
+**症状:** 全屏绿色 + Vulkan 验证层报错
+
+#### BUG-4: VUID-None-08600 (Set2 GDR SSBO 未绑定)
+**根因:** `VulkanRenderCommandBuffer::BindPipeline` 只绑定 set 0+1，GDR set 2 需要显式绑定
+**修复:** `BindPipeline` 后显式 `vkCmdBindDescriptorSets(set=2)`
+**症状:** shader 读取垃圾 SSBO 数据
+
+#### BUG-5: Set1 描述符布局 flags 不匹配 (UPDATE_AFTER_BIND)
+**根因:** 上一个 bindless pass 的 set1 残留，其 layout 带 UAB flag，与新 pipeline 的 set1 layout 不兼容
+**修复:** `BindPipeline` 非 bindless 路径显式绑定 set1
+**症状:** VUID-None-08600 "Set 1 flags don't match"
+
+#### BUG-6: dummyLayout 提前销毁导致 pipeline layout 失效
+**根因:** `GenericDrawPass::OnAttach` 创建局部 `dummyLayout` → 用于 `vkCreatePipelineLayout` → 立即 `vkDestroyDescriptorSetLayout` → pipeline layout 失效
+**修复:** 改为成员变量 `m_CullDummyLayout`，对齐 `VulkanShadowPass`/`VulkanGBufferPass` 的生命周期模式
+**症状:** VUID-vkCmdBindPipeline-pipeline-parameter
+
+#### BUG-7: vkCmdPipelineBarrier 参数错误
+**根因:** 间接绘制 barrier 使用 `memoryBarrierCount=1` 但 `pMemoryBarriers=nullptr`
+**修复:** 改为 `memoryBarrierCount=0`（仅需要 buffer barrier）
+**症状:** VUID-vkCmdPipelineBarrier-pMemoryBarriers-parameter
+
+#### BUG-8: Gribb-Hartmann frustum 平面提取错误
+**根因:** `GenericDrawPass` 从 VP 矩阵提取原始行作为 frustum 平面，而非 Gribb-Hartmann 要求的 row3±row{0,1,2} 组合 → cull.comp 使用无效平面 → 所有实例被错误剔除
+**修复:** 对齐 `VulkanGBufferPass` 的正确实现 (transpose + row 组合)
+**症状:** 全息 cube 消失（即使 frag shader 输出纯品红也不可见）
+
+#### BUG-9: LightModeMask 序列化断裂
+**根因:** `SetLightModeMask(32)` 仅设置 `m_LightModeMask` 整数，不更新 `m_LightModeStr` → 序列化跳过 → 重载后 mask 丢失 → 自动推导 6 ≠ 32
+**修复:** `SetLightModeMask` 同步 `m_LightModeStr`；`GetLightModeMask` 纯数字串解析回退
+
+#### BUG-10: GenericFullScreenPass targetFormat 硬编码 RGBA8
+**根因:** 合成到 Lighting (RGBA16F+Depth) 时管线 `colorAttachmentFormat` 不匹配
+**修复:** 从运行时 FBO 提取 `targetFormat` + `hasDepth`，动态创建参考 FBO
+
+#### BUG-11: WBOIT_Resolve readWrite → write 导致绿色画面
+**根因:** 改为纯 write 后 RenderGraph 不插入 `EnsureReadable` 屏障 → TBDR tile memory 读到脏数据
+**修复:** 恢复 `readWrite` — WBOIT_Resolve 必须是 Lighting 上唯一的 readWrite pass
+
+#### BUG-12: 透明管线无渲染输出（未解决）
+**状态:** 全链路确认正常（Queue 分发 ✅、RenderQueue 过滤 ✅、管线创建 ✅、push constants 对齐 ✅）但 `vkCmdDrawIndexed` 全屏三角诊断也无输出
+**排查方向:** 管线的 colorWriteMask、render pass storeOp、或 FBO 注入问题
+
+### 21.5 Material / LightMode 序列化
+
+- `SetLightModeMask(uint32_t)` 同步 `m_LightModeStr`：内置位 → "GBuffer,ShadowCaster"；自定义位 → "32"
+- `GetLightModeMask()` 纯数字串解析 → 命名串不动（回退到 BlendMode 自动推导）
+- `kEngineReservedLightModeMask(0x0F)` / `kUserCustomLightModeStartBit(4)` 位边界常量
+- `FromAyaShader` flag 跳过默认 PBR 属性注入
+
+### 21.6 当前架构限制
+
+1. **WBOIT_Resolve 约束**: 是 Lighting 上唯一的 `readWrite` pass，其后不能追加纯 write pass（会产生 backward read edge → RenderGraph 循环依赖）
+2. **透明管线未完全工作**: CPU 排序路径找到包、创建管线、启动 render pass，但无视觉输出 — 需要继续排查
+3. **Culled pass 保留**: `Compile()` 保留 culled pass 的实现已回退（触发循环依赖边缘情况），运行时 toggle 仍需 viewport resize 或 MarkSRPDirty 恢复
+4. **SRP mtime 热重载**: 已回退（为隔离绿色屏幕），可随时重新启用
+
+### 21.7 修改文件清单
+
+**新增:**
+- `assets/AyayaProject/Graphics/testSRP/Assets/Shaders/copy.hlsl` — 全屏纹理拷贝
+- `assets/AyayaProject/Graphics/testSRP/Assets/Shaders/hologram.hlsl` — 全息 GDR shader
+
+**C++ 引擎 (关键文件):**
+- `src/Engine/Renderer/Passes/GenericDrawPass.cpp` (+216 行) — Queue 分流 + ExecuteTransparent + frustum/管线修复
+- `src/Engine/Renderer/Passes/GenericFullScreenPass.cpp` (+101 行) — BlendMode/ClearColor/targetFormat
+- `src/Engine/Renderer/Passes/VulkanWBOITPass.cpp` — LightModeMask 过滤
+- `src/Engine/Renderer/Passes/VulkanGbufferPass.cpp` — FrustumPush 统一
+- `src/Engine/Renderer/Passes/VulkanShadowPass.cpp` — FrustumPush 统一
+- `src/Engine/Renderer/Material.cpp` / `Material.hpp` — LightMode 序列化
+- `src/Engine/Renderer/SceneRenderer.cpp` — ApplyPerFrameCulling 统一 + GPUInstanceIndex
+- `src/Engine/Renderer/RenderGraph.cpp` / `RenderGraph.hpp` — PassType + culled pass 保留
+- `src/Engine/Renderer/PipelineBuilder.cpp` — PassType 传递
+- `src/Engine/Renderer/RenderQueue.hpp` — GPUInstanceIndex
+- `src/Engine/Platform/Vulkan/VulkanRenderCommandBuffer.cpp` — BindPipeline set1
+- `src/Engine/Platform/Vulkan/VulkanGeometryPool.hpp` — GPUMaterial customData
+
+**Shader:**
+- `assets/Editor/shaders/src/vulkan/Generic/AyayaGDR.hlsl` — overrideInstanceID
+- `assets/Editor/shaders/src/vulkan/Deferred/gbuffer_gdr.vert` — GPUMaterial stride
+- `assets/Editor/shaders/src/vulkan/Deferred/gbuffer_gdr_bindless.frag` — GPUMaterial stride
+- `assets/Editor/shaders/src/vulkan/Shadow/shadow_gdr_masked.frag` — GPUMaterial stride
+
+**SRP:**
+- `assets/AyayaProject/Graphics/testSRP/Assets/Settings/default.srp` — Hologram pass
+- `assets/Editor/srp/default.srp` — LightMode 文档注释

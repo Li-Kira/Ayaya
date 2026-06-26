@@ -66,12 +66,12 @@ Entities:
       Tag: Cube
       IsActive: true
     TransformComponent:
-      Translation: [0, 0.3, 0]
+      Translation: [0.2, 0.3, 0]
       Rotation: [0, 0.6335549, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
       ModelHandle: 16140901000000000001
-      MaterialHandle: 15972461601806397795
+      MaterialHandle: 722090966365288411
       CastShadows: true
       ReceiveShadows: true
     RelationshipComponent:

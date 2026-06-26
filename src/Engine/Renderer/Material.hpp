@@ -20,6 +20,13 @@ namespace Ayaya {
     };
 
     // SRP LightMode bitmask — a material can participate in multiple passes simultaneously.
+    // ── Bit allocation ────────────────────────────────────────────────
+    //  Bit 0 (1):  GBuffer       — deferred geometry
+    //  Bit 1 (2):  ShadowCaster  — shadow map rendering
+    //  Bit 2 (4):  Forward       — forward / overlay
+    //  Bit 3 (8):  DepthPrePass  — depth-only pre-pass
+    //  Bit 4+ (16): User-defined — custom SRP passes (e.g. Hologram=32)
+    // ──────────────────────────────────────────────────────────────────
     enum class LightModeFlags : uint32_t {
         None         = 0,
         GBuffer      = 1u << 0,  // 1
@@ -27,6 +34,9 @@ namespace Ayaya {
         Forward      = 1u << 2,  // 4
         DepthPrePass = 1u << 3,  // 8
     };
+
+    static constexpr uint32_t kUserCustomLightModeStartBit = 4;
+    static constexpr uint32_t kEngineReservedLightModeMask = (1u << kUserCustomLightModeStartBit) - 1; // 0x0F
 
     enum class MaterialPropertyType {
         Float     = 0,
@@ -80,11 +90,32 @@ namespace Ayaya {
 
         // SRP LightMode bitmask — bitwise OR of LightModeFlags for multi-pass participation.
         // 0 = auto-detect from BlendMode (Opaque/Masked→GBuffer|ShadowCaster, Translucent→Forward|ShadowCaster)
-        void SetLightModeMask(uint32_t mask) { m_LightModeMask = mask; }
+        void SetLightModeMask(uint32_t mask) {
+            m_LightModeMask = mask;
+            // Sync to string for serialization round-trip
+            if (mask == 0) {
+                m_LightModeStr.clear();
+                return;
+            }
+            std::string str;
+            if (mask & (uint32_t)LightModeFlags::GBuffer)      str += (str.empty() ? "" : ",") + std::string("GBuffer");
+            if (mask & (uint32_t)LightModeFlags::ShadowCaster) str += (str.empty() ? "" : ",") + std::string("ShadowCaster");
+            if (mask & (uint32_t)LightModeFlags::Forward)      str += (str.empty() ? "" : ",") + std::string("Forward");
+            if (mask & (uint32_t)LightModeFlags::DepthPrePass) str += (str.empty() ? "" : ",") + std::string("DepthPrePass");
+            // Custom bits (>=16): fall back to raw integer if no built-in name matched
+            uint32_t custom = mask & ~kEngineReservedLightModeMask;
+            if (custom != 0 || str.empty())
+                str = std::to_string(mask);
+            m_LightModeStr = str;
+        }
         uint32_t GetLightModeMask() const;
         // UI/Serialization: string representation (comma-separated or YAML array)
         const std::string& GetLightModeStr() const { return m_LightModeStr; }
         void SetLightModeStr(const std::string& str) { m_LightModeStr = str; }
+
+        // Flag set when Material was auto-generated from .ayashader — skips
+        // default PBR property injection during Deserialize.
+        bool FromAyaShader = false;
 
         // Built-in materials are shared read-only templates (e.g. DefaultPBR).
         // Editing them requires an explicit "Create Instance" via the editor.

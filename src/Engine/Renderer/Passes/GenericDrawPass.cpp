@@ -6,7 +6,11 @@
 #include "Renderer/Framebuffer.hpp"
 #include "Renderer/Frustum.hpp"
 #include "Platform/Vulkan/VulkanContext.hpp"
+#include "Platform/Vulkan/VulkanPipeline.hpp"
 #include "Core/Application.hpp"
+#include "Core/VFS.hpp"
+#include "Renderer/RenderQueue.hpp"
+#include "Renderer/Material.hpp"
 
 namespace Ayaya {
 
@@ -18,11 +22,17 @@ namespace Ayaya {
         if (!vkCtx) return;
         VkDevice device = vkCtx->GetDevice();
 
+        // Wait for GPU to finish before destroying pipelines.
+        // GenericDrawPass is recreated during SRP rebuild — the old instance's
+        // pipelines may still be referenced by in-flight command buffers.
+        vkDeviceWaitIdle(device);
+
         if (m_CullPipeline)  vkDestroyPipeline(device, m_CullPipeline, nullptr);
         if (m_CullLayout)    vkDestroyPipelineLayout(device, m_CullLayout, nullptr);
         if (m_CullShader)    vkDestroyShaderModule(device, m_CullShader, nullptr);
         if (m_CullSet3Pool)  vkDestroyDescriptorPool(device, m_CullSet3Pool, nullptr);
         if (m_CullSet3Layout) vkDestroyDescriptorSetLayout(device, m_CullSet3Layout, nullptr);
+        if (m_CullDummyLayout) vkDestroyDescriptorSetLayout(device, m_CullDummyLayout, nullptr);
     }
 
     void GenericDrawPass::OnAttach() {
@@ -33,8 +43,11 @@ namespace Ayaya {
         uint32_t fiCount = vkCtx->GetFramesInFlight();
 
         // ── Load cull.comp SPIR-V (shared compute shader) ──
+        // Priority: project-local override → engine default
         auto exePath = std::filesystem::current_path();
         std::string spvPath = (exePath / "assets/Editor/shaders/cache/vulkan/Deferred/cull.comp.spv").string();
+        std::string projLocal = VFS::ResolveString("project://Shaders/Cache/Deferred/cull.comp.spv");
+        if (std::filesystem::exists(projLocal)) spvPath = projLocal;
         std::ifstream file(spvPath, std::ios::ate | std::ios::binary);
         if (!file.is_open()) {
             AYAYA_CORE_ERROR("[GenericDraw] Failed to open cull.comp.spv at {}", spvPath);
@@ -85,13 +98,14 @@ namespace Ayaya {
             vkUpdateDescriptorSets(device, 1, &w, 0, nullptr);
         }
 
-        // ── Dummy Set 0 layout (cull.comp uses GDR set=2, not per-pipeline set=0) ──
-        VkDescriptorSetLayout dummyLayout = VK_NULL_HANDLE;
+        // ── Dummy Set 0/1 layout (cull.comp uses GDR set=2, not per-pipeline set=0/1).
+        //     Must be a member variable — Vulkan spec requires DS layouts referenced by a
+        //     VkPipelineLayout to outlive the layout (and all pipelines derived from it).
         VkDescriptorSetLayoutCreateInfo dummyInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-        vkCreateDescriptorSetLayout(device, &dummyInfo, nullptr, &dummyLayout);
+        vkCreateDescriptorSetLayout(device, &dummyInfo, nullptr, &m_CullDummyLayout);
 
         // ── Compute pipeline layout ──
-        VkDescriptorSetLayout cullLayouts[] = { dummyLayout, dummyLayout,
+        VkDescriptorSetLayout cullLayouts[] = { m_CullDummyLayout, m_CullDummyLayout,
             m_GDRCtx ? m_GDRCtx->Set2Layout : VK_NULL_HANDLE, m_CullSet3Layout };
         VkPushConstantRange pcRange{ VK_SHADER_STAGE_COMPUTE_BIT, 0, 112 };
         VkPipelineLayoutCreateInfo plInfo{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
@@ -106,8 +120,6 @@ namespace Ayaya {
         cpInfo.stage.pName = "main";
         cpInfo.layout = m_CullLayout;
         vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpInfo, nullptr, &m_CullPipeline);
-
-        vkDestroyDescriptorSetLayout(device, dummyLayout, nullptr);
     }
 
     void GenericDrawPass::DeclareResources(RGBuilder& builder, uint32_t w, uint32_t h,
@@ -124,7 +136,10 @@ namespace Ayaya {
         auto it = m_PipelineCache.find(key);
         if (it != m_PipelineCache.end()) return it->second;
 
-        auto shader = LoadShader(key.shader + ".vert", key.shader + ".frag");
+        std::string stem = key.shader;
+        if (stem.size() > 5 && stem.substr(stem.size()-5) == ".frag") stem = stem.substr(0, stem.size()-5);
+        else if (stem.size() > 5 && stem.substr(stem.size()-5) == ".vert") stem = stem.substr(0, stem.size()-5);
+        auto shader = LoadShader(stem + ".vert", stem + ".frag");
         if (!shader) {
             AYAYA_CORE_ERROR("[GenericDraw] Failed to load shader: {}", key.shader);
             return nullptr;
@@ -143,17 +158,53 @@ namespace Ayaya {
                          BlendModeType::None;
         spec.NoTextureDescriptors = false;
 
-        auto pipeline = Pipeline::Create(spec);
+        // Reference FBO for dynamic rendering format matching.
+        // Must match the runtime target: color format + depth format if present.
+        // Otherwise VkPipelineRenderingCreateInfo depthAttachmentFormat won't match
+        // the render pass's depth attachment → VUID-dynamicRenderingUnusedAttachments-08914.
+        FramebufferSpecification refSpec;
+        refSpec.Width = 1280; refSpec.Height = 720;
+        refSpec.Attachments = { key.colorFormat };
+        if (key.hasDepth)
+            refSpec.Attachments.Attachments.push_back({FramebufferTextureFormat::Depth});
+        spec.TargetFramebuffer = Framebuffer::Create(refSpec);
+
+        // Inject GDR Set 2 (SSBO: Instance/Range/Material/GeometryPool) into pipeline layout
+        size_t extraLayoutIdx = VulkanPipeline::s_ExtraSetLayouts.size();
+        if (m_GDRCtx && m_GDRCtx->Set2Layout != VK_NULL_HANDLE) {
+            VulkanPipeline::s_ExtraSetLayouts.push_back(m_GDRCtx->Set2Layout);
+        }
+
+        std::shared_ptr<Pipeline> pipeline;
+        try {
+            pipeline = Pipeline::Create(spec);
+        } catch (const std::exception& e) {
+            AYAYA_CORE_ERROR("[GenericDraw] Pipeline creation failed for '{}': {}", key.shader, e.what());
+            VulkanPipeline::s_ExtraSetLayouts.resize(extraLayoutIdx);
+            return nullptr;
+        }
+        VulkanPipeline::s_ExtraSetLayouts.resize(extraLayoutIdx);
         if (pipeline) m_PipelineCache[key] = pipeline;
         return pipeline;
     }
 
     void GenericDrawPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
-        if (!m_GDRCtx || m_GDRCtx->InstanceCount == 0) return;
-
-        // Read Lua-baked params (use node name from Lua, not pass type name)
         std::string prefix = m_NodeName.empty() ? m_PassName : m_NodeName;
         uint32_t lightModeMask = (uint32_t)context.Get<int>(prefix + ".LightModeMask", 1);
+        std::string queueType = context.Get<std::string>(prefix + ".Queue", "Opaque");
+
+        if (queueType == "Transparent") {
+            AYAYA_CORE_INFO("[GenericDraw:'{}'] Queue=Transparent, dispatching to ExecuteTransparent", prefix);
+            ExecuteTransparent(context, cmd, prefix, lightModeMask);
+        } else {
+            ExecuteOpaque(context, cmd, prefix, lightModeMask);
+        }
+    }
+
+    void GenericDrawPass::ExecuteOpaque(RenderContext& context, RenderCommandBuffer& cmd,
+                                         const std::string& prefix, uint32_t lightModeMask) {
+        if (!m_GDRCtx || m_GDRCtx->InstanceCount == 0) return;
+
         bool depthTest  = context.Get<int>(prefix + ".DepthTest", 1) != 0;
         bool depthWrite = context.Get<int>(prefix + ".DepthWrite", 1) != 0;
         int cullMode    = context.Get<int>(prefix + ".CullMode", 2);
@@ -166,17 +217,30 @@ namespace Ayaya {
             return;
         }
 
-        // Get or create graphics pipeline
-        PipelineKey key{ shaderPath, depthTest, depthWrite, cullMode, blendMode };
-        auto pipeline = GetOrCreatePipeline(key);
-        if (!pipeline) return;
-
-        // Get target FBO
+        // Get target FBO first — need its color format for pipeline creation
         auto fbo = context.GetFramebuffer(targetName);
         if (!fbo) {
             AYAYA_CORE_WARN("[GenericDraw] Target FBO '{}' not found", targetName);
             return;
         }
+
+        // Extract color + depth format from the runtime FBO for pipeline format matching
+        FramebufferTextureFormat fmt = FramebufferTextureFormat::RGBA16F;
+        bool hasDepth = false;
+        auto& fboSpec = fbo->GetSpecification();
+        for (auto& att : fboSpec.Attachments.Attachments) {
+            if (att.TextureFormat != FramebufferTextureFormat::Depth &&
+                att.TextureFormat != FramebufferTextureFormat::DEPTH24STENCIL8) {
+                fmt = att.TextureFormat;
+            } else {
+                hasDepth = true;
+            }
+        }
+
+        // Get or create graphics pipeline (keyed by format to match dynamic rendering)
+        PipelineKey key{ shaderPath, depthTest, depthWrite, cullMode, blendMode, fmt, hasDepth };
+        auto pipeline = GetOrCreatePipeline(key);
+        if (!pipeline) return;
 
         auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
             Application::Get().GetWindow().GetContext());
@@ -199,15 +263,20 @@ namespace Ayaya {
         vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE,
             m_CullLayout, 3, 1, &m_CullSet3Descriptors[frameIdx], 0, nullptr);
 
-        struct FrustumPush { glm::vec4 planes[6]; uint32_t count; uint32_t lightModeMask; uint32_t _pad[2]; } fpc;
+        struct FrustumPush { glm::vec4 planes[6]; uint32_t count; uint32_t lightModeMask; uint32_t overrideInstanceID; uint32_t _pad; } fpc;
+        // Gribb-Hartmann frustum plane extraction from VP matrix (same as VulkanGBufferPass)
         glm::mat4 vp = context.ProjectionMatrix * context.ViewMatrix;
         glm::mat4 vpT = glm::transpose(vp);
-        for (int i = 0; i < 6; i++) {
-            float len = glm::length(glm::vec3(vpT[i]));
-            fpc.planes[i] = vpT[i] / len;
-        }
+        glm::vec4 rows[4] = { vpT[0], vpT[1], vpT[2], vpT[3] };
+        fpc.planes[0] = glm::normalize(glm::vec4(glm::vec3(rows[3] + rows[0]), rows[3].w + rows[0].w));
+        fpc.planes[1] = glm::normalize(glm::vec4(glm::vec3(rows[3] - rows[0]), rows[3].w - rows[0].w));
+        fpc.planes[2] = glm::normalize(glm::vec4(glm::vec3(rows[3] + rows[1]), rows[3].w + rows[1].w));
+        fpc.planes[3] = glm::normalize(glm::vec4(glm::vec3(rows[3] - rows[1]), rows[3].w - rows[1].w));
+        fpc.planes[4] = glm::normalize(glm::vec4(glm::vec3(rows[3] + rows[2]), rows[3].w + rows[2].w));
+        fpc.planes[5] = glm::normalize(glm::vec4(glm::vec3(rows[3] - rows[2]), rows[3].w - rows[2].w));
         fpc.count = m_GDRCtx->InstanceCount;
         fpc.lightModeMask = lightModeMask;
+        fpc.overrideInstanceID = 0xFFFFFFFF;  // GDR path: use SV_InstanceID
         vkCmdPushConstants(vkCmd, m_CullLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(fpc), &fpc);
 
         uint32_t groupCount = (m_GDRCtx->InstanceCount + 63) / 64;
@@ -220,11 +289,25 @@ namespace Ayaya {
         indirectBarrier.size = VK_WHOLE_SIZE;
         vkCmdPipelineBarrier(vkCmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
             VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0,
-            1, nullptr, 1, &indirectBarrier, 0, nullptr);
+            0, nullptr, 1, &indirectBarrier, 0, nullptr);
 
         // ── Graphics pass ──
-        cmd.BeginRenderPass(fbo, true);
+        bool clear = context.Get<int>(prefix + ".ClearColor", 1) != 0;
+        cmd.BeginRenderPass(fbo, clear);
         cmd.BindPipeline(pipeline);
+
+        // Bind GDR Set 2 (Instance/Range/Material/GeometryPool SSBOs)
+        // Required by AyayaGDR.hlsl vertex-pulling shaders.
+        // VulkanRenderCommandBuffer::BindPipeline only binds sets 0+1;
+        // set 2 must be explicitly bound after, matching VulkanGBufferPass pattern.
+        if (m_GDRCtx && m_GDRCtx->Set2Layout != VK_NULL_HANDLE) {
+            auto gdrPipe = std::dynamic_pointer_cast<VulkanPipeline>(pipeline);
+            if (gdrPipe) {
+                vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    gdrPipe->GetVulkanPipelineLayout(),
+                    2, 1, &m_GDRCtx->Set2Descriptors[frameIdx], 0, nullptr);
+            }
+        }
 
         uint32_t instanceCount = std::min(m_GDRCtx->InstanceCount, kMaxInstances);
         // Issue indirect draw using the global geometry pool
@@ -235,6 +318,91 @@ namespace Ayaya {
         vkCmdBindIndexBuffer(vkCmd, pool.GetBuffer(), 0, VK_INDEX_TYPE_UINT32);
         vkCmdDrawIndexedIndirect(vkCmd, m_DrawIndirectBuffer->GetBuffer(frameIdx), 0,
             instanceCount, sizeof(VkDrawIndexedIndirectCommand));
+
+        cmd.EndRenderPass();
+    }
+
+    void GenericDrawPass::ExecuteTransparent(RenderContext& context, RenderCommandBuffer& cmd,
+                                              const std::string& prefix, uint32_t mask) {
+        auto* queue = context.RenderQueue;
+        if (!queue) { AYAYA_CORE_INFO("[Transparent:'{}'] No RenderQueue", prefix); return; }
+        if (queue->Packets.empty()) { AYAYA_CORE_INFO("[Transparent:'{}'] RenderQueue empty", prefix); return; }
+
+        // CPU filter: LightModeMask + RenderBucket::Translucent
+        std::vector<const DrawPacket*> packets;
+        for (auto& p : queue->Packets) {
+            SortKey k; k.Value = p.SortKey;
+            if (k.Bits.BucketID != (uint64_t)RenderBucket::Translucent) continue;
+            if (!p.MaterialAsset) continue;
+            uint32_t lm = p.MaterialAsset->GetLightModeMask();
+            if ((lm & mask) == 0) { AYAYA_CORE_INFO("[Transparent:'{}'] skip packet mask={}, passMask={}", prefix, lm, mask); continue; }
+            packets.push_back(&p);
+        }
+        if (packets.empty()) { AYAYA_CORE_INFO("[Transparent:'{}'] No matching packets", prefix); return; }
+        AYAYA_CORE_INFO("[Transparent:'{}'] Found {} packets", prefix, (int)packets.size());
+
+        bool depthTest  = context.Get<int>(prefix + ".DepthTest", 1) != 0;
+        bool depthWrite = context.Get<int>(prefix + ".DepthWrite", 1) != 0;
+        int cullMode    = context.Get<int>(prefix + ".CullMode", 2);
+        int blendMode   = context.Get<int>(prefix + ".BlendMode", 0);
+        std::string shaderPath = context.Get<std::string>(prefix + ".Shader", "");
+        std::string targetName = context.Get<std::string>(prefix + ".Target", "");
+
+        auto fbo = context.GetFramebuffer(targetName);
+        if (!fbo) return;
+
+        FramebufferTextureFormat fmt = FramebufferTextureFormat::RGBA16F;
+        bool hasDepth = false;
+        for (auto& att : fbo->GetSpecification().Attachments.Attachments) {
+            if (att.TextureFormat != FramebufferTextureFormat::Depth &&
+                att.TextureFormat != FramebufferTextureFormat::DEPTH24STENCIL8) {
+                fmt = att.TextureFormat;
+            } else { hasDepth = true; }
+        }
+
+        PipelineKey key{shaderPath, depthTest, depthWrite, cullMode, blendMode, fmt, hasDepth};
+        auto pipeline = GetOrCreatePipeline(key);
+        if (!pipeline) { AYAYA_CORE_INFO("[Transparent:'{}'] Pipeline FAILED", prefix); return; }
+
+        auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+            Application::Get().GetWindow().GetContext());
+        if (!vkCtx) return;
+        VkCommandBuffer vkCmd = vkCtx->GetCurrentCommandBuffer();
+        uint32_t frameIdx = vkCtx->GetCurrentFrameIndex() % vkCtx->GetFramesInFlight();
+
+        bool clear = context.Get<int>(prefix + ".ClearColor", 1) != 0;
+        cmd.BeginRenderPass(fbo, clear);
+        cmd.BindPipeline(pipeline);
+
+        // Bind GDR Set 2 — SSBO vertex pulling (same data source as Opaque path)
+        if (m_GDRCtx && m_GDRCtx->Set2Layout != VK_NULL_HANDLE) {
+            auto gdrPipe = std::dynamic_pointer_cast<VulkanPipeline>(pipeline);
+            if (gdrPipe)
+                vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    gdrPipe->GetVulkanPipelineLayout(),
+                    2, 1, &m_GDRCtx->Set2Descriptors[frameIdx], 0, nullptr);
+        }
+
+        // Bind global geometry pool once
+        auto& pool = vkCtx->GetGeometryPool();
+        vkCmdBindIndexBuffer(vkCmd, pool.GetBuffer(), 0, VK_INDEX_TYPE_UINT32);
+
+        // CPU-sorted submission: push instanceID, draw each matching packet
+        struct FrustumPush { glm::vec4 planes[6]; uint32_t count; uint32_t lightModeMask; uint32_t overrideInstanceID; uint32_t _pad; } fpc;
+        memset(&fpc, 0, sizeof(fpc));
+        fpc.lightModeMask = mask;
+        auto plLayout = std::dynamic_pointer_cast<VulkanPipeline>(pipeline)->GetVulkanPipelineLayout();
+
+        for (auto* pkt : packets) {
+            fpc.overrideInstanceID = pkt->GPUInstanceIndex;
+            vkCmdPushConstants(vkCmd, plLayout,
+                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                0, sizeof(fpc), &fpc);
+
+            auto range = pool.GetOrUploadMesh(pkt->MeshAsset.get());
+            vkCmdDrawIndexed(vkCmd, range.indexCount, 1,
+                range.indexOffset / 4, (int32_t)range.vertexOffset, 0);
+        }
 
         cmd.EndRenderPass();
     }

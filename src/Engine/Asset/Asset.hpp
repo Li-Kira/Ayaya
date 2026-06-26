@@ -16,7 +16,8 @@ namespace Ayaya {
         SubMesh,     // lightweight: ParentHandle + SubMeshIndex, no own buffers
         Curve,       // Hermite-interpolated animation curve (.curve)
         SRPipeline,  // Scriptable Render Pipeline (.srp Lua file)
-        HLSLShader   // HLSL shader source (.hlsl text file)
+        HLSLShader,  // HLSL shader source (.hlsl text file)
+        AyaShader    // Unified shader definition (.ayashader YAML)
     };
 
     class Asset {

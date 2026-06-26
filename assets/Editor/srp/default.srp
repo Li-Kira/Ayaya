@@ -1,6 +1,11 @@
 -- default.srp — Ayaya Engine Default Scriptable Render Pipeline
 -- This script produces rendering identical to the hardcoded C++ pipeline.
 -- Edit this file to customize the render pipeline without recompiling C++.
+--
+-- LightMode 体系 — 材质通过位掩码声明参与哪些渲染 pass：
+--   内置位：  GBuffer(1)  ShadowCaster(2)  Forward(4)  DepthPrePass(8)
+--   用户自定义位从 16 开始：16, 32, 64, 128
+--   LightMode 参数接受逗号分隔字符串 ("GBuffer,ShadowCaster") 或自定义 Mask。
 
 local vpW = Pipeline:GetViewportWidth()
 local vpH = Pipeline:GetViewportHeight()

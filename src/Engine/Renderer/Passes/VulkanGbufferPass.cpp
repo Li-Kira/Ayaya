@@ -597,8 +597,9 @@ namespace Ayaya {
                 vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE,
                     m_Cull_PipelineLayout, 3, 1, &m_Cull_Set3Descriptors[frameIdx], 0, nullptr);
 
-                struct FrustumPush { glm::vec4 planes[6]; uint32_t count; uint32_t lightModeMask; uint32_t _pad[2]; } fpc;
+                struct FrustumPush { glm::vec4 planes[6]; uint32_t count; uint32_t lightModeMask; uint32_t overrideInstanceID; uint32_t _pad; } fpc;
                 fpc.lightModeMask = (uint32_t)context.Get<int>("GBuffer.LightMode", 1); // default GBuffer
+                fpc.overrideInstanceID = 0xFFFFFFFF; // GDR path: use SV_InstanceID
                 glm::mat4 vp = context.ProjectionMatrix * context.ViewMatrix;
                 // Gribb-Hartmann requires ROWS of VP matrix, but glm::mat4[i] returns COLUMNS.
                 // Transpose first so vpT[i] gives row i as a vec4.

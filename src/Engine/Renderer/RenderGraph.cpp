@@ -245,7 +245,16 @@ namespace Ayaya {
             }
         }
 
-        m_Passes = std::move(sorted);
+        // Preserve culled passes for future ApplyPerFrameCulling uncull.
+        // Execute() already skips IsCulled passes (line 400).
+        // Without this, toggling SSAO/Bloom runtime would permanently lose the pass.
+        {
+            std::vector<std::shared_ptr<RGPass>> allPasses = std::move(sorted);
+            for (auto& p : m_Passes) {
+                if (p->IsCulled) allPasses.push_back(p);
+            }
+            m_Passes = std::move(allPasses);
+        }
 
         // Step 5: 为每个纹理创建 3 帧缓冲物理 FBO
         //   Only create FBOs for textures that are actually written (IsWritten=true).

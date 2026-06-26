@@ -28,6 +28,13 @@ Pipeline:AddPass("ForwardBlend", "ForwardBlend", {}, {"Lighting"}, {},
 Pipeline:AddPass("WBOIT_Gather", "WBOIT_Gather",
     {"GBuffer"}, {"WBOIT_Gather"}, {},
     { Queue = "Translucent" })
+
+-- Hologram: CPU-sorted transparent, direct to FinalOutput
+Pipeline:AddPass("Hologram", "GenericDrawPass", {}, {"FinalOutput"}, {},
+    { Shader = "hologram", LightModeMask = 32, Queue = "Transparent",
+      Target = "FinalOutput", ClearColor = false,
+      DepthTest = true, DepthWrite = false, BlendMode = 1, CullMode = 0 })
+
 Pipeline:AddPass("WBOIT_Resolve", "WBOIT_Resolve",
     {"WBOIT_Gather"}, {}, {"Lighting"})
 Pipeline:AddPass("Outline", "OutlinePass", {"GBuffer"}, {"Selection"}, {},
@@ -37,19 +44,14 @@ Pipeline:AddPass("Bloom", "BloomPass", {"Lighting"}, {"Bloom"}, {},
 Pipeline:AddPass("PostProcess", "PostProcessPass",
     {"Lighting", "Selection", "Bloom"}, {"FinalOutput"}, {})
 
--- 🌟 Grayscale replaces FXAA — reads FinalOutput, writes FXAA
-Pipeline:AddPass("Grayscale", "GenericFullScreenPass",
-    {"FinalOutput"},
-    {"FXAA"},
-    {},
-    {
-        Shader = "Custom/grayscale.frag",
-        Target = "FXAA",
-        Texture0 = "FinalOutput"
-    }
-)
+-- FXAA — anti-aliasing
+Pipeline:AddPass("FXAA", "FXAAPass", {"FinalOutput"}, {"FXAA"}, {})
 
 -- UI composited on FXAA
 Pipeline:AddPass("UI", "UIPass", {}, {}, {"FXAA"})
+
+-- Smoke test: GenericComputePass
+Pipeline:AddPass("ComputeTest", "GenericComputePass", {}, {}, {},
+    { Shader = "Custom/test_compute.comp", DispatchX = 1, DispatchY = 1, DispatchZ = 1 })
 
 Pipeline:SetOutput("FXAA")

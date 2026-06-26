@@ -3,6 +3,7 @@
 #include "Renderer/Passes/VulkanWBOITPass.hpp"
 #include "Renderer/Passes/GenericDrawPass.hpp"
 #include "Renderer/Passes/GenericFullScreenPass.hpp"
+#include "Renderer/Passes/GenericComputePass.hpp"
 #include "Renderer/SceneRenderer.hpp"
 
 // sol2 — for BakeParams / LuaTableToStringVector
@@ -126,6 +127,11 @@ namespace Ayaya {
             gp->OnAttach();
             gp->SetNodeName(nodeName);
             passInstance = gp;
+        } else if (passType == "GenericComputePass") {
+            auto gp = std::make_shared<GenericComputePass>();
+            gp->OnAttach();
+            gp->SetNodeName(nodeName);
+            passInstance = gp;
         } else {
             auto it = m_PassInstances.find(passType);
             if (it == m_PassInstances.end()) {
@@ -193,7 +199,7 @@ namespace Ayaya {
         // Save nodeName as string for the lambda capture
         std::string capturedNodeName = nodeName;
 
-        // 4. Add the pass to the RenderGraph
+        // 4. Add the pass to the RenderGraph (passType = factory name for culling)
         m_Graph.AddPass(nodeName,
             // ── setup_lambda (called ONCE per Compile) ──
             [&, baked, readVec, writeSpecs, rwSpecs](RGBuilder& builder) {
@@ -258,7 +264,8 @@ namespace Ayaya {
 
                 // Execute the pass (factory already resolved WBOIT vs standard)
                 execFn(ctx, cmd);
-            }
+            },
+            passType  // PassType = factory name, used by ApplyPerFrameCulling
         );
     }
 
@@ -378,9 +385,10 @@ namespace Ayaya {
             }
 
             // ── Typed params ──
-            if (val.is<float>()) {
+            if (val.is<int>()) {
+                baked.IntParams[keyStr] = val.as<int>();
+            } else if (val.is<float>()) {
                 baked.FloatParams[keyStr] = val.as<float>();
-            } else if (val.is<int>()) {
                 // sol2 may return int as float or vice versa — check bool first since bool IS int in Lua
                 sol::type vt = val.get_type();
                 if (vt == sol::type::boolean) {

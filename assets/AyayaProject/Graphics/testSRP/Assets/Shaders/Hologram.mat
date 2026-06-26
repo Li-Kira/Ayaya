@@ -1,0 +1,14 @@
+MaterialName: Hologram
+ShaderName: Default
+BlendMode: 3
+AlphaCutoff: 0.5
+LightModes: 32
+Properties:
+  - UniformName: _Color
+    DisplayName: Hologram Color
+    Type: 5
+    Vec4Value: [0, 1, 1, 0.5]
+  - UniformName: _ScanSpeed
+    DisplayName: Scan Speed
+    Type: 0
+    FloatValue: 0
