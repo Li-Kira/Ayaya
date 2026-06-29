@@ -41,7 +41,7 @@ struct GPUMaterial {
 [[vk::binding(0, 2)]] StructuredBuffer<GPUInstance>   u_Instances;
 [[vk::binding(1, 2)]] StructuredBuffer<GeometryRange> u_Ranges;
 [[vk::binding(2, 2)]] StructuredBuffer<GPUMaterial>   u_Materials;
-[[vk::binding(3, 2)]] ByteAddressBuffer               g_Data; // raw geometry pool
+[[vk::binding(3, 2)]] StructuredBuffer<uint>           g_Data; // raw geometry pool (StructuredBuffer for MoltenVK compat)
 
 // ── Engine vertex layout (11 uints = 44 bytes) ──
 // position: float3 (uints 0-2), normal: float3 (3-5), uv: float2 (6-7), tangent: float3 (8-10)
@@ -67,10 +67,10 @@ AyayaVertex GetAyayaVertex(uint vertexID, uint instanceID) {
     GeometryRange range = u_Ranges[inst.geometryRangeIdx];
     uint base = range.vertexOffset + vertexID * kVertexStride;
 
-    // ByteAddressBuffer::Load(byteOffset) → uint4 at DWORD-aligned offset
+    // StructuredBuffer<uint> index-based access (MoltenVK-compatible).
     // Vertex layout: pos[3] | normal[3] | uv[2] | tangent[3] = 11 uints
-    uint4 d0 = g_Data.Load(base * 4);        // {pos.x, pos.y, pos.z, normal.x}
-    uint4 d1 = g_Data.Load(base * 4 + 12);   // {normal.y, normal.z, uv.x, uv.y}
+    uint4 d0 = uint4(g_Data[base+0], g_Data[base+1], g_Data[base+2], g_Data[base+3]); // {pos.x, pos.y, pos.z, normal.x}
+    uint4 d1 = uint4(g_Data[base+3], g_Data[base+4], g_Data[base+5], g_Data[base+6]); // {normal.y, normal.z, uv.x, uv.y}
 
     AyayaVertex v;
     v.position    = float3(asfloat(d0.x), asfloat(d0.y), asfloat(d0.z));

@@ -419,6 +419,11 @@ namespace Ayaya {
 
         // ==========================================
         // RenderQueue: translucent only
+        // GPUInstanceIndex MUST match BuildFromScene order:
+        //   BuildFromScene iterates the same ECS view, skips inactive entities,
+        //   and pushes ONE GDR instance PER SUB-MESH.
+        //   The RenderQueue must mirror this exactly — increment gpuIdx only
+        //   for active entities AND per sub-mesh.
         // ==========================================
         m_RenderQueue.Clear();
         {
@@ -427,19 +432,25 @@ namespace Ayaya {
             auto view = scene->Reg().view<TransformComponent, MeshRendererComponent>();
             uint32_t gpuIdx = 0;  // tracks GDR SSBO instance index (matches BuildFromScene order)
             for (auto entityID : view) {
-                uint32_t instIdx = gpuIdx++;
+                Entity entity{ entityID, scene.get() };
+                if (!entity.IsActiveInHierarchy()) continue;  // must check BEFORE gpuIdx — BuildFromScene does too
                 auto& meshComp = view.get<MeshRendererComponent>(entityID);
                 if (!meshComp.CachedMaterial)
                     meshComp.CachedMaterial = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
                 auto material = meshComp.CachedMaterial;
                 uint8_t bucket = material ? material->GetRenderBucket() : 0;
-                if (bucket <= 1) continue;
-                Entity entity{ entityID, scene.get() };
-                if (!entity.IsActiveInHierarchy()) continue;
+                if (bucket <= 1) {
+                    // Still need to advance gpuIdx for opaque/masked entities —
+                    // BuildFromScene creates GDR instances for ALL blend modes.
+                    auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
+                    if (model) gpuIdx += (uint32_t)model->GetMeshes().size();
+                    continue;
+                }
                 auto model = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
                 if (!model) continue;
                 glm::mat4 transform = entity.GetWorldTransform();
                 for (auto& mesh : model->GetMeshes()) {
+                    uint32_t instIdx = gpuIdx++;  // per-sub-mesh, same as BuildFromScene
                     if (!frustum.IsBoxVisible(mesh->GetAABB(), transform)) continue;
                     DrawPacket packet;
                     packet.Transform = transform;

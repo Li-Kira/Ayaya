@@ -17,6 +17,13 @@ namespace Ayaya {
             vkDeviceWaitIdle(m_Device);
         }
 
+        // Destroy debug messenger before instance
+        if (m_DebugMessenger != VK_NULL_HANDLE) {
+            auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)
+                vkGetInstanceProcAddr(m_Instance, "vkDestroyDebugUtilsMessengerEXT");
+            if (func) func(m_Instance, m_DebugMessenger, nullptr);
+        }
+
         m_GeometryPool.Shutdown();
         DestroyDefaultBindlessTextures();
         m_BindlessManager.Shutdown(m_Device);
@@ -95,6 +102,7 @@ namespace Ayaya {
         extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
         createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 #endif
+        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
         createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
         createInfo.ppEnabledExtensionNames = extensions.data();
@@ -131,6 +139,8 @@ namespace Ayaya {
 
         VkResult result = vkCreateInstance(&createInfo, nullptr, &m_Instance);
         AYAYA_CORE_ASSERT(result == VK_SUCCESS, "Failed to create Vulkan Instance!");
+
+        SetupDebugMessenger();
 
         CreateSurface();
         PickPhysicalDevice();
@@ -1059,6 +1069,47 @@ namespace Ayaya {
             } else {
                 ++it;
             }
+        }
+    }
+
+    VKAPI_ATTR VkBool32 VKAPI_CALL VulkanContext::DebugCallback(
+        VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+        VkDebugUtilsMessageTypeFlagsEXT type,
+        const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+        void* pUserData)
+    {
+        (void)type;
+        (void)pUserData;
+
+        const char* prefix = "[Vulkan]";
+        if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+            AYAYA_CORE_ERROR("{} {}", prefix, pCallbackData->pMessage);
+        } else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+            AYAYA_CORE_WARN("{} {}", prefix, pCallbackData->pMessage);
+        } else {
+            AYAYA_CORE_INFO("{} {}", prefix, pCallbackData->pMessage);
+        }
+        return VK_FALSE;
+    }
+
+    void VulkanContext::SetupDebugMessenger() {
+        VkDebugUtilsMessengerCreateInfoEXT createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+        createInfo.messageSeverity =
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
+        createInfo.messageType =
+            VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+        createInfo.pfnUserCallback = DebugCallback;
+
+        auto func = (PFN_vkCreateDebugUtilsMessengerEXT)
+            vkGetInstanceProcAddr(m_Instance, "vkCreateDebugUtilsMessengerEXT");
+        if (func) {
+            VkResult result = func(m_Instance, &createInfo, nullptr, &m_DebugMessenger);
+            if (result == VK_SUCCESS)
+                AYAYA_CORE_INFO("Vulkan debug messenger created — validation output enabled");
         }
     }
 

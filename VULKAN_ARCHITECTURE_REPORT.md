@@ -1945,3 +1945,124 @@ ReadWrite 纹理先 Exec `EnsureReadable`（transition → read）再 `EnsureWri
 **SRP:**
 - `assets/AyayaProject/Graphics/testSRP/Assets/Settings/default.srp` — Hologram pass
 - `assets/Editor/srp/default.srp` — LightMode 文档注释
+
+---
+
+## 22. SRP 透明管线调试全记录 + ByteAddressBuffer 兼容性修复 (2026-06-29)
+
+> **目标:** 修复 testSRP 项目中 hologram 材质的透明立方体完全不渲染的问题。
+> **最终根因:** HLSL `ByteAddressBuffer` 在 MoltenVK (Apple Silicon) 上与 geometry pool buffer 不兼容，导致 GPU 静默丢弃整个 draw call。
+> **修改规模:** 5 文件, +120/-60 行
+
+### 22.1 问题演进
+
+| 阶段 | 症状 | 诊断结论 |
+|------|------|---------|
+| 初始 | 全屏半透明洋红色 | 旧版 shader 编译产物问题，重编译后消失 |
+| 重编译后 | 立方体完全不可见 | 开始系统性排查 |
+| 硬编码全屏三角形 | 全屏红色 ✅ | Fragment shader + render pass + pipeline 正常 |
+| GDR vertex pulling | 不可见 ✗ | 问题在 GDR 顶点数据读取 |
+| 硬编码角点 + inst.transform | 白色/粉色/蓝色可见 ✅ | `u_Instances` 正常，transform 正确 |
+| GDR pulling + 绿色检测 | 不可见 ✗ | `g_Data.Load()` 导致所有三角形退化 |
+| 读 `u_Ranges.vertexCount` | 红色 ✅ (值=24) | `u_Ranges` 正常 |
+| 读 `u_Materials.lightModeMask` | 红色 ✅ (值=32) | `u_Materials` 正常 |
+| `g_Data.Load(0)` (绝对偏移) | 不可见 ✗ | **`ByteAddressBuffer::Load()` 本身导致 GPU 丢弃 draw** |
+
+### 22.2 根因分析：ByteAddressBuffer vs MoltenVK
+
+#### 问题机理
+
+引擎内置 shader（`gbuffer_gdr.vert` 等）使用 **GLSL** 编写，以 `uint g_Data[]` 声明 geometry pool buffer。GLSL 编译为 SPIR-V 时生成 `StorageBuffer` + `OpAccessChain` 带 uint 数组类型。这在 MoltenVK 上正常工作。
+
+项目 HLSL shader（`hologram.hlsl` 等）通过 `#include "Generic/AyayaGDR.hlsl"` 引入 GDR 声明。原始 `AyayaGDR.hlsl` 使用 HLSL 的 `ByteAddressBuffer` 类型，`Load(byteOffset)` 方法读取数据。DXC 将其编译为 SPIR-V 时，生成**无类型** `StorageBuffer` + 裸字节访问。
+
+在 MoltenVK (Metal) 上，无类型 `StorageBuffer` 的字节访问方式与 geometry pool buffer 的 Metal 缓冲映射不兼容，导致 `ByteAddressBuffer::Load()` 指令在 GPU 端静默失败 —— 不产生任何 fragment，也不报告验证错误。
+
+#### 诊断方法
+
+该问题极难通过传统调试定位：
+1. **无 Vulkan 验证错误** — draw call 语法完全合法
+2. **C++ 管线完全正确** — 日志确认所有步骤执行
+3. **其他 SSBO binding 正常** — `StructuredBuffer<T>` 全部可用
+
+通过**逐级旁路诊断法**（渐进式替换 shader 中的数据源）才最终锁定：
+1. 硬编码顶点坐标 → 确认 render pass / pipeline / fragment shader 正常
+2. 硬编码角点 + `u_Instances[].transform` → 确认 instance 数据正常
+3. 读 `u_Ranges[]` + 硬编码角点 → 确认 GeometryRange 数据正常
+4. 读 `u_Materials[]` + 硬编码角点 → 确认 Material 数据正常
+5. `g_Data.Load(0)` (绝对偏移 0) → **唯一失败的测试** — 锁定 `ByteAddressBuffer`
+
+### 22.3 修复方案
+
+**`AyayaGDR.hlsl`** — 将 `ByteAddressBuffer` 替换为 `StructuredBuffer<uint>`：
+
+```hlsl
+// 修复前 (不兼容 MoltenVK)
+[[vk::binding(3, 2)]] ByteAddressBuffer g_Data;
+uint4 d0 = g_Data.Load(base * 4);
+uint4 d1 = g_Data.Load(base * 4 + 12);
+
+// 修复后 (兼容 MoltenVK)
+[[vk::binding(3, 2)]] StructuredBuffer<uint> g_Data;
+uint4 d0 = uint4(g_Data[base+0], g_Data[base+1], g_Data[base+2], g_Data[base+3]);
+uint4 d1 = uint4(g_Data[base+3], g_Data[base+4], g_Data[base+5], g_Data[base+6]);
+```
+
+两种访问模式在数据读取上完全等价，但 `StructuredBuffer<uint>` 生成的 SPIR-V 带有显式 uint 数组类型，与 GLSL `uint g_Data[]` 一致，在 MoltenVK 上正常工作。
+
+### 22.4 附带修复的 Bug
+
+在诊断过程中同时发现并修复了以下独立 bug：
+
+#### Bug 22.4.1 — GPUInstanceIndex 计数不一致
+
+**文件:** `SceneRenderer.cpp`
+
+RenderQueue 构建时 `gpuIdx` 按实体递增且提前于 `IsActiveInHierarchy()` 检查，而 `BuildFromScene` 按子网格递增且在 active 检查之后。导致多子网格模型或存在非活跃实体时 GPUInstanceIndex 错位。
+
+**修复:** RenderQueue 的 `gpuIdx` 改为与 BuildFromScene 一致的逻辑 —— 每子网格递增，先检查 active，不透明实体也正确消耗索引。
+
+#### Bug 22.4.2 — `vkCmdDrawIndexed` vertexOffset 双倍偏移
+
+**文件:** `GenericDrawPass.cpp`
+
+Vulkan 索引绘制中 `SV_VertexID = indexBuffer[firstIndex + i] + vertexOffset`（已包含 draw call 的 vertexOffset）。GDR shader 内部又通过 `range.vertexOffset` 做一次偏移。透明路径直接传入 `range.vertexOffset` 作为 draw call 参数，导致双倍偏移。
+
+引擎 Opaque 路径通过 cull.comp 写 indirect draw 命令时 `vertexOffset=0`，shader 内部自行加偏移，因此不受影响。
+
+**修复:** 透明路径的 `vkCmdDrawIndexed` 改为 `vertexOffset=0`。
+
+#### Bug 22.4.3 — 透明路径缺少 host→device 内存屏障
+
+**文件:** `GenericDrawPass.cpp`
+
+Opaque 路径在执行 compute culling 前有 `VK_PIPELINE_STAGE_HOST_BIT → VK_PIPELINE_STAGE_VERTEX_SHADER_BIT` 的屏障确保 SSBO 数据可见。透明路径不使用 compute culling，但也需要确保 BuildFromScene 写入的 SSBO 数据对 vertex shader 可见。
+
+**修复:** 在 `BeginRenderPass` 前添加 host→device 内存屏障。
+
+#### Bug 22.4.4 — Vulkan Validation Debug Messenger 缺失
+
+**文件:** `VulkanContext.hpp`, `VulkanContext.cpp`
+
+验证层虽已启用 (`VK_LAYER_KHRONOS_validation`)，但缺少 `VK_EXT_debug_utils` debug messenger，验证消息只能输出到 stdout 且无结构化日志。
+
+**修复:** 添加 `VK_EXT_debug_utils` 扩展 + `DebugCallback` 回调，将所有验证层消息通过 `AYAYA_CORE_ERROR/WARN/INFO` 输出，统一日志格式。
+
+### 22.5 修改文件清单
+
+| 文件 | 修改内容 |
+|------|---------|
+| `assets/Editor/shaders/src/vulkan/Generic/AyayaGDR.hlsl` | **根因修复**: `ByteAddressBuffer` → `StructuredBuffer<uint>` + `Load()` → `uint4(array[i],...)` |
+| `assets/AyayaProject/Graphics/testSRP/Assets/Shaders/hologram.hlsl` | 恢复原始 hologram 扫描线效果 |
+| `src/Engine/Renderer/Passes/GenericDrawPass.cpp` | vertexOffset=0 + host→device 屏障 + 诊断日志 |
+| `src/Engine/Renderer/SceneRenderer.cpp` | GPUInstanceIndex 计数对齐 BuildFromScene |
+| `src/Engine/Platform/Vulkan/VulkanContext.hpp` | Debug messenger 声明 |
+| `src/Engine/Platform/Vulkan/VulkanContext.cpp` | Debug messenger 实现 + `VK_EXT_debug_utils` 扩展 |
+
+### 22.6 经验教训
+
+1. **MoltenVK 兼容性**: `ByteAddressBuffer` 在 MoltenVK 上不可靠。项目 HLSL shader 应优先使用 `StructuredBuffer<uint>` 或 `StructuredBuffer<uint4>` 进行原始内存访问。
+
+2. **逐级旁路诊断法**: 当 draw call 合法但无可视输出时，从最底层（硬编码顶点）逐级恢复数据源，可高效定位问题。本次从全屏三角形 → 硬编码角点 → u_Instances → u_Ranges → u_Materials → g_Data，每一级排除一个变量。
+
+3. **Vulkan 验证层的局限**: 并非所有 GPU 问题都会产生验证错误。ByteAddressBuffer 在 MoltenVK 上的静默失败就是一例 —— 需要 shader 级诊断和系统性排除法。Debug messenger 的集成在此过程中至关重要。

@@ -194,7 +194,7 @@ namespace Ayaya {
         std::string queueType = context.Get<std::string>(prefix + ".Queue", "Opaque");
 
         if (queueType == "Transparent") {
-            AYAYA_CORE_INFO("[GenericDraw:'{}'] Queue=Transparent, dispatching to ExecuteTransparent", prefix);
+            //AYAYA_CORE_INFO("[GenericDraw:'{}'] Queue=Transparent, dispatching to ExecuteTransparent", prefix);
             ExecuteTransparent(context, cmd, prefix, lightModeMask);
         } else {
             ExecuteOpaque(context, cmd, prefix, lightModeMask);
@@ -325,8 +325,8 @@ namespace Ayaya {
     void GenericDrawPass::ExecuteTransparent(RenderContext& context, RenderCommandBuffer& cmd,
                                               const std::string& prefix, uint32_t mask) {
         auto* queue = context.RenderQueue;
-        if (!queue) { AYAYA_CORE_INFO("[Transparent:'{}'] No RenderQueue", prefix); return; }
-        if (queue->Packets.empty()) { AYAYA_CORE_INFO("[Transparent:'{}'] RenderQueue empty", prefix); return; }
+        if (!queue) { /*AYAYA_CORE_INFO("[Transparent:'{}'] No RenderQueue", prefix);*/ return; }
+        if (queue->Packets.empty()) { /*AYAYA_CORE_INFO("[Transparent:'{}'] RenderQueue empty", prefix);*/ return; }
 
         // CPU filter: LightModeMask + RenderBucket::Translucent
         std::vector<const DrawPacket*> packets;
@@ -335,11 +335,11 @@ namespace Ayaya {
             if (k.Bits.BucketID != (uint64_t)RenderBucket::Translucent) continue;
             if (!p.MaterialAsset) continue;
             uint32_t lm = p.MaterialAsset->GetLightModeMask();
-            if ((lm & mask) == 0) { AYAYA_CORE_INFO("[Transparent:'{}'] skip packet mask={}, passMask={}", prefix, lm, mask); continue; }
+            if ((lm & mask) == 0) { /*AYAYA_CORE_INFO("[Transparent:'{}'] skip packet mask={}, passMask={}", prefix, lm, mask);*/ continue; }
             packets.push_back(&p);
         }
-        if (packets.empty()) { AYAYA_CORE_INFO("[Transparent:'{}'] No matching packets", prefix); return; }
-        AYAYA_CORE_INFO("[Transparent:'{}'] Found {} packets", prefix, (int)packets.size());
+        if (packets.empty()) { /*AYAYA_CORE_INFO("[Transparent:'{}'] No matching packets", prefix);*/ return; }
+        //AYAYA_CORE_INFO("[Transparent:'{}'] Found {} packets", prefix, (int)packets.size());
 
         bool depthTest  = context.Get<int>(prefix + ".DepthTest", 1) != 0;
         bool depthWrite = context.Get<int>(prefix + ".DepthWrite", 1) != 0;
@@ -371,6 +371,17 @@ namespace Ayaya {
         uint32_t frameIdx = vkCtx->GetCurrentFrameIndex() % vkCtx->GetFramesInFlight();
 
         bool clear = context.Get<int>(prefix + ".ClearColor", 1) != 0;
+
+        // ── Host → Device barrier: ensure SSBO data written by BuildFromScene
+        //     (InstanceSSBO, GeometryRangeSSBO, MaterialSSBO, GeometryPool) is
+        //     visible to the vertex shader. Same pattern as ExecuteOpaque.
+        VkMemoryBarrier hostBarrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER };
+        hostBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+        hostBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_INDEX_READ_BIT;
+        vkCmdPipelineBarrier(vkCmd, VK_PIPELINE_STAGE_HOST_BIT,
+            VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0,
+            1, &hostBarrier, 0, nullptr, 0, nullptr);
+
         cmd.BeginRenderPass(fbo, clear);
         cmd.BindPipeline(pipeline);
 
@@ -393,6 +404,7 @@ namespace Ayaya {
         fpc.lightModeMask = mask;
         auto plLayout = std::dynamic_pointer_cast<VulkanPipeline>(pipeline)->GetVulkanPipelineLayout();
 
+        int drawCount = 0;
         for (auto* pkt : packets) {
             fpc.overrideInstanceID = pkt->GPUInstanceIndex;
             vkCmdPushConstants(vkCmd, plLayout,
@@ -400,9 +412,18 @@ namespace Ayaya {
                 0, sizeof(fpc), &fpc);
 
             auto range = pool.GetOrUploadMesh(pkt->MeshAsset.get());
+            // vertexOffset MUST be 0 — the GDR vertex shader (AyayaGDR.hlsl)
+            // already adds range.vertexOffset internally via the SSBO GeometryRange.
+            // Vulkan adds vertexOffset to SV_VertexID for indexed draws.
+            // Passing non-zero here would double-count: SV_VertexID would be
+            // (indexVal + range.vertexOffset), then the shader adds range.vertexOffset
+            // again → reads from the wrong location in the geometry pool.
             vkCmdDrawIndexed(vkCmd, range.indexCount, 1,
-                range.indexOffset / 4, (int32_t)range.vertexOffset, 0);
+                range.indexOffset / 4, 0, 0);
+            drawCount++;
         }
+        //AYAYA_CORE_INFO("[Transparent:'{}'] Submitted {} draws, target={}, fmt={}, hasDepth={}, blend={}",
+        //    prefix, drawCount, targetName, (int)fmt, hasDepth, blendMode);
 
         cmd.EndRenderPass();
     }

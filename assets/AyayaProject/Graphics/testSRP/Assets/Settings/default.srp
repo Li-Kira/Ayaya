@@ -27,22 +27,21 @@ Pipeline:AddPass("ForwardBlend", "ForwardBlend", {}, {"Lighting"}, {},
     { LightMode = "Forward" })
 Pipeline:AddPass("WBOIT_Gather", "WBOIT_Gather",
     {"GBuffer"}, {"WBOIT_Gather"}, {},
-    { Queue = "Translucent" })
-
--- Hologram: CPU-sorted transparent, direct to FinalOutput
-Pipeline:AddPass("Hologram", "GenericDrawPass", {}, {"FinalOutput"}, {},
-    { Shader = "hologram", LightModeMask = 32, Queue = "Transparent",
-      Target = "FinalOutput", ClearColor = false,
-      DepthTest = true, DepthWrite = false, BlendMode = 1, CullMode = 0 })
-
+    { Queue = "Translucent", Enabled = false })
 Pipeline:AddPass("WBOIT_Resolve", "WBOIT_Resolve",
-    {"WBOIT_Gather"}, {}, {"Lighting"})
+    {"WBOIT_Gather"}, {}, {"Lighting"}, { Enabled = false })
 Pipeline:AddPass("Outline", "OutlinePass", {"GBuffer"}, {"Selection"}, {},
     { Enabled = false })
 Pipeline:AddPass("Bloom", "BloomPass", {"Lighting"}, {"Bloom"}, {},
     { Enabled = false })
 Pipeline:AddPass("PostProcess", "PostProcessPass",
     {"Lighting", "Selection", "Bloom"}, {"FinalOutput"}, {})
+
+-- Hologram: CPU-sorted transparent, direct to FinalOutput
+Pipeline:AddPass("Hologram", "GenericDrawPass", {}, {"FinalOutput"}, {},
+    { Shader = "hologram", LightModeMask = 32, Queue = "Transparent",
+      Target = "FinalOutput", ClearColor = false,
+      DepthTest = true, DepthWrite = false, BlendMode = 1, CullMode = 0 })
 
 -- FXAA — anti-aliasing
 Pipeline:AddPass("FXAA", "FXAAPass", {"FinalOutput"}, {"FXAA"}, {})

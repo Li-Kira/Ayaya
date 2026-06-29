@@ -180,6 +180,15 @@ namespace Ayaya {
         uint32_t m_LastFrameSlotCount = 0;
         uint32_t m_TimestampNotReadyCount = 0;  // throttled VK_NOT_READY logging
 
+        // Debug messenger for Vulkan validation layer output
+        VkDebugUtilsMessengerEXT m_DebugMessenger = VK_NULL_HANDLE;
+        void SetupDebugMessenger();
+        static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
+            VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+            VkDebugUtilsMessageTypeFlagsEXT type,
+            const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+            void* pUserData);
+
         void CreateSurface();
         void PickPhysicalDevice();
         bool IsDeviceSuitable(VkPhysicalDevice device);
