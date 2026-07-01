@@ -34,6 +34,13 @@ namespace Ayaya {
         if (tex) tex->IsRead = true;
     }
 
+    void RGBuilder::ReadTextureAsDepth(const std::string& name) {
+        m_Pass.TextureReads.push_back(name);
+        m_Pass.DepthReadTextures.insert(name);
+        auto* tex = m_Graph.GetTexture(name);
+        if (tex) tex->IsRead = true;
+    }
+
     void RGBuilder::WriteTexture(const std::string& name, const FramebufferSpecification& spec) {
         m_Pass.TextureWrites.push_back(name);
         auto& tex = m_Graph.RegisterTexture(name, spec);
@@ -411,6 +418,8 @@ namespace Ayaya {
             // Step a: 確保 Read 纹理处于可采样布局（必须在 EnsureWritable 之前执行，
             //         避免 ReadWrite 纹理被 EnsureReadable 把 attachment 布局又转回只读）
             for (auto& r : pass->TextureReads) {
+                // Depth attachment reads stay in ATTACHMENT_OPTIMAL (not SHADER_READ_ONLY)
+                if (pass->DepthReadTextures.count(r)) continue;
                 auto it = m_Textures.find(r);
                 if (it != m_Textures.end())
                     EnsureReadable(it->second, frameIndex, cmd);

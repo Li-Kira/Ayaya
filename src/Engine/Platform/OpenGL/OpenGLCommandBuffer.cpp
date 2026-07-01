@@ -73,6 +73,12 @@ namespace Ayaya {
         }
     }
 
+    void OpenGLCommandBuffer::BeginRenderPass(const std::shared_ptr<Framebuffer>& targetFBO, bool clearColor, bool clearDepth, const glm::vec4& clearValue) {
+        BeginRenderPass(targetFBO, clearColor, clearValue);  // OpenGL: ignore per-attachment LoadOp
+    }
+    void OpenGLCommandBuffer::BeginRenderPass(const std::shared_ptr<Framebuffer>& colorFBO, const std::shared_ptr<Framebuffer>& depthFBO, bool clearColor, bool clearDepth, const glm::vec4& clearValue) {
+        BeginRenderPass(colorFBO, clearColor, clearValue);  // OpenGL: ignore separate depth
+    }
     void OpenGLCommandBuffer::EndRenderPass() { glBindFramebuffer(GL_FRAMEBUFFER, 0); }
 
     void OpenGLCommandBuffer::BindPipeline(const std::shared_ptr<Pipeline>& pipeline) { if (pipeline) pipeline->Bind(); }

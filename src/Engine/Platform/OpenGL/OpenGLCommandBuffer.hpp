@@ -29,6 +29,8 @@ namespace Ayaya {
         virtual void BlitDepth(uint32_t readFBO, uint32_t drawFBO, uint32_t width, uint32_t height) override;
 
         virtual void BeginRenderPass(const std::shared_ptr<Framebuffer>& targetFBO, bool clear, const glm::vec4& clearColor) override;
+        virtual void BeginRenderPass(const std::shared_ptr<Framebuffer>& targetFBO, bool clearColor, bool clearDepth, const glm::vec4& clearValue) override;
+        virtual void BeginRenderPass(const std::shared_ptr<Framebuffer>& colorFBO, const std::shared_ptr<Framebuffer>& depthFBO, bool clearColor, bool clearDepth, const glm::vec4& clearValue) override;
         virtual void EndRenderPass() override;
         virtual void BindPipeline(const std::shared_ptr<Pipeline>& pipeline) override;
 

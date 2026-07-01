@@ -4,6 +4,7 @@
 #include "Renderer/Passes/GenericComputePass.hpp"
 #include "Renderer/Passes/VulkanShadowPass.hpp"
 #include "Renderer/Passes/VulkanGbufferPass.hpp"
+#include "Renderer/Passes/VulkanDepthPrePass.hpp"
 #include "Renderer/Passes/VulkanLightingPass.hpp"
 #include "Renderer/Passes/VulkanForwardBlendPass.hpp"
 #include "Renderer/Passes/VulkanSSAOPass.hpp"
@@ -139,6 +140,7 @@ namespace Ayaya {
     void PassRegistry::Init(std::shared_ptr<GDRContext> gdrCtx,
                             std::shared_ptr<RenderPass> shadowPass,
                             std::shared_ptr<RenderPass> gbufferPass,
+                            std::shared_ptr<RenderPass> depthPrePass,
                             std::shared_ptr<RenderPass> lightingPass,
                             std::shared_ptr<RenderPass> forwardBlendPass,
                             std::shared_ptr<RenderPass> ssaoPass,
@@ -149,8 +151,10 @@ namespace Ayaya {
                             std::shared_ptr<RenderPass> uiPass,
                             std::shared_ptr<class VulkanWBOITPass> wboitPass) {
 
-        // Inject GDRContext into Shadow and GBuffer passes
+        // Inject GDRContext into Depth, Shadow and GBuffer passes
         if (gdrCtx) {
+            if (auto* depth = dynamic_cast<VulkanDepthPrePass*>(depthPrePass.get()))
+                depth->SetGDRContext(gdrCtx);
             if (auto* shadow = dynamic_cast<VulkanShadowPass*>(shadowPass.get()))
                 shadow->SetGDRContext(gdrCtx);
             if (auto* gbuffer = dynamic_cast<VulkanGBufferPass*>(gbufferPass.get()))
@@ -158,6 +162,13 @@ namespace Ayaya {
         }
 
         // ── Register all 12 passes ──
+
+        // DepthPrePass — depth-only (no color attachments)
+        Register("DepthPrePass", [depthPrePass]() -> std::unique_ptr<IPassFactory> {
+            using Fn = void(*)(RGBuilder&, uint32_t, uint32_t);
+            return std::make_unique<StandardPassFactory<RenderPass, Fn>>(
+                VulkanDepthPrePass::DeclareResources, depthPrePass);
+        });
 
         // ShadowPass — no width/height needed (fixed 4096x4096)
         Register("ShadowPass", [shadowPass]() -> std::unique_ptr<IPassFactory> {
@@ -248,7 +259,7 @@ namespace Ayaya {
                 }
             };
             auto f = std::make_unique<Factory>();
-            dynamic_cast<GenericDrawPass*>(f->pass.get())->SetGDRContext(SceneRenderer::s_GDRContext);
+            // GDRContext is per-renderer — set by PipelineBuilder at SRP compile time
             f->pass->OnAttach();
             return f;
         });

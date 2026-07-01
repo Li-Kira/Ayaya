@@ -12,14 +12,20 @@
 namespace Ayaya {
 
     void VulkanGBufferPass::DeclareResources(RGBuilder& builder, uint32_t width, uint32_t height) {
-        FramebufferSpecification spec;
-        spec.Width = width; spec.Height = height; spec.Samples = 1;
-        spec.Attachments = {
+        // GBuffer: 4 MRT (no depth — SceneDepth provides it)
+        FramebufferSpecification colorSpec;
+        colorSpec.Width = width; colorSpec.Height = height; colorSpec.Samples = 1;
+        colorSpec.Attachments = {
             FramebufferTextureFormat::RG16F, FramebufferTextureFormat::RGBA8,
-            FramebufferTextureFormat::RGBA8,   FramebufferTextureFormat::RGBA8,
-            FramebufferTextureFormat::Depth
+            FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::RGBA8
         };
-        builder.WriteTexture("GBuffer", spec);
+        builder.WriteTexture("GBuffer", colorSpec);
+
+        // SceneDepth: read+write — read pre-pass depth, write new depth
+        FramebufferSpecification depthSpec;
+        depthSpec.Width = width; depthSpec.Height = height; depthSpec.Samples = 1;
+        depthSpec.Attachments = { FramebufferTextureFormat::Depth };
+        builder.ReadWriteTexture("SceneDepth", depthSpec);
     }
 
     VulkanGBufferPass::~VulkanGBufferPass() {
@@ -340,8 +346,8 @@ namespace Ayaya {
         refSpec.Width = 1280; refSpec.Height = 720; refSpec.Samples = 1;
         refSpec.Attachments = {
             FramebufferTextureFormat::RG16F, FramebufferTextureFormat::RGBA8,
-            FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::RGBA8,
-            FramebufferTextureFormat::Depth
+            FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::RGBA8
+            // No depth — SceneDepth provides it at render time via BeginRenderPass(colorFBO, depthFBO)
         };
         m_RefFBO = Framebuffer::Create(refSpec);
 
@@ -361,6 +367,7 @@ namespace Ayaya {
             gdrSpec.TargetFramebuffer = m_RefFBO;
             gdrSpec.Layout = {};  // empty — no VBO inputs, vertices pulled from SSBO
             gdrSpec.DepthTest = true; gdrSpec.DepthWrite = true;
+            gdrSpec.DepthOperator = DepthCompareOperator::LEqual;  // Pre-pass wrote same depth → must accept EQUAL
             gdrSpec.Blend = false;
             gdrSpec.BackfaceCulling = CullMode::None;
             gdrSpec.UseBindlessTextures = true;
@@ -439,7 +446,7 @@ namespace Ayaya {
             // Indices must match shader set=N: [0]=dummy, [1]=dummy, [2]=GDR, [3]=Cull
             VkDescriptorSetLayout compSetLayouts[] = { m_Cull_DummyLayout, m_Cull_DummyLayout,
                 m_GDRCtx->Set2Layout, m_Cull_Set3Layout };
-            VkPushConstantRange pcRange{ VK_SHADER_STAGE_COMPUTE_BIT, 0, 112 };
+            VkPushConstantRange pcRange{ VK_SHADER_STAGE_COMPUTE_BIT, 0, 128 };
             VkPipelineLayoutCreateInfo plCI{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
             plCI.setLayoutCount = 4; plCI.pSetLayouts = compSetLayouts;
             plCI.pushConstantRangeCount = 1; plCI.pPushConstantRanges = &pcRange;
@@ -545,14 +552,18 @@ namespace Ayaya {
     // (Phase 1-3 retired — replaced by GDR Phase 4)
 
     void VulkanGBufferPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
-    auto fbo = context.GetFramebuffer("GBuffer");
-    if (!fbo) return;
+    auto colorFBO = context.GetFramebuffer("GBuffer");
+    auto depthFBO = context.GetFramebuffer("SceneDepth");
+    if (!colorFBO) return;
+
+    // 🔥 Smart fallback: SceneDepth present → LOAD pre-pass depth; absent → CLEAR depth
+    bool clearDepth = (depthFBO == nullptr);
+    if (context.Settings.count("GBuffer.ClearDepth"))
+        clearDepth = context.Get<int>("GBuffer.ClearDepth", 1) != 0;
 
     auto* queue = context.RenderQueue;
-    // Check GDR instance count (blind submit) rather than RenderQueue (translucent-only now).
     if (!queue || (!m_GDRCtx || m_GDRCtx->InstanceCount == 0)) {
-        // Unconditionally clear GBuffer to prevent ghost rendering from previous frame
-        cmd.BeginRenderPass(fbo, true, glm::vec4(0.0f));
+        cmd.BeginRenderPass(colorFBO, true, glm::vec4(0.0f));
         cmd.EndRenderPass();
         return;
     }
@@ -562,11 +573,10 @@ namespace Ayaya {
         auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
             Application::Get().GetWindow().GetContext());
 
-        // Guard: if context or pipeline is unavailable, clear GBuffer and bail
         if (!vkCtx || !m_GDRPipeline || !m_GDRCtx) {
-            cmd.BeginRenderPass(fbo, true, glm::vec4(0.0f));
+            cmd.BeginRenderPass(colorFBO, true, glm::vec4(0.0f));
             cmd.EndRenderPass();
-            context.Framebuffers["GBuffer"] = fbo;
+            context.Framebuffers["GBuffer"] = colorFBO;
             return;
         }
 
@@ -597,7 +607,7 @@ namespace Ayaya {
                 vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE,
                     m_Cull_PipelineLayout, 3, 1, &m_Cull_Set3Descriptors[frameIdx], 0, nullptr);
 
-                struct FrustumPush { glm::vec4 planes[6]; uint32_t count; uint32_t lightModeMask; uint32_t overrideInstanceID; uint32_t _pad; } fpc;
+                struct FrustumPush { glm::vec4 planes[6]; uint32_t count; uint32_t lightModeMask; uint32_t overrideInstanceID; uint32_t _pad; glm::vec4 texelSize; } fpc;
                 fpc.lightModeMask = (uint32_t)context.Get<int>("GBuffer.LightMode", 1); // default GBuffer
                 fpc.overrideInstanceID = 0xFFFFFFFF; // GDR path: use SV_InstanceID
                 glm::mat4 vp = context.ProjectionMatrix * context.ViewMatrix;
@@ -661,8 +671,12 @@ namespace Ayaya {
                         0, nullptr, 1, &indirectBarrier, 0, nullptr);
                 }
 
-                // ── Render pass + indirect draw ──
-                cmd.BeginRenderPass(fbo, true, glm::vec4(0.0f));
+                // ── GBuffer Main Pass ──
+                // Use SceneDepth as depth attachment (if available) for true Early-Z.
+                if (depthFBO)
+                    cmd.BeginRenderPass(colorFBO, depthFBO, /*clearColor=*/true, clearDepth);
+                else
+                    cmd.BeginRenderPass(colorFBO, /*clearColor=*/true, clearDepth);
                 vkCmdBindIndexBuffer(vkCmd, pool.GetBuffer(), 0, VK_INDEX_TYPE_UINT32);
                 cmd.BindPipeline(m_GDRPipeline);
                 auto gdrPipe = std::dynamic_pointer_cast<VulkanPipeline>(m_GDRPipeline);
@@ -688,13 +702,13 @@ namespace Ayaya {
                 }
             } else {
                 // No instances: still clear GBuffer to prevent ghost rendering
-                cmd.BeginRenderPass(fbo, true, glm::vec4(0.0f));
+                cmd.BeginRenderPass(colorFBO, true, glm::vec4(0.0f));
             }
         }
     }
 
     cmd.EndRenderPass();
-    context.Framebuffers["GBuffer"] = fbo;
+    context.Framebuffers["GBuffer"] = colorFBO;
 
     // ── Build Hi-Z for NEXT frame (MUST be outside render pass) ──
     if (m_GDRCtx && m_GDRCtx->InstanceCount > 0) {
@@ -703,7 +717,7 @@ namespace Ayaya {
         if (vkCtx && m_HiZBuildPipeline != VK_NULL_HANDLE) {
             VkCommandBuffer vkCmd = vkCtx->GetCurrentCommandBuffer();
             uint32_t writeIdx = m_HiZFrameCount % vkCtx->GetFramesInFlight();
-            auto gbufferFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(fbo);
+            auto gbufferFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(depthFBO);
             BuildHiZ(vkCmd, writeIdx, gbufferFBO);
 
             m_HiZPrevView[writeIdx] = context.ViewMatrix;
@@ -754,7 +768,7 @@ namespace Ayaya {
                 0, nullptr, 1, &p2Barrier, 0, nullptr);
 
             // Phase 2 draw (LOAD_OP_LOAD — preserve Phase 1 output)
-            cmd.BeginRenderPass(fbo, /*clear=*/false, glm::vec4(0.0f));
+            cmd.BeginRenderPass(colorFBO, /*clear=*/false, glm::vec4(0.0f));
             vkCmdBindIndexBuffer(vkCmd, pool.GetBuffer(), 0, VK_INDEX_TYPE_UINT32);
             cmd.BindPipeline(m_GDRPipeline);
             auto gdrPipe2 = std::dynamic_pointer_cast<VulkanPipeline>(m_GDRPipeline);

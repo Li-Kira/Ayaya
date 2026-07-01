@@ -83,6 +83,7 @@ namespace Ayaya {
         static void Init(std::shared_ptr<struct GDRContext> gdrCtx,
                          std::shared_ptr<RenderPass> shadowPass,
                          std::shared_ptr<RenderPass> gbufferPass,
+                         std::shared_ptr<RenderPass> depthPrePass,
                          std::shared_ptr<RenderPass> lightingPass,
                          std::shared_ptr<RenderPass> forwardBlendPass,
                          std::shared_ptr<RenderPass> ssaoPass,

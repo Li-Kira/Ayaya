@@ -270,9 +270,9 @@ namespace Ayaya {
         uint32_t frameIdx = ctx->GetCurrentFrameIndex() % ctx->GetFramesInFlight();
         VkCommandBuffer vkCmd = ctx->GetCurrentCommandBuffer();
 
-        // ==== Shared depth from GBuffer (read-only, LOAD, never CLEAR) ====
-        auto gbufferFBO = context.GetFramebuffer("GBuffer");
-        auto vkGbuffer = std::dynamic_pointer_cast<VulkanFramebuffer>(gbufferFBO);
+        // ==== Shared depth from SceneDepth (read-only, LOAD, never CLEAR) ====
+        auto depthFBO = context.GetFramebuffer("SceneDepth");
+        auto vkGbuffer = std::dynamic_pointer_cast<VulkanFramebuffer>(depthFBO);
         auto vkGather  = std::dynamic_pointer_cast<VulkanFramebuffer>(gatherFBO);
         auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
             Application::Get().GetWindow().GetContext());

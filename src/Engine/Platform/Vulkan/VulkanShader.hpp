@@ -20,6 +20,10 @@ namespace Ayaya {
         VkShaderModule GetVertexShaderModule() const { return m_VertexShaderModule; }
         VkShaderModule GetFragmentShaderModule() const { return m_FragmentShaderModule; }
 
+        // Returns true if both shader modules loaded successfully
+        bool IsValid() const { return m_VertexShaderModule != VK_NULL_HANDLE
+                                   && m_FragmentShaderModule != VK_NULL_HANDLE; }
+
         // Vulkan 不使用传统的 glUniform 设值，而是使用 PushConstants 或 DescriptorSets。
         // 为了防止抽象类报错，我们先架空这些旧的 OpenGL 接口。
         virtual void SetBool(const std::string& name, bool value) override {}

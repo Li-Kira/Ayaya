@@ -57,6 +57,15 @@ namespace Ayaya {
         // 现代 API 核心语义
         // ==========================================
         virtual void BeginRenderPass(const std::shared_ptr<Framebuffer>& targetFBO, bool clear = true, const glm::vec4& clearColor = glm::vec4(0.0f)) = 0;
+        // Per-attachment LoadOp control: clearColor→CLEAR/LOAD for color, clearDepth→CLEAR/LOAD for depth.
+        virtual void BeginRenderPass(const std::shared_ptr<Framebuffer>& targetFBO,
+                                     bool clearColor, bool clearDepth,
+                                     const glm::vec4& clearColorValue = glm::vec4(0.0f)) = 0;
+        // Separate depth attachment: color from colorFBO, depth from depthFBO.
+        virtual void BeginRenderPass(const std::shared_ptr<Framebuffer>& colorFBO,
+                                     const std::shared_ptr<Framebuffer>& depthFBO,
+                                     bool clearColor, bool clearDepth,
+                                     const glm::vec4& clearColorValue = glm::vec4(0.0f)) = 0;
         virtual void EndRenderPass() = 0;
         virtual void SetPerAttachmentClearColors(const std::vector<glm::vec4>& colors) = 0;
         virtual void BindPipeline(const std::shared_ptr<Pipeline>& pipeline) = 0;

@@ -4,6 +4,7 @@
 #include <memory>
 #include <glm/glm.hpp>
 #include "Engine/Core/UUID.hpp"
+#include "Renderer/LightModeTagRegistry.hpp"
 
 namespace Ayaya {
 
@@ -92,21 +93,7 @@ namespace Ayaya {
         // 0 = auto-detect from BlendMode (Opaque/Masked→GBuffer|ShadowCaster, Translucent→Forward|ShadowCaster)
         void SetLightModeMask(uint32_t mask) {
             m_LightModeMask = mask;
-            // Sync to string for serialization round-trip
-            if (mask == 0) {
-                m_LightModeStr.clear();
-                return;
-            }
-            std::string str;
-            if (mask & (uint32_t)LightModeFlags::GBuffer)      str += (str.empty() ? "" : ",") + std::string("GBuffer");
-            if (mask & (uint32_t)LightModeFlags::ShadowCaster) str += (str.empty() ? "" : ",") + std::string("ShadowCaster");
-            if (mask & (uint32_t)LightModeFlags::Forward)      str += (str.empty() ? "" : ",") + std::string("Forward");
-            if (mask & (uint32_t)LightModeFlags::DepthPrePass) str += (str.empty() ? "" : ",") + std::string("DepthPrePass");
-            // Custom bits (>=16): fall back to raw integer if no built-in name matched
-            uint32_t custom = mask & ~kEngineReservedLightModeMask;
-            if (custom != 0 || str.empty())
-                str = std::to_string(mask);
-            m_LightModeStr = str;
+            m_LightModeStr = LightModeTagRegistry::Instance().MaskToString(mask);
         }
         uint32_t GetLightModeMask() const;
         // UI/Serialization: string representation (comma-separated or YAML array)

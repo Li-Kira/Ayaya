@@ -11,6 +11,7 @@ namespace Ayaya {
 
     void VulkanLightingPass::DeclareResources(RGBuilder& builder, uint32_t width, uint32_t height) {
         builder.ReadTexture("GBuffer");
+        builder.ReadTexture("SceneDepth");
         builder.ReadTexture("ShadowMap");
         FramebufferSpecification s;
         s.Width = width; s.Height = height; s.Samples = 1;
@@ -39,14 +40,15 @@ namespace Ayaya {
 
     void VulkanLightingPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
         auto gbufferFBO = context.GetFramebuffer("GBuffer");
+        auto sceneDepthFBO = context.GetFramebuffer("SceneDepth");
         auto lightingFBO = context.GetFramebuffer("Lighting");
-        if (!gbufferFBO || !lightingFBO) return;
+        if (!gbufferFBO || !sceneDepthFBO || !lightingFBO) return;
 
         cmd.BeginRenderPass(lightingFBO, true, glm::vec4(0.0f));
 
         // PBR Deferred Shading
         cmd.BindPipeline(m_DeferredPipeline);
-        cmd.BindTexture2D(m_DeferredPipeline, "u_DepthMap",   0, gbufferFBO, 0, true);  // TEST: hw depth at slot 0
+        cmd.BindTexture2D(m_DeferredPipeline, "u_DepthMap",   0, sceneDepthFBO, 0, true);  // depth from SceneDepth
         cmd.BindTexture2D(m_DeferredPipeline, "g_Albedo",     1, gbufferFBO, 1);
         cmd.BindTexture2D(m_DeferredPipeline, "g_PBR",        2, gbufferFBO, 2);
         cmd.BindTexture2D(m_DeferredPipeline, "g_CustomData", 3, gbufferFBO, 3);

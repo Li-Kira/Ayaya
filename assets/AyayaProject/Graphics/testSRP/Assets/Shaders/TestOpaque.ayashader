@@ -1,0 +1,18 @@
+# TestOpaque.ayashader — GDR opaque rendering shader definition
+# Drop this file in ContentBrowser to generate a .mat via PropertiesPanel.
+Name: "TestOpaque"
+PassType: "GenericDrawPass"
+Tags:
+  LightModeMask: 64
+  Queue: "Opaque"
+RenderState:
+  DepthTest: true
+  DepthWrite: true
+  CullMode: "Back"
+  BlendMode: "Opaque"
+Properties:
+  - Name: "_Color"
+    DisplayName: "Albedo Tint"
+    Type: Color
+    Default: [1.0, 1.0, 1.0, 1.0]
+HLSL: "test_opaque.hlsl"

@@ -121,6 +121,19 @@ namespace Ayaya {
             if (it != Framebuffers.end()) return it->second;
             return nullptr;
         }
+
+        // ── Global shader parameters (SRP cross-pass constants) ──
+        // Stored in Settings with "Global." prefix. Passes read via
+        //   context.Get<float>("Global.MyParam", default)
+        // and push as part of their push constant block.
+        static constexpr std::string_view GlobalPrefix = "Global.";
+        static std::string MakeGlobalKey(std::string_view name) {
+            return std::string(GlobalPrefix) + std::string(name);
+        }
+        void SetGlobalFloat(std::string_view key, float v)       { Set(MakeGlobalKey(key), v); }
+        void SetGlobalInt(std::string_view key, int v)           { Set(MakeGlobalKey(key), v); }
+        void SetGlobalVec4(std::string_view key, const glm::vec4& v) { Set(MakeGlobalKey(key), v); }
+        void SetGlobalVec3(std::string_view key, const glm::vec3& v) { Set(MakeGlobalKey(key), v); }
     };
 
     class RenderPass {

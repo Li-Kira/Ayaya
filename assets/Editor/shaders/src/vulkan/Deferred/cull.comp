@@ -56,11 +56,14 @@ layout(std430, set = 3, binding = 0) buffer DrawIndirectBuffer {
     DrawCommand Commands[];
 };
 
-// ── Push constants ──
+// ── Push constants (128 bytes, matches C++ FrustumPush) ──
 layout(push_constant) uniform FrustumPC {
-    vec4 u_Planes[6];
-    uint u_InstanceCount;
-    uint u_LightModeMask;
+    vec4 u_Planes[6];           // 96
+    uint u_InstanceCount;       // 4
+    uint u_LightModeMask;       // 4
+    uint u_OverrideInstanceID;  // 4 — GDR: 0xFFFFFFFF → use SV_InstanceID
+    uint _pad;                  // 4
+    vec4 u_TexelSize;           // 16 — x=1/tw, y=1/th, z=tw, w=th
 } pc;
 
 bool IsVisible(vec4 sphere) {

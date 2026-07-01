@@ -19,6 +19,12 @@ namespace Ayaya {
     void VulkanRenderCommandBuffer::End() {}
 
     void VulkanRenderCommandBuffer::BeginRenderPass(const std::shared_ptr<Framebuffer>& targetFBO, bool clear, const glm::vec4& clearColor) {
+        BeginRenderPass(targetFBO, clear, clear, clearColor);
+    }
+
+    void VulkanRenderCommandBuffer::BeginRenderPass(const std::shared_ptr<Framebuffer>& targetFBO,
+                                                     bool clearColor, bool clearDepth,
+                                                     const glm::vec4& clearColorValue) {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         VkCommandBuffer cmdBuffer = context->GetCurrentCommandBuffer();
 
@@ -27,9 +33,10 @@ namespace Ayaya {
 
         uint32_t width  = vulkanFBO->GetSpecification().Width;
         uint32_t height = vulkanFBO->GetSpecification().Height;
-        VkAttachmentLoadOp loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+        VkAttachmentLoadOp colorLoadOp = clearColor ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+        VkAttachmentLoadOp depthLoadOp = clearDepth ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
 
-        // 构建颜色附件
+        // 构建颜色附件 (独立 LoadOp)
         uint32_t colorCount = vulkanFBO->GetColorAttachmentCount();
         std::vector<VkRenderingAttachmentInfo> colorAttachments(colorCount);
         for (uint32_t i = 0; i < colorCount; i++) {
@@ -37,9 +44,9 @@ namespace Ayaya {
             att.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
             att.imageView = vulkanFBO->GetColorAttachmentImageView(i);
             att.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            att.loadOp = loadOp;
+            att.loadOp = colorLoadOp;
             att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-            att.clearValue.color = {{clearColor.r, clearColor.g, clearColor.b, clearColor.a}};
+            att.clearValue.color = {{clearColorValue.r, clearColorValue.g, clearColorValue.b, clearColorValue.a}};
         }
 
         // Per-attachment clear color overrides (e.g. WBOIT attachment 1 needs 1.0)
@@ -51,13 +58,13 @@ namespace Ayaya {
             m_PendingClearColors.clear();
         }
 
-        // 构建深度附件
+        // 构建深度附件 (独立 LoadOp)
         VkRenderingAttachmentInfo depthAttachment{};
         if (vulkanFBO->HasDepthAttachment()) {
             depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
             depthAttachment.imageView = vulkanFBO->GetDepthAttachmentImageView();
             depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            depthAttachment.loadOp = loadOp;  // 跟随 color: CLEAR或LOAD
+            depthAttachment.loadOp = depthLoadOp;
             depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
             depthAttachment.clearValue.depthStencil = { 1.0f, 0 };
         }
@@ -85,6 +92,76 @@ namespace Ayaya {
         VkRect2D scissor{};
         scissor.offset = {0, 0};
         scissor.extent = { width, height };
+        vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
+    }
+
+    void VulkanRenderCommandBuffer::BeginRenderPass(
+        const std::shared_ptr<Framebuffer>& colorFBO,
+        const std::shared_ptr<Framebuffer>& depthFBO,
+        bool clearColor, bool clearDepth,
+        const glm::vec4& clearColorValue)
+    {
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        VkCommandBuffer cmdBuffer = context->GetCurrentCommandBuffer();
+
+        auto vkColorFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(colorFBO);
+        if (!vkColorFBO) return;
+
+        // 🔥 Depth attachment dimensions MUST match color
+        if (depthFBO) {
+            AYAYA_CORE_ASSERT(
+                colorFBO->GetSpecification().Width  == depthFBO->GetSpecification().Width &&
+                colorFBO->GetSpecification().Height == depthFBO->GetSpecification().Height,
+                "DepthTarget dimensions must match ColorTarget!");
+        }
+
+        uint32_t width  = vkColorFBO->GetSpecification().Width;
+        uint32_t height = vkColorFBO->GetSpecification().Height;
+        VkAttachmentLoadOp colorLoadOp = clearColor ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+        VkAttachmentLoadOp depthLoadOp = clearDepth ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+
+        // Color attachments from colorFBO
+        uint32_t colorCount = vkColorFBO->GetColorAttachmentCount();
+        std::vector<VkRenderingAttachmentInfo> colorAttachments(colorCount);
+        for (uint32_t i = 0; i < colorCount; i++) {
+            VkRenderingAttachmentInfo& att = colorAttachments[i];
+            att.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            att.imageView = vkColorFBO->GetColorAttachmentImageView(i);
+            att.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            att.loadOp = colorLoadOp;
+            att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            att.clearValue.color = {{clearColorValue.r, clearColorValue.g, clearColorValue.b, clearColorValue.a}};
+        }
+
+        // Depth attachment from depthFBO (or fallback to colorFBO)
+        VkRenderingAttachmentInfo depthAttachment{};
+        auto vkDepthFBO = depthFBO ? std::dynamic_pointer_cast<VulkanFramebuffer>(depthFBO) : vkColorFBO;
+        if (vkDepthFBO->HasDepthAttachment()) {
+            depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            depthAttachment.imageView = vkDepthFBO->GetDepthAttachmentImageView();
+            depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            depthAttachment.loadOp = depthLoadOp;
+            depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            depthAttachment.clearValue.depthStencil = { 1.0f, 0 };
+        }
+
+        VkRenderingInfo renderingInfo{};
+        renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        renderingInfo.renderArea = { {0, 0}, {width, height} };
+        renderingInfo.layerCount = 1;
+        renderingInfo.colorAttachmentCount = colorCount;
+        renderingInfo.pColorAttachments = colorAttachments.data();
+        renderingInfo.pDepthAttachment = vkDepthFBO->HasDepthAttachment() ? &depthAttachment : nullptr;
+        vkCmdBeginRendering(cmdBuffer, &renderingInfo);
+
+        VkViewport viewport{};
+        viewport.x = 0.0f; viewport.y = (float)height;
+        viewport.width = (float)width; viewport.height = -(float)height;
+        viewport.minDepth = 0.0f; viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
+
+        VkRect2D scissor{};
+        scissor.offset = {0, 0}; scissor.extent = { width, height };
         vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
     }
 

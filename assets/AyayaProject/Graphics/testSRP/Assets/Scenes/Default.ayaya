@@ -2,11 +2,11 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition: [-11.758415, 4.8627377, -3.892712]
-  CameraDistance: 16.495737
-  CameraPitch: -0.34931436
-  CameraYaw: -1.9684695
-  CameraFocalPoint: [2.531592, -0.782989, 2.1098518]
+  CameraPosition: [-1.0113014, 1.5608014, 4.5161285]
+  CameraDistance: 5
+  CameraPitch: -0.18061227
+  CameraYaw: -0.09120418
+  CameraFocalPoint: [-0.5633198, 0.66264194, -0.38209772]
 Entities:
   - Entity: 12257148072277889535
     TagComponent:
@@ -63,7 +63,7 @@ Entities:
       Parent: 0
   - Entity: 4527633678594138007
     TagComponent:
-      Tag: Cube
+      Tag: HologramCube
       IsActive: true
     TransformComponent:
       Translation: [0.2, 0.3, 0]
@@ -78,12 +78,42 @@ Entities:
       Parent: 0
   - Entity: 11561986092693821065
     TagComponent:
-      Tag: Cube (1)
+      Tag: Floor
       IsActive: true
     TransformComponent:
       Translation: [0, -0.7880537, 0]
       Rotation: [0, -0, 0]
       Scale: [6.1733546, 1, 4.8344717]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000001
+      MaterialHandle: 15972461601806397795
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 6187958944299114315
+    TagComponent:
+      Tag: "TestOpaqueCube "
+      IsActive: true
+    TransformComponent:
+      Translation: [-1.4, 0.6, 0.2664557]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000001
+      MaterialHandle: 17453219739804012566
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 18112233445566778899
+    TagComponent:
+      Tag: OccluderWall
+      IsActive: false
+    TransformComponent:
+      Translation: [-1.4, 0.6, -1.5]
+      Rotation: [0, 0, 0]
+      Scale: [3, 3, 0.3]
     MeshRendererComponent:
       ModelHandle: 16140901000000000001
       MaterialHandle: 15972461601806397795

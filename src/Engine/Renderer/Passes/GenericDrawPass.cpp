@@ -7,6 +7,7 @@
 #include "Renderer/Frustum.hpp"
 #include "Platform/Vulkan/VulkanContext.hpp"
 #include "Platform/Vulkan/VulkanPipeline.hpp"
+#include "Platform/Vulkan/VulkanShader.hpp"
 #include "Core/Application.hpp"
 #include "Core/VFS.hpp"
 #include "Renderer/RenderQueue.hpp"
@@ -15,6 +16,17 @@
 namespace Ayaya {
 
     static constexpr uint32_t kMaxInstances = 65536;
+
+    // ── Unified push constant struct (matches HLSL FrustumPC + GLSL cull.comp) ──
+    struct FrustumPush {
+        glm::vec4 planes[6];           // 96 bytes
+        uint32_t  instanceCount;       // 4
+        uint32_t  lightModeMask;       // 4
+        uint32_t  overrideInstanceID;  // 4
+        uint32_t  _pad;               // 4
+        glm::vec4 texelSize;          // 16 — x=1/tw, y=1/th, z=tw, w=th
+        float     exposureInverse;    //  4 — 1.0/PhysicalExposure (matches ForwardBlend pass)
+    };
 
     GenericDrawPass::~GenericDrawPass() {
         auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
@@ -107,7 +119,7 @@ namespace Ayaya {
         // ── Compute pipeline layout ──
         VkDescriptorSetLayout cullLayouts[] = { m_CullDummyLayout, m_CullDummyLayout,
             m_GDRCtx ? m_GDRCtx->Set2Layout : VK_NULL_HANDLE, m_CullSet3Layout };
-        VkPushConstantRange pcRange{ VK_SHADER_STAGE_COMPUTE_BIT, 0, 112 };
+        VkPushConstantRange pcRange{ VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(FrustumPush) };
         VkPipelineLayoutCreateInfo plInfo{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
         plInfo.setLayoutCount = 4; plInfo.pSetLayouts = cullLayouts;
         plInfo.pushConstantRangeCount = 1; plInfo.pPushConstantRanges = &pcRange;
@@ -132,7 +144,7 @@ namespace Ayaya {
         return Shader::Create(vertPath, fragPath);
     }
 
-    std::shared_ptr<Pipeline> GenericDrawPass::GetOrCreatePipeline(const PipelineKey& key) {
+    std::shared_ptr<Pipeline> GenericDrawPass::GetOrCreatePipeline(const PipelineKey& key, const FramebufferSpecification& fboSpec) {
         auto it = m_PipelineCache.find(key);
         if (it != m_PipelineCache.end()) return it->second;
 
@@ -142,6 +154,11 @@ namespace Ayaya {
         auto shader = LoadShader(stem + ".vert", stem + ".frag");
         if (!shader) {
             AYAYA_CORE_ERROR("[GenericDraw] Failed to load shader: {}", key.shader);
+            return nullptr;
+        }
+        auto vkShader = std::dynamic_pointer_cast<VulkanShader>(shader);
+        if (!vkShader || !vkShader->IsValid()) {
+            AYAYA_CORE_ERROR("[GenericDraw] Shader SPIR-V missing or invalid: {}", key.shader);
             return nullptr;
         }
 
@@ -157,16 +174,20 @@ namespace Ayaya {
                          (key.blendMode == 2) ? BlendModeType::Alpha :
                          BlendModeType::None;
         spec.NoTextureDescriptors = false;
+        spec.ColorWrite = key.colorWrite;
+        switch (key.depthFunc) {
+            case 1: spec.DepthOperator = DepthCompareOperator::LEqual;  break;
+            case 2: spec.DepthOperator = DepthCompareOperator::Never;   break;
+            case 3: spec.DepthOperator = DepthCompareOperator::Greater; break;
+            default: spec.DepthOperator = DepthCompareOperator::Less;   break; // 0
+        }
 
         // Reference FBO for dynamic rendering format matching.
-        // Must match the runtime target: color format + depth format if present.
-        // Otherwise VkPipelineRenderingCreateInfo depthAttachmentFormat won't match
-        // the render pass's depth attachment → VUID-dynamicRenderingUnusedAttachments-08914.
-        FramebufferSpecification refSpec;
+        // Must use the FULL attachment layout from the runtime FBO — not just the first color.
+        // Otherwise VkPipelineRenderingCreateInfo colorAttachmentCount/format won't match
+        // the render pass → VUID-colorAttachmentCount-06179 / VUID-dynamicRendering-08910.
+        FramebufferSpecification refSpec = fboSpec;
         refSpec.Width = 1280; refSpec.Height = 720;
-        refSpec.Attachments = { key.colorFormat };
-        if (key.hasDepth)
-            refSpec.Attachments.Attachments.push_back({FramebufferTextureFormat::Depth});
         spec.TargetFramebuffer = Framebuffer::Create(refSpec);
 
         // Inject GDR Set 2 (SSBO: Instance/Range/Material/GeometryPool) into pipeline layout
@@ -209,6 +230,10 @@ namespace Ayaya {
         bool depthWrite = context.Get<int>(prefix + ".DepthWrite", 1) != 0;
         int cullMode    = context.Get<int>(prefix + ".CullMode", 2);
         int blendMode   = context.Get<int>(prefix + ".BlendMode", 0);
+        int depthFunc   = context.Get<int>(prefix + ".DepthFunc", 0);   // 0=LESS, 1=LEQUAL
+        bool colorWrite = context.Get<int>(prefix + ".ColorWrite", 1) != 0;
+        bool clearColor = context.Get<int>(prefix + ".ClearColor", 1) != 0;
+        bool clearDepth = context.Get<int>(prefix + ".ClearDepth", 1) != 0;
         std::string shaderPath = context.Get<std::string>(prefix + ".Shader", "");
         std::string targetName = context.Get<std::string>(prefix + ".Target", "");
 
@@ -238,8 +263,8 @@ namespace Ayaya {
         }
 
         // Get or create graphics pipeline (keyed by format to match dynamic rendering)
-        PipelineKey key{ shaderPath, depthTest, depthWrite, cullMode, blendMode, fmt, hasDepth };
-        auto pipeline = GetOrCreatePipeline(key);
+        PipelineKey key{ shaderPath, depthTest, depthWrite, cullMode, blendMode, fmt, hasDepth, depthFunc, colorWrite };
+        auto pipeline = GetOrCreatePipeline(key, fboSpec);
         if (!pipeline) return;
 
         auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
@@ -263,7 +288,7 @@ namespace Ayaya {
         vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE,
             m_CullLayout, 3, 1, &m_CullSet3Descriptors[frameIdx], 0, nullptr);
 
-        struct FrustumPush { glm::vec4 planes[6]; uint32_t count; uint32_t lightModeMask; uint32_t overrideInstanceID; uint32_t _pad; } fpc;
+        FrustumPush fpc{};
         // Gribb-Hartmann frustum plane extraction from VP matrix (same as VulkanGBufferPass)
         glm::mat4 vp = context.ProjectionMatrix * context.ViewMatrix;
         glm::mat4 vpT = glm::transpose(vp);
@@ -274,9 +299,14 @@ namespace Ayaya {
         fpc.planes[3] = glm::normalize(glm::vec4(glm::vec3(rows[3] - rows[1]), rows[3].w - rows[1].w));
         fpc.planes[4] = glm::normalize(glm::vec4(glm::vec3(rows[3] + rows[2]), rows[3].w + rows[2].w));
         fpc.planes[5] = glm::normalize(glm::vec4(glm::vec3(rows[3] - rows[2]), rows[3].w - rows[2].w));
-        fpc.count = m_GDRCtx->InstanceCount;
+        fpc.instanceCount = m_GDRCtx->InstanceCount;
         fpc.lightModeMask = lightModeMask;
         fpc.overrideInstanceID = 0xFFFFFFFF;  // GDR path: use SV_InstanceID
+        // Populate _TexelSize from target Framebuffer dimensions
+        float tw = (float)fbo->GetSpecification().Width;
+        float th = (float)fbo->GetSpecification().Height;
+        fpc.texelSize = glm::vec4(1.0f / tw, 1.0f / th, tw, th);
+        fpc.exposureInverse = 1.0f / context.Get<float>("PhysicalExposure", 1.0f);
         vkCmdPushConstants(vkCmd, m_CullLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(fpc), &fpc);
 
         uint32_t groupCount = (m_GDRCtx->InstanceCount + 63) / 64;
@@ -292,8 +322,7 @@ namespace Ayaya {
             0, nullptr, 1, &indirectBarrier, 0, nullptr);
 
         // ── Graphics pass ──
-        bool clear = context.Get<int>(prefix + ".ClearColor", 1) != 0;
-        cmd.BeginRenderPass(fbo, clear);
+        cmd.BeginRenderPass(fbo, clearColor, clearDepth);
         cmd.BindPipeline(pipeline);
 
         // Bind GDR Set 2 (Instance/Range/Material/GeometryPool SSBOs)
@@ -306,6 +335,11 @@ namespace Ayaya {
                 vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     gdrPipe->GetVulkanPipelineLayout(),
                     2, 1, &m_GDRCtx->Set2Descriptors[frameIdx], 0, nullptr);
+                // Push FrustumPush to graphics pipeline — pc.overrideInstanceID
+                // (GetAyayaVertex) and pc._TexelSize (TA shader) need this.
+                vkCmdPushConstants(vkCmd, gdrPipe->GetVulkanPipelineLayout(),
+                    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                    0, sizeof(fpc), &fpc);
             }
         }
 
@@ -345,6 +379,10 @@ namespace Ayaya {
         bool depthWrite = context.Get<int>(prefix + ".DepthWrite", 1) != 0;
         int cullMode    = context.Get<int>(prefix + ".CullMode", 2);
         int blendMode   = context.Get<int>(prefix + ".BlendMode", 0);
+        int depthFunc   = context.Get<int>(prefix + ".DepthFunc", 0);
+        bool colorWrite = context.Get<int>(prefix + ".ColorWrite", 1) != 0;
+        bool clearColor = context.Get<int>(prefix + ".ClearColor", 1) != 0;
+        bool clearDepth = context.Get<int>(prefix + ".ClearDepth", 1) != 0;
         std::string shaderPath = context.Get<std::string>(prefix + ".Shader", "");
         std::string targetName = context.Get<std::string>(prefix + ".Target", "");
 
@@ -360,8 +398,8 @@ namespace Ayaya {
             } else { hasDepth = true; }
         }
 
-        PipelineKey key{shaderPath, depthTest, depthWrite, cullMode, blendMode, fmt, hasDepth};
-        auto pipeline = GetOrCreatePipeline(key);
+        PipelineKey key{shaderPath, depthTest, depthWrite, cullMode, blendMode, fmt, hasDepth, depthFunc, colorWrite};
+        auto pipeline = GetOrCreatePipeline(key, fbo->GetSpecification());
         if (!pipeline) { AYAYA_CORE_INFO("[Transparent:'{}'] Pipeline FAILED", prefix); return; }
 
         auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
@@ -369,8 +407,6 @@ namespace Ayaya {
         if (!vkCtx) return;
         VkCommandBuffer vkCmd = vkCtx->GetCurrentCommandBuffer();
         uint32_t frameIdx = vkCtx->GetCurrentFrameIndex() % vkCtx->GetFramesInFlight();
-
-        bool clear = context.Get<int>(prefix + ".ClearColor", 1) != 0;
 
         // ── Host → Device barrier: ensure SSBO data written by BuildFromScene
         //     (InstanceSSBO, GeometryRangeSSBO, MaterialSSBO, GeometryPool) is
@@ -382,7 +418,7 @@ namespace Ayaya {
             VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0,
             1, &hostBarrier, 0, nullptr, 0, nullptr);
 
-        cmd.BeginRenderPass(fbo, clear);
+        cmd.BeginRenderPass(fbo, clearColor, clearDepth);
         cmd.BindPipeline(pipeline);
 
         // Bind GDR Set 2 — SSBO vertex pulling (same data source as Opaque path)
@@ -398,10 +434,14 @@ namespace Ayaya {
         auto& pool = vkCtx->GetGeometryPool();
         vkCmdBindIndexBuffer(vkCmd, pool.GetBuffer(), 0, VK_INDEX_TYPE_UINT32);
 
+        // Populate _TexelSize from target FBO
+        float tw = (float)fbo->GetSpecification().Width;
+        float th = (float)fbo->GetSpecification().Height;
         // CPU-sorted submission: push instanceID, draw each matching packet
-        struct FrustumPush { glm::vec4 planes[6]; uint32_t count; uint32_t lightModeMask; uint32_t overrideInstanceID; uint32_t _pad; } fpc;
-        memset(&fpc, 0, sizeof(fpc));
+        FrustumPush fpc{};
         fpc.lightModeMask = mask;
+        fpc.texelSize = glm::vec4(1.0f / tw, 1.0f / th, tw, th);
+        fpc.exposureInverse = 1.0f / context.Get<float>("PhysicalExposure", 1.0f);
         auto plLayout = std::dynamic_pointer_cast<VulkanPipeline>(pipeline)->GetVulkanPipelineLayout();
 
         int drawCount = 0;

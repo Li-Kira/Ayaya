@@ -1,6 +1,42 @@
-// AyayaGDR.hlsl — Engine GDR Standard Library
-// Include in custom shaders to hide SSBO vertex-pulling complexity.
-// TA just calls GetAyayaVertex(vertexID, instanceID) → gets a ready-to-use vertex.
+// ==========================================
+// AyayaGDR.hlsl — Engine GDR Standard Library v2
+//
+// TA 只需 #include this file，自动获得:
+//   Camera UBO (Set 0): viewProj, view, cameraPos, _ScreenParams, _Time
+//   Push Constants:     pc.planes[], pc.overrideInstanceID, pc._TexelSize
+//   GDR SSBO (Set 2):   u_Instances, u_Ranges, u_Materials, g_Data
+//   GetAyayaVertex(vertexID, instanceID)
+//
+// TA 永远不需要自己声明 cbuffer 或 push constant。
+// ==========================================
+
+// ── Camera UBO (Set 0 Binding 0, 176 bytes, matches C++ struct_CameraData) ──
+[[vk::binding(0, 0)]] cbuffer CameraUBO {
+    float4x4 viewProj;       // offset 0
+    float4x4 view;           // offset 64  — world→view
+    float3   cameraPos;      // offset 128
+    float    _pad0;          // offset 140
+    float4   _ScreenParams;  // offset 144 — x=w, y=h, z=1+1/w, w=1+1/h
+    float4   _Time;          // offset 160 — x=t/20, y=t, z=t*2, w=t*3
+};
+
+// ── Frame constant access macros ──
+#define AYAYA_TIME           _Time.y
+#define AYAYA_DELTA          _Time.x
+#define AYAYA_SCREEN_W       _ScreenParams.x
+#define AYAYA_SCREEN_H       _ScreenParams.y
+
+// ── Push Constants (matches C++ FrustumPush) ──
+struct FrustumPC {
+    float4 planes[6];           // offset 0,  size 96
+    uint   instanceCount;       // offset 96, size 4
+    uint   lightModeMask;       // offset 100, size 4
+    uint   overrideInstanceID;  // offset 104, size 4 — GDR: 0xFFFFFFFF → use SV_InstanceID
+    uint   _pad;               // offset 108, size 4
+    float4 _TexelSize;         // offset 112, size 16 — x=1/tw, y=1/th, z=tw, w=th
+    float  _ExposureInverse;   // offset 128, size 4 — 1.0/PhysicalExposure (matches ForwardBlend)
+};
+[[vk::push_constant]] FrustumPC pc;
 
 // ── GDR SSBO structs (must match C++ VulkanGeometryPool.hpp) ──
 
@@ -70,7 +106,7 @@ AyayaVertex GetAyayaVertex(uint vertexID, uint instanceID) {
     // StructuredBuffer<uint> index-based access (MoltenVK-compatible).
     // Vertex layout: pos[3] | normal[3] | uv[2] | tangent[3] = 11 uints
     uint4 d0 = uint4(g_Data[base+0], g_Data[base+1], g_Data[base+2], g_Data[base+3]); // {pos.x, pos.y, pos.z, normal.x}
-    uint4 d1 = uint4(g_Data[base+3], g_Data[base+4], g_Data[base+5], g_Data[base+6]); // {normal.y, normal.z, uv.x, uv.y}
+    uint4 d1 = uint4(g_Data[base+4], g_Data[base+5], g_Data[base+6], g_Data[base+7]); // {normal.y, normal.z, uv.x, uv.y}
 
     AyayaVertex v;
     v.position    = float3(asfloat(d0.x), asfloat(d0.y), asfloat(d0.z));

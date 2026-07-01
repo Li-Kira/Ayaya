@@ -15,15 +15,16 @@ namespace Ayaya {
     enum class PolygonMode { Fill, Line, Point };
     
     // 深度比较操作符：保留 LEqual, GEqual 等名称以兼容你现有的旧代码调用
-    enum class DepthCompareOperator { 
-        None = 0, 
-        Less, 
-        LEqual, 
-        Equal, 
-        GEqual, 
-        Greater, 
-        NotEqual, 
-        Always 
+    enum class DepthCompareOperator {
+        None = 0,
+        Less,
+        LEqual,
+        Equal,
+        GEqual,
+        Greater,
+        NotEqual,
+        Always,
+        Never  // depth test always fails — diagnostic only
     };
     
     // 混合模式：将类型重命名为 BlendModeType，解决成员变量同名导致的 C2653 错误
@@ -69,6 +70,7 @@ namespace Ayaya {
         bool NoGlobalUBOs = false;          // 跳过 Set 0 (UBO) 描述符集 — UI 管线专用
         bool UseBindlessTextures = false;   // 使用全局 Bindless 纹理数组替代传统纹理绑定
         bool NoFragmentShader = false;      // VS-only pipeline (depth-only, no fragment stage — enables hardware Early-Z)
+        bool ColorWrite = true;             // false → all color attachments have writeMask=0 (depth-only)
 
         // Depth bias (shadow acne prevention, depth-only passes)
         bool DepthBiasEnable = false;

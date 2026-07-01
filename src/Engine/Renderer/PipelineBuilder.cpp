@@ -1,5 +1,6 @@
 #include "ayapch.h"
 #include "PipelineBuilder.hpp"
+#include "LightModeTagRegistry.hpp"
 #include "Renderer/Passes/VulkanWBOITPass.hpp"
 #include "Renderer/Passes/GenericDrawPass.hpp"
 #include "Renderer/Passes/GenericFullScreenPass.hpp"
@@ -50,6 +51,16 @@ namespace Ayaya {
     }
     uint32_t PipelineBuilder::GetViewportWidth() const { return m_ViewportWidth; }
     uint32_t PipelineBuilder::GetViewportHeight() const { return m_ViewportHeight; }
+
+    // ==========================================
+    // Global Shader Parameters
+    // ==========================================
+    void PipelineBuilder::SetGlobalFloat(const std::string& name, float value) {
+        m_BakedParams["__Globals__"].FloatParams[name] = value;
+    }
+    void PipelineBuilder::SetGlobalInt(const std::string& name, int value) {
+        m_BakedParams["__Globals__"].IntParams[name] = value;
+    }
 
     // ==========================================
     // DeclareTexture
@@ -118,7 +129,7 @@ namespace Ayaya {
         // Generic passes create a fresh instance per node (multiple per pipeline)
         if (passType == "GenericDrawPass") {
             auto gp = std::make_shared<GenericDrawPass>();
-            gp->SetGDRContext(SceneRenderer::s_GDRContext);
+            gp->SetGDRContext(m_GDRCtx);
             gp->OnAttach();
             gp->SetNodeName(nodeName);
             passInstance = gp;
@@ -213,6 +224,11 @@ namespace Ayaya {
                 for (auto& r : readVec)
                     builder.ReadTexture(r);
 
+                // 🔥 DepthTarget: read as depth attachment (keep ATTACHMENT layout, not SHADER_READ_ONLY)
+                std::string depthTarget = baked.GetStr("DepthTarget");
+                if (!depthTarget.empty())
+                    builder.ReadTextureAsDepth(depthTarget);
+
                 // Declare explicit writes (LoadOp already baked into spec)
                 for (auto& [name, spec] : writeSpecs)
                     builder.WriteTexture(name, spec);
@@ -241,26 +257,19 @@ namespace Ayaya {
 
                 // Inject LightMode as bitmask (int) and Queue as string
                 if (!baked.LightMode.empty()) {
-                    // Parse comma-separated or single LightMode → bitmask
-                    uint32_t mask = 0;
-                    std::string remaining = baked.LightMode;
-                    size_t pos;
-                    while ((pos = remaining.find(',')) != std::string::npos) {
-                        std::string tag = remaining.substr(0, pos);
-                        if (tag == "GBuffer")       mask |= 1;
-                        else if (tag == "ShadowCaster") mask |= 2;
-                        else if (tag == "Forward")      mask |= 4;
-                        else if (tag == "DepthPrePass") mask |= 8;
-                        remaining = remaining.substr(pos + 1);
-                    }
-                    if (remaining == "GBuffer")       mask |= 1;
-                    else if (remaining == "ShadowCaster") mask |= 2;
-                    else if (remaining == "Forward")      mask |= 4;
-                    else if (remaining == "DepthPrePass") mask |= 8;
+                    uint32_t mask = LightModeTagRegistry::Instance().ParseMask(baked.LightMode);
                     ctx.Set(capturedNodeName + ".LightMode", (int)mask);
                 }
                 if (!baked.Queue.empty())
                     ctx.Set(capturedNodeName + ".Queue", baked.Queue);
+
+                // Inject DepthTarget FBO into context.Framebuffers for passes that need it
+                std::string depthTarget = baked.GetStr("DepthTarget");
+                if (!depthTarget.empty()) {
+                    auto depthFBO = ctx.GetFramebuffer(depthTarget);
+                    if (depthFBO)
+                        ctx.Framebuffers[capturedNodeName + ".DepthTarget"] = depthFBO;
+                }
 
                 // Execute the pass (factory already resolved WBOIT vs standard)
                 execFn(ctx, cmd);
@@ -384,20 +393,13 @@ namespace Ayaya {
                 continue;
             }
 
-            // ── Typed params ──
-            if (val.is<int>()) {
+            // ── Typed params (bool first: most specific Lua type) ──
+            if (val.is<bool>()) {
+                baked.IntParams[keyStr] = val.as<bool>() ? 1 : 0;
+            } else if (val.is<int>()) {
                 baked.IntParams[keyStr] = val.as<int>();
             } else if (val.is<float>()) {
                 baked.FloatParams[keyStr] = val.as<float>();
-                // sol2 may return int as float or vice versa — check bool first since bool IS int in Lua
-                sol::type vt = val.get_type();
-                if (vt == sol::type::boolean) {
-                    baked.IntParams[keyStr] = val.as<bool>() ? 1 : 0;
-                } else {
-                    baked.IntParams[keyStr] = val.as<int>();
-                }
-            } else if (val.is<bool>()) {
-                baked.IntParams[keyStr] = val.as<bool>() ? 1 : 0;
             } else if (val.is<std::string>()) {
                 baked.StrParams[keyStr] = val.as<std::string>();
             }

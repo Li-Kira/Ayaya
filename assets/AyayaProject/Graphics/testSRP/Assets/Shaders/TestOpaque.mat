@@ -1,17 +1,13 @@
-MaterialName: Hologram
+MaterialName: TestOpaque
 ShaderName: Default
-BlendMode: 3
+BlendMode: 64
 AlphaCutoff: 0.5
-LightModes: 32
+LightModes: 64
 Properties:
   - UniformName: _Color
-    DisplayName: Hologram Color
+    DisplayName: Albedo Tint
     Type: 5
-    Vec4Value: [0, 1, 1, 0.5]
-  - UniformName: _ScanSpeed
-    DisplayName: Scan Speed
-    Type: 0
-    FloatValue: 0
+    Vec4Value: [1, 1, 1, 1]
   - UniformName: u_Alpha
     DisplayName: Alpha Multiplier
     Type: 0

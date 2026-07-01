@@ -32,7 +32,10 @@ namespace Ayaya {
         uint32_t framesInFlight = 3; // 与引擎 Double Buffering 保持一致
     
         auto vulkanShader = std::dynamic_pointer_cast<VulkanShader>(spec.Shader);
-        AYAYA_CORE_ASSERT(vulkanShader, "Pipeline requires a valid VulkanShader!");
+        if (!vulkanShader || !vulkanShader->IsValid()) {
+            AYAYA_CORE_ERROR("VulkanPipeline: Shader is null or SPIR-V modules are invalid!");
+            return;
+        }
 
         // ==========================================
         // 1. 着色器阶段 (Shader Stages)
@@ -160,6 +163,7 @@ namespace Ayaya {
                 case DepthCompareOperator::Greater: return VK_COMPARE_OP_GREATER;
                 case DepthCompareOperator::NotEqual: return VK_COMPARE_OP_NOT_EQUAL;
                 case DepthCompareOperator::Always: return VK_COMPARE_OP_ALWAYS;
+                case DepthCompareOperator::Never:  return VK_COMPARE_OP_NEVER;
                 default: return VK_COMPARE_OP_LESS; // 加个 fallback
             }
             return VK_COMPARE_OP_LESS;
@@ -204,7 +208,9 @@ namespace Ayaya {
 
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(colorAttachmentCount);
         for (uint32_t i = 0; i < colorAttachmentCount; i++) {
-            blendAttachments[i].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+            blendAttachments[i].colorWriteMask = spec.ColorWrite
+                ? (VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT)
+                : 0;
 
             // Per-attachment blend mode (WBOIT dual-attachment, etc.)
             BlendModeType attBlend = spec.BlendMode;
@@ -363,12 +369,35 @@ namespace Ayaya {
             uint32_t cc = vulkanFBO->GetColorAttachmentCount();
             for (uint32_t i = 0; i < cc; i++) colorFormats.push_back(vulkanFBO->GetColorAttachmentFormat(i));
             depthFormat = vulkanFBO->GetDepthAttachmentFormat();
+            // Fallback: reference FBO may not have been Invalidated, so GetDepthAttachmentFormat
+            // can return UNDEFINED. Extract format from the FBO spec directly instead.
+            if (depthFormat == VK_FORMAT_UNDEFINED) {
+                for (auto& att : spec.TargetFramebuffer->GetSpecification().Attachments.Attachments) {
+                    if (att.TextureFormat == FramebufferTextureFormat::Depth ||
+                        att.TextureFormat == FramebufferTextureFormat::DEPTH24STENCIL8) {
+                        auto ctx = std::dynamic_pointer_cast<VulkanContext>(
+                            Application::Get().GetWindow().GetContext());
+                        depthFormat = ctx ? ctx->FindDepthFormat() : VK_FORMAT_UNDEFINED;
+                        break;
+                    }
+                }
+            }
+        }
+        // 🔥 Fallback: RefFBO has no depth attachment but pipeline needs depth test/write.
+        // SceneDepth provides depth at render time via BeginRenderPass(colorFBO, depthFBO).
+        if (depthFormat == VK_FORMAT_UNDEFINED && (spec.DepthTest || spec.DepthWrite)) {
+            auto ctx = std::dynamic_pointer_cast<VulkanContext>(
+                Application::Get().GetWindow().GetContext());
+            depthFormat = ctx ? ctx->FindDepthFormat() : VK_FORMAT_UNDEFINED;
         }
         renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
         renderingInfo.colorAttachmentCount = (uint32_t)colorFormats.size();
         renderingInfo.pColorAttachmentFormats = colorFormats.data();
         renderingInfo.depthAttachmentFormat = depthFormat;
         renderingInfo.stencilAttachmentFormat = spec.StencilTestEnable ? depthFormat : VK_FORMAT_UNDEFINED;
+        //AYAYA_CORE_INFO("[VulkanPipeline] shader='{}' depthFmt={} depthTest={} depthWrite={} depthCompare={}",
+        //    spec.Shader ? spec.Shader->GetName() : "null",
+        //    (int)depthFormat, (int)spec.DepthTest, (int)spec.DepthWrite, (int)spec.DepthOperator);
         renderingInfo.pNext = nullptr;
         pipelineInfo.pNext = &renderingInfo;
 

@@ -35,6 +35,9 @@ namespace Ayaya {
     public:
         explicit PipelineBuilder(RenderGraph& graph);
 
+        // Per-renderer GDRContext for GenericDrawPass instances created during SRP compilation.
+        void SetGDRContext(std::shared_ptr<struct GDRContext> ctx) { m_GDRCtx = std::move(ctx); }
+
         // Register pass instances for this renderer (called before Lua script execution).
         // Each SceneRenderer has its own pass instances with per-renderer pipelines/UBO bindings.
         void RegisterPassInstance(const std::string& name, std::shared_ptr<RenderPass> pass,
@@ -45,6 +48,11 @@ namespace Ayaya {
         void SetViewportSize(uint32_t w, uint32_t h);
         uint32_t GetViewportWidth() const;
         uint32_t GetViewportHeight() const;
+
+        // Global shader parameters — accessible to all passes via RenderContext.
+        // Lua: Pipeline:SetGlobalFloat("WindStrength", 2.5)
+        void SetGlobalFloat(const std::string& name, float value);
+        void SetGlobalInt(const std::string& name, int value);
 
         // Declare a named render target.
         //   name        — unique texture name (e.g., "GBuffer")
@@ -102,6 +110,7 @@ namespace Ayaya {
         // Pass instances — registered per-renderer before Lua execution
         std::unordered_map<std::string, std::shared_ptr<RenderPass>> m_PassInstances;
         std::shared_ptr<class VulkanWBOITPass> m_WBOITPass;  // special: ExecuteGather/ExecuteResolve
+        std::shared_ptr<struct GDRContext> m_GDRCtx;     // per-renderer, for GenericDrawPass creation
 
         // BAKED parameters — pure C++, zero Lua dependency in hot path
         std::unordered_map<std::string, PassBakedParams> m_BakedParams;

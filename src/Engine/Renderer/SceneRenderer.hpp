@@ -57,7 +57,7 @@ namespace Ayaya {
         static void Shutdown();
 
         // Shared GDR data hub (GPUInstance[], GeometryRange[], GPUMaterial[] + set=2 descriptors)
-        static std::shared_ptr<struct GDRContext> s_GDRContext;
+        std::shared_ptr<struct GDRContext> m_GDRContext;  // per-renderer (dual-viewport safe)
         void OnWindowResize(uint32_t width, uint32_t height);
         void MarkViewportDirty() { m_ViewportDirty = true; }
         void* GetFinalColorAttachmentRendererID();
@@ -114,6 +114,7 @@ namespace Ayaya {
         // Deferred Pass 实例池
         std::shared_ptr<RenderPass> m_ShadowPass;
         std::shared_ptr<RenderPass> m_GBufferPass;
+        std::shared_ptr<RenderPass> m_DepthPass;
         std::shared_ptr<RenderPass> m_LightingPass;
         std::shared_ptr<RenderPass> m_ForwardBlendPass;
         std::shared_ptr<RenderPass> m_SSAOPass;

@@ -73,6 +73,7 @@ namespace Ayaya {
         RGBuilder(RenderGraph& graph, RGPass& pass);
 
         void ReadTexture(const std::string& name);
+        void ReadTextureAsDepth(const std::string& name);  // depth attachment usage — keep ATTACHMENT layout, not SHADER_READ_ONLY
         void WriteTexture(const std::string& name, const FramebufferSpecification& spec);
         void ReadWriteTexture(const std::string& name, const FramebufferSpecification& spec);
 
@@ -104,6 +105,7 @@ namespace Ayaya {
 
         std::vector<std::string> TextureReads;
         std::vector<std::string> TextureWrites;
+        std::unordered_set<std::string> DepthReadTextures; // reads used as depth attachment (keep ATTACHMENT layout)
 
         bool HasSideEffect = false;
         bool IsCulled      = false;

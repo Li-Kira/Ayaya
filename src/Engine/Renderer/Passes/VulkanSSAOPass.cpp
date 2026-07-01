@@ -11,7 +11,8 @@ namespace Ayaya {
 
     void VulkanSSAOPass::DeclareResources(RGBuilder& builder,
                                            uint32_t width, uint32_t height) {
-        builder.ReadTexture("GBuffer");   // normal + depth
+        builder.ReadTexture("GBuffer");
+        builder.ReadTexture("SceneDepth");
         // Only expose the final AO texture; intermediate targets are
         // managed internally to avoid RenderGraph layout tracking conflicts.
         FramebufferSpecification s;
@@ -85,6 +86,7 @@ namespace Ayaya {
         if (!context.Get<bool>("EnableSSAO", false)) return;
 
         auto gbufferFBO = context.GetFramebuffer("GBuffer");
+        auto sceneDepthFBO = context.GetFramebuffer("SceneDepth");
         auto finalFBO   = context.GetFramebuffer("SSAO_Final");
         if (!gbufferFBO || !finalFBO) return;
 
@@ -105,7 +107,7 @@ namespace Ayaya {
         cmd.BeginRenderPass(m_RawFBO, true, glm::vec4(1.0f));
         cmd.BindPipeline(m_GenPipeline);
         // World-space SSAO: reconstruct position from linear depth
-        cmd.BindTexture2D(m_GenPipeline, "u_DepthMap", 0, gbufferFBO, 0, true);
+        cmd.BindTexture2D(m_GenPipeline, "u_DepthMap", 0, sceneDepthFBO, 0, true);
         cmd.BindTexture2D(m_GenPipeline, "g_Normal",   1, gbufferFBO, 0);
         cmd.BindTexture2D(m_GenPipeline, "u_Noise",    2, noiseTex);
 
@@ -132,7 +134,7 @@ namespace Ayaya {
         cmd.BeginRenderPass(m_BlurXFBO, true, glm::vec4(1.0f));
         cmd.BindPipeline(m_BlurXPipeline);
         cmd.BindTexture2D(m_BlurXPipeline, "u_AO",       0, m_RawFBO, 0);
-        cmd.BindTexture2D(m_BlurXPipeline, "u_DepthMap", 1, gbufferFBO, 0, true);
+        cmd.BindTexture2D(m_BlurXPipeline, "u_DepthMap", 1, sceneDepthFBO, 0, true);
         cmd.BindTexture2D(m_BlurXPipeline, "g_Normal",   2, gbufferFBO, 0);
         struct BlurPC {
             alignas(16) glm::mat4 InverseViewProj;
@@ -154,7 +156,7 @@ namespace Ayaya {
         cmd.BeginRenderPass(finalFBO, true, glm::vec4(1.0f));
         cmd.BindPipeline(m_BlurYPipeline);
         cmd.BindTexture2D(m_BlurYPipeline, "u_AO",       0, m_BlurXFBO, 0);
-        cmd.BindTexture2D(m_BlurYPipeline, "u_DepthMap", 1, gbufferFBO, 0, true);
+        cmd.BindTexture2D(m_BlurYPipeline, "u_DepthMap", 1, sceneDepthFBO, 0, true);
         cmd.BindTexture2D(m_BlurYPipeline, "g_Normal",   2, gbufferFBO, 0);
         BlurPC by;
         by.InverseViewProj = context.Get<glm::mat4>("InverseViewProj", glm::mat4(1.0f));

@@ -46,33 +46,46 @@ namespace Ayaya {
         std::vector<VkDescriptorSet> m_CullSet3Descriptors;
         std::unique_ptr<VulkanStorageBuffer> m_DrawIndirectBuffer;
 
-        // Graphics pipeline cache: keyed by (shaderPath, depthTest, cullMode, blendMode, colorFormat, hasDepth)
+        // Graphics pipeline cache: keyed by (shader, depth, cull, blend, format, depthFunc, colorWrite)
         struct PipelineKey {
             std::string shader;
             bool depthTest = true, depthWrite = true;
             int cullMode = 0;   // 0=None, 1=Front, 2=Back
             int blendMode = 0;  // 0=Opaque, 1=Additive, 2=AlphaBlend
             FramebufferTextureFormat colorFormat = FramebufferTextureFormat::RGBA16F;
-            bool hasDepth = false;  // does the runtime target have a depth attachment?
+            bool hasDepth = false;
+            int  depthFunc = 0;   // 0=LESS(default), 1=LEQUAL
+            bool colorWrite = true;  // false → writeMask=0 for all attachments (depth-only)
             bool operator==(const PipelineKey& o) const {
                 return shader == o.shader && depthTest == o.depthTest &&
                        depthWrite == o.depthWrite && cullMode == o.cullMode &&
                        blendMode == o.blendMode && colorFormat == o.colorFormat &&
-                       hasDepth == o.hasDepth;
+                       hasDepth == o.hasDepth && depthFunc == o.depthFunc &&
+                       colorWrite == o.colorWrite;
             }
         };
         struct PipelineKeyHash {
+            static inline void hash_combine(size_t& seed, size_t h) {
+                seed ^= h + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            }
             size_t operator()(const PipelineKey& k) const {
-                return std::hash<std::string>{}(k.shader) ^
-                       (k.depthTest ? 0x01 : 0) ^ (k.depthWrite ? 0x02 : 0) ^
-                       (k.cullMode << 2) ^ (k.blendMode << 4) ^
-                       ((int)k.colorFormat << 8) ^ (k.hasDepth ? 0x1000 : 0);
+                size_t s = 0;
+                hash_combine(s, std::hash<std::string>{}(k.shader));
+                hash_combine(s, std::hash<bool>{}(k.depthTest));
+                hash_combine(s, std::hash<bool>{}(k.depthWrite));
+                hash_combine(s, std::hash<int>{}(k.cullMode));
+                hash_combine(s, std::hash<int>{}(k.blendMode));
+                hash_combine(s, std::hash<int>{}(static_cast<int>(k.colorFormat)));
+                hash_combine(s, std::hash<bool>{}(k.hasDepth));
+                hash_combine(s, std::hash<int>{}(k.depthFunc));
+                hash_combine(s, std::hash<bool>{}(k.colorWrite));
+                return s;
             }
         };
         std::unordered_map<PipelineKey, std::shared_ptr<Pipeline>, PipelineKeyHash> m_PipelineCache;
 
         std::shared_ptr<Shader> LoadShader(const std::string& vertPath, const std::string& fragPath);
-        std::shared_ptr<Pipeline> GetOrCreatePipeline(const PipelineKey& key);
+        std::shared_ptr<Pipeline> GetOrCreatePipeline(const PipelineKey& key, const FramebufferSpecification& fboSpec);
     };
 
 } // namespace Ayaya

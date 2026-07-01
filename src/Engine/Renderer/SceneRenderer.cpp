@@ -28,6 +28,7 @@
 #include "Renderer/Passes/FXAAPass.hpp"
 #include "Renderer/Passes/VulkanClearPass.hpp"
 #include "Renderer/Passes/VulkanGbufferPass.hpp"
+#include "Renderer/Passes/VulkanDepthPrePass.hpp"
 #include "Renderer/Passes/VulkanLightingPass.hpp"
 #include "Renderer/Passes/VulkanPostProcessPass.hpp"
 #include "Renderer/Passes/VulkanForwardTestPass.hpp"
@@ -61,11 +62,13 @@
 
 namespace Ayaya {
     struct struct_CameraData {
-        glm::mat4 ViewProjection;   // 64 bytes
-        glm::mat4 View;             // 64 bytes (world→view)
-        glm::vec3 CameraPosition;   // 12 bytes
-        float _padding;             // 4 bytes
-    };
+        glm::mat4 ViewProjection;   // 64   (offset 0)
+        glm::mat4 View;             // 64   (offset 64)
+        glm::vec3 CameraPosition;   // 12   (offset 128)
+        float     _padding0;        //  4   (offset 140)
+        glm::vec4 ScreenParams;     // 16   (offset 144) — x=w, y=h, z=1+1/w, w=1+1/h
+        glm::vec4 Time;             // 16   (offset 160) — x=t/20, y=t, z=t*2, w=t*3
+    }; // 176 bytes
 
     struct struct_PointLight {
         glm::vec4 Position; 
@@ -87,7 +90,6 @@ namespace Ayaya {
     static std::shared_ptr<Mesh> s_SkyboxMesh;
     static std::shared_ptr<Shader> s_SkyboxShader;
 
-    std::shared_ptr<GDRContext> SceneRenderer::s_GDRContext;
     static std::shared_ptr<TextureCube> s_DefaultEnvironmentMap;
     static std::shared_ptr<TextureCube> s_DefaultIrradianceMap;
     static std::shared_ptr<TextureCube> s_DefaultPrefilterMap;
@@ -211,6 +213,7 @@ namespace Ayaya {
             // ==========================================
             m_ShadowPass      = std::make_shared<VulkanShadowPass>();
             m_GBufferPass     = std::make_shared<VulkanGBufferPass>();
+            m_DepthPass       = std::make_shared<VulkanDepthPrePass>();
             m_LightingPass    = std::make_shared<VulkanLightingPass>();
             m_ForwardBlendPass = std::make_shared<VulkanForwardBlendPass>();
             m_OutlinePass     = std::make_shared<VulkanOutlinePass>();
@@ -226,20 +229,23 @@ namespace Ayaya {
                 Application::Get().GetWindow().GetContext());
             if (vkCtx) {
                 // Create GDRContext once (static, shared across all SceneRenderer instances)
-                if (!s_GDRContext) {
-                    s_GDRContext = std::make_shared<GDRContext>();
-                    s_GDRContext->Init(vkCtx->GetDevice(), vkCtx->GetFramesInFlight(),
+                if (!m_GDRContext) {
+                    m_GDRContext = std::make_shared<GDRContext>();
+                    m_GDRContext->Init(vkCtx->GetDevice(), vkCtx->GetFramesInFlight(),
                                        vkCtx->GetGeometryPool().GetBuffer());
                 }
                 // Pass shared context to GDR-enabled passes (every renderer's passes share the same one)
                 auto shadowPass = std::dynamic_pointer_cast<VulkanShadowPass>(m_ShadowPass);
                 auto gbufferPass = std::dynamic_pointer_cast<VulkanGBufferPass>(m_GBufferPass);
-                if (shadowPass) shadowPass->SetGDRContext(s_GDRContext);
-                if (gbufferPass) gbufferPass->SetGDRContext(s_GDRContext);
+                auto depthPass = std::dynamic_pointer_cast<VulkanDepthPrePass>(m_DepthPass);
+                if (shadowPass) shadowPass->SetGDRContext(m_GDRContext);
+                if (gbufferPass) gbufferPass->SetGDRContext(m_GDRContext);
+                if (depthPass) depthPass->SetGDRContext(m_GDRContext);
             }
 
             m_ShadowPass->OnAttach();
             m_GBufferPass->OnAttach();
+            m_DepthPass->OnAttach();
             m_SSAOPass->OnAttach();
             m_LightingPass->OnAttach();
             m_ForwardBlendPass->OnAttach();
@@ -251,8 +257,9 @@ namespace Ayaya {
             m_WBOITPass->OnAttach();
 
             // ── Register all passes for SRP (Scriptable Render Pipeline) by-name lookup ──
-            PassRegistry::Init(s_GDRContext,
-                               m_ShadowPass, m_GBufferPass, m_LightingPass, m_ForwardBlendPass,
+            PassRegistry::Init(m_GDRContext,
+                               m_ShadowPass, m_GBufferPass, m_DepthPass,
+                               m_LightingPass, m_ForwardBlendPass,
                                m_SSAOPass, m_OutlinePass, m_BloomPass,
                                m_PostProcessPass, m_FXAAPass, m_UIPass,
                                m_WBOITPass);
@@ -271,11 +278,7 @@ namespace Ayaya {
         s_DefaultIrradianceMap.reset();
         s_DefaultPrefilterMap.reset();
         s_DefaultBRDFLUT.reset();
-        // 释放 GDR 共享资源 (SSBO, descriptor sets, layouts, pools)
-        if (s_GDRContext) {
-            s_GDRContext->Shutdown();
-            s_GDRContext.reset();
-        }
+        // GDRContext is per-renderer — cleaned up in SceneRenderer destructor
         if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
             // 销毁所有烘焙出来的 IBL 环境贴图显存
             VulkanIBLBuilder::ClearResources();
@@ -334,6 +337,13 @@ namespace Ayaya {
         m_Data->CameraData.ViewProjection = m_Data->ViewProjectionMatrix;
         m_Data->CameraData.View = viewMatrix;
         m_Data->CameraData.CameraPosition = m_Data->CameraPosition;
+
+        // ── Frame constants (Unity convention) ──
+        float vpW = (float)m_Data->ViewportWidth;
+        float vpH = (float)m_Data->ViewportHeight;
+        m_Data->CameraData.ScreenParams = glm::vec4(vpW, vpH, 1.0f + 1.0f / vpW, 1.0f + 1.0f / vpH);
+        float t = fmodf((float)glfwGetTime(), 3600.0f);  // mod 3600 prevents float precision loss
+        m_Data->CameraData.Time = glm::vec4(t / 20.0f, t, t * 2.0f, t * 3.0f);
         
         // ==========================================
         // 4. 【核心修复】：上传数据到当前实例私有的 UBO
@@ -407,12 +417,12 @@ namespace Ayaya {
         // GDR: Blind Submit with 3-suspect diagnostics
         // ==========================================
         auto tCull0 = std::chrono::high_resolution_clock::now();
-        if (s_GDRContext && RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+        if (m_GDRContext && RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
             auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
                 Application::Get().GetWindow().GetContext());
             if (vkCtx) {
                 uint32_t frameIdx = vkCtx->GetCurrentFrameIndex() % vkCtx->GetFramesInFlight();
-                s_GDRContext->BuildFromScene(scene.get(), vkCtx->GetGeometryPool(), frameIdx);
+                m_GDRContext->BuildFromScene(scene.get(), vkCtx->GetGeometryPool(), frameIdx);
             }
         }
         auto tCull1 = std::chrono::high_resolution_clock::now();
@@ -552,6 +562,17 @@ namespace Ayaya {
         m_RenderContext.Set("SSAORadius", ssaoRadius);
         m_RenderContext.Set("SSAOBias", ssaoBias);
 
+        // ── Inject SRP global shader params ──
+        if (m_PipelineBuilder) {
+            const auto* globals = m_PipelineBuilder->GetBakedParams("__Globals__");
+            if (globals) {
+                for (auto& [k, v] : globals->FloatParams)
+                    m_RenderContext.SetGlobalFloat(k, v);
+                for (auto& [k, v] : globals->IntParams)
+                    m_RenderContext.SetGlobalInt(k, v);
+            }
+        }
+
         std::shared_ptr<RenderCommandBuffer> cmd = RenderCommandBuffer::Create();
 
         if (cmd) {
@@ -591,7 +612,7 @@ namespace Ayaya {
                 //    float uboMs   = std::chrono::duration_cast<ms>(tExec0 - tGraph1).count();
                 //    AYAYA_CORE_INFO("[Scene] gdr={:.3f}ms queue={:.3f}ms graph={:.3f}ms ubo={:.3f}ms exec={:.3f}ms gdrInst={} qPackets={}",
                 //        gdrMs, queueMs, graphMs, uboMs, execMs,
-                //        s_GDRContext ? (int)s_GDRContext->InstanceCount : 0,
+                //        m_GDRContext ? (int)m_GDRContext->InstanceCount : 0,
                 //        (int)m_RenderQueue.Packets.size());
                 //}
             } else {
@@ -611,10 +632,10 @@ namespace Ayaya {
         m_Data->Stats.VertexCount = m_RenderContext.Stats.VertexCount;
 
         // ── GDR diagnostics ──
-        if (s_GDRContext) {
-            m_Data->Stats.GDRInstanceCount = s_GDRContext->InstanceCount;
-            m_Data->Stats.GDRRangeCount    = s_GDRContext->RangeCount;
-            m_Data->Stats.GDRMaterialCount = s_GDRContext->MaterialCount;
+        if (m_GDRContext) {
+            m_Data->Stats.GDRInstanceCount = m_GDRContext->InstanceCount;
+            m_Data->Stats.GDRRangeCount    = m_GDRContext->RangeCount;
+            m_Data->Stats.GDRMaterialCount = m_GDRContext->MaterialCount;
         }
 
         // 性能统计
@@ -809,9 +830,15 @@ namespace Ayaya {
             m_RenderGraph.AddPass("ShadowPass",
                 [&](RGBuilder& b) { VulkanShadowPass::DeclareResources(b); },
                 [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_ShadowPass) m_ShadowPass->Execute(ctx, c); });
+            m_RenderGraph.AddPass("DepthPrePass",
+                [&](RGBuilder& b) { VulkanDepthPrePass::DeclareResources(b, vpW, vpH); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_DepthPass) m_DepthPass->Execute(ctx, c); });
             m_RenderGraph.AddPass("GBufferPass",
                 [&](RGBuilder& b) { VulkanGBufferPass::DeclareResources(b, vpW, vpH); },
-                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_GBufferPass) m_GBufferPass->Execute(ctx, c); });
+                [&](RenderContext& ctx, RenderCommandBuffer& c) {
+                    ctx.Set("GBuffer.ClearDepth", 0); // LOAD pre-filled depth
+                    if (m_GBufferPass) m_GBufferPass->Execute(ctx, c);
+                });
 
             m_RenderGraph.AddPass("SSAOPass",
                 [&](RGBuilder& b) { VulkanSSAOPass::DeclareResources(b, vpW, vpH); },
@@ -898,6 +925,7 @@ namespace Ayaya {
 
         m_PipelineBuilder = std::make_unique<PipelineBuilder>(m_RenderGraph);
         m_PipelineBuilder->SetViewportSize(vpW, vpH);
+        m_PipelineBuilder->SetGDRContext(m_GDRContext);
 
         // 🔥 Register THIS renderer's pass instances (not global registry).
         // Each SceneRenderer has its own passes with per-renderer UBO bindings.
