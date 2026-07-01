@@ -242,7 +242,8 @@ namespace Ayaya {
 
     void VulkanWBOITPass::ExecuteGather(RenderContext& context, RenderCommandBuffer& cmd) {
         auto gatherFBO = context.GetFramebuffer("WBOIT_Gather");
-        if (!gatherFBO) return;
+        auto depthFBO = context.GetFramebuffer("SceneDepth");
+        if (!gatherFBO || !depthFBO) return;
 
         auto* queue = context.RenderQueue;
         if (!queue) return;
@@ -271,7 +272,6 @@ namespace Ayaya {
         VkCommandBuffer vkCmd = ctx->GetCurrentCommandBuffer();
 
         // ==== Shared depth from SceneDepth (read-only, LOAD, never CLEAR) ====
-        auto depthFBO = context.GetFramebuffer("SceneDepth");
         auto vkGbuffer = std::dynamic_pointer_cast<VulkanFramebuffer>(depthFBO);
         auto vkGather  = std::dynamic_pointer_cast<VulkanFramebuffer>(gatherFBO);
         auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(

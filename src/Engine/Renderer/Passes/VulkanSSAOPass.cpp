@@ -88,7 +88,7 @@ namespace Ayaya {
         auto gbufferFBO = context.GetFramebuffer("GBuffer");
         auto sceneDepthFBO = context.GetFramebuffer("SceneDepth");
         auto finalFBO   = context.GetFramebuffer("SSAO_Final");
-        if (!gbufferFBO || !finalFBO) return;
+        if (!gbufferFBO || !sceneDepthFBO || !finalFBO) return;
 
         uint32_t vpW = context.Get<uint32_t>("ViewportWidth");
         uint32_t vpH = context.Get<uint32_t>("ViewportHeight");

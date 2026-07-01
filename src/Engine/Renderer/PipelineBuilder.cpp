@@ -224,7 +224,8 @@ namespace Ayaya {
                 for (auto& r : readVec)
                     builder.ReadTexture(r);
 
-                // 🔥 DepthTarget: read as depth attachment (keep ATTACHMENT layout, not SHADER_READ_ONLY)
+                // 🔥 DepthTarget: read as depth attachment (keep ATTACHMENT layout).
+                // Depth barrier is handled in RenderGraph::Execute after the pass runs.
                 std::string depthTarget = baked.GetStr("DepthTarget");
                 if (!depthTarget.empty())
                     builder.ReadTextureAsDepth(depthTarget);

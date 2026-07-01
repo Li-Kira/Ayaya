@@ -25,8 +25,9 @@ namespace Ayaya {
         uint32_t geometryRangeIdx;   // index into geometryRanges[] SSBO
         uint32_t materialIdx;        // index into materials[] SSBO
         uint32_t entityId;           // for selection/hover
-        uint32_t flags;              // bit 0 = CastShadows (replaces _pad, still 96 bytes)
-        static constexpr uint32_t kFlag_CastShadows = 1u << 0;
+        uint32_t flags;              // bit 0=CastShadows, bit 1=ReceiveShadows
+        static constexpr uint32_t kFlag_CastShadows    = 1u << 0;
+        static constexpr uint32_t kFlag_ReceiveShadows = 1u << 1;
     };
     static_assert(sizeof(GPUInstance) == 96, "GPUInstance must be 96 bytes (matches GLSL std430)");
 

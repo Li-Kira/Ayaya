@@ -243,6 +243,17 @@ namespace Ayaya {
                 if (depthPass) depthPass->SetGDRContext(m_GDRContext);
             }
 
+            // 🔥 Pre-register UBO buffers before pipeline construction.
+            //    s_GlobalUBOs must be populated when VulkanPipeline constructs descriptor sets
+            //    during OnAttach→Pipeline::Create. Without this, Set 0 descriptor sets are
+            //    written with null buffer references → shaders read zero camera/light data → black.
+            auto camUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_CameraUniformBuffer);
+            auto lightUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_LightUniformBuffer);
+            if (camUBO) for (uint32_t i = 0; i < 3; i++)
+                VulkanPipeline::SetGlobalUniformBuffer(0, i, camUBO->GetBuffer(i), sizeof(struct_CameraData));
+            if (lightUBO) for (uint32_t i = 0; i < 3; i++)
+                VulkanPipeline::SetGlobalUniformBuffer(1, i, lightUBO->GetBuffer(i), sizeof(struct_LightData));
+
             m_ShadowPass->OnAttach();
             m_GBufferPass->OnAttach();
             m_DepthPass->OnAttach();
@@ -292,11 +303,8 @@ namespace Ayaya {
         m_Data->ViewportHeight = height;
         m_ViewportDirty = true;
 
-        // 等待 GPU 完成所有飞行中的帧，确保旧 FBO 不再被引用
-        if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-            auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
-            if (vkCtx) vkDeviceWaitIdle(vkCtx->GetDevice());
-        }
+        // Deferred destruction queue handles old FBO safety — no vkDeviceWaitIdle needed.
+        // Old FBOs stay alive for 3 frames after Release(), eliminating GPU stalls on resize.
         if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL)
             m_Pipeline.OnResize(width, height);
     }
@@ -426,6 +434,7 @@ namespace Ayaya {
             }
         }
         auto tCull1 = std::chrono::high_resolution_clock::now();
+
 
         // ==========================================
         // RenderQueue: translucent only
@@ -785,13 +794,21 @@ namespace Ayaya {
             void* preID = IBLBuilder::CreatePrefilterMap(baseCubemapID, s_SkyboxMesh, prefilterShader);
             newPrefilter = TextureCube::Create(preID, 128, 128);
 
-            // 旧纹理放入 3 帧安全期垃圾桶，避免 GPU 仍在读取时被销毁
+            // Old cubemaps: push to deferred queue (3-frame delay via VulkanContext fence).
+            // The shared_ptr keeps the TextureCube alive until the lambda fires.
             if (m_Data->EnvironmentCubemap) {
-                DeferredRelease release;
-                release.TextureCubes.push_back(m_Data->EnvironmentCubemap);
-                release.TextureCubes.push_back(m_Data->IrradianceMap);
-                release.TextureCubes.push_back(m_Data->PrefilterMap);
-                m_DeferredReleases.push_back(std::move(release));
+                auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+                    Application::Get().GetWindow().GetContext());
+                if (vkCtx) {
+                    auto oldEnv   = m_Data->EnvironmentCubemap;
+                    auto oldIrr   = m_Data->IrradianceMap;
+                    auto oldPref  = m_Data->PrefilterMap;
+                    vkCtx->QueueDeferredResource(VulkanContext::DeferredResource{
+                        {[oldEnv, oldIrr, oldPref]() {
+                            // shared_ptr drops → destructor frees GPU resources
+                        }}
+                    });
+                }
             }
 
             m_Data->EnvironmentCubemap = newEnvCubemap;
@@ -817,7 +834,7 @@ namespace Ayaya {
     // Helper: find a pass by name in the compiled pass list and update its IsCulled flag
     void SceneRenderer::BuildRenderGraph(const RenderViewConfig& config, uint32_t vpW, uint32_t vpH) {
         if (m_SRPScriptHandle != 0)
-            BuildRenderGraph_SRP(vpW, vpH);
+            BuildRenderGraph_SRP(config, vpW, vpH);
         else
             BuildRenderGraph_Default(config, vpW, vpH);
     }
@@ -900,7 +917,7 @@ namespace Ayaya {
         MarkSRPDirty();  // force rebuild even for same-handle "reload"
     }
 
-    void SceneRenderer::BuildRenderGraph_SRP(uint32_t vpW, uint32_t vpH) {
+    void SceneRenderer::BuildRenderGraph_SRP(const RenderViewConfig& config, uint32_t vpW, uint32_t vpH) {
         if (!m_SRPScriptHandle) return;
 
         // ── Resolve script path ──
@@ -908,7 +925,11 @@ namespace Ayaya {
         if (scriptPath.empty()) {
             AYAYA_CORE_ERROR("[SRP] Pipeline script not found for handle {} — downgrading to default pipeline",
                 (uint64_t)m_SRPScriptHandle);
-            SetSRPScript(0);  // auto-downgrade: prevents permanent black screen on startup
+            // Same-frame downgrade: skip SetSRPScript(0) to avoid MarkSRPDirty(),
+            // directly build the default pipeline THIS frame — no black frame.
+            m_SRPScriptHandle = 0;
+            m_ViewportDirty = true;
+            BuildRenderGraph_Default(config, vpW, vpH);
             return;
         }
 
@@ -920,7 +941,12 @@ namespace Ayaya {
         }
 
         // ── Full rebuild ──
-        // 🔥 Extract existing state BEFORE Clear() so FBOs aren't destroyed.
+        // 🔥 Wait for GPU before destroying old FBOs. With 3 frames-in-flight,
+        // command buffers from up to 2 frames ago may still reference them.
+        auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+            Application::Get().GetWindow().GetContext());
+        if (vkCtx) vkDeviceWaitIdle(vkCtx->GetDevice());
+
         auto snapshot = m_RenderGraph.ExtractState();
 
         m_PipelineBuilder = std::make_unique<PipelineBuilder>(m_RenderGraph);
@@ -931,6 +957,7 @@ namespace Ayaya {
         // Each SceneRenderer has its own passes with per-renderer UBO bindings.
         m_PipelineBuilder->RegisterPassInstance("ShadowPass",      m_ShadowPass);
         m_PipelineBuilder->RegisterPassInstance("GBufferPass",     m_GBufferPass);
+        m_PipelineBuilder->RegisterPassInstance("DepthPrePass",    m_DepthPass);
         m_PipelineBuilder->RegisterPassInstance("SSAOPass",        m_SSAOPass);
         m_PipelineBuilder->RegisterPassInstance("LightingPass",    m_LightingPass);
         m_PipelineBuilder->RegisterPassInstance("ForwardBlend",    m_ForwardBlendPass);

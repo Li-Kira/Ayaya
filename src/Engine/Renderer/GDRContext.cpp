@@ -326,6 +326,7 @@ namespace Ayaya {
                 gi.entityId         = static_cast<uint32_t>(entityID) & 0xFFFF;
                 gi.flags = 0;
                 if (meshComp.CastShadows) gi.flags |= GPUInstance::kFlag_CastShadows;
+                if (meshComp.ReceiveShadows) gi.flags |= GPUInstance::kFlag_ReceiveShadows;
                 gdrInstances.push_back(gi);
             }
         }

@@ -62,6 +62,7 @@ layout(location = 0) out vec3 v_FragPos;
 layout(location = 1) out vec3 v_Normal;
 layout(location = 2) out vec2 v_TexCoord;
 layout(location = 3) flat out uint v_MaterialIdx;
+layout(location = 4) flat out uint v_Flags;
 
 const uint VERTEX_STRIDE = 11;  // 44 bytes / 4 = 11 uints per vertex
 
@@ -88,5 +89,6 @@ void main() {
     v_Normal = mat3(inst.transform) * nrm;
     v_TexCoord = uv;
     v_MaterialIdx = inst.materialIdx;
+    v_Flags = inst.flags;
     gl_Position = u_ViewProjection * worldPos;
 }

@@ -184,6 +184,11 @@ namespace Ayaya {
                 auto* tex = GetTexture(r);
                 if (tex) tex->IsRead = true;
             }
+            // DepthReadTextures: mark as written so InsertTileResolveBarrier runs depth transition
+            for (auto& d : p->DepthReadTextures) {
+                auto* tex = GetTexture(d);
+                if (tex) tex->IsWritten = true;
+            }
         }
 
         // Step 1: 建立生产者映射 + 隐式多生产者链 (仅活跃 Pass)
@@ -286,7 +291,17 @@ namespace Ayaya {
 
             for (uint32_t i = 0; i < kRenderGraphFramesInFlight; ++i) {
                 if (!tex.PhysicalFBOs[i]) {
-                    tex.PhysicalFBOs[i] = Framebuffer::Create(tex.Spec);
+                    auto vkFBO = std::make_shared<VulkanFramebuffer>(tex.Spec, true);
+                    auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+                        Application::Get().GetWindow().GetContext());
+                    if (vkCtx) {
+                        VkCommandBuffer cmd = vkCtx->GetCurrentCommandBuffer();
+                        if (cmd != VK_NULL_HANDLE)
+                            vkFBO->Invalidate(cmd);
+                        else
+                            vkFBO->Invalidate();
+                    }
+                    tex.PhysicalFBOs[i] = vkFBO;
                     // Layout tracking initialized exactly once at FBO creation.
                     // Subsequent frames maintain layout via EnsureWritable /
                     // InsertTileResolveBarrier — NEVER reset here, or the
@@ -431,6 +446,12 @@ namespace Ayaya {
                 if (it != m_Textures.end() && it->second.PhysicalFBOs[idx])
                     EnsureWritable(it->second, frameIndex, cmd);
             }
+            // DepthReadTextures also need ATTACHMENT layout (external depth attachment)
+            for (auto& d : pass->DepthReadTextures) {
+                auto it = m_Textures.find(d);
+                if (it != m_Textures.end() && it->second.PhysicalFBOs[idx])
+                    EnsureWritable(it->second, frameIndex, cmd);
+            }
 
             // Step c: 注入当前帧 FBO 到 context 黑板
             //   Write 纹理 → 始终注入（Pass 需要渲染目标）
@@ -543,6 +564,17 @@ namespace Ayaya {
                     InsertTileResolveBarrier(it->second, frameIndex);
                 }
             }
+            // DepthReadTextures: external depth attachments used by ReadTextureAsDepth.
+            // They were transitioned to ATTACHMENT_OPTIMAL by EnsureWritable, then consumed
+            // as depth attachments during the render pass. Now transition back to READ_ONLY
+            // so downstream shader reads get the correct layout.
+            for (auto& d : pass->DepthReadTextures) {
+                auto it = m_Textures.find(d);
+                if (it != m_Textures.end() && it->second.PhysicalFBOs[idx]) {
+                    InsertTileResolveBarrier(it->second, frameIndex);
+                }
+            }
+
         }
 
         // 全局内存屏障：确保所有 Pass 的写入对后续 command（如 ImGui）可见

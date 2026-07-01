@@ -28,6 +28,17 @@ namespace Ayaya {
         DestroyDefaultBindlessTextures();
         m_BindlessManager.Shutdown(m_Device);
 
+        // Force-destroy all deferred Vulkan resources before VMA is torn down.
+        // ProcessDeferredResources normally requires 3-frame countdown, but at
+        // shutdown there are no more frames — destroy everything immediately.
+        {
+            std::lock_guard<std::mutex> lock(m_DeferredResourcesMutex);
+            for (auto& res : m_DeferredResources) {
+                if (res.destroy) res.destroy();
+            }
+            m_DeferredResources.clear();
+        }
+
         if (m_Allocator != VK_NULL_HANDLE) {
             vmaDestroyAllocator(m_Allocator);
             AYAYA_CORE_INFO("VMA Allocator destroyed.");
@@ -622,6 +633,7 @@ namespace Ayaya {
         // Process deferred bindless index releases now that the fence guarantees
         // the GPU has finished with this frame's resources.
         ProcessDeferredBindlessReleases();
+        ProcessDeferredResources();
 
         // Deferred swapchain rebuild (e.g., VSync toggle mid-frame).
         // Safe point: GPU is idle (fence waited), no command buffer recording active.
@@ -1066,6 +1078,24 @@ namespace Ayaya {
             if (--it->FramesRemaining == 0) {
                 m_BindlessManager.FreeIndex(it->Index);
                 it = m_DeferredBindlessReleases.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    void VulkanContext::QueueDeferredResource(DeferredResource&& resource) {
+        std::lock_guard<std::mutex> lock(m_DeferredResourcesMutex);
+        m_DeferredResources.push_back(std::move(resource));
+    }
+
+    void VulkanContext::ProcessDeferredResources() {
+        std::lock_guard<std::mutex> lock(m_DeferredResourcesMutex);
+        for (auto it = m_DeferredResources.begin();
+             it != m_DeferredResources.end(); ) {
+            if (--it->framesRemaining == 0) {
+                if (it->destroy) it->destroy();
+                it = m_DeferredResources.erase(it);
             } else {
                 ++it;
             }

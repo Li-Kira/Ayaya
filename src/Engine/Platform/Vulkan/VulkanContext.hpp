@@ -8,6 +8,8 @@
 #include <set>
 #include <vector>
 #include <algorithm>
+#include <mutex>
+#include <functional>
 
 struct GLFWwindow;
 
@@ -101,6 +103,16 @@ namespace Ayaya {
         void QueueDeferredBindlessRelease(uint32_t index);
         void ProcessDeferredBindlessReleases();
 
+        // General-purpose deferred resource destruction queue.
+        // Resources are kept alive for 3 frames after being queued, then destroyed
+        // in BeginFrame() after the fence wait confirms the GPU is done with them.
+        struct DeferredResource {
+            std::function<void()> destroy;  // Lambda — MUST only capture Vulkan handles by VALUE
+            int framesRemaining = 3;
+        };
+        void QueueDeferredResource(DeferredResource&& resource);
+        void ProcessDeferredResources();
+
     private:
         GLFWwindow* m_WindowHandle;
 
@@ -166,6 +178,9 @@ namespace Ayaya {
             uint32_t FramesRemaining = 3;
         };
         std::vector<DeferredBindlessRelease> m_DeferredBindlessReleases;
+
+        std::vector<DeferredResource> m_DeferredResources;
+        std::mutex m_DeferredResourcesMutex;
 
         // GPU timestamp queries (16 passes × 2 slots × 3 frames-in-flight)
         static constexpr uint32_t kMaxTimestampQueries = 96;

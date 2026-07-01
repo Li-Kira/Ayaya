@@ -1,6 +1,6 @@
 # Ayaya Engine — Vulkan 渲染架构与管线深度分析报告
 
-> **初始报告:** 2026-06-18 | **更新:** 2026-06-26 (SRP 透明管线 + 引擎加固 10+ Bug 修复 + Queue 分流)
+> **初始报告:** 2026-06-18 | **更新:** 2026-07-01 (延迟销毁队列 + GDR 管线鲁棒性 + 首帧黑色修复 + ReceiveShadows + SRP 资源依赖)
 > **分析范围:** `/src/Engine/Platform/Vulkan/` (28 文件), `/src/Engine/Renderer/` (抽象层 + 12 个 Pass + SRP), `/assets/Editor/shaders/src/vulkan/` (52 个 Shader)
 
 ---
@@ -19,6 +19,8 @@
 10. [GDR 性能优化](#18-gdr-性能优化-2026-06-20)
 20. [SRP Scriptable Render Pipeline (2026-06-24)](#20-srp-scriptable-render-pipeline-2026-06-24)
 21. [SRP 透明管线 + 引擎加固 (2026-06-26)](#21-srp-透明管线--引擎加固-2026-06-26)
+22. [SRP 透明管线调试 + ByteAddressBuffer (2026-06-29)](#22-srp-透明管线调试全记录--byteaddressbuffer-兼容性修复-2026-06-29)
+23. [延迟销毁队列 + GDR 鲁棒性强化 (2026-07-01)](#23-延迟销毁队列--gdr-管线鲁棒性强化-2026-07-01)
 
 ---
 
@@ -58,7 +60,7 @@
 | 指标 | 数值 |
 |------|------|
 | Frames in Flight | 3 |
-| GBuffer 附件数 | 5 (RG16F + RGBA8×3 + Depth) |
+| GBuffer 附件数 | 4 MRT (RG16F + RGBA8×3) + SceneDepth 外置 |
 | 最大点光源数 | 4 (Deferred) / 8 (WBOIT) |
 | Push Constants 上限 | 256 bytes |
 | 纹理描述符集 Ring Buffer | 1000 个/帧 (~10x 余量) |
@@ -372,9 +374,8 @@ For each Pass in topological order:
    后续 Pass 读取此类纹理的 depth 可能读到过期数据。"
 ```
 
-**优化点 #5:** RenderGraph 的 `CurrentLayout` 仅追踪单一布局，但 color+depth 纹理的 color 和 depth 可能有不同布局。这会导致:
-- 下游 Pass 读取 depth 时缺少必要的 `DEPTH_STENCIL_ATTACHMENT → DEPTH_STENCIL_READ_ONLY` 转换
-- TBDR tile cache 中的 depth 数据可能未 flush
+**优化点 #5 (已修复):** ~~RenderGraph 的 `CurrentLayout` 仅追踪单一布局...~~ 
+→ InsertTileResolveBarrier 现已正确转换混合 FBO 的 depth attachment (lines 638-656)，`DepthLayout[]` 独立追踪 depth 布局。
 
 ### 5.5 Pass Culling
 
@@ -389,11 +390,13 @@ For each Pass in topological order:
 ### 6.1 管线拓扑总览
 
 ```
-RenderGraph 执行顺序 (12 Passes):
+RenderGraph 执行顺序 (13 Passes):
                                   写入目标 (分辨率)
+Stage 0─────────────────────────────────────────────
+  DepthPrePass        [SceneDepth]      VP×VP R8+Depth  ← 深度预通道 (2026-06-28)
 Stage 1─────────────────────────────────────────────
-  ShadowPass          [ShadowMap]       2048×2048 Depth
-  GBufferPass         [GBuffer]         VP×VP 5-attach
+  ShadowPass          [ShadowMap]       4096×4096 Depth
+  GBufferPass         [GBuffer]         VP×VP 4-MRT (depth via SceneDepth LEQUAL)
 Stage 1.5───────────────────────────────────────────
   SSAOPass            [SSAO_Final]      VP/2 × VP/2 R8
 Stage 2─────────────────────────────────────────────
@@ -735,7 +738,7 @@ Scene::GetActiveAssetHandles() → 遍历所有实体组件
 
 | # | 优化项 | 问题 | 方案 | 预期收益 |
 |---|--------|------|------|---------|
-| **9.5** | **GBuffer 深度预 Pass** | GBuffer Pass 直接写 5 个附件，fragment shader 包含完整的 PBR 材质计算。很多 fragment 会被深度测试拒绝 | 增加一个轻量 Depth-Only Pre-Pass，只写深度。GBuffer Pass 设置 depth compare = EQUAL | 减少 GBuffer fragment shader 执行量 (取决于 overdraw)，尤其复杂场景 |
+| **9.5** | **GBuffer 深度预 Pass** (✅ 已实现) | GBuffer Pass fragment shader 含完整 PBR，overdraw 浪费 | DepthPrePass (depth-only, ColorWrite=0) + GBuffer LEQUAL | Early-Z 硬件剔除，复杂场景 GBuffer 片段数减少 |
 | **9.6** | **RenderGraph Pass Culling** | `RGPass::IsCulled` 已预留但未实现。禁用 SSAO/Bloom/FXAA 时 Pass 仍然注册+执行空回调 | 实现 IsCulled 逻辑：如果 Pass 的输出无人消费或输入为空，从 DAG 剔除 | 功能禁用时节省 GPU 时间 + 屏障开销 |
 | **9.7** | **Instance 化 Sprite 渲染** | ForwardBlendPass 的 Sprite 每 quad 独立 `DrawTriangleStrip(4)` | 使用 SSBO 实例化 (同 GBuffer Phase 2)，批量提交 sprite transforms | 大量 2D 元素时 draw call 数量降低 100-1000x |
 | **9.8** | **SSAO → GTAO 升级** | SSAO 使用传统 32-sample 半球采样，缺乏时空稳定性 | 实现 GTAO (Ground Truth AO) 或 CACAO | AO 质量提升 + 可能性能改善 (更少样本) |
@@ -756,7 +759,7 @@ Scene::GetActiveAssetHandles() → 遍历所有实体组件
 | # | 改进项 | 问题 | 方案 |
 |---|--------|------|------|
 | **9.15** | **Depth Layout 双轨追踪** | `RGTexture::CurrentLayout` 仅追踪单一布局，color+depth 纹理的 depth 布局可能不准确 | 实现 `ColorLayout` + `DepthLayout` 独立追踪，确保 depth correctly transitioned |
-| **9.16** | **EndSingleTimeCommands 异步化** | 一次性命令使用 `vkQueueWaitIdle` + `vkDeviceWaitIdle` 全局阻塞 | 改用 per-transfer Fence + Ring Buffer staging，避免全局 GPU 阻塞 |
+| **9.16** | **EndSingleTimeCommands 异步化** (✅ 已完成) | ~~一次性命令使用 `vkQueueWaitIdle` 全局阻塞~~ | FBO 异步创建路径：`Invalidate(VkCommandBuffer)` 将布局屏障录制到主 CB，消除 GPU 等待 |
 | **9.17** | **VulkanForwardTestPass 清理** | 独立的 Forward 渲染路径 (~300 行)，不在活跃管线中 | 删除或合并到 RenderGraph 作为可选 forward pass |
 | **9.18** | **Shader Variant 统一** | GBuffer 有 3 个 vertex shader 变体 (single/instanced/gdr)，需手动维护 | 评估是否可通过 specialization constant 合并 |
 
@@ -2066,3 +2069,164 @@ Opaque 路径在执行 compute culling 前有 `VK_PIPELINE_STAGE_HOST_BIT → VK
 2. **逐级旁路诊断法**: 当 draw call 合法但无可视输出时，从最底层（硬编码顶点）逐级恢复数据源，可高效定位问题。本次从全屏三角形 → 硬编码角点 → u_Instances → u_Ranges → u_Materials → g_Data，每一级排除一个变量。
 
 3. **Vulkan 验证层的局限**: 并非所有 GPU 问题都会产生验证错误。ByteAddressBuffer 在 MoltenVK 上的静默失败就是一例 —— 需要 shader 级诊断和系统性排除法。Debug messenger 的集成在此过程中至关重要。
+
+---
+
+## 23. 延迟销毁队列 + GDR 管线鲁棒性强化 (2026-07-01)
+
+> **修改规模:** 16 文件 (9 C++源码, 2 头文件, 5 shader), +468/-116 行
+> **核心改进:** 通用延迟销毁队列、FBO 异步创建/销毁、UBO 描述符预注册、GDR 管线屏障修复、ReceiveShadows 管线接入
+
+### 23.1 通用延迟销毁队列 (Deferred Destruction Queue)
+
+**文件:** `VulkanContext.hpp/cpp`, `VulkanFramebuffer.hpp/cpp`, `RenderGraph.cpp`, `SceneRenderer.hpp/cpp`
+
+#### 23.1.1 问题
+
+引擎在两个路径使用 `vkQueueWaitIdle`/`vkDeviceWaitIdle` 强制 GPU 同步：
+- **FBO 创建:** `VulkanFramebuffer::Invalidate()` → `EndSingleTimeCommands` → `vkQueueWaitIdle`
+- **FBO 销毁:** `VulkanFramebuffer::Release()` → `vkDeviceWaitIdle`
+
+导致项目打开/切换/热重载/窗口 resize 时 GPU 排空 → CPU 卡顿 → 可见黑帧。
+
+#### 23.1.2 方案
+
+**异步销毁** — `VulkanContext` 新增通用 `DeferredResource` 队列：
+
+```cpp
+struct DeferredResource {
+    std::function<void()> destroy;  // Lambda — 仅按值捕获 Vulkan Handle
+    int framesRemaining = 3;
+};
+std::vector<DeferredResource> m_DeferredResources;
+std::mutex m_DeferredResourcesMutex;
+```
+
+**生命周期:**
+```
+帧 N:    资源废弃 → QueueDeferredResource({destroy_lambda, 3})
+帧 N+1:  BeginFrame → vkWaitForFences → ProcessDeferred → framesRemaining=2
+帧 N+2:  BeginFrame → vkWaitForFences → ProcessDeferred → framesRemaining=1
+帧 N+3:  BeginFrame → vkWaitForFences → ProcessDeferred → framesRemaining=0 → destroy()
+```
+
+`ProcessDeferredResources()` 在 `BeginFrame()` 的 `vkWaitForFences` 之后调用，与现有 `ProcessDeferredBindlessReleases()` 并列。Fence 确认 N-3 帧的 GPU 工作已完成 → 安全销毁。
+
+**Lambda 捕获安全约束:** 绝对禁止 `[&]` 或 `[this]` — 3 帧后原对象可能已析构。只按值捕获 `VkDevice`、`VmaAllocator`、`VkImage` 等纯 Handle。
+
+**Shutdown 安全:** `~VulkanContext` 在 VMA 销毁前强制执行队列中所有 `destroy()` 回调。`ImGui::GetCurrentContext()` 守护防止 shutdown 时调用已销毁的 ImGui API。
+
+**异步创建** — `VulkanFramebuffer` 双路径架构:
+
+| 调用场景 | 命令缓冲区 | GPU 等待 |
+|---|---|---|
+| `Init()` 阶段 | `BeginSingleTimeCommands` (one-time CB) | `vkQueueWaitIdle` (仅启动一次) |
+| `RenderScene → Compile()` | 主命令缓冲区 `GetCurrentCommandBuffer()` | **零等待** |
+
+`Invalidate(VkCommandBuffer cmd)` 将初始布局转换屏障直接录制到主 CB 中。`RenderGraph::Compile()` 的 FBO 创建循环使用 `VulkanFramebuffer(asyncInit=true)` → `Invalidate(cmd)`。
+
+**附带修复:**
+- `SceneRenderer::m_DeferredReleases` (TextureCube 永久泄漏) 已移除，改用通用延迟队列
+- `SceneRenderer::OnWindowResize` 移除 `vkDeviceWaitIdle` (延迟队列已保证旧 FBO 安全)
+- `SceneRenderer::BuildRenderGraph_SRP` — `ExtractState()` 前移除 `vkDeviceWaitIdle`
+
+### 23.2 首帧黑色物体修复 — UBO 描述符预注册
+
+**文件:** `SceneRenderer.cpp`
+
+**根因:** `VulkanPipeline::s_GlobalUBOs` 是静态变量。管线在 `Init()`→`OnAttach()` 中构造，此时 UBO 的 `SetGlobalUniformBuffer` 尚未被调用 → `s_GlobalUBOs` 为空 → Set 0 描述符集从未写入有效 VkBuffer 引用 → GPU 读取零值 Camera/Light 数据 → 黑色渲染。
+
+**修复:** 在 `SceneRenderer::Init()` 中，管线 `OnAttach()` **之前**，预先调用 `SetGlobalUniformBuffer` 将 UBO 的 VkBuffer 引用注册到 `s_GlobalUBOs`。这样管线构造时描述符集将被写入有效 Buffer 引用。
+
+同时修改 `EditorLayer::OnUpdate()` — 首帧通过 `glfwGetFramebufferSize` 获取实际窗口尺寸，立即调用 `OnWindowResize` + `EditorCamera::OnResize`，防止 FBO 以默认 1280×720 创建而实际窗口为 2560×1600。
+
+### 23.3 GDR 管线屏障修复 — 缺失的 COMPUTE→DRAW_INDIRECT 屏障
+
+**文件:** `VulkanGbufferPass.cpp`
+
+**根因:** GBuffer Pass 在 `vkCmdDispatch(cull.comp)` 后直接进入 `BeginRenderPass`，缺少从 `COMPUTE_SHADER` (写入 indirect buffer) 到 `DRAW_INDIRECT_BIT` (读取间接命令) 的管线屏障。DepthPrePass 和 ShadowPass 已正确设置此屏障，GBufferPass 因 Hi-Z 代码块 (已禁用) 内的独立屏障而遗漏。
+
+**症状:** MoltenVK/Apple Silicon 上，indirect draw 可能读到 compute shader 未完成写入的数据 → 垃圾/陈旧间接命令 → 错误几何体 → 大面积黑色矩形闪烁。该 bug 表现为**实体可见性切换时的闪烁**——当 GDR 实例数变化时，indirect buffer 槽位偏移处的陈旧数据被读取。
+
+**修复:** 在主 cull `vkCmdDispatch` 后添加 `VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT → VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT` 的 `VkBufferMemoryBarrier`，确保 compute 写入对间接绘制可见。
+
+### 23.4 Indirect Buffer 完整清零修复
+
+**文件:** `cull.comp`, `cull_shadow.comp`
+
+**根因:** culling compute shader 三个 no-op 路径 (非阴影投射 / LightMode 不匹配 / 视锥体剔除) 仅写入 `Commands[gID].instanceCount = 0`，不置零 `indexCount`、`firstIndex`、`vertexOffset`、`firstInstance`。这些字段保留上一帧同槽位的陈旧值。在 MoltenVK 上，`instanceCount=0` 的间接绘制若其他字段非零，可能导致 Metal 间接绘制产生异常——读取错误的 index buffer 区域 → 错误三角形。
+
+**修复:** 所有 no-op 路径现在写入完整零值 `DrawCommand` 结构体 (5 个字段全清零)。
+
+**影响范围:**
+- `cull.comp`: 2 个 no-op 路径 (视锥体剔除 + LightMode 不匹配)
+- `cull_shadow.comp`: 3 个 no-op 路径 (非阴影投射 + LightMode 不匹配 + 视锥体剔除)
+
+### 23.5 ReceiveShadows GPU-Driven 管线接入
+
+**文件:** `VulkanGeometryPool.hpp`, `GDRContext.cpp`, `gbuffer_gdr.vert`, `gbuffer_gdr_bindless.frag`
+
+**问题:** `ReceiveShadows` 标志仅在 OpenGL `GBufferPass` 中通过 push constant 生效。Vulkan GDR 路径中 `g_CustomData.r` 被硬编码为 `1.0`。
+
+**修复 — 完整数据流:**
+```
+MeshRendererComponent::ReceiveShadows
+  → GDRContext::BuildFromScene → GPUInstance::flags bit 1 (kFlag_ReceiveShadows)
+    → gbuffer_gdr.vert → flat out v_Flags
+      → gbuffer_gdr_bindless.frag → g_CustomData.r
+        → deferred_lighting.frag → RcvShadow → 控制 per-fragment 阴影采样
+```
+
+- `GPUInstance::kFlag_ReceiveShadows = 1u << 1`
+- `gbuffer_gdr.vert`: 新增 `layout(location=4) flat out uint v_Flags`
+- `gbuffer_gdr_bindless.frag`: `g_CustomData.r = ((v_Flags & 2u) != 0u) ? 1.0 : 0.0`
+
+### 23.6 SRP 资源依赖修正
+
+**文件:** `default.srp`, `RenderGraph.cpp`, `VulkanGbufferPass.cpp`
+
+- `default.srp`: Lighting/SSAO/WBOIT passes 正确声明 `SceneDepth` 读取；GBuffer `SceneDepth` 改为 `readWrite` (depth attachment)；ForwardBlend `Lighting` 改为 `readWrite` (LOAD overlay)
+- `VulkanGbufferPass::DeclareResources`: SceneDepth 规格与 `VulkanDepthPrePass` 匹配 `{R8, Depth}`
+- `RenderGraph::Execute()`: `DepthReadTextures` 现在触发 `InsertTileResolveBarrier`，闭合深度布局追踪循环
+
+### 23.7 已完成优化项刷新
+
+| 优化项 | 原状态 | 现状态 |
+|---|---|---|
+| 9.5 Depth Pre-Pass | Tier 2 未实现 | ✅ 已实现 (VulkanDepthPrePass + SceneDepth 解耦 + LEQUAL) |
+| 9.16 EndSingleTimeCommands 异步化 | 未实现 | ✅ FBO 异步创建路径 (主 CB 录制 barriers) |
+| LOW-1 OnWindowResize vkDeviceWaitIdle | 已知问题 | ✅ 已移除 (延迟销毁队列) |
+| MEDIUM-1 RefreshDescriptorSets 死代码 | 已知问题 | ⚠️ 仍为死代码，但 UBO 预注册使其非必要 |
+| SceneRenderer DeferredRelease 泄漏 | 未记录 | ✅ 已修复 (移除，改用通用延迟队列) |
+
+### 23.8 新增已知问题
+
+| 问题 | 描述 |
+|---|---|
+| 首帧短暂黑色 | 项目打开时首帧仍可能极短暂变黑 — FBO 布局转换屏障录制到主 CB 后，GPU 执行前有一帧延迟。影响约 1 帧，仅项目加载时可见 |
+| GenericDrawPass ~VulkanPipeline | `~GenericDrawPass()` 调用 `vkDeviceWaitIdle` — SRP 重建时仍会 GPU stall。待迁移到通用延迟队列 |
+
+### 23.9 修改文件清单
+
+**C++ 引擎:**
+- `VulkanContext.hpp/cpp` — 通用延迟销毁队列 + `ProcessDeferredResources()` + shutdown 强制清空 + mutex
+- `VulkanFramebuffer.hpp/cpp` — `Release()` 异步化 + `Invalidate(VkCommandBuffer)` 异步布局 + `asyncInit` 参数
+- `RenderGraph.cpp` — `Compile()` FBO 异步创建 + `DepthReadTextures` 屏障闭合
+- `SceneRenderer.cpp` — UBO 预注册 + 移除 vkDeviceWaitIdle (ExtractState/OnWindowResize/SetEnvironment) + 移除 m_DeferredReleases
+- `SceneRenderer.hpp` — 移除 `DeferredRelease` 结构体
+- `EditorLayer.cpp` — MarkSRPDirty vkDeviceWaitIdle + 首帧 viewport/camera 初始化
+- `VulkanGbufferPass.cpp` — 缺失 COMPUTE→DRAW_INDIRECT 屏障 + SceneDepth 规格修正
+- `VulkanGeometryPool.hpp` — `kFlag_ReceiveShadows`
+- `GDRContext.cpp` — `ReceiveShadows` flag 设置
+- `GenericDrawPass.cpp` — 移除自管深度屏障 + 清理 include
+- `PipelineBuilder.cpp` — DepthTarget 注释
+- `VulkanSSAOPass.cpp` / `VulkanWBOITPass.cpp` — SceneDepth null-guard
+
+**Shader:**
+- `cull.comp` — 2 路径完整零值 DrawCommand
+- `cull_shadow.comp` — 3 路径完整零值 DrawCommand
+- `gbuffer_gdr.vert` — `v_Flags` 传递
+- `gbuffer_gdr_bindless.frag` — `g_CustomData.r = ReceiveShadows`
+
+**SRP:**
+- `default.srp` — 资源依赖修正 (SceneDepth/Lighting/ForwardBlend/SSAO/WBOIT)

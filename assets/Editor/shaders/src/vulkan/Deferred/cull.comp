@@ -80,16 +80,25 @@ void main() {
 
     GPUInstance inst = Instances[gID];
 
+    // Pre-init zeroed no-op. ALL skip paths must write the ENTIRE struct —
+    // partial zeroing leaves stale indexCount/firstIndex from previous frames.
+    DrawCommand zeroCmd;
+    zeroCmd.indexCount = 0u;
+    zeroCmd.instanceCount = 0u;
+    zeroCmd.firstIndex = 0u;
+    zeroCmd.vertexOffset = 0;
+    zeroCmd.firstInstance = 0u;
+
     // 🔥 Step 1: ALU-only frustum test (no memory fetch beyond Instances)
     if (!IsVisible(inst.boundingSphere)) {
-        Commands[gID].instanceCount = 0u;
+        Commands[gID] = zeroCmd;
         return;
     }
 
     // 🔥 Step 2: Only read GPUMaterial for frustum-survivors (memory-bound)
     GPUMaterial mat = Materials[inst.materialIdx];
     if ((mat.lightModeMask & pc.u_LightModeMask) == 0u) {
-        Commands[gID].instanceCount = 0u;
+        Commands[gID] = zeroCmd;
         return;
     }
 

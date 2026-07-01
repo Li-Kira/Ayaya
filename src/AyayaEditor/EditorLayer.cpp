@@ -9,6 +9,7 @@
 #include "Engine/Core/Application.hpp"
 #include "Project/Project.hpp"
 #include "Core/VFS.hpp"
+#include "Platform/Vulkan/VulkanContext.hpp"
 
 #include <glad/glad.h>
 #include <imgui.h>
@@ -105,13 +106,17 @@ namespace Ayaya {
                 m_ActiveScene->InvalidateAssetCache(uuid);
         }
 
-        // SRP hot-reload: if the active pipeline script changed, mark dirty
+        // SRP hot-reload: if the active pipeline script changed, mark dirty.
+        // Wait for GPU before the rebuild destroys old FBOs/pipelines.
         if (!reloadedUUIDs.empty()) {
             if (m_SceneRenderer) {
                 UUID srpHandle = m_SceneRenderer->GetSRPScript();
                 if (srpHandle != 0) {
                     for (auto uuid : reloadedUUIDs) {
                         if (uuid == srpHandle) {
+                            auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+                                Application::Get().GetWindow().GetContext());
+                            if (vkCtx) vkDeviceWaitIdle(vkCtx->GetDevice());
                             m_SceneRenderer->MarkSRPDirty();
                             if (m_GameRenderer) m_GameRenderer->MarkSRPDirty();
                             break;
@@ -152,6 +157,21 @@ namespace Ayaya {
         // ------------------------------------------
         // 2.1 处理 Scene (上帝视口) 的 Resize
         // ------------------------------------------
+        // First frame: ImGui hasn't rendered yet, m_ViewportSize is 0.
+        // Use the GLFW framebuffer size as initial viewport to avoid FBOs
+        // being created at the default 1280x720 while the window is much larger.
+        if (m_ViewportSize.x <= 0.0f || m_ViewportSize.y <= 0.0f) {
+            GLFWwindow* window = static_cast<GLFWwindow*>(Application::Get().GetWindow().GetNativeWindow());
+            int fbW = 1280, fbH = 720;
+            glfwGetFramebufferSize(window, &fbW, &fbH);
+            m_SceneRenderer->OnWindowResize((uint32_t)fbW, (uint32_t)fbH);
+            m_GameRenderer->OnWindowResize((uint32_t)fbW, (uint32_t)fbH);
+            // Camera projection must also be updated — wrong aspect ratio
+            // produces incorrect frustum planes, causing GPU culling to
+            // incorrectly remove all instances → black objects.
+            m_EditorCamera.OnResize((float)fbW, (float)fbH);
+        }
+
         static glm::vec2 s_LastViewportSize = { 0.0f, 0.0f };
         if (m_ViewportSize.x > 0.0f && m_ViewportSize.y > 0.0f &&
            (s_LastViewportSize.x != m_ViewportSize.x || s_LastViewportSize.y != m_ViewportSize.y)) {

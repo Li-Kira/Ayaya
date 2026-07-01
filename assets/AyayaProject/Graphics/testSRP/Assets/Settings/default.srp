@@ -1,11 +1,12 @@
--- testSRP — Grayscale via GenericFullScreenPass (replaces FXAA)
+-- testSRP — Scriptable Render Pipeline
 
 local vpW = Pipeline:GetViewportWidth()
 local vpH = Pipeline:GetViewportHeight()
 
 Pipeline:DeclareTexture("ShadowMap", {"Depth"}, 4096, 4096, 1, true)
+Pipeline:DeclareTexture("SceneDepth", {"R8", "Depth"}, vpW, vpH)
 Pipeline:DeclareTexture("GBuffer",
-    {"RG16F", "RGBA8", "RGBA8", "RGBA8", "Depth"}, vpW, vpH)
+    {"RG16F", "RGBA8", "RGBA8", "RGBA8"}, vpW, vpH)
 Pipeline:DeclareTexture("SSAO_Final", {"R8"}, vpW / 2, vpH / 2)
 Pipeline:DeclareTexture("Lighting", {"RGBA16F", "Depth"}, vpW, vpH)
 Pipeline:DeclareTexture("Selection", {"RGBA8"}, vpW, vpH)
@@ -14,62 +15,75 @@ Pipeline:DeclareTexture("Bloom", {"RGBA16F"}, vpW / 2, vpH / 2)
 Pipeline:DeclareTexture("FinalOutput", {"RGBA8"}, vpW, vpH)
 Pipeline:DeclareTexture("FXAA", {"RGBA8"}, vpW, vpH)
 
--- Standard passes (DepthPrePass→Shadow→GBuffer→Lighting→Forward→PostProcess)
+-- Depth Pre-pass (SceneDepth for hardcoded pipeline Early-Z; SRP GBuffer is self-contained)
+Pipeline:AddPass("DepthPrePass", "DepthPrePass", {}, {"SceneDepth"}, {},
+    { LightMode = "GBuffer", Queue = "Opaque" })
 
--- Depth Pre-pass: write depth only (ColorWrite=false), then GBuffer uses LEQUAL for Early-Z.
-Pipeline:AddPass("DepthPrePass", "GenericDrawPass", {}, {"GBuffer"}, {},
-    { LightMode = "GBuffer", Queue = "Opaque",
-      Target = "GBuffer", Shader = "depth_only",
-      ClearColor = false, ClearDepth = true,
-      DepthTest = true, DepthWrite = true, DepthFunc = 1,
-      BlendMode = 0, CullMode = 2, ColorWrite = false })
-
+-- Shadow
 Pipeline:AddPass("Shadow", "ShadowPass", {}, {"ShadowMap"}, {},
     { LightMode = "ShadowCaster" })
-Pipeline:AddPass("GBuffer", "GBufferPass", {}, {"GBuffer"}, {},
+
+-- GBuffer: SceneDepth as depth attachment → readWrite (LOAD pre-pass depth)
+Pipeline:AddPass("GBuffer", "GBufferPass",
+    {"SceneDepth"}, {"GBuffer"}, {"SceneDepth"},
     { LightMode = "GBuffer", Queue = "Opaque",
       ClearColor = true, ClearDepth = false,
       DepthTest = true, DepthWrite = true, DepthFunc = 1 })
 
--- TestOpaque: readWrite GBuffer (hardware depth, proven correct by GBuffer LEQUAL)
+-- TestOpaque: custom opaque into GBuffer (self-contained depth)
 Pipeline:AddPass("TestOpaque", "GenericDrawPass", {}, {}, {"GBuffer"},
     { Shader = "test_opaque", LightModeMask = 64, Queue = "Opaque",
-      Target = "GBuffer", ClearColor = false, ClearDepth = false,
+      Target = "GBuffer", DepthTarget = "SceneDepth",
+      ClearColor = false, ClearDepth = false,
       DepthTest = true, DepthWrite = true, DepthFunc = 0,
       BlendMode = 0, CullMode = 0 })
 
-Pipeline:AddPass("SSAO", "SSAOPass", {"GBuffer"}, {"SSAO_Final"}, {},
+-- SSAO
+Pipeline:AddPass("SSAO", "SSAOPass",
+    {"GBuffer", "SceneDepth"}, {"SSAO_Final"}, {},
     { Enabled = false })
+
+-- Deferred Lighting — reads SceneDepth for depth reconstruction
 Pipeline:AddPass("Lighting", "LightingPass",
-    {"GBuffer", "ShadowMap", "SSAO_Final"}, {"Lighting"}, {})
-Pipeline:AddPass("ForwardBlend", "ForwardBlend", {}, {"Lighting"}, {},
+    {"GBuffer", "ShadowMap", "SSAO_Final", "SceneDepth"}, {"Lighting"}, {})
+
+-- Forward Blend — readWrite (LOAD + overlay skybox/grid onto Lighting)
+Pipeline:AddPass("ForwardBlend", "ForwardBlend",
+    {}, {}, {"Lighting"},
     { LightMode = "Forward" })
+
+-- WBOIT
 Pipeline:AddPass("WBOIT_Gather", "WBOIT_Gather",
-    {"GBuffer"}, {"WBOIT_Gather"}, {},
+    {"GBuffer", "SceneDepth"}, {"WBOIT_Gather"}, {},
     { Queue = "Translucent", Enabled = false })
 Pipeline:AddPass("WBOIT_Resolve", "WBOIT_Resolve",
     {"WBOIT_Gather"}, {}, {"Lighting"}, { Enabled = false })
+
+-- Outline
 Pipeline:AddPass("Outline", "OutlinePass", {"GBuffer"}, {"Selection"}, {},
     { Enabled = false })
+
+-- Bloom
 Pipeline:AddPass("Bloom", "BloomPass", {"Lighting"}, {"Bloom"}, {},
     { Enabled = false })
+
+-- PostProcess
 Pipeline:AddPass("PostProcess", "PostProcessPass",
     {"Lighting", "Selection", "Bloom"}, {"FinalOutput"}, {})
 
--- Hologram: transparent overlay (readWrite FinalOutput LDR)
---   Additive blend on top of PostProcess output, no depth (design: holograms float above scene)
+-- Hologram: transparent overlay
 Pipeline:AddPass("Hologram", "GenericDrawPass", {}, {}, {"FinalOutput"},
     { Shader = "hologram", LightModeMask = 32, Queue = "Transparent",
       Target = "FinalOutput", ClearColor = false,
       DepthTest = false, DepthWrite = false, BlendMode = 1, CullMode = 0 })
 
--- FXAA — anti-aliasing
+-- FXAA
 Pipeline:AddPass("FXAA", "FXAAPass", {"FinalOutput"}, {"FXAA"}, {})
 
--- UI composited on FXAA
+-- UI
 Pipeline:AddPass("UI", "UIPass", {}, {}, {"FXAA"})
 
--- Smoke test: GenericComputePass
+-- Compute test
 Pipeline:AddPass("ComputeTest", "GenericComputePass", {}, {}, {},
     { Shader = "Custom/test_compute.comp", DispatchX = 1, DispatchY = 1, DispatchZ = 1 })
 

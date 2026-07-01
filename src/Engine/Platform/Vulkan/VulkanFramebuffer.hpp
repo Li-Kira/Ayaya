@@ -9,10 +9,11 @@ namespace Ayaya {
     // Vulkan 1.3 Dynamic Rendering — 不再使用 VkRenderPass / VkFramebuffer
     class VulkanFramebuffer : public Framebuffer {
     public:
-        VulkanFramebuffer(const FramebufferSpecification& spec);
+        VulkanFramebuffer(const FramebufferSpecification& spec, bool asyncInit = false);
         virtual ~VulkanFramebuffer() override;
 
         void Invalidate();
+        void Invalidate(VkCommandBuffer cmd);  // async: records barriers into active command buffer
         void Release();
 
         virtual void Bind() override;

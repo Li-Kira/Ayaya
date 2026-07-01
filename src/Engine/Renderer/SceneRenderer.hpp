@@ -127,12 +127,6 @@ namespace Ayaya {
 
         std::vector<std::shared_ptr<CustomPostProcess>> m_CustomPostProcesses;
 
-        struct DeferredRelease {
-            std::vector<std::shared_ptr<TextureCube>> TextureCubes;
-            int FramesRemaining = 3;
-        };
-        std::vector<DeferredRelease> m_DeferredReleases;
-
         RenderContext m_RenderContext;
         RenderQueue  m_RenderQueue;
         float m_Exposure = 1.0f;
@@ -143,7 +137,7 @@ namespace Ayaya {
         bool m_SRPDirty = true;                    // re-execute Lua on next build
 
         void BuildRenderGraph_Default(const RenderViewConfig& config, uint32_t vpW, uint32_t vpH);
-        void BuildRenderGraph_SRP(uint32_t vpW, uint32_t vpH);
+        void BuildRenderGraph_SRP(const RenderViewConfig& config, uint32_t vpW, uint32_t vpH);
         void ApplyPerFrameCulling();
     };
 

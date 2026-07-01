@@ -236,35 +236,51 @@ namespace Ayaya {
         bool clearDepth = context.Get<int>(prefix + ".ClearDepth", 1) != 0;
         std::string shaderPath = context.Get<std::string>(prefix + ".Shader", "");
         std::string targetName = context.Get<std::string>(prefix + ".Target", "");
+        std::string depthTargetName = context.Get<std::string>(prefix + ".DepthTarget", "");
 
         if (shaderPath.empty() || targetName.empty()) {
             AYAYA_CORE_WARN("[GenericDraw] Missing Shader or Target param");
             return;
         }
 
-        // Get target FBO first — need its color format for pipeline creation
+        // Get color FBO + optional external depth FBO
         auto fbo = context.GetFramebuffer(targetName);
         if (!fbo) {
             AYAYA_CORE_WARN("[GenericDraw] Target FBO '{}' not found", targetName);
             return;
         }
+        auto depthFBO = depthTargetName.empty() ? nullptr : context.GetFramebuffer(depthTargetName);
 
-        // Extract color + depth format from the runtime FBO for pipeline format matching
+        // Extract color format from runtime FBO. Depth comes from colorFBO or external depthFBO.
         FramebufferTextureFormat fmt = FramebufferTextureFormat::RGBA16F;
-        bool hasDepth = false;
+        bool hasDepth = (depthFBO != nullptr);
         auto& fboSpec = fbo->GetSpecification();
         for (auto& att : fboSpec.Attachments.Attachments) {
             if (att.TextureFormat != FramebufferTextureFormat::Depth &&
                 att.TextureFormat != FramebufferTextureFormat::DEPTH24STENCIL8) {
                 fmt = att.TextureFormat;
             } else {
-                hasDepth = true;
+                hasDepth = true; // colorFBO自带深度
             }
+        }
+
+        // Pipeline refSpec must include depth format if depth test is enabled
+        FramebufferSpecification pipeFboSpec = fboSpec;
+        if (hasDepth && depthFBO) {
+            // Color from fbo, depth from external — append depth to refSpec for pipeline creation
+            bool refHasDepth = false;
+            for (auto& att : pipeFboSpec.Attachments.Attachments) {
+                if (att.TextureFormat == FramebufferTextureFormat::Depth ||
+                    att.TextureFormat == FramebufferTextureFormat::DEPTH24STENCIL8)
+                    refHasDepth = true;
+            }
+            if (!refHasDepth)
+                pipeFboSpec.Attachments.Attachments.push_back({FramebufferTextureFormat::Depth});
         }
 
         // Get or create graphics pipeline (keyed by format to match dynamic rendering)
         PipelineKey key{ shaderPath, depthTest, depthWrite, cullMode, blendMode, fmt, hasDepth, depthFunc, colorWrite };
-        auto pipeline = GetOrCreatePipeline(key, fboSpec);
+        auto pipeline = GetOrCreatePipeline(key, pipeFboSpec);
         if (!pipeline) return;
 
         auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
@@ -322,7 +338,13 @@ namespace Ayaya {
             0, nullptr, 1, &indirectBarrier, 0, nullptr);
 
         // ── Graphics pass ──
-        cmd.BeginRenderPass(fbo, clearColor, clearDepth);
+        // Depth layout is managed by RenderGraph:
+        //   - EnsureWritable (DepthReadTextures) transitions to ATTACHMENT before the pass
+        //   - InsertTileResolveBarrier (DepthReadTextures) transitions back to READ_ONLY after
+        if (depthFBO)
+            cmd.BeginRenderPass(fbo, depthFBO, clearColor, clearDepth);
+        else
+            cmd.BeginRenderPass(fbo, clearColor, clearDepth);
         cmd.BindPipeline(pipeline);
 
         // Bind GDR Set 2 (Instance/Range/Material/GeometryPool SSBOs)
@@ -385,21 +407,32 @@ namespace Ayaya {
         bool clearDepth = context.Get<int>(prefix + ".ClearDepth", 1) != 0;
         std::string shaderPath = context.Get<std::string>(prefix + ".Shader", "");
         std::string targetName = context.Get<std::string>(prefix + ".Target", "");
+        std::string depthTargetName = context.Get<std::string>(prefix + ".DepthTarget", "");
 
         auto fbo = context.GetFramebuffer(targetName);
         if (!fbo) return;
+        auto depthFBO = depthTargetName.empty() ? nullptr : context.GetFramebuffer(depthTargetName);
 
         FramebufferTextureFormat fmt = FramebufferTextureFormat::RGBA16F;
-        bool hasDepth = false;
-        for (auto& att : fbo->GetSpecification().Attachments.Attachments) {
+        bool hasDepth = (depthFBO != nullptr);
+        auto pipeFboSpec = fbo->GetSpecification();
+        for (auto& att : pipeFboSpec.Attachments.Attachments) {
             if (att.TextureFormat != FramebufferTextureFormat::Depth &&
                 att.TextureFormat != FramebufferTextureFormat::DEPTH24STENCIL8) {
                 fmt = att.TextureFormat;
             } else { hasDepth = true; }
         }
+        if (hasDepth && depthFBO) {
+            bool refHasDepth = false;
+            for (auto& att : pipeFboSpec.Attachments.Attachments)
+                if (att.TextureFormat == FramebufferTextureFormat::Depth ||
+                    att.TextureFormat == FramebufferTextureFormat::DEPTH24STENCIL8) refHasDepth = true;
+            if (!refHasDepth)
+                pipeFboSpec.Attachments.Attachments.push_back({FramebufferTextureFormat::Depth});
+        }
 
         PipelineKey key{shaderPath, depthTest, depthWrite, cullMode, blendMode, fmt, hasDepth, depthFunc, colorWrite};
-        auto pipeline = GetOrCreatePipeline(key, fbo->GetSpecification());
+        auto pipeline = GetOrCreatePipeline(key, pipeFboSpec);
         if (!pipeline) { AYAYA_CORE_INFO("[Transparent:'{}'] Pipeline FAILED", prefix); return; }
 
         auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
@@ -418,7 +451,10 @@ namespace Ayaya {
             VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0,
             1, &hostBarrier, 0, nullptr, 0, nullptr);
 
-        cmd.BeginRenderPass(fbo, clearColor, clearDepth);
+        if (depthFBO)
+            cmd.BeginRenderPass(fbo, depthFBO, clearColor, clearDepth);
+        else
+            cmd.BeginRenderPass(fbo, clearColor, clearDepth);
         cmd.BindPipeline(pipeline);
 
         // Bind GDR Set 2 — SSBO vertex pulling (same data source as Opaque path)

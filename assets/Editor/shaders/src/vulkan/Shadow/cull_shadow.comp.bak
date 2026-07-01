@@ -104,21 +104,12 @@ void main() {
 
     GPUInstance inst = Instances[gID];
 
-    // Pre-initialize zeroed no-op command. ALL skip paths MUST write the
-    // ENTIRE struct — MoltenVK indirect draws read every field; stale
-    // indexCount/firstIndex from previous frames cause black rectangles.
-    DrawCommand zeroCmd;
-    zeroCmd.indexCount = 0;
-    zeroCmd.instanceCount = 0;
-    zeroCmd.firstIndex = 0;
-    zeroCmd.vertexOffset = 0;
-    zeroCmd.firstInstance = 0;
-
     // Skip non-shadow-casters
     if ((inst.flags & kFlag_CastShadows) == 0u) {
 #ifndef USE_INDIRECT_COUNT
-        OpaqueCmds[gID] = zeroCmd;
-        MaskedCmds[gID] = zeroCmd;
+        // Fixed-slot path: must write no-op to avoid reading garbage from uninitialized slots
+        OpaqueCmds[gID].instanceCount = 0;
+        MaskedCmds[gID].instanceCount = 0;
 #endif
         return;
     }
@@ -130,8 +121,8 @@ void main() {
         // LightMode mask check (GPU routing — zero CPU cost)
         if ((mat.lightModeMask & pc.u_LightModeMask) == 0u) {
 #ifndef USE_INDIRECT_COUNT
-            OpaqueCmds[gID] = zeroCmd;
-            MaskedCmds[gID] = zeroCmd;
+            OpaqueCmds[gID].instanceCount = 0;
+            MaskedCmds[gID].instanceCount = 0;
 #endif
             return;
         }
@@ -145,6 +136,8 @@ void main() {
 
 #ifdef USE_INDIRECT_COUNT
         // ── Atomic-compacted binning ──
+        // Compact visible instances into contiguous slots via atomicAdd.
+        // drawCount = actual populated slots; vkCmdDrawIndexedIndirectCount reads counts.
         if (mat.blendMode == 1) {
             uint idx = atomicAdd(MaskedCnt, 1u);
             MaskedCmds[idx] = cmd;
@@ -154,20 +147,24 @@ void main() {
         }
 #else
         // ── Fixed-slot binning (MoltenVK/M1 compatible) ──
+        // Each invocation writes to OpaqueCmds[gID] or MaskedCmds[gID].
+        // The other bin gets instanceCount=0 → GPU hardware no-op.
+        // vkCmdDrawIndexedIndirect draws ALL slots; culled ones are skipped by hardware.
         if (mat.blendMode == 1) {
             MaskedCmds[gID] = cmd;
-            OpaqueCmds[gID] = zeroCmd;
+            OpaqueCmds[gID].instanceCount = 0;
         } else {
             OpaqueCmds[gID] = cmd;
-            MaskedCmds[gID] = zeroCmd;
+            MaskedCmds[gID].instanceCount = 0;
         }
 #endif
     }
 #ifndef USE_INDIRECT_COUNT
     else {
-        // Frustum-culled: zero BOTH bins
-        OpaqueCmds[gID] = zeroCmd;
-        MaskedCmds[gID] = zeroCmd;
+        // Culled: write no-op to BOTH bins (instanceCount=0 → GPU hardware skips)
+        OpaqueCmds[gID].instanceCount = 0;
+        MaskedCmds[gID].instanceCount = 0;
     }
+    // (USE_INDIRECT_COUNT path: culled instances write nothing; slots left unpopulated)
 #endif
 }

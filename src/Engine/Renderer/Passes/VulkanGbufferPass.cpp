@@ -21,10 +21,12 @@ namespace Ayaya {
         };
         builder.WriteTexture("GBuffer", colorSpec);
 
-        // SceneDepth: read+write — read pre-pass depth, write new depth
+        // SceneDepth: read+write — read pre-pass depth, write new depth.
+        // Must match VulkanDepthPrePass declaration {R8, Depth} to avoid
+        // "conflicting specs" warning and ensure layout tracking consistency.
         FramebufferSpecification depthSpec;
         depthSpec.Width = width; depthSpec.Height = height; depthSpec.Samples = 1;
-        depthSpec.Attachments = { FramebufferTextureFormat::Depth };
+        depthSpec.Attachments = { FramebufferTextureFormat::R8, FramebufferTextureFormat::Depth };
         builder.ReadWriteTexture("SceneDepth", depthSpec);
     }
 
@@ -628,13 +630,17 @@ namespace Ayaya {
                 uint32_t groupCount = (instanceCount + 63) / 64;
                 vkCmdDispatch(vkCmd, groupCount, 1, 1);
 
+                // ⚠️ CRITICAL: Compute→Indirect barrier BEFORE any barrier chain.
+                // The compute shader writes DrawIndexedIndirectCommand entries to
+                // m_DrawIndirectBuffer. The subsequent draw MUST see these writes.
+                // Without this barrier, MoltenVK/Apple Silicon may read stale data.
                 VkBufferMemoryBarrier indirectBarrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
                 indirectBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-                indirectBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+                indirectBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
                 indirectBarrier.buffer = m_DrawIndirectBuffer->GetBuffer(frameIdx);
                 indirectBarrier.size = VK_WHOLE_SIZE;
                 vkCmdPipelineBarrier(vkCmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+                    VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0,
                     0, nullptr, 1, &indirectBarrier, 0, nullptr);
 
                 // ── Hi-Z Occlusion Culling (temporal: uses previous frame's depth pyramid) ──
@@ -714,7 +720,7 @@ namespace Ayaya {
     if (m_GDRCtx && m_GDRCtx->InstanceCount > 0) {
         auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
             Application::Get().GetWindow().GetContext());
-        if (vkCtx && m_HiZBuildPipeline != VK_NULL_HANDLE) {
+        if (vkCtx && m_HiZBuildPipeline != VK_NULL_HANDLE && depthFBO) {
             VkCommandBuffer vkCmd = vkCtx->GetCurrentCommandBuffer();
             uint32_t writeIdx = m_HiZFrameCount % vkCtx->GetFramesInFlight();
             auto gbufferFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(depthFBO);

@@ -10,6 +10,7 @@ layout(location = 0) in vec3 v_FragPos;
 layout(location = 1) in vec3 v_Normal;
 layout(location = 2) in vec2 v_TexCoord;
 layout(location = 3) flat in uint v_MaterialIdx;
+layout(location = 4) flat in uint v_Flags;
 
 // set=1: bindless texture array
 layout(set = 1, binding = 0) uniform sampler2D u_GlobalTextures[];
@@ -83,5 +84,7 @@ void main() {
         ao        = a * texture(u_GlobalTextures[nonuniformEXT(mat.aoBindless)],        v_TexCoord).r;
     }
     g_PBR = vec4(metallic, roughness, ao, 1.0);
-    g_CustomData = vec4(1.0, 0.0, 0.0, 1.0);
+    // .r = ReceiveShadows flag (read by deferred_lighting.frag as RcvShadow)
+    float rcvShadow = ((v_Flags & 2u) != 0u) ? 1.0 : 0.0;
+    g_CustomData = vec4(rcvShadow, 0.0, 0.0, 1.0);
 }
