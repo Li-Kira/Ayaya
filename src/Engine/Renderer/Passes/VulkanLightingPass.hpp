@@ -4,6 +4,7 @@
 #include "Renderer/Framebuffer.hpp"
 #include "Renderer/RenderCommandBuffer.hpp"
 #include "Renderer/Pipeline.hpp"
+#include <vk_mem_alloc.h>
 
 namespace Ayaya {
 
@@ -30,6 +31,7 @@ namespace Ayaya {
     class VulkanLightingPass : public RenderPass {
     public:
         VulkanLightingPass() { m_PassName = "Lighting Pass"; }
+        ~VulkanLightingPass() override;
         virtual void OnAttach() override;
         virtual void Execute(RenderContext& context, RenderCommandBuffer& cmd) override;
         static void DeclareResources(class RGBuilder& builder, uint32_t width, uint32_t height);
@@ -39,5 +41,23 @@ namespace Ayaya {
         std::shared_ptr<Shader> m_DeferredShader;
         PipelineSpecification m_DeferredPipeSpec;
         std::shared_ptr<Pipeline> m_DeferredPipeline;
+
+        // Set 2: PointLight SSBO (binding 0) — shared with deferred fullscreen pass
+        VkDescriptorSetLayout m_Set2Layout = VK_NULL_HANDLE;
+        VkDescriptorPool m_Set2Pool = VK_NULL_HANDLE;
+        std::vector<VkDescriptorSet> m_Set2Descriptors;
+
+        // Light Volume rendering
+        std::shared_ptr<Mesh> m_SphereMesh;
+        uint32_t m_SphereIndexCount = 0;
+        uint32_t m_SphereIndexOffset = 0;
+        uint32_t m_SphereVertexOffset = 0;
+        VkBuffer m_SphereRangeBuffer = VK_NULL_HANDLE;
+        VmaAllocation m_SphereRangeAlloc = VK_NULL_HANDLE;
+        std::shared_ptr<Shader> m_LightVolumeShader;
+        std::shared_ptr<Pipeline> m_LightVolumePipeline;
+        VkDescriptorSetLayout m_LV_Set2Layout = VK_NULL_HANDLE;
+        VkDescriptorPool     m_LV_Set2Pool = VK_NULL_HANDLE;
+        std::vector<VkDescriptorSet> m_LV_Set2Descriptors;
     };
 }

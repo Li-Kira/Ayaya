@@ -19,8 +19,15 @@ layout(set = 1, binding = 11) uniform sampler2D u_SSAO;
 
 layout(set = 0, binding = 0) uniform Camera { mat4 u_ViewProjection; mat4 u_View; vec3 u_CameraPosition; };
 
-struct PointLight { vec4 Position; vec4 Color; };
-layout(set = 0, binding = 1) uniform LightData { vec4 DirLightDir; vec4 DirLightColor; PointLight PointLights[4]; int PointLightCount; };
+// Directional light — UBO (Set 0 Binding 1, global mechanism)
+layout(set = 0, binding = 1) uniform DirLight { vec4 u_DirLightDir; vec4 u_DirLightColor; };
+
+// Point lights — SSBO (Set 2 Binding 0, first s_ExtraSetLayouts slot), unlimited count
+struct PointLight { vec4 positionAndRadius; vec4 colorAndFalloff; };
+layout(std430, set = 2, binding = 0) readonly buffer LightSSBO {
+    uint u_PointLightCount;
+    PointLight u_PointLights[];
+};
 
 layout(push_constant) uniform PC {
     mat4 u_LightSpaceMatrix;
@@ -127,7 +134,7 @@ void main() {
     vec3 Lo = vec3(0.0);
 
     // Directional Light
-    vec3 L = normalize(-DirLightDir.xyz);
+    vec3 L = normalize(-u_DirLightDir.xyz);
     vec3 H = normalize(V+L);
     float NdotL = max(dot(N,L),0.0);
     float D = D_GGX(N,H,Roughness), G = G_Smith(N,V,L,Roughness);
@@ -135,30 +142,7 @@ void main() {
     vec3 spec = (D*G*F)/max(4.0*max(dot(N,V),0.0)*NdotL,0.001);
     vec3 kS=F,kD=(1.0-kS)*(1.0-Metallic);
     float shadow = ShadowCalc(pc.u_LightSpaceMatrix*vec4(FragPos,1.0), NdotL) * RcvShadow;
-    Lo += (kD*Albedo/PI+spec)*DirLightColor.rgb*NdotL*(1.0-shadow);
-
-    // Point Lights — distance-culled per pixel
-    for(int i=0;i<PointLightCount&&i<4;i++){
-        vec3 lp=PointLights[i].Position.xyz; float lr=PointLights[i].Position.w;
-        // Early distance cull: skip expensive PBR math if pixel is outside light radius
-        vec3 toLight = lp - FragPos;
-        float d2 = dot(toLight, toLight);
-        if (d2 > lr * lr) continue;
-        float d = sqrt(d2);
-
-        vec3 lc=PointLights[i].Color.rgb; float lf=PointLights[i].Color.w;
-        vec3 Lp=toLight / d; vec3 Hp=normalize(V+Lp);
-        float att=1.0/(d*d+0.0001);
-        float dbr=d/lr, dbr4=pow(dbr,4.0);
-        float w=clamp(1.0-dbr4,0.0,1.0); w=pow(w,lf+1.0); att*=w;
-        vec3 rad=lc*att; float NdotLp=max(dot(N,Lp),0.0);
-        if (NdotLp <= 0.0) continue;
-        float Dp=D_GGX(N,Hp,Roughness), Gp=G_Smith(N,V,Lp,Roughness);
-        vec3 Fp=F_Schlick(max(dot(Hp,V),0.0),F0);
-        vec3 sp=(Dp*Gp*Fp)/max(4.0*max(dot(N,V),0.0)*NdotLp,0.001);
-        vec3 kSp=Fp,kDp=(1.0-kSp)*(1.0-Metallic);
-        Lo+=(kDp*Albedo/PI+sp)*rad*NdotLp;
-    }
+    Lo += (kD*Albedo/PI+spec)*u_DirLightColor.rgb*NdotL*(1.0-shadow);
 
     // IBL
     float NdV=max(dot(N,V),0.0);

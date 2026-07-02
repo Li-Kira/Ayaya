@@ -70,18 +70,16 @@ namespace Ayaya {
         glm::vec4 Time;             // 16   (offset 160) — x=t/20, y=t, z=t*2, w=t*3
     }; // 176 bytes
 
-    struct struct_PointLight {
-        glm::vec4 Position; 
-        glm::vec4 Color;    
+    // Directional light only (small UBO, Set 0 Binding 2)
+    struct struct_DirLight {
+        glm::vec4 DirLightDir;
+        glm::vec4 DirLightColor;
     };
 
-    struct struct_LightData {
-        glm::vec4 DirLightDir;   
-        glm::vec4 DirLightColor; 
-        
-        struct_PointLight PointLights[4]; 
-        int PointLightCount;              
-        int _padding[3];                  
+    // Point lights — SSBO (Set 0 Binding 1), unlimited count
+    struct GPUPointLight {
+        glm::vec4 positionAndRadius;  // xyz=world pos, w=radius
+        glm::vec4 colorAndFalloff;    // rgb=radiance, w=falloff
     };
 
     // static std::shared_ptr<UniformBuffer> s_CameraUniformBuffer;
@@ -116,7 +114,7 @@ namespace Ayaya {
         glm::vec4 ClearColor = { 0.06f, 0.06f, 0.065f, 1.0f };
 
         struct_CameraData CameraData;
-        struct_LightData LightData;
+        struct_DirLight DirLight;
 
         uint32_t ViewportWidth = 1280;
         uint32_t ViewportHeight = 720;
@@ -130,7 +128,7 @@ namespace Ayaya {
     SceneRenderer::SceneRenderer() {
         m_Data = std::make_unique<SceneRendererData>();
         m_CameraUniformBuffer = UniformBuffer::Create(sizeof(struct_CameraData), 0);
-        m_LightUniformBuffer = UniformBuffer::Create(sizeof(struct_LightData), 1);
+        m_DirLightUniformBuffer = UniformBuffer::Create(sizeof(struct_DirLight), 1);
         m_PipelineBuilder = std::make_unique<PipelineBuilder>(m_RenderGraph);
     }
 
@@ -247,12 +245,21 @@ namespace Ayaya {
             //    s_GlobalUBOs must be populated when VulkanPipeline constructs descriptor sets
             //    during OnAttach→Pipeline::Create. Without this, Set 0 descriptor sets are
             //    written with null buffer references → shaders read zero camera/light data → black.
+            // Create point light SSBO (triple-buffered, max 65536 lights)
+            m_PointLightSSBO = std::make_unique<VulkanStorageBuffer>(
+                65536 * sizeof(GPUPointLight),
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+            // Light volume instance SSBO (mat4 per light, for instanced sphere rendering)
+            m_LightInstanceSSBO = std::make_unique<VulkanStorageBuffer>(
+                65536 * sizeof(glm::mat4),
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
             auto camUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_CameraUniformBuffer);
-            auto lightUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_LightUniformBuffer);
+            auto dirLightUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_DirLightUniformBuffer);
             if (camUBO) for (uint32_t i = 0; i < 3; i++)
                 VulkanPipeline::SetGlobalUniformBuffer(0, i, camUBO->GetBuffer(i), sizeof(struct_CameraData));
-            if (lightUBO) for (uint32_t i = 0; i < 3; i++)
-                VulkanPipeline::SetGlobalUniformBuffer(1, i, lightUBO->GetBuffer(i), sizeof(struct_LightData));
+            if (dirLightUBO) for (uint32_t i = 0; i < 3; i++)
+                VulkanPipeline::SetGlobalUniformBuffer(1, i, dirLightUBO->GetBuffer(i), sizeof(struct_DirLight));
 
             m_ShadowPass->OnAttach();
             m_GBufferPass->OnAttach();
@@ -378,8 +385,8 @@ namespace Ayaya {
         m_RenderContext.PassProfiles.clear();  // 每帧清空性能统计
         m_RenderContext.Framebuffers.clear();  // 每帧清空 FBO 黑板，防止跨帧残留
         
-        memset(&m_Data->LightData, 0, sizeof(struct_LightData));
-        
+        memset(&m_Data->DirLight, 0, sizeof(struct_DirLight));
+
         float physicalExposure = 1.0f;
         auto cameraView = scene->Reg().view<CameraComponent>();
         for (auto entityID : cameraView) {
@@ -397,29 +404,72 @@ namespace Ayaya {
             glm::quat orientation = glm::quat(transform.Rotation);
             glm::vec3 dir = glm::rotate(orientation, glm::vec3(0.0f, 0.0f, -1.0f));
             
-            m_Data->LightData.DirLightDir = glm::vec4(dir, 0.0f);
-            m_Data->LightData.DirLightColor = glm::vec4(dlc.Color * dlc.Illuminance, 0.0f);
+            m_Data->DirLight.DirLightDir = glm::vec4(dir, 0.0f);
+            m_Data->DirLight.DirLightColor = glm::vec4(dlc.Color * dlc.Illuminance, 0.0f);
             hasDirLight = true;
-            break; 
+            break;
         }
 
         if (!hasDirLight) {
-            m_Data->LightData.DirLightDir = glm::vec4(0.0f, -1.0f, 0.0f, 0.03f);
+            m_Data->DirLight.DirLightDir = glm::vec4(0.0f, -1.0f, 0.0f, 0.03f);
         }
 
-        int pointLightIndex = 0;
-        auto pointLightGroup = scene->Reg().view<TransformComponent, PointLightComponent>();
-        for (auto entityID : pointLightGroup) {
-            if (pointLightIndex >= 4) break; 
-            auto [transform, plc] = pointLightGroup.get<TransformComponent, PointLightComponent>(entityID);
-            
-            m_Data->LightData.PointLights[pointLightIndex].Position = glm::vec4(transform.Translation, plc.Radius);
-            float candelas = plc.LuminousPower / (4.0f * glm::pi<float>());
-            m_Data->LightData.PointLights[pointLightIndex].Color = glm::vec4(plc.Color * candelas, plc.Falloff);
-            pointLightIndex++;
+        // Point lights — SSBO (unlimited count, frustum-culled)
+        {
+            std::vector<GPUPointLight> gpuLights;
+            glm::mat4 vp = m_RenderContext.ProjectionMatrix * m_RenderContext.ViewMatrix;
+            Frustum frustum(vp);
+            auto pointLightGroup = scene->Reg().view<TransformComponent, PointLightComponent>();
+            for (auto entityID : pointLightGroup) {
+                auto [transform, plc] = pointLightGroup.get<TransformComponent, PointLightComponent>(entityID);
+                // CPU frustum culling — skip lights entirely outside the view
+                // Build AABB from the light's bounding sphere for Frustum::IsBoxVisible
+                AABB lightAABB;
+                lightAABB.Min = transform.Translation - glm::vec3(plc.Radius);
+                lightAABB.Max = transform.Translation + glm::vec3(plc.Radius);
+                if (!frustum.IsBoxVisible(lightAABB, glm::mat4(1.0f))) continue;
+                float candelas = plc.LuminousPower / (4.0f * glm::pi<float>());
+                gpuLights.push_back({
+                    glm::vec4(transform.Translation, plc.Radius),
+                    glm::vec4(plc.Color * candelas, plc.Falloff)
+                });
+            }
+            uint32_t lightCount = (uint32_t)gpuLights.size();
+            if (m_PointLightSSBO) {
+                // SSBO layout: [uint count][3*uint _pad][GPUPointLight lights[]]
+                // Must write count + pad + light data as contiguous block
+                struct { uint32_t count; uint32_t _pad[3]; } header = { lightCount, {} };
+                std::vector<uint8_t> buffer(sizeof(header) + lightCount * sizeof(GPUPointLight));
+                memcpy(buffer.data(), &header, sizeof(header));
+                if (lightCount > 0)
+                    memcpy(buffer.data() + sizeof(header), gpuLights.data(),
+                           lightCount * sizeof(GPUPointLight));
+                m_PointLightSSBO->SetData(buffer.data(), buffer.size());
+            }
+            m_RenderContext.Set("PointLightCount", (int)lightCount);
+            // Pass SSBO buffers to LightingPass for per-frame binding
+            if (m_PointLightSSBO && m_LightInstanceSSBO) {
+                auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+                    Application::Get().GetWindow().GetContext());
+                if (vkCtx) {
+                    uint32_t fi = vkCtx->GetCurrentFrameIndex() % vkCtx->GetFramesInFlight();
+                    m_RenderContext.Set("PointLightSSBO", (uint64_t)m_PointLightSSBO->GetBuffer(fi));
+
+                    // Upload instance matrices (translate * scale per light)
+                    std::vector<glm::mat4> instances(lightCount);
+                    for (uint32_t i = 0; i < lightCount; i++) {
+                        glm::vec3 pos = glm::vec3(gpuLights[i].positionAndRadius);
+                        float radius = gpuLights[i].positionAndRadius.w;
+                        instances[i] = glm::translate(glm::mat4(1.0f), pos)
+                                     * glm::scale(glm::mat4(1.0f), glm::vec3(radius));
+                    }
+                    m_LightInstanceSSBO->SetData(instances.data(),
+                        lightCount * sizeof(glm::mat4));
+                    m_RenderContext.Set("InstanceSSBO", (uint64_t)m_LightInstanceSSBO->GetBuffer(fi));
+                }
+            }
         }
-        m_Data->LightData.PointLightCount = pointLightIndex;
-        m_LightUniformBuffer->SetData(&m_Data->LightData, sizeof(struct_LightData));
+        m_DirLightUniformBuffer->SetData(&m_Data->DirLight, sizeof(struct_DirLight));
 
         // ==========================================
         // GDR: Blind Submit with 3-suspect diagnostics
@@ -505,7 +555,7 @@ namespace Ayaya {
         m_RenderContext.Set("ViewportWidth", m_Data->ViewportWidth);
         m_RenderContext.Set("ViewportHeight", m_Data->ViewportHeight);
         m_RenderContext.Set("HasDirLight", hasDirLight);
-        m_RenderContext.Set("DirLightDir", glm::vec3(m_Data->LightData.DirLightDir));
+        m_RenderContext.Set("DirLightDir", glm::vec3(m_Data->DirLight.DirLightDir));
 
         m_RenderContext.SetTexture("WhiteTexture", m_Data->WhiteTexture);
         m_RenderContext.SetTexture("BlackTexture", m_Data->BlackTexture);
@@ -597,9 +647,9 @@ namespace Ayaya {
 
                 VulkanPipeline::ClearGlobalUBOs();
                 auto camUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_CameraUniformBuffer);
-                auto lightUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_LightUniformBuffer);
+                auto dirLightUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_DirLightUniformBuffer);
                 if (camUBO) for (uint32_t i=0;i<3;i++) VulkanPipeline::SetGlobalUniformBuffer(0,i,camUBO->GetBuffer(i),sizeof(struct_CameraData));
-                if (lightUBO) for (uint32_t i=0;i<3;i++) VulkanPipeline::SetGlobalUniformBuffer(1,i,lightUBO->GetBuffer(i),sizeof(struct_LightData));
+                if (dirLightUBO) for (uint32_t i=0;i<3;i++) VulkanPipeline::SetGlobalUniformBuffer(1,i,dirLightUBO->GetBuffer(i),sizeof(struct_DirLight));
 
                 // Read N-1 frame GPU timestamps before executing current frame
                 auto tsCtx = std::dynamic_pointer_cast<VulkanContext>(
