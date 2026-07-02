@@ -2,1432 +2,877 @@ Scene: Untitled
 EditorState:
   ShowGrid: false
   ShowSkybox: true
-  CameraPosition:
-  - -4.1182694
-  - 1.4732139
-  - 36.212795
+  CameraPosition: [-4.1182694, 1.4732139, 36.212795]
   CameraDistance: 37.000557
   CameraPitch: -0.023497922
   CameraYaw: -0.059041016
-  CameraFocalPoint:
-  - -1.9355907
-  - 0.6038577
-  - -0.7130966
+  CameraFocalPoint: [-1.9355907, 0.6038577, -0.7130966]
 Entities:
-- Entity: 5948316899377550005
-  TagComponent:
-    Tag: Main Camera
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 0
-    - 0
-    - 23.6
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 1
-    - 1
-    - 1
-  CameraComponent:
-    Primary: true
-    FixedAspectRatio: false
-    EV100: 0
-    ClearFlag: 1
-    BackgroundColor:
-    - 0.0071174502
-    - 0.0071174502
-    - 0.0071174502
-    - 1
-    Camera:
-      ProjectionType: 0
-      PerspectiveFOV: 0.7853982
-      PerspectiveNear: 0.01
-      PerspectiveFar: 1000
-      OrthographicSize: 5
-      OrthographicNear: -1
-      OrthographicFar: 1000
-  RelationshipComponent:
-    Parent: 0
-- Entity: 4673506207229515908
-  TagComponent:
-    Tag: Point Light 0
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -10
-    - 10
-    - 10
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 0.5
-    - 0.5
-    - 0.5
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 7228356185306713137
-  PointLightComponent:
-    Color:
-    - 1
-    - 1
-    - 1
-    LuminousPower: 1500
-    Radius: 109.2
-    Falloff: 1
-  RelationshipComponent:
-    Parent: 0
-- Entity: 18134488219967424044
-  TagComponent:
-    Tag: Point Light 1
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 10
-    - 10
-    - 10
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 0.5
-    - 0.5
-    - 0.5
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 3160826742336583479
-  PointLightComponent:
-    Color:
-    - 1
-    - 1
-    - 1
-    LuminousPower: 1500
-    Radius: 109.2
-    Falloff: 1
-  RelationshipComponent:
-    Parent: 0
-- Entity: 16967919021197220176
-  TagComponent:
-    Tag: Point Light 2
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -10
-    - -10
-    - 10
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 0.5
-    - 0.5
-    - 0.5
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 13430207756346672096
-  PointLightComponent:
-    Color:
-    - 1
-    - 1
-    - 1
-    LuminousPower: 1500
-    Radius: 109.2
-    Falloff: 1
-  RelationshipComponent:
-    Parent: 0
-- Entity: 7776252869593817873
-  TagComponent:
-    Tag: Point Light 3
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 10
-    - -10
-    - 10
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 0.5
-    - 0.5
-    - 0.5
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 6196501296408520344
-  PointLightComponent:
-    Color:
-    - 1
-    - 1
-    - 1
-    LuminousPower: 1500
-    Radius: 109.2
-    Falloff: 10
-  RelationshipComponent:
-    Parent: 0
-- Entity: 454681315911136007
-  TagComponent:
-    Tag: PBR Sphere Grid
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 0
-    - 0
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 1
-    - 1
-    - 1
-  RelationshipComponent:
-    Parent: 0
-- Entity: 14180390231928814554
-  TagComponent:
-    Tag: Sphere_M0_R5
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -7.5
-    - -7.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 2913938787331340890
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 11304064241039315965
-  TagComponent:
-    Tag: Sphere_M0_R16
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -5
-    - -7.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 16307833197151254739
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 10103244382630039209
-  TagComponent:
-    Tag: Sphere_M0_R33
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -2.5
-    - -7.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 2179450236811559209
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 16702459296978883351
-  TagComponent:
-    Tag: Sphere_M0_R50
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 0
-    - -7.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 7360008680067039934
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 2467157189256502405
-  TagComponent:
-    Tag: Sphere_M0_R66
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 2.5
-    - -7.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 16799987269235130194
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 17741071141692052095
-  TagComponent:
-    Tag: Sphere_M0_R83
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 5
-    - -7.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 7663558330717396260
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 17740591265077510907
-  TagComponent:
-    Tag: Sphere_M0_R100
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 7.5
-    - -7.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 12206235588240122376
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 10464699468366235916
-  TagComponent:
-    Tag: Sphere_M16_R5
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -7.5
-    - -5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 12413342663050352594
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 4080826509765440307
-  TagComponent:
-    Tag: Sphere_M16_R16
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -5
-    - -5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 8873859052745459179
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 9724380828745411508
-  TagComponent:
-    Tag: Sphere_M16_R33
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -2.5
-    - -5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 5438728351537768748
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 10783664929510380957
-  TagComponent:
-    Tag: Sphere_M16_R50
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 0
-    - -5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 11653556992882889489
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 6236941920131156724
-  TagComponent:
-    Tag: Sphere_M16_R66
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 2.5
-    - -5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 1989536105768128229
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 17008038194438138920
-  TagComponent:
-    Tag: Sphere_M16_R83
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 5
-    - -5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 9001608739745611732
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 9904271597798751397
-  TagComponent:
-    Tag: Sphere_M16_R100
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 7.5
-    - -5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 5750566085453862647
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 12454745608770059806
-  TagComponent:
-    Tag: Sphere_M33_R5
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -7.5
-    - -2.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 17234475571309647144
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 18401491765531654327
-  TagComponent:
-    Tag: Sphere_M33_R16
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -5
-    - -2.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 9170761096493082753
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 9348027648776900782
-  TagComponent:
-    Tag: Sphere_M33_R33
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -2.5
-    - -2.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 3622840683813339887
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 17751290344493326145
-  TagComponent:
-    Tag: Sphere_M33_R50
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 0
-    - -2.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 18146723874824769844
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 2196336093993331587
-  TagComponent:
-    Tag: Sphere_M33_R66
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 2.5
-    - -2.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 9739983916604361318
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 12524165893417908058
-  TagComponent:
-    Tag: Sphere_M33_R83
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 5
-    - -2.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 3157261267663706763
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 14888776582807275225
-  TagComponent:
-    Tag: Sphere_M33_R100
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 7.5
-    - -2.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 1166357433829648732
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 7712548751370405178
-  TagComponent:
-    Tag: Sphere_M50_R5
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -7.5
-    - 0
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 9506833680205807868
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 17062175257226599934
-  TagComponent:
-    Tag: Sphere_M50_R16
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -5
-    - 0
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 17620708959061752963
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 5630167432543382369
-  TagComponent:
-    Tag: Sphere_M50_R33
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -2.5
-    - 0
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 4092612989334295050
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 10031530543579594372
-  TagComponent:
-    Tag: Sphere_M50_R50
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 0
-    - 0
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 5979066729291324008
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 13696111789324161207
-  TagComponent:
-    Tag: Sphere_M50_R66
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 2.5
-    - 0
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 3100525985393925875
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 4092345181773180402
-  TagComponent:
-    Tag: Sphere_M50_R83
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 5
-    - 0
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 4337812220680944005
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 12139174842283467893
-  TagComponent:
-    Tag: Sphere_M50_R100
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 7.5
-    - 0
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 13418029421253904257
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 554932139284313008
-  TagComponent:
-    Tag: Sphere_M66_R5
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -7.5
-    - 2.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 2564520700204553130
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 641220254051612622
-  TagComponent:
-    Tag: Sphere_M66_R16
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -5
-    - 2.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 10472524945344084536
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 16845992191887604492
-  TagComponent:
-    Tag: Sphere_M66_R33
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -2.5
-    - 2.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 13671853718844208862
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 2429917273015710460
-  TagComponent:
-    Tag: Sphere_M66_R50
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 0
-    - 2.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 11191946422678202942
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 3633832020812006239
-  TagComponent:
-    Tag: Sphere_M66_R66
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 2.5
-    - 2.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 14226807156494370153
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 7722587756968172135
-  TagComponent:
-    Tag: Sphere_M66_R83
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 5
-    - 2.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 8962005181964757018
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 18121561528972126915
-  TagComponent:
-    Tag: Sphere_M66_R100
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 7.5
-    - 2.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 17249231856524104551
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 5557376298992102553
-  TagComponent:
-    Tag: Sphere_M83_R5
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -7.5
-    - 5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 2752228573761483559
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 14232831882245990189
-  TagComponent:
-    Tag: Sphere_M83_R16
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -5
-    - 5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 4707286734025527677
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 3565561095305945668
-  TagComponent:
-    Tag: Sphere_M83_R33
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -2.5
-    - 5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 17707877469284049569
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 596952473056353486
-  TagComponent:
-    Tag: Sphere_M83_R50
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 0
-    - 5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 10607320773906193670
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 12116363593392979293
-  TagComponent:
-    Tag: Sphere_M83_R66
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 2.5
-    - 5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 12867810005179646569
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 10071468536417815098
-  TagComponent:
-    Tag: Sphere_M83_R83
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 5
-    - 5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 102552745375564347
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 15831100693101426757
-  TagComponent:
-    Tag: Sphere_M83_R100
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 7.5
-    - 5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 16976183307543432344
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 10908765520439904052
-  TagComponent:
-    Tag: Sphere_M100_R5
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -7.5
-    - 7.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 2276986592198111381
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 16759778860054133429
-  TagComponent:
-    Tag: Sphere_M100_R16
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -5
-    - 7.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 10657599288453476440
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 15224640695126231657
-  TagComponent:
-    Tag: Sphere_M100_R33
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - -2.5
-    - 7.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 7579532593610394416
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 5150654801832263055
-  TagComponent:
-    Tag: Sphere_M100_R50
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 0
-    - 7.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 62743632801309727
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 15593721669897890867
-  TagComponent:
-    Tag: Sphere_M100_R66
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 2.5
-    - 7.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 12693975743889114544
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 7805305103125184721
-  TagComponent:
-    Tag: Sphere_M100_R83
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 5
-    - 7.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 12797696483532893849
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 3556057618848213169
-  TagComponent:
-    Tag: Sphere_M100_R100
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 7.5
-    - 7.5
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 2
-    - 2
-    - 2
-  MeshRendererComponent:
-    CastShadows: false
-    ReceiveShadows: false
-    ModelHandle: 16140901000000000002
-    MaterialHandle: 4090700421238353285
-  RelationshipComponent:
-    Parent: 454681315911136007
-- Entity: 5828971257645455519
-  TagComponent:
-    Tag: Skybox
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 0
-    - 0
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 1
-    - 1
-    - 1
-  EnvironmentComponent:
-    Type: 1
-    Intensity: 0.1
-    AmbientColor:
-    - 0
-    - 0
-    - 0
-    EquirectangularHandle: 16140901000000000005
-    CubemapHandle: 0
-  RelationshipComponent:
-    Parent: 0
-- Entity: 9313563377055794543
-  TagComponent:
-    Tag: Post Process Volume
-    IsActive: true
-  TransformComponent:
-    Translation:
-    - 0
-    - 0
-    - 0
-    Rotation:
-    - 0
-    - 0
-    - 0
-    Scale:
-    - 1
-    - 1
-    - 1
-  PostProcessVolumeComponent:
-    IsGlobal: true
-    ToneMappingType: 0
-    Exposure: 1
-    EnableBloom: true
-    BloomThreshold: 1
-    BloomKnee: 0.1
-    BloomRadius: 0.005
-    BloomIntensity: 1
-    EnableFXAA: false
-  RelationshipComponent:
-    Parent: 0
+  - Entity: 5948316899377550005
+    TagComponent:
+      Tag: Main Camera
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 23.6]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    CameraComponent:
+      Primary: true
+      FixedAspectRatio: false
+      EV100: 0
+      ClearFlag: 1
+      BackgroundColor: [0.0071174502, 0.0071174502, 0.0071174502, 1]
+      Camera:
+        ProjectionType: 0
+        PerspectiveFOV: 0.7853982
+        PerspectiveNear: 0.01
+        PerspectiveFar: 1000
+        OrthographicSize: 5
+        OrthographicNear: -1
+        OrthographicFar: 1000
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 4673506207229515908
+    TagComponent:
+      Tag: Point Light 0
+      IsActive: true
+    TransformComponent:
+      Translation: [-10, 10, 10]
+      Rotation: [0, 0, 0]
+      Scale: [0.5, 0.5, 0.5]
+    PointLightComponent:
+      Color: [1, 1, 1]
+      LuminousPower: 1500
+      Radius: 109.2
+      Falloff: 1
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 18134488219967424044
+    TagComponent:
+      Tag: Point Light 1
+      IsActive: true
+    TransformComponent:
+      Translation: [10, 10, 10]
+      Rotation: [0, 0, 0]
+      Scale: [0.5, 0.5, 0.5]
+    PointLightComponent:
+      Color: [1, 1, 1]
+      LuminousPower: 1500
+      Radius: 109.2
+      Falloff: 1
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 16967919021197220176
+    TagComponent:
+      Tag: Point Light 2
+      IsActive: true
+    TransformComponent:
+      Translation: [-10, -10, 10]
+      Rotation: [0, 0, 0]
+      Scale: [0.5, 0.5, 0.5]
+    PointLightComponent:
+      Color: [1, 1, 1]
+      LuminousPower: 1500
+      Radius: 109.2
+      Falloff: 1
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 7776252869593817873
+    TagComponent:
+      Tag: Point Light 3
+      IsActive: true
+    TransformComponent:
+      Translation: [10, -10, 10]
+      Rotation: [0, 0, 0]
+      Scale: [0.5, 0.5, 0.5]
+    PointLightComponent:
+      Color: [1, 1, 1]
+      LuminousPower: 1500
+      Radius: 109.2
+      Falloff: 10
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 454681315911136007
+    TagComponent:
+      Tag: PBR Sphere Grid
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 14180390231928814554
+    TagComponent:
+      Tag: Sphere_M0_R5
+      IsActive: true
+    TransformComponent:
+      Translation: [-7.5, -7.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 2913938787331340890
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 11304064241039315965
+    TagComponent:
+      Tag: Sphere_M0_R16
+      IsActive: true
+    TransformComponent:
+      Translation: [-5, -7.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 16307833197151254739
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 10103244382630039209
+    TagComponent:
+      Tag: Sphere_M0_R33
+      IsActive: true
+    TransformComponent:
+      Translation: [-2.5, -7.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 2179450236811559209
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 16702459296978883351
+    TagComponent:
+      Tag: Sphere_M0_R50
+      IsActive: true
+    TransformComponent:
+      Translation: [0, -7.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 7360008680067039934
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 2467157189256502405
+    TagComponent:
+      Tag: Sphere_M0_R66
+      IsActive: true
+    TransformComponent:
+      Translation: [2.5, -7.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 16799987269235130194
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 17741071141692052095
+    TagComponent:
+      Tag: Sphere_M0_R83
+      IsActive: true
+    TransformComponent:
+      Translation: [5, -7.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 7663558330717396260
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 17740591265077510907
+    TagComponent:
+      Tag: Sphere_M0_R100
+      IsActive: true
+    TransformComponent:
+      Translation: [7.5, -7.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 12206235588240122376
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 10464699468366235916
+    TagComponent:
+      Tag: Sphere_M16_R5
+      IsActive: true
+    TransformComponent:
+      Translation: [-7.5, -5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 12413342663050352594
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 4080826509765440307
+    TagComponent:
+      Tag: Sphere_M16_R16
+      IsActive: true
+    TransformComponent:
+      Translation: [-5, -5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 8873859052745459179
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 9724380828745411508
+    TagComponent:
+      Tag: Sphere_M16_R33
+      IsActive: true
+    TransformComponent:
+      Translation: [-2.5, -5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 5438728351537768748
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 10783664929510380957
+    TagComponent:
+      Tag: Sphere_M16_R50
+      IsActive: true
+    TransformComponent:
+      Translation: [0, -5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 11653556992882889489
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 6236941920131156724
+    TagComponent:
+      Tag: Sphere_M16_R66
+      IsActive: true
+    TransformComponent:
+      Translation: [2.5, -5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 1989536105768128229
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 17008038194438138920
+    TagComponent:
+      Tag: Sphere_M16_R83
+      IsActive: true
+    TransformComponent:
+      Translation: [5, -5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 9001608739745611732
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 9904271597798751397
+    TagComponent:
+      Tag: Sphere_M16_R100
+      IsActive: true
+    TransformComponent:
+      Translation: [7.5, -5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 5750566085453862647
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 12454745608770059806
+    TagComponent:
+      Tag: Sphere_M33_R5
+      IsActive: true
+    TransformComponent:
+      Translation: [-7.5, -2.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 17234475571309647144
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 18401491765531654327
+    TagComponent:
+      Tag: Sphere_M33_R16
+      IsActive: true
+    TransformComponent:
+      Translation: [-5, -2.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 9170761096493082753
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 9348027648776900782
+    TagComponent:
+      Tag: Sphere_M33_R33
+      IsActive: true
+    TransformComponent:
+      Translation: [-2.5, -2.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 3622840683813339887
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 17751290344493326145
+    TagComponent:
+      Tag: Sphere_M33_R50
+      IsActive: true
+    TransformComponent:
+      Translation: [0, -2.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 18146723874824769844
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 2196336093993331587
+    TagComponent:
+      Tag: Sphere_M33_R66
+      IsActive: true
+    TransformComponent:
+      Translation: [2.5, -2.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 9739983916604361318
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 12524165893417908058
+    TagComponent:
+      Tag: Sphere_M33_R83
+      IsActive: true
+    TransformComponent:
+      Translation: [5, -2.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 3157261267663706763
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 14888776582807275225
+    TagComponent:
+      Tag: Sphere_M33_R100
+      IsActive: true
+    TransformComponent:
+      Translation: [7.5, -2.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 1166357433829648732
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 7712548751370405178
+    TagComponent:
+      Tag: Sphere_M50_R5
+      IsActive: true
+    TransformComponent:
+      Translation: [-7.5, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 9506833680205807868
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 17062175257226599934
+    TagComponent:
+      Tag: Sphere_M50_R16
+      IsActive: true
+    TransformComponent:
+      Translation: [-5, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 17620708959061752963
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 5630167432543382369
+    TagComponent:
+      Tag: Sphere_M50_R33
+      IsActive: true
+    TransformComponent:
+      Translation: [-2.5, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 4092612989334295050
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 10031530543579594372
+    TagComponent:
+      Tag: Sphere_M50_R50
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 5979066729291324008
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 13696111789324161207
+    TagComponent:
+      Tag: Sphere_M50_R66
+      IsActive: true
+    TransformComponent:
+      Translation: [2.5, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 3100525985393925875
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 4092345181773180402
+    TagComponent:
+      Tag: Sphere_M50_R83
+      IsActive: true
+    TransformComponent:
+      Translation: [5, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 4337812220680944005
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 12139174842283467893
+    TagComponent:
+      Tag: Sphere_M50_R100
+      IsActive: true
+    TransformComponent:
+      Translation: [7.5, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 13418029421253904257
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 554932139284313008
+    TagComponent:
+      Tag: Sphere_M66_R5
+      IsActive: true
+    TransformComponent:
+      Translation: [-7.5, 2.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 2564520700204553130
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 641220254051612622
+    TagComponent:
+      Tag: Sphere_M66_R16
+      IsActive: true
+    TransformComponent:
+      Translation: [-5, 2.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 10472524945344084536
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 16845992191887604492
+    TagComponent:
+      Tag: Sphere_M66_R33
+      IsActive: true
+    TransformComponent:
+      Translation: [-2.5, 2.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 13671853718844208862
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 2429917273015710460
+    TagComponent:
+      Tag: Sphere_M66_R50
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 2.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 11191946422678202942
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 3633832020812006239
+    TagComponent:
+      Tag: Sphere_M66_R66
+      IsActive: true
+    TransformComponent:
+      Translation: [2.5, 2.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 14226807156494370153
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 7722587756968172135
+    TagComponent:
+      Tag: Sphere_M66_R83
+      IsActive: true
+    TransformComponent:
+      Translation: [5, 2.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 8962005181964757018
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 18121561528972126915
+    TagComponent:
+      Tag: Sphere_M66_R100
+      IsActive: true
+    TransformComponent:
+      Translation: [7.5, 2.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 17249231856524104551
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 5557376298992102553
+    TagComponent:
+      Tag: Sphere_M83_R5
+      IsActive: true
+    TransformComponent:
+      Translation: [-7.5, 5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 2752228573761483559
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 14232831882245990189
+    TagComponent:
+      Tag: Sphere_M83_R16
+      IsActive: true
+    TransformComponent:
+      Translation: [-5, 5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 4707286734025527677
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 3565561095305945668
+    TagComponent:
+      Tag: Sphere_M83_R33
+      IsActive: true
+    TransformComponent:
+      Translation: [-2.5, 5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 17707877469284049569
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 596952473056353486
+    TagComponent:
+      Tag: Sphere_M83_R50
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 10607320773906193670
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 12116363593392979293
+    TagComponent:
+      Tag: Sphere_M83_R66
+      IsActive: true
+    TransformComponent:
+      Translation: [2.5, 5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 12867810005179646569
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 10071468536417815098
+    TagComponent:
+      Tag: Sphere_M83_R83
+      IsActive: true
+    TransformComponent:
+      Translation: [5, 5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 102552745375564347
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 15831100693101426757
+    TagComponent:
+      Tag: Sphere_M83_R100
+      IsActive: true
+    TransformComponent:
+      Translation: [7.5, 5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 16976183307543432344
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 10908765520439904052
+    TagComponent:
+      Tag: Sphere_M100_R5
+      IsActive: true
+    TransformComponent:
+      Translation: [-7.5, 7.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 2276986592198111381
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 16759778860054133429
+    TagComponent:
+      Tag: Sphere_M100_R16
+      IsActive: true
+    TransformComponent:
+      Translation: [-5, 7.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 10657599288453476440
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 15224640695126231657
+    TagComponent:
+      Tag: Sphere_M100_R33
+      IsActive: true
+    TransformComponent:
+      Translation: [-2.5, 7.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 7579532593610394416
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 5150654801832263055
+    TagComponent:
+      Tag: Sphere_M100_R50
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 7.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 62743632801309727
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 15593721669897890867
+    TagComponent:
+      Tag: Sphere_M100_R66
+      IsActive: true
+    TransformComponent:
+      Translation: [2.5, 7.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 12693975743889114544
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 7805305103125184721
+    TagComponent:
+      Tag: Sphere_M100_R83
+      IsActive: true
+    TransformComponent:
+      Translation: [5, 7.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 12797696483532893849
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 3556057618848213169
+    TagComponent:
+      Tag: Sphere_M100_R100
+      IsActive: true
+    TransformComponent:
+      Translation: [7.5, 7.5, 0]
+      Rotation: [0, 0, 0]
+      Scale: [2, 2, 2]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 4090700421238353285
+      CastShadows: false
+      ReceiveShadows: false
+    RelationshipComponent:
+      Parent: 454681315911136007
+  - Entity: 5828971257645455519
+    TagComponent:
+      Tag: Skybox
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    EnvironmentComponent:
+      Type: 1
+      Intensity: 0.1
+      AmbientColor: [0, 0, 0]
+      EquirectangularHandle: 16140901000000000005
+      CubemapHandle: 0
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 9313563377055794543
+    TagComponent:
+      Tag: Post Process Volume
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    PostProcessVolumeComponent:
+      IsGlobal: true
+      ToneMappingType: 0
+      Exposure: 1
+      EnableBloom: true
+      BloomThreshold: 1
+      BloomKnee: 0.1
+      BloomRadius: 0.005
+      BloomIntensity: 1
+      EnableFXAA: false
+      EnableSSAO: false
+      SSAORadius: 0.5
+      SSAOBias: 0.025
+    RelationshipComponent:
+      Parent: 0

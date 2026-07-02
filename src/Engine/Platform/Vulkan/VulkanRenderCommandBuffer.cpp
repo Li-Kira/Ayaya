@@ -79,7 +79,8 @@ namespace Ayaya {
 
         vkCmdBeginRendering(cmdBuffer, &renderingInfo);
 
-        // Vulkan 负高度视口 (Y轴翻转，兼容 OpenGL 投影矩阵)
+        // Vulkan negative-height viewport: sole Y-flip (matches OpenGL projection).
+        // Per Vulkan spec §27.7, HW auto-compensates winding when height < 0.
         VkViewport viewport{};
         viewport.x = 0.0f;
         viewport.y = (float)height;

@@ -324,24 +324,28 @@ namespace Ayaya {
         m_Data->ProjectionMatrix = projectionMatrix;
         m_Data->CameraPosition = cameraPosition;
 
-        // 1. 应用 Vulkan 深度校正 (保持 Y 轴缩放为 1.0f，配合之前的 Negative Viewport 方案)
+        // GLM_FORCE_DEPTH_ZERO_TO_ONE: glm::perspective produces [0,1] depth already.
+        // Vulkan: zero correction — pure projection, no Y-flip, no Z-remap.
+        // Negative viewport handles Y-axis (VK spec §27.7 winding auto-compensation).
         if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
-            static const glm::mat4 vulkanCorrection(
-                1.0f,  0.0f,  0.0f,  0.0f,
-                0.0f, -1.0f,  0.0f,  0.0f,
-                0.0f,  0.0f,  0.5f,  0.0f, 
-                0.0f,  0.0f,  0.5f,  1.0f  
-            );
-            m_RenderContext.ProjectionMatrix = vulkanCorrection * projectionMatrix;
-        } else {
             m_RenderContext.ProjectionMatrix = projectionMatrix;
+        }
+        // OpenGL: GLM produces [0,1] depth, but OpenGL expects [-1,1] → reverse map.
+        else {
+            static const glm::mat4 openGLDepthCorrection(
+                1.0f, 0.0f, 0.0f, 0.0f,   // col 0
+                0.0f, 1.0f, 0.0f, 0.0f,   // col 1
+                0.0f, 0.0f, 2.0f, 0.0f,   // col 2: z' = 2z
+                0.0f, 0.0f,-1.0f, 1.0f    // col 3: w' = w - z  →  NDC' = 2*NDC - 1
+            );
+            m_RenderContext.ProjectionMatrix = openGLDepthCorrection * projectionMatrix;
         }
 
         m_RenderContext.ViewMatrix = viewMatrix;
         m_RenderContext.CameraPosition = cameraPosition;
 
         // ==========================================
-        // 2. 【核心修复】：计算 ViewProjection 必须用校正后的 Projection！
+        // ViewProjection uses depth-corrected projection (GL [-1,1] → VK [0,1]).
         // ==========================================
         m_Data->ViewProjectionMatrix = m_RenderContext.ProjectionMatrix * viewMatrix;
         m_RenderContext.Set("InverseProj", glm::inverse(m_RenderContext.ProjectionMatrix));

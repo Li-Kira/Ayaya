@@ -135,13 +135,16 @@ namespace Ayaya {
         vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
 
         // ==========================================
-        // 4. 定义 6 个面的视图矩阵 (engine flipped viewport, no proj Y-flip)
+        // 4. 定义 6 个面的视图矩阵
         // ==========================================
+        // ==========================================
+        // 4. 定义 6 个面的视图矩阵 (Standard OpenGL cubemap)
+        // ==========================================
+        // Classic dual-flip for cubemap: proj Y-flip × neg viewport = all 6 faces correct.
+        // Standard right-handed lookAt matrices work naturally — no shader hacks needed.
         glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
-        captureProjection[1][1] *= -1.0f; // + neg-height viewport = net Y-flip vs standard Vulkan
-        
-        // Proj Y-flip and neg-height viewport are equivalent — both flip Y.
-        // Up vectors are unchanged from Vulkan default (neg-Y for ±X/±Z, ±Z for ±Y).
+        captureProjection[1][1] *= -1.0f;
+
         glm::mat4 captureViews[] = {
             glm::lookAt(glm::vec3(0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
             glm::lookAt(glm::vec3(0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
@@ -457,11 +460,10 @@ namespace Ayaya {
         write.pImageInfo = &descImageInfo;
         vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
 
-        // 4. 定义视图矩阵
+        // 4. 定义视图矩阵 (Standard OpenGL cubemap: -Y for ±X/±Z, ±Z for ±Y)
         glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
-        captureProjection[1][1] *= -1.0f; // + neg-height viewport = net Y-flip vs standard Vulkan
-        // Proj Y-flip and neg-height viewport are equivalent — both flip Y.
-        // Up vectors are unchanged from Vulkan default (neg-Y for ±X/±Z, ±Z for ±Y).
+        captureProjection[1][1] *= -1.0f;
+
         glm::mat4 captureViews[] = {
             glm::lookAt(glm::vec3(0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
             glm::lookAt(glm::vec3(0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
@@ -676,11 +678,10 @@ namespace Ayaya {
         write.descriptorCount = 1; write.pImageInfo = &descImageInfo;
         vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
 
-        // 4. 定义视图矩阵
+        // 4. 定义视图矩阵 (Standard OpenGL cubemap: -Y for ±X/±Z, ±Z for ±Y)
         glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
-        captureProjection[1][1] *= -1.0f; // + neg-height viewport = net Y-flip vs standard Vulkan
-        // Proj Y-flip and neg-height viewport are equivalent — both flip Y.
-        // Up vectors are unchanged from Vulkan default (neg-Y for ±X/±Z, ±Z for ±Y).
+        captureProjection[1][1] *= -1.0f;
+
         glm::mat4 captureViews[] = {
             glm::lookAt(glm::vec3(0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
             glm::lookAt(glm::vec3(0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),

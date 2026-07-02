@@ -32,7 +32,7 @@ Entities:
         OrthographicFar: 1000
     RelationshipComponent:
       Parent: 0
-  - Entity: 9146408660368255167
+  - Entity: 14129445293635039415
     TagComponent:
       Tag: Canvas
       IsActive: true
@@ -41,11 +41,11 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     RectTransformComponent:
-      AnchorMin: [0.5, 0.5]
-      AnchorMax: [0.5, 0.5]
+      AnchorMin: [0, 0]
+      AnchorMax: [1, 1]
       Pivot: [0.5, 0.5]
       Position: [0, 0]
-      Size: [100, 100]
+      Size: [0, 0]
       Rotation: 0
       Scale: [1, 1]
     CanvasComponent:
@@ -53,7 +53,7 @@ Entities:
       SortOrder: 0
     RelationshipComponent:
       Parent: 0
-  - Entity: 1267798018143488366
+  - Entity: 4046858175357237978
     TagComponent:
       Tag: Image
       IsActive: true
@@ -73,4 +73,4 @@ Entities:
       Color: [1, 1, 1, 1]
       TextureHandle: 639220978417225722
     RelationshipComponent:
-      Parent: 9146408660368255167
+      Parent: 14129445293635039415

@@ -1,4 +1,25 @@
 MaterialName: NewMaterial (1)
 ShaderName: Default
+BlendMode: 0
+AlphaCutoff: 0.5
 Properties:
-  []
+  - UniformName: u_Alpha
+    DisplayName: Alpha Multiplier
+    Type: 0
+    FloatValue: 1
+  - UniformName: u_AlphaMap
+    DisplayName: Alpha/Opacity Map
+    Type: 8
+    TextureHandle: 0
+  - UniformName: u_ORMMap
+    DisplayName: ORM Texture (R=AO G=Roughness B=Metallic)
+    Type: 8
+    TextureHandle: 0
+  - UniformName: u_HeightMap
+    DisplayName: Height/Displacement Map
+    Type: 8
+    TextureHandle: 0
+  - UniformName: u_EmissiveMap
+    DisplayName: Emissive Map
+    Type: 8
+    TextureHandle: 0

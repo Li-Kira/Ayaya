@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(APPLE)
     set(CMAKE_MACOSX_RPATH 1)
     set(APPLE_FRAMEWORKS "-framework Cocoa -framework IOKit -framework CoreVideo -framework OpenGL -framework QuartzCore")
-    # add_definitions(-DGLM_FORCE_DEPTH_ZERO_TO_ONE) 
+    add_definitions(-DGLM_FORCE_DEPTH_ZERO_TO_ONE)
 elseif(WIN32)
     # Windows 平台特有设置
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)

@@ -371,7 +371,7 @@ namespace Ayaya {
             gdrSpec.DepthTest = true; gdrSpec.DepthWrite = true;
             gdrSpec.DepthOperator = DepthCompareOperator::LEqual;  // Pre-pass wrote same depth → must accept EQUAL
             gdrSpec.Blend = false;
-            gdrSpec.BackfaceCulling = CullMode::None;
+            gdrSpec.BackfaceCulling = CullMode::Back;
             gdrSpec.UseBindlessTextures = true;
             VulkanPipeline::s_ExtraSetLayouts = { m_GDRCtx->Set2Layout };
             m_GDRPipeline = Pipeline::Create(gdrSpec);

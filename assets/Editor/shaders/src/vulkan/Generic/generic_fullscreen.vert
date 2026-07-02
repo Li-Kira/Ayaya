@@ -1,12 +1,12 @@
 #version 450 core
 
-// Full-screen triangle — generates NDC positions from gl_VertexIndex.
+// Full-screen triangle — OpenGL NDC (Y-up) for negative-height viewport.
 // Used by GenericFullScreenPass and any post-processing effect.
 
 vec2 positions[3] = vec2[](
-    vec2(-1.0, -1.0),
-    vec2( 3.0, -1.0),
-    vec2(-1.0,  3.0)
+    vec2(-1.0,  1.0),
+    vec2( 3.0,  1.0),
+    vec2(-1.0, -3.0)
 );
 
 vec2 uvs[3] = vec2[](

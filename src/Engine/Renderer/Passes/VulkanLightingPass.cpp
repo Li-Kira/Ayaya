@@ -114,10 +114,9 @@ namespace Ayaya {
             lvSpec.Layout = {};  // SSBO vertex pulling (no VBO vertex attributes)
             lvSpec.Topology = PrimitiveTopology::Triangles;
             lvSpec.TargetFramebuffer = m_RefFBO;
-            // CullMode::Front is CORRECT here — not a bug.
-            // The vulkanCorrection matrix (Y-flip) inverts the projected winding:
-            //   world-space CCW → screen-space CW (after Y-flip)
-            // CullMode::Back would cull all visible faces. CullMode::Front keeps them.
+            // Light volumes: MUST render back faces (inner shell).
+            // Front faces (outward) get clipped by near plane when camera enters the sphere.
+            // Back faces always face the camera → CullMode::Front culls outward, keeps inward.
             // No depth test — fragment shader distance check (d2 > lr*lr) handles culling.
             lvSpec.DepthTest = false;
             lvSpec.DepthWrite = false;

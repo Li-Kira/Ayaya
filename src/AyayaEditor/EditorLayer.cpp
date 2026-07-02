@@ -1559,7 +1559,10 @@ namespace Ayaya {
                     ImGui::SetCursorPos(ImGui::GetCursorPos() + imageOffset);
                 }
                 ImVec2 vpSize = imageSize;
-                ImGui::Image(textureID, vpSize, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+                bool vk = (RendererAPI::GetAPI() == RendererAPI::API::Vulkan);
+                ImGui::Image(textureID, vpSize,
+                    vk ? ImVec2{0,0} : ImVec2{0,1},
+                    vk ? ImVec2{1,1} : ImVec2{1,0});
 
                 // Update viewport bounds for gizmo/picking
                 ImVec2 imgMin = ImGui::GetItemRectMin();
@@ -1573,7 +1576,10 @@ namespace Ayaya {
                 void* uiTexID = m_SceneRenderer->GetBlackboardTextureID("UI");
                 if (uiTexID) {
                     ImGui::SetCursorScreenPos(uiOverlayPos);
-                    ImGui::Image(uiTexID, vpSize, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+                    bool vk2 = (RendererAPI::GetAPI() == RendererAPI::API::Vulkan);
+                    ImGui::Image(uiTexID, vpSize,
+                        vk2 ? ImVec2{0,0} : ImVec2{0,1},
+                        vk2 ? ImVec2{1,1} : ImVec2{1,0});
                 }
                 if (m_ShowUIGizmos) UIRenderDebugUIGizmos(uiOverlayPos, vpSize,
                     ImGui::GetIO().DisplayFramebufferScale.x);
@@ -2110,14 +2116,20 @@ namespace Ayaya {
                     ImGui::SetCursorPos(cursorStartPos + imageOffset);
                 }
 
-                ImGui::Image(textureID, vpSize, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+                bool vk3 = (RendererAPI::GetAPI() == RendererAPI::API::Vulkan);
+                ImGui::Image(textureID, vpSize,
+                    vk3 ? ImVec2{0,0} : ImVec2{0,1},
+                    vk3 ? ImVec2{1,1} : ImVec2{1,0});
 
                 // UI overlay (must match letterboxed position)
                 ImVec2 gameVpScreenMin = ImGui::GetItemRectMin();
                 void* uiTexID = m_GameRenderer->GetBlackboardTextureID("UI");
                 if (uiTexID) {
                     ImGui::SetCursorScreenPos(gameVpScreenMin);
-                    ImGui::Image(uiTexID, vpSize, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+                    bool vk4 = (RendererAPI::GetAPI() == RendererAPI::API::Vulkan);
+                    ImGui::Image(uiTexID, vpSize,
+                        vk4 ? ImVec2{0,0} : ImVec2{0,1},
+                        vk4 ? ImVec2{1,1} : ImVec2{1,0});
                 }
                 if (m_ShowUIGizmos) UIRenderDebugUIGizmos(gameVpScreenMin, vpSize,
                     ImGui::GetIO().DisplayFramebufferScale.x);
@@ -2671,7 +2683,7 @@ namespace Ayaya {
             float s = size * 0.5f;
             drawList->AddImage((ImTextureID)tex->GetImGuiTextureID(),
                 ImVec2(pos.x - s, pos.y - s), ImVec2(pos.x + s, pos.y + s),
-                ImVec2(0, 1), ImVec2(1, 0), tint);
+                ImVec2(0, 0), ImVec2(1, 1), tint);
             if (canClick && mousePos.x >= pos.x - s && mousePos.x <= pos.x + s &&
                 mousePos.y >= pos.y - s && mousePos.y <= pos.y + s) {
                 float depth;

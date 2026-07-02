@@ -289,7 +289,6 @@ namespace Ayaya {
                 uint32_t vpH = context.Get<uint32_t>("ViewportHeight", 1080);
                 float aspect = (float)vpW / (float)vpH;
                 skyProj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10.0f);
-                skyProj[1][1] *= -1.0f; // Vulkan Y-flip
             }
             skyConst.ViewProjection = skyProj * glm::mat4(glm::mat3(context.ViewMatrix));
             skyConst.Intensity = context.Get<float>("EnvironmentIntensity", 1.0f);

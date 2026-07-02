@@ -1361,7 +1361,9 @@ namespace Ayaya {
 
                                         if (tex && tex->GetImGuiTextureID() != nullptr && (uint64_t)tex->GetImGuiTextureID() != 0) {
                                             bool vk = (RendererAPI::GetAPI() == RendererAPI::API::Vulkan);
-                                            ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), ImVec2(slot,slot), vk?ImVec2(0,0):ImVec2(0,1), vk?ImVec2(1,1):ImVec2(1,0));
+                                            ImVec2 uv0 = vk ? ImVec2(0, tex->IsDataFlipped()?1:0) : ImVec2(0, tex->IsDataFlipped()?0:1);
+                                            ImVec2 uv1 = vk ? ImVec2(1, tex->IsDataFlipped()?0:1) : ImVec2(1, tex->IsDataFlipped()?1:0);
+                                            ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), ImVec2(slot,slot), uv0, uv1);
                                         } else {
                                             ImGui::Button(tex ? "Loading..." : "Null", ImVec2(slot,slot));
                                         }
@@ -2047,7 +2049,9 @@ namespace Ayaya {
                 auto tex = AssetManager::GetAsset<Texture2D>(ref.TextureHandle);
                 if (tex && tex->GetImGuiTextureID() != nullptr) {
                     bool vk = (RendererAPI::GetAPI() == RendererAPI::API::Vulkan);
-                    ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), texSlot, vk?ImVec2(0,0):ImVec2(0,1), vk?ImVec2(1,1):ImVec2(1,0));
+                    ImVec2 uv0 = vk ? ImVec2(0, tex->IsDataFlipped()?1:0) : ImVec2(0, tex->IsDataFlipped()?0:1);
+                    ImVec2 uv1 = vk ? ImVec2(1, tex->IsDataFlipped()?0:1) : ImVec2(1, tex->IsDataFlipped()?1:0);
+                    ImGui::Image((ImTextureID)tex->GetImGuiTextureID(), texSlot, uv0, uv1);
                 } else {
                     ImGui::Button("Loading...", texSlot);
                 }

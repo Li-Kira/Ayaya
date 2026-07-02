@@ -38,7 +38,7 @@ float DistributionGGX(vec3 N, vec3 H, float roughness) {
     return a2 / (PI * denom * denom);
 }
 
-void main() {       
+void main() {
     vec3 N = normalize(v_LocalPos);
     vec3 R = N; vec3 V = R;
 

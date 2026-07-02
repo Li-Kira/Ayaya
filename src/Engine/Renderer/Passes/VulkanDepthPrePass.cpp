@@ -135,7 +135,7 @@ namespace Ayaya {
             pipeSpec.DepthTest = true; pipeSpec.DepthWrite = true;
             pipeSpec.DepthOperator = DepthCompareOperator::Less;
             pipeSpec.Blend = false;
-            pipeSpec.BackfaceCulling = CullMode::None;
+            pipeSpec.BackfaceCulling = CullMode::Back;
             pipeSpec.ColorWrite = false;
             pipeSpec.NoTextureDescriptors = false;
             VulkanPipeline::s_ExtraSetLayouts = { m_GDRCtx->Set2Layout };

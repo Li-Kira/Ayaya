@@ -149,7 +149,10 @@ namespace Ayaya {
         if (spec.BackfaceCulling == CullMode::Back) rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
         else if (spec.BackfaceCulling == CullMode::Front) rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
         
-        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        // Pure projection (no Y-flip) + negative viewport:
+        //   world CCW → viewport flips Y → screen CW.
+        // VK_FRONT_FACE_COUNTER_CLOCKWISE + neg viewport → HW effectively tests CLOCKWISE → CW=front.
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 
         // ==========================================
         // 5. 深度与模板测试 (Depth & Stencil)

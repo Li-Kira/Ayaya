@@ -2,3 +2,4 @@ Project:
   Name: testUI
   StartScene: Scenes/Default.ayaya
   AssetDirectory: Assets
+  DefaultSRPScript: 0

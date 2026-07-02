@@ -121,7 +121,7 @@ namespace Ayaya {
         float cx = ImGui::GetCursorPosX() + (avail.x - imageSize.x) * 0.5f;
         if (cx > ImGui::GetCursorPosX()) ImGui::SetCursorPosX(cx);
 
-        ImGui::Image(texID, imageSize, ImVec2(0, 1), ImVec2(1, 0));
+        ImGui::Image(texID, imageSize, ImVec2(0, 0), ImVec2(1, 1));
     }
 
     // ==========================================
@@ -624,7 +624,7 @@ namespace Ayaya {
                     float aspect = spec.Height > 0 ? (float)spec.Width/(float)spec.Height : 16.0f/9.0f;
                     float th = 60.0f;  // compact thumbnail
                     float tw = std::min(th * aspect, 170.0f);
-                    ImGui::Image(texID, ImVec2(tw, th), ImVec2(0, 1), ImVec2(1, 0));
+                    ImGui::Image(texID, ImVec2(tw, th), ImVec2(0, 0), ImVec2(1, 1));
                 } else {
                     ImGui::TextDisabled("-");
                 }

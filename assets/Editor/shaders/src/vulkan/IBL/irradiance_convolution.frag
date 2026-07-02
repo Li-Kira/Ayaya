@@ -7,7 +7,7 @@ layout(set = 1, binding = 0) uniform samplerCube u_EnvironmentMap;
 
 const float PI = 3.14159265359;
 
-void main() {       
+void main() {
     vec3 N = normalize(v_LocalPos);
     vec3 irradiance = vec3(0.0);   
     

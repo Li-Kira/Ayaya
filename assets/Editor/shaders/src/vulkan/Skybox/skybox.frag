@@ -5,7 +5,6 @@ layout(location = 0) in vec3 v_TexCoords;
 
 layout(set = 1, binding = 0) uniform samplerCube u_Skybox;
 
-// 【修复】：必须和 vert 里的结构完全一模一样！
 layout(push_constant) uniform Constants {
     mat4 u_ViewProjection;
     float u_Intensity;
