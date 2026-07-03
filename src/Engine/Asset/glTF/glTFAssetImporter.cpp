@@ -1,0 +1,466 @@
+#include "ayapch.h"
+#include "glTFAssetImporter.hpp"
+
+#define CGLTF_IMPLEMENTATION
+#include <cgltf/cgltf.h>
+
+#include "Scene/Scene.hpp"
+#include "Scene/Components.hpp"
+#include "Scene/Entity.hpp"
+#include "Scene/SceneSerializer.hpp"
+#include "Renderer/Material.hpp"
+#include "Renderer/MaterialSerializer.hpp"
+#include "Renderer/Mesh.hpp"
+#include "Renderer/Model.hpp"
+#include "Asset/AssetManager.hpp"
+#include "Asset/Prefab.hpp"
+#include "Project/Project.hpp"
+#include "Core/Log.hpp"
+#include "Core/Application.hpp"
+#include "Platform/Vulkan/VulkanContext.hpp"
+#include "Renderer/RendererAPI.hpp"
+#include "Core/VFS.hpp"
+
+#include <fstream>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
+
+namespace Ayaya {
+
+// ==========================================
+// URI URL-Decode
+// ==========================================
+static std::string UrlDecode(const std::string& src) {
+    std::string out;
+    out.reserve(src.size());
+    for (size_t i = 0; i < src.size(); i++) {
+        if (src[i] == '%' && i + 2 < src.size() && isxdigit(src[i+1]) && isxdigit(src[i+2])) {
+            int hi = src[i+1] <= '9' ? src[i+1]-'0' : (src[i+1]|32)-'a'+10;
+            int lo = src[i+2] <= '9' ? src[i+2]-'0' : (src[i+2]|32)-'a'+10;
+            out += (char)((hi << 4) | lo);
+            i += 2;
+        } else if (src[i] == '+') {
+            out += ' ';
+        } else {
+            out += src[i];
+        }
+    }
+    return out;
+}
+
+// ==========================================
+// Name deduplication
+// ==========================================
+static std::string DeduplicatePath(const std::string& path) {
+    if (!std::filesystem::exists(path)) return path;
+    auto parent = std::filesystem::path(path).parent_path();
+    auto stem   = std::filesystem::path(path).stem().string();
+    auto ext    = std::filesystem::path(path).extension().string();
+    for (int i = 1; ; i++) {
+        std::string candidate = (parent / (stem + "_" + std::to_string(i) + ext)).string();
+        if (!std::filesystem::exists(candidate)) return candidate;
+    }
+}
+
+// ==========================================
+// glTF Mat4 → GLM (column-major from cgltf)
+// ==========================================
+static glm::mat4 GltfNodeToMat4(const cgltf_node* node) {
+    if (node->has_matrix) return glm::make_mat4(&node->matrix[0]);
+    glm::mat4 m(1.0f);
+    if (node->has_translation)
+        m = glm::translate(m, glm::vec3(node->translation[0], node->translation[1], node->translation[2]));
+    if (node->has_rotation)
+        m *= glm::mat4_cast(glm::quat(node->rotation[3], node->rotation[0], node->rotation[1], node->rotation[2]));
+    if (node->has_scale)
+        m = glm::scale(m, glm::vec3(node->scale[0], node->scale[1], node->scale[2]));
+    return m;
+}
+
+// ==========================================
+// Extract glTF primitive → engine Vertex buffer
+// ==========================================
+static std::shared_ptr<Mesh> ExtractPrimitive(const cgltf_primitive& prim, int matIdx) {
+    const cgltf_accessor* posAcc = nullptr, *nrmAcc = nullptr, *uvAcc = nullptr, *idxAcc = prim.indices;
+    for (cgltf_size a = 0; a < prim.attributes_count; ++a) {
+        switch (prim.attributes[a].type) {
+            case cgltf_attribute_type_position: posAcc = prim.attributes[a].data; break;
+            case cgltf_attribute_type_normal:   nrmAcc = prim.attributes[a].data; break;
+            case cgltf_attribute_type_texcoord: uvAcc  = prim.attributes[a].data; break;
+            default: break;
+        }
+    }
+    if (!posAcc || posAcc->type != cgltf_type_vec3) return nullptr;
+
+    std::vector<Vertex> vertices(posAcc->count);
+    for (cgltf_size i = 0; i < posAcc->count; ++i) {
+        float p[3]={0}, n[3]={0}, u[2]={0};
+        cgltf_accessor_read_float(posAcc, i, p, 3);
+        if (nrmAcc) cgltf_accessor_read_float(nrmAcc, i, n, 3);
+        if (uvAcc)  cgltf_accessor_read_float(uvAcc,  i, u, 2);
+        vertices[i].Position = glm::vec3(p[0], p[1], p[2]);
+        vertices[i].Normal   = glm::vec3(n[0], n[1], n[2]);
+        vertices[i].TexCoord = glm::vec2(u[0], u[1]);
+    }
+
+    std::vector<uint32_t> indices;
+    if (idxAcc) {
+        indices.resize(idxAcc->count);
+        for (cgltf_size i = 0; i < idxAcc->count; ++i)
+            indices[i] = (uint32_t)cgltf_accessor_read_index(idxAcc, i);
+    } else {
+        indices.resize(posAcc->count);
+        for (cgltf_size i = 0; i < posAcc->count; ++i) indices[i] = (uint32_t)i;
+    }
+    return std::make_shared<Mesh>(vertices, indices, matIdx);
+}
+
+// ==========================================
+// Convert glTF PBR material → engine Material
+// ==========================================
+static std::shared_ptr<Material> ConvertMaterial(const cgltf_material* mat,
+                                                   std::unordered_map<std::string, UUID>& texCache) {
+    if (!mat) return nullptr;
+    // Clone from DefaultPBR to inherit all standard properties (u_Alpha, u_Emissive, etc.)
+    UUID builtIn = AssetManager::GetBuiltInMaterial();
+    auto defaultMat = AssetManager::GetAsset<Material>(builtIn);
+    auto m = defaultMat ? std::make_shared<Material>(*defaultMat) : std::make_shared<Material>();
+    m->Name = mat->name && mat->name[0] ? mat->name : "glTF Material";
+    m->ShaderName = "PBR";
+
+    if (mat->has_pbr_metallic_roughness) {
+        auto& p = mat->pbr_metallic_roughness;
+        m->SetVec4("u_Albedo", glm::vec4(p.base_color_factor[0], p.base_color_factor[1], p.base_color_factor[2], p.base_color_factor[3]));
+        m->SetFloat("u_Metallic", p.metallic_factor);
+        m->SetFloat("u_Roughness", p.roughness_factor);
+        m->SetFloat("u_AO", 1.0f);
+        if (p.base_color_texture.texture) {
+            auto it = texCache.find(p.base_color_texture.texture->image->uri ? p.base_color_texture.texture->image->uri : "");
+            if (it != texCache.end()) m->SetTexture("u_AlbedoMap", it->second);
+        }
+        if (p.metallic_roughness_texture.texture) {
+            auto it = texCache.find(p.metallic_roughness_texture.texture->image->uri ? p.metallic_roughness_texture.texture->image->uri : "");
+            if (it != texCache.end()) m->SetTexture("u_ORMMap", it->second);
+        }
+    }
+    if (mat->normal_texture.texture) {
+        auto it = texCache.find(mat->normal_texture.texture->image->uri ? mat->normal_texture.texture->image->uri : "");
+        if (it != texCache.end()) m->SetTexture("u_NormalMap", it->second);
+    }
+    if (mat->occlusion_texture.texture) {
+        auto it = texCache.find(mat->occlusion_texture.texture->image->uri ? mat->occlusion_texture.texture->image->uri : "");
+        if (it != texCache.end()) m->SetTexture("u_AOMap", it->second);
+    }
+    if (mat->emissive_texture.texture) {
+        auto it = texCache.find(mat->emissive_texture.texture->image->uri ? mat->emissive_texture.texture->image->uri : "");
+        if (it != texCache.end()) m->SetTexture("u_EmissiveMap", it->second);
+        m->SetVec3("u_Emissive", glm::vec3(mat->emissive_factor[0], mat->emissive_factor[1], mat->emissive_factor[2]));
+    }
+    switch (mat->alpha_mode) {
+        case cgltf_alpha_mode_mask:  m->SetBlendMode(MaterialBlendMode::Masked); m->SetFloat("u_Alpha", mat->alpha_cutoff); break;
+        case cgltf_alpha_mode_blend: m->SetBlendMode(MaterialBlendMode::Translucent); break;
+        default: m->SetBlendMode(MaterialBlendMode::Opaque); break;
+    }
+    m->SetPacking(Material::TexturePacking::glTF_MetalRough);
+    return m;
+}
+
+// ==========================================
+// Build Prefab entity tree from glTF nodes
+// ==========================================
+static void BuildPrefabEntity(const cgltf_node* node, Entity parent, Scene& prefabScene,
+                               const std::vector<glTFImportResult::MeshEntry>& meshEntries,
+                               const std::vector<glTFImportResult::MatEntry>& matEntries,
+                               const cgltf_data* data) {
+    Entity e = prefabScene.CreateEntity(node->name && node->name[0] ? node->name : "Node");
+
+    glm::mat4 local = GltfNodeToMat4(node);
+    glm::vec3 scale, trans, skew; glm::vec4 persp; glm::quat rot;
+    glm::decompose(local, scale, rot, trans, skew, persp);
+    auto& tc = e.GetComponent<TransformComponent>();
+    tc.Translation = trans; tc.Rotation = glm::eulerAngles(rot); tc.Scale = scale;
+
+    if (parent) e.SetParent(parent);
+
+    // Mesh
+    if (node->mesh) {
+        int meshIdx = (int)(node->mesh - data->meshes);
+        bool multi = node->mesh->primitives_count > 1;
+        for (cgltf_size p = 0; p < node->mesh->primitives_count; ++p) {
+            Entity target = multi ? prefabScene.CreateEntity(
+                std::string(node->name && node->name[0] ? node->name : "prim") + "_" + std::to_string(p)) : e;
+            if (multi) target.SetParent(e);
+
+            auto& mr = target.AddComponent<MeshRendererComponent>();
+            // Match SubMesh by index encoding: meshIdx*1000 + primitiveIdx
+            int encodedIdx = meshIdx * 1000 + (int)p;
+            for (auto& me : meshEntries) {
+                if (me.SubMeshIndex == encodedIdx) {
+                    mr.ModelHandle = me.Handle;
+                    break;
+                }
+            }
+            // Match material: primitive material index
+            int matIdx = (int)p < (int)data->materials_count ? (int)p : -1;
+            if (matIdx >= 0 && matIdx < (int)matEntries.size()) {
+                mr.MaterialHandle = matEntries[matIdx].Handle;
+            }
+        }
+    }
+
+    // Light
+    if (node->light) {
+        switch (node->light->type) {
+            case cgltf_light_type_directional: {
+                auto& l = e.AddComponent<DirectionalLightComponent>();
+                l.Color = glm::vec3(node->light->color[0], node->light->color[1], node->light->color[2]);
+                l.Illuminance = node->light->intensity; break;
+            }
+            case cgltf_light_type_point: {
+                auto& l = e.AddComponent<PointLightComponent>();
+                l.Color = glm::vec3(node->light->color[0], node->light->color[1], node->light->color[2]);
+                l.LuminousPower = node->light->intensity;
+                l.Radius = node->light->range > 0 ? node->light->range : 10.0f; break;
+            }
+            default: break;
+        }
+    }
+
+    // Camera
+    if (node->camera && node->camera->type == cgltf_camera_type_perspective) {
+        auto& cam = e.AddComponent<CameraComponent>();
+        cam.Camera.SetPerspective(node->camera->data.perspective.yfov,
+            node->camera->data.perspective.znear,
+            node->camera->data.perspective.zfar > 0 ? node->camera->data.perspective.zfar : 1000.0f);
+    }
+
+    // EnTT-safe: copy children before recursion
+    std::vector<cgltf_node*> kids(node->children, node->children + node->children_count);
+    for (auto* c : kids) BuildPrefabEntity(c, e, prefabScene, meshEntries, matEntries, data);
+}
+
+// ==========================================
+// Phase 1: Background-thread import
+// ==========================================
+glTFImportResult ImportglTFSceneSync(const std::string& sourcePath) {
+    glTFImportResult result;
+
+    // === 1. Parse ===
+    cgltf_options opts{};
+    cgltf_data* data = nullptr;
+    if (cgltf_parse_file(&opts, sourcePath.c_str(), &data) != cgltf_result_success) {
+        result.ErrorMsg = "cgltf_parse_file failed"; return result;
+    }
+    if (cgltf_load_buffers(&opts, data, sourcePath.c_str()) != cgltf_result_success) {
+        result.ErrorMsg = "cgltf_load_buffers failed"; cgltf_free(data); return result;
+    }
+
+    AYAYA_CORE_INFO("glTF import: {} nodes, {} meshes, {} materials, {} textures, {} lights",
+        data->nodes_count, data->meshes_count, data->materials_count,
+        data->textures_count, data->lights_count);
+
+    // === 2. Asset directory setup ===
+    std::string assetDir = Project::GetAssetDirectory().string();
+    std::string baseName   = std::filesystem::path(sourcePath).stem().string();
+    std::string destDir    = assetDir + "/" + baseName;
+    std::filesystem::create_directories(destDir + "/textures");
+    std::filesystem::create_directories(destDir + "/Materials");
+
+    // === 3. Copy source .gltf/.glb ===
+    std::string gltfExt  = std::filesystem::path(sourcePath).extension().string();
+    std::string gltfDest = DeduplicatePath(destDir + "/" + baseName + gltfExt);
+    std::filesystem::copy_file(sourcePath, gltfDest, std::filesystem::copy_options::overwrite_existing);
+    result.ModelPhysicalPath = gltfDest;
+    result.ModelVirtualPath  = VFS::GetVirtualPath(gltfDest);
+    result.ModelHandle       = UUID(); // reuse if .meta exists
+    std::string metaPath = gltfDest + ".meta";
+    if (std::filesystem::exists(metaPath)) {
+        // Reuse existing UUID on re-import
+        result.ModelHandle = UUID(); // TODO: parse from .meta
+    }
+
+    // === 4. Copy external .bin ===
+    for (cgltf_size i = 0; i < data->buffers_count; i++) {
+        if (data->buffers[i].uri && !strstr(data->buffers[i].uri, "data:")) {
+            auto glTFDir = std::filesystem::path(sourcePath).parent_path();
+            auto binSrc = std::filesystem::weakly_canonical(glTFDir / UrlDecode(data->buffers[i].uri));
+            if (std::filesystem::exists(binSrc)) {
+                std::string binDest = destDir + "/" + std::filesystem::path(binSrc).filename().string();
+                binDest = DeduplicatePath(binDest);
+                std::filesystem::copy_file(binSrc, binDest, std::filesystem::copy_options::overwrite_existing);
+            }
+        }
+    }
+
+    // === 5. Build sRGB texture index set ===
+    std::unordered_set<int> srgbIndices;
+    for (cgltf_size i = 0; i < data->materials_count; i++) {
+        auto& m = data->materials[i];
+        if (auto* t = m.pbr_metallic_roughness.base_color_texture.texture) {
+            for (cgltf_size j = 0; j < data->textures_count; j++)
+                if (&data->textures[j] == t) { srgbIndices.insert((int)j); break; }
+        }
+        if (auto* t = m.emissive_texture.texture) {
+            for (cgltf_size j = 0; j < data->textures_count; j++)
+                if (&data->textures[j] == t) { srgbIndices.insert((int)j); break; }
+        }
+    }
+
+    // === 6. Extract textures ===
+    std::unordered_map<std::string, UUID> texUUIDs; // URI→UUID cache (dedup)
+    for (cgltf_size i = 0; i < data->textures_count; i++) {
+        auto& img = *data->textures[i].image;
+        std::string texName = baseName + "_Tex" + std::to_string(i);
+        std::string texDest;
+
+        if (img.uri && !strstr(img.uri, "data:")) {
+            // External: URL-decode, resolve relative path (handles ../ etc.)
+            std::string decoded = UrlDecode(img.uri);
+            auto glTFDir = std::filesystem::path(sourcePath).parent_path();
+            auto srcPath = std::filesystem::weakly_canonical(glTFDir / decoded);
+            auto srcFn = srcPath.filename().string();
+            texDest = DeduplicatePath(destDir + "/textures/" + srcFn);
+            if (std::filesystem::exists(srcPath))
+                std::filesystem::copy_file(srcPath, texDest, std::filesystem::copy_options::overwrite_existing);
+        } else if (img.buffer_view) {
+            // Embedded: dump raw bytes (already PNG/JPEG)
+            const char* ext = ".png";
+            if (strstr(img.mime_type, "jpeg") || strstr(img.mime_type, "jpg")) ext = ".jpg";
+            texName += ext;
+            texDest = DeduplicatePath(destDir + "/textures/" + texName);
+            auto& bv = *img.buffer_view;
+            const uint8_t* src = (const uint8_t*)bv.buffer->data + bv.offset;
+            std::ofstream(texDest, std::ios::binary).write((const char*)src, bv.size);
+        } else continue;
+
+        if (texDest.empty()) continue;
+
+        // Record for Phase 2 finalization (sRGB flag carried via .meta update)
+        UUID texUUID = UUID();
+        TextureImportSettings tSet;
+        tSet.SRGB = srgbIndices.count((int)i) > 0;
+        tSet.FlipY = false;
+        tSet.GenerateMipmaps = false;  // CRITICAL: avoids VkImage mipmap OOM on bulk import
+        AssetManager::WriteMetaFile(texDest, texUUID, AssetType::Texture2D, tSet);
+        result.CopiedTextures.push_back({texDest, texUUID});
+        result.CopiedTextures.back().SRGB = srgbIndices.count((int)i) > 0;
+        texUUIDs[img.uri ? img.uri : texName] = texUUID;
+    }
+
+    // === 7. Build materials ===
+    for (cgltf_size i = 0; i < data->materials_count; i++) {
+        auto mat = ConvertMaterial(&data->materials[i], texUUIDs);
+        if (!mat) continue;
+
+        std::string matName = mat->Name.empty() ? "Material_" + std::to_string(i) : mat->Name;
+        // Sanitize filename
+        for (auto& c : matName) if (c == '/' || c == '\\' || c == ':') c = '_';
+        std::string matPath = DeduplicatePath(destDir + "/Materials/" + matName + ".mat");
+        MaterialSerializer::Serialize(mat, matPath);
+
+        UUID matUUID;
+        std::string matMetaPath = matPath + ".meta";
+        if (std::filesystem::exists(matMetaPath)) {
+            matUUID = UUID(); // TODO: read existing
+        } else {
+            matUUID = UUID();
+        }
+        AssetManager::WriteMetaFile(matPath, matUUID, AssetType::Material);
+        result.Materials.push_back({matUUID, VFS::GetVirtualPath(matPath), matPath});
+    }
+
+    // === 8. Build SubMeshes ===
+    for (cgltf_size i = 0; i < data->meshes_count; i++) {
+        for (cgltf_size p = 0; p < data->meshes[i].primitives_count; p++) {
+            auto mesh = ExtractPrimitive(data->meshes[i].primitives[p],
+                (int)p < (int)data->materials_count ? (int)p : -1);
+            if (!mesh) continue;
+
+            UUID subUUID = UUID();
+            std::string subName = baseName + "_Mesh" + std::to_string(i) + "_" + std::to_string(p);
+            result.SubMeshes.push_back({subUUID, result.ModelVirtualPath, "", (int)(i*1000 + p), subName});
+            result.SubMeshData.push_back(mesh);
+        }
+    }
+
+    // === 9. Build Prefab ===
+    auto prefab = std::make_shared<Prefab>();
+    Scene* prefabScene = prefab->GetScene();
+    Entity rootEntity = prefabScene->CreateEntity(baseName);
+    prefab->SetRootEntity(rootEntity);
+    cgltf_scene* scene = data->scene ? data->scene : &data->scenes[0];
+    for (cgltf_size i = 0; i < scene->nodes_count; i++) {
+        BuildPrefabEntity(scene->nodes[i], rootEntity, *prefabScene,
+            result.SubMeshes, result.Materials, data);
+    }
+
+    result.PrefabPath = DeduplicatePath(destDir + "/" + baseName + ".prefab");
+    prefab->Save(result.PrefabPath);
+    result.PrefabHandle = UUID();
+    AssetManager::WriteMetaFile(result.PrefabPath, result.PrefabHandle, AssetType::Prefab);
+
+    result.Success = true;
+    result.NodeCount = (int)data->nodes_count;
+    result.MeshCount = (int)data->meshes_count;
+    result.MaterialCount = (int)data->materials_count;
+    result.TextureCount = (int)data->textures_count;
+    result.LightCount = (int)data->lights_count;
+
+    cgltf_free(data);
+    return result;
+}
+
+// ==========================================
+// Phase 2: Main-thread finalization
+// ==========================================
+void FinalizeglTFImport(const glTFImportResult& result) {
+    if (!result.Success) {
+        AYAYA_CORE_ERROR("glTF import finalize failed: {}", result.ErrorMsg);
+        return;
+    }
+
+    // Register model in registry (ImportAsset writes .meta + populates s_Registry)
+    // Use the UUID returned by ImportAsset (may differ from result.ModelHandle if .meta existed)
+    UUID modelUUID = AssetManager::ImportAsset(result.ModelPhysicalPath);
+
+    // Register SubMesh assets (wrap extracted meshes in Model, persist in s_Registry)
+    for (size_t i = 0; i < result.SubMeshes.size() && i < result.SubMeshData.size(); ++i) {
+        auto& sub = result.SubMeshes[i];
+        auto& mesh = result.SubMeshData[i];
+        if (mesh) {
+            auto subModel = std::make_shared<Model>(mesh);
+            AssetManager::AddAsset<Model>(sub.Handle, subModel);
+            AssetManager::RegisterSubMesh(sub.Handle, modelUUID,
+                sub.SubMeshIndex, result.ModelVirtualPath);
+        }
+    }
+
+    // Register textures lazily. BakeProperties auto-retries when bindless indices become
+    // available (m_HasPendingTextures flag). No eager loading → avoids OOM.
+    for (auto& t : result.CopiedTextures)
+        AssetManager::RegisterTextureAsset(t.Handle, t.PhysicalPath);
+
+    // Register materials
+    for (auto& m : result.Materials) {
+        AssetManager::ImportAsset(m.PhysicalPath);
+    }
+
+    // Register prefab
+    AssetManager::ImportAsset(result.PrefabPath);
+
+    // Drain GPU deferred-release queue after bulk import.
+    // 115 meshes + 72 textures → staging buffers/VkImages accumulate in 3-frame queue → OOM.
+    if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+        auto ctx = Application::Get().GetWindow().GetContext();
+        if (auto vk = std::dynamic_pointer_cast<VulkanContext>(ctx)) {
+            vkDeviceWaitIdle(vk->GetDevice());
+            vk->ProcessDeferredResources(true);
+        }
+    }
+
+    AYAYA_CORE_INFO("glTF import complete: {} nodes, {} meshes, {} materials, {} textures, {} lights",
+        result.NodeCount, result.MeshCount, result.MaterialCount, result.TextureCount, result.LightCount);
+}
+
+} // namespace Ayaya

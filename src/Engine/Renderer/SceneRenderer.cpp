@@ -575,6 +575,7 @@ namespace Ayaya {
         m_RenderContext.Set("ClearColor", config.ClearColor);
         m_RenderContext.Set("ShowSkybox", config.EnableSkybox);
         m_RenderContext.Set("ShowGrid", config.EnableGrid && config.IsEditorView);
+        m_RenderContext.Set("EnableOutline", config.EnableOutline);
         m_RenderContext.Set("HoveredEntity", config.HoveredEntity);
         m_RenderContext.Set("SelectedEntities", config.SelectedEntities);
         m_RenderContext.Set("EnvironmentIntensity", m_Data->EnvironmentIntensity);
@@ -1068,6 +1069,7 @@ namespace Ayaya {
         bool enableSSAO    = m_RenderContext.Get<bool>("EnableSSAO", false);
         bool enableBloom   = m_RenderContext.Get<bool>("EnableBloom", true);
         bool enableOutline = m_RenderContext.Get<bool>("EnableOutline", false);
+        bool enableFXAA    = m_RenderContext.Get<bool>("EnableFXAA", false);
 
         bool hasTranslucent = false;
         if (m_RenderContext.RenderQueue) {
@@ -1083,6 +1085,7 @@ namespace Ayaya {
             if (type == "SSAOPass")        pass->IsCulled = !enableSSAO;
             if (type == "BloomPass")       pass->IsCulled = !enableBloom;
             if (type == "OutlinePass")     pass->IsCulled = !enableOutline;
+            // FXAA uses push-constant toggle (passthrough when disabled) — never cull.
             if (type == "WBOIT_Gather")    pass->IsCulled = !hasTranslucent;
             if (type == "WBOIT_Resolve")   pass->IsCulled = !hasTranslucent;
         }

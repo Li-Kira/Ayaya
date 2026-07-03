@@ -59,8 +59,9 @@ namespace Ayaya {
         cmd.BindPipeline(m_Pipeline);
         cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, inputFBO, 0);
 
-        FXAAPushConstants pc{};
+        struct alignas(16) { glm::vec2 TexelSize; float Enable; } pc{};
         pc.TexelSize = glm::vec2(1.0f / (float)w, 1.0f / (float)h);
+        pc.Enable = context.Get<bool>("EnableFXAA", false) ? 1.0f : 0.0f;
         cmd.PushConstantData(m_Pipeline, &pc, sizeof pc);
         cmd.DrawArrays(3);
         cmd.EndRenderPass();

@@ -109,6 +109,7 @@ namespace Ayaya {
 
     void Material::BakeProperties() {
         m_BakedPC = BakedPC{};  // reset to defaults (indices point to default 1×1 textures)
+        bool hasPending = false;
         for (auto& prop : Properties) {
             if (prop.UniformName == "u_Albedo" && prop.Type == MaterialPropertyType::Vec3) {
                 m_BakedPC.Albedo = glm::vec4(prop.Vec3Value, 1.0f);
@@ -127,7 +128,7 @@ namespace Ayaya {
                     tex = AssetManager::GetAsset<Texture2D>(prop.TextureHandle);
                 if (tex) {
                     uint32_t idx = tex->GetBindlessIndex();
-                    if (idx == 0) continue;  // texture not yet uploaded to GPU
+                    if (idx == 0) { hasPending = true; continue; }  // not yet uploaded
                     if (prop.UniformName == "u_AlbedoMap") {
                         m_BakedPC.AlbedoMapIndex = idx;
                     } else if (prop.UniformName == "u_NormalMap") {
@@ -148,10 +149,11 @@ namespace Ayaya {
             }
         }
         m_BakedPC.Dirty = false;
+        m_HasPendingTextures = hasPending;  // true until all texture bindless indices available
     }
 
     const Material::BakedPC& Material::GetBakedPC() {
-        if (m_BakedPC.Dirty) BakeProperties();
+        if (m_BakedPC.Dirty || m_HasPendingTextures) BakeProperties();
         return m_BakedPC;
     }
 

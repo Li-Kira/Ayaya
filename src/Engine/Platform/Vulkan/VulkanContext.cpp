@@ -825,6 +825,10 @@ namespace Ayaya {
         vkQueueWaitIdle(m_GraphicsQueue);
         vkDeviceWaitIdle(m_Device);
 
+        // Immediately drain deferred-release queue (GPU is idle → safe to destroy).
+        // Prevents staging-buffer/VkImage accumulation during bulk imports (OOM on M1).
+        ProcessDeferredResources(true);
+
         vkResetCommandPool(m_Device, m_OneTimeCommandPool, 0);
     }
 
@@ -1089,11 +1093,11 @@ namespace Ayaya {
         m_DeferredResources.push_back(std::move(resource));
     }
 
-    void VulkanContext::ProcessDeferredResources() {
+    void VulkanContext::ProcessDeferredResources(bool forceAll) {
         std::lock_guard<std::mutex> lock(m_DeferredResourcesMutex);
         for (auto it = m_DeferredResources.begin();
              it != m_DeferredResources.end(); ) {
-            if (--it->framesRemaining == 0) {
+            if (forceAll || --it->framesRemaining == 0) {
                 if (it->destroy) it->destroy();
                 it = m_DeferredResources.erase(it);
             } else {

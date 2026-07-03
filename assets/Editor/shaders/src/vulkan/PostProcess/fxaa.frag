@@ -9,6 +9,7 @@ layout(set = 1, binding = 0) uniform sampler2D u_ScreenTexture;
 // 【核心改造】：放入 Push Constant
 layout(push_constant) uniform Constants {
     vec2 u_TexelSize;
+    float u_Enable;
 } pc;
 
 float rgb2luma(vec3 rgb){
@@ -16,6 +17,10 @@ float rgb2luma(vec3 rgb){
 }
 
 void main() {
+    if (pc.u_Enable < 0.5) {
+        FragColor = vec4(texture(u_ScreenTexture, v_TexCoord).rgb, 1.0);
+        return;
+    }
     vec3 colorCenter = texture(u_ScreenTexture, v_TexCoord).rgb;
     
     vec3 colorUp    = textureOffset(u_ScreenTexture, v_TexCoord, ivec2(0, 1)).rgb;

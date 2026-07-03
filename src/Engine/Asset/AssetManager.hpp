@@ -198,6 +198,14 @@ namespace Ayaya {
         // Remove from registry & memory (no disk changes) — used when .meta is deleted externally
         static void UnregisterAsset(UUID handle);
 
+        // Register a SubMesh asset in the registry with parent linkage.
+        // Writes sub_assets YAML entries into the parent model's .meta file.
+        static void RegisterSubMesh(UUID subHandle, UUID parentHandle, int subMeshIndex,
+                                     const std::string& virtualPath);
+        // Register a texture in s_Registry WITHOUT triggering async GPU upload.
+        // Used for batch imports (glTF) to avoid OOM from concurrent stbi threads.
+        static void RegisterTextureAsset(UUID handle, const std::string& physicalPath);
+
     private:
         // 内部专用：真正执行硬盘读取的函数，返回擦除了类型的 void 指针
         static std::shared_ptr<void> LoadAssetFromFile(UUID handle);

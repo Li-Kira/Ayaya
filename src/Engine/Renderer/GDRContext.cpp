@@ -162,6 +162,7 @@ namespace Ayaya {
                 gm.roughnessBindless = (int)b.RoughnessMapIndex;
                 gm.aoBindless        = (int)b.AOMapIndex;
                 gm.useORMMap    = (int)b.UseORMMap;
+                gm.packing       = (uint32_t)b.Packing;
                 gm.alphaBindless = (int)b.AlphaMapIndex;
                 gm.useAlphaMap   = (b.AlphaMapIndex != 1) ? 1 : 0;
                 gm.alphaCutoff  = pkt.MaterialAsset->GetAlphaCutoff();
@@ -305,6 +306,7 @@ namespace Ayaya {
                         gm.alphaCutoff = material->GetAlphaCutoff();
                         gm.blendMode     = (int)material->GetBlendMode();
                         gm.lightModeMask = material->GetLightModeMask();
+                        gm.packing       = (uint32_t)b.Packing;
                     }
                     gdrMaterials.push_back(gm);
                 }

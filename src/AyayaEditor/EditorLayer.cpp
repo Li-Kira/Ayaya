@@ -380,6 +380,7 @@ namespace Ayaya {
         editorCfg.IsEditorView = true;
         editorCfg.EnableGrid = m_ShowGrid;
         editorCfg.EnableSkybox = renderSkybox;
+        editorCfg.EnableOutline = true;
         editorCfg.HoveredEntity = m_HoveredEntity;
         editorCfg.SelectedEntities = m_SceneHierarchyPanel.GetSelectedEntities();
         editorCfg.ClearColor = clearColor;
@@ -478,6 +479,7 @@ namespace Ayaya {
         UIRenderNewProjectPopup();
         UIRenderSaveAsPopup();
         m_ImportModelPanel.Draw();
+        m_ImportglTFPanel.Draw();
         m_CurveEditorPanel.OnImGuiRender();
 
         // ---- Drawer + Bottom bar ----

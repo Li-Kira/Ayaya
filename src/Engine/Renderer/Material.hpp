@@ -155,12 +155,17 @@ namespace Ayaya {
         // ==========================================
         // Pre-baked push-constant cache (eliminates per-packet string parsing)
         // ==========================================
+        enum class TexturePacking : uint32_t {
+            UE4_ORM = 0,       // R=AO, G=Roughness, B=Metallic (engine default)
+            glTF_MetalRough,   // B=Metallic, G=Roughness, R=unused; AO from separate slot
+            Separate,          // Individual metallic/roughness/AO textures
+        };
+
         struct BakedPC {
-            // Scalar values (directly memcpy-able to push constants)
             glm::vec4 Albedo{1.0f};
             float Metallic = 0.0f, Roughness = 0.5f, AO = 1.0f, Alpha = 0.5f;
             uint32_t UseORMMap = 0;
-            // Bindless texture indices (defaults point to fixed 1×1 textures)
+            TexturePacking Packing = TexturePacking::UE4_ORM;
             uint32_t AlbedoMapIndex = 1;      // white (multiplicative identity)
             uint32_t NormalMapIndex = 3;      // default flat normal (Z-up)
             uint32_t ORMMapIndex = 2;         // black (unused when UseORMMap=0)
@@ -183,6 +188,8 @@ namespace Ayaya {
         };
         const BakedPC& GetBakedPC();
         void BakeProperties();  // rebuild BakedPC from Properties vector
+        void SetPacking(TexturePacking p) { BakeProperties(); m_BakedPC.Packing = p; }
+        bool m_HasPendingTextures = false;  // true until all texture bindless indices available
 
     private:
         MaterialBlendMode m_BlendMode = MaterialBlendMode::Opaque;

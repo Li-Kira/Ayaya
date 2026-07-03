@@ -3,6 +3,7 @@
 #include "Core/VFS.hpp"
 #include "Core/Log.hpp"
 #include "Asset/AssetManager.hpp"
+#include "../EditorLayer.hpp"
 #include "Renderer/AssetPreviewer.hpp"
 #include "Renderer/RendererAPI.hpp"
 #include "Utils/PlatformUtils.hpp"
@@ -430,6 +431,12 @@ namespace Ayaya {
                     "3D Models (*.fbx *.obj *.gltf *.glb)|*.fbx;*.obj;*.gltf;*.glb");
                 if (!filepath.empty())
                     EditorLayer::Get().GetImportModelPanel().RequestOpen(filepath);
+            }
+            if (UI::DrawNativeMenuItem("Import glTF Scene...", ICON_FA_CUBE)) {
+                std::string filepath = FileDialogs::OpenFile(
+                    "glTF Scenes (*.gltf *.glb)|*.gltf;*.glb");
+                if (!filepath.empty())
+                    EditorLayer::Get().GetImportglTFPanel().RequestOpen(filepath);
             }
             ImGui::EndPopup();
         }

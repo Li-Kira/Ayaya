@@ -68,7 +68,7 @@ struct GPUMaterial {
     int    useAlphaMap;
     int    alphaBindless;
     uint   lightModeMask;
-    uint   _pad0, _pad1, _pad2;       // alignas(16) padding
+    uint   packing; uint _pad1, _pad2; // TexturePacking enum + alignas(16)
     float4 customData[4];             // TA-extensible: 64 bytes
 };
 

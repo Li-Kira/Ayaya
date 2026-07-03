@@ -1,7 +1,7 @@
 # Ayaya Engine — Vulkan 渲染架构与管线深度分析报告
 
-> **初始报告:** 2026-06-18 | **更新:** 2026-07-01 (延迟销毁队列 + GDR 管线鲁棒性 + 首帧黑色修复 + ReceiveShadows + SRP 资源依赖)
-> **分析范围:** `/src/Engine/Platform/Vulkan/` (28 文件), `/src/Engine/Renderer/` (抽象层 + 12 个 Pass + SRP), `/assets/Editor/shaders/src/vulkan/` (52 个 Shader)
+> **初始报告:** 2026-06-18 | **更新:** 2026-07-03 (负视口坐标系终极修复 + glTF场景解析器 + TexturePacking多规范支持 + OOM修复)
+> **分析范围:** `/src/Engine/Platform/Vulkan/` (28 文件), `/src/Engine/Renderer/` (抽象层 + 12 个 Pass + SRP), `/assets/Editor/shaders/src/vulkan/` (58 个 Shader), `/src/Engine/Asset/glTF/` (新增)
 
 ---
 
@@ -21,6 +21,10 @@
 21. [SRP 透明管线 + 引擎加固 (2026-06-26)](#21-srp-透明管线--引擎加固-2026-06-26)
 22. [SRP 透明管线调试 + ByteAddressBuffer (2026-06-29)](#22-srp-透明管线调试全记录--byteaddressbuffer-兼容性修复-2026-06-29)
 23. [延迟销毁队列 + GDR 鲁棒性强化 (2026-07-01)](#23-延迟销毁队列--gdr-管线鲁棒性强化-2026-07-01)
+24. [负视口坐标系终极修复 (2026-07-03)](#24-负视口坐标系终极修复-2026-07-03)
+25. [glTF 场景解析器 + 资产持久化 (2026-07-03)](#25-gltf-场景解析器--资产持久化-2026-07-03)
+26. [TexturePacking 多规范材质系统 (2026-07-03)](#26-texturepacking-多规范材质系统-2026-07-03)
+27. [OOM 防护与 GPU 内存管理 (2026-07-03)](#27-oom-防护与-gpu-内存管理-2026-07-03)
 
 ---
 
@@ -2230,3 +2234,195 @@ MeshRendererComponent::ReceiveShadows
 
 **SRP:**
 - `default.srp` — 资源依赖修正 (SceneDepth/Lighting/ForwardBlend/SSAO/WBOIT)
+
+---
+
+## 24. 负视口坐标系终极修复 (2026-07-03)
+
+> **目标:** 对标 UE5/Unity 行业标准 — 负视口高度作为唯一 Y-flip，投影矩阵保持纯净 OpenGL 约定。
+> **修改规模:** 20 文件, +166/-82 行
+
+### 24.1 核心原理
+
+引擎原先使用**双重 Y-flip**：`vulkanCorrection` 矩阵 `[1][1]=-1` + 负视口高度。两个 Y-flip 抵消使画面正确，但绕组被反转 → 需要 `VK_FRONT_FACE_CLOCKWISE`（反直觉）。
+
+**修复后**：启用 `GLM_FORCE_DEPTH_ZERO_TO_ONE` → `glm::perspective` 直接产出 `[0,1]` 深度 + OpenGL NDC Y-up → 负视口单独翻转 Y → 画面正确 + VK Spec §27.7 自动补偿绕组。
+
+```
+纯投影 (无Y-flip) + 负视口:
+  世界 CCW → 视口翻转 Y → 屏幕 CW
+  VK_FRONT_FACE_COUNTER_CLOCKWISE + 负视口 → HW 判定 CW=正面
+  → CullMode::Back 语义纯正
+```
+
+### 24.2 C++ 侧修改
+
+| 文件 | 修改 |
+|------|------|
+| `CMakeLists.txt` | 启用 `GLM_FORCE_DEPTH_ZERO_TO_ONE` |
+| `SceneRenderer.cpp` | Vulkan 路径零修正（纯投影）；OpenGL 路径 `openGLDepthCorrection` 反向映射 `[0,1]→[-1,1]` |
+| `VulkanPipeline.cpp` | `VK_FRONT_FACE_COUNTER_CLOCKWISE` |
+| `VulkanLightingPass.cpp` | Light volume `CullMode::Front`（渲染内壳防穿透） |
+| `VulkanForwardBlendPass.cpp` | 移除 `skyProj[1][1] *= -1.0f` |
+| `VulkanForwardTestPass.cpp` | 同上 |
+| `VulkanIBLBuilder.cpp` | IBLBuilder 保留自己的 proj Y-flip（经典双 flip 方案，6 面全正确） |
+| `VulkanGBufferPass.cpp` | `CullMode::Back` |
+| `VulkanDepthPrePass.cpp` | `CullMode::Back` + InstanceCount==0 时始终清空 SceneDepth |
+| `VulkanRenderCommandBuffer.cpp` | 更新注释 |
+
+### 24.3 Shader 侧修改
+
+| Shader | 修改 |
+|--------|------|
+| `generic_fullscreen.vert` | OpenGL NDC Y-up: `(-1,1)/(3,1)/(-1,-3)` |
+| `brdf.vert` | 同上 |
+| `deferred_lighting.vert` | Bit-math: `y = 1.0 - float((i&2)<<1)` |
+| `postprocess.vert` | 同上 |
+
+### 24.4 ImGui UV 修复
+
+| 文件 | 修改 |
+|------|------|
+| `EditorLayer.cpp` | 4 处 `ImGui::Image` 后端感知: Vulkan `{0,0}→{1,1}`, OpenGL `{0,1}→{1,0}` |
+| `FrameDebuggerPanel.cpp` | 2 处同上 |
+| `PropertiesPanel.cpp` | `IsDataFlipped()` 检查 |
+
+### 24.5 最终绕组约定
+
+| 组件 | frontFace | CullMode |
+|------|-----------|----------|
+| RHI 全局 | `COUNTER_CLOCKWISE` | — |
+| GBuffer / Opaque | 继承全局 | `Back` |
+| DepthPrePass | 继承全局 | `Back` |
+| Shadow / 植被 | 继承全局 | `None` |
+| Light Volume | 继承全局 | `Front` |
+
+---
+
+## 25. glTF 场景解析器 + 资产持久化 (2026-07-03)
+
+> **目标:** 将 glTF 导入从"纯内存预览"升级为完整的资产持久化管线。
+> **新增:** 8 文件，~2200 行
+
+### 25.1 架构
+
+```
+ContentBrowser "Import glTF Scene..."
+  → ImportglTFPanel (auto-scan + settings UI)
+    → ImportglTFSceneSync (bg thread: copy files + cgltf parse + .meta + .mat + .prefab)
+    → SubmitToMainThread
+      → FinalizeglTFImport (main thread: s_Registry + SubMesh register + texture lazy-load)
+```
+
+### 25.2 核心文件
+
+| 文件 | 功能 |
+|------|------|
+| `vendor/include/cgltf/cgltf.h` | cgltf 单头文件库 (7240 行) |
+| `Asset/glTF/glTFParser.hpp/cpp` | cgltf 解析器：节点遍历、材质转换、网格提取、光源/相机导入 |
+| `Asset/glTF/glTFAssetImporter.hpp/cpp` | 双阶段持久化：Phase1 文件拷贝+序列化，Phase2 资产注册 |
+| `Panels/ImportglTFPanel.hpp/cpp` | ImGui 导入面板：自动扫描 URI、场景统计、导入设置 |
+
+### 25.3 PBR 材质映射
+
+- `metallicRoughnessTexture` → `u_ORMMap` (G=Roughness, B=Metallic 与 UE4 ORM 一致)
+- `occlusionTexture` → `u_AOMap` (R=AO)
+- `normalTexture` → `u_NormalMap`
+- `baseColorTexture` → `u_AlbedoMap` (sRGB)
+- sRGB/Linear 自动检测基于 glTF metadata（非文件名猜测）
+- 材质从 DefaultPBR 克隆，继承全部标准属性
+
+### 25.4 场景功能
+
+- 递归节点层级 → Entity 树 + TransformComponent + RelationshipComponent
+- KHR_lights_punctual → DirectionalLightComponent / PointLightComponent
+- 透视相机 → CameraComponent
+- 网格数据按 `cgltf_accessor::stride` 安全读取 → `Vertex` 结构体
+- URI URL-Decode + `weakly_canonical` 路径解析
+- 嵌入纹理 (buffer_view) 直接 dump 原始字节（不 decode+re-encode）
+- 纹理去重缓存（URI → UUID）
+
+### 25.5 资产持久化
+
+| 资产类型 | 持久化方式 |
+|----------|-----------|
+| 模型 (.gltf) | 拷贝到项目 Assets + `.meta` (AssetType::Model) |
+| 缓冲 (.bin) | 拷贝外部 buffer URI |
+| 纹理 | 拷贝/提取到 `textures/` + `.meta` (sRGB, mipmaps=false, flipY=false) |
+| 材质 | `MaterialSerializer::Serialize` → `.mat` + `.meta` |
+| 网格 | `RegisterSubMesh` → `s_Registry` + `RewriteMetaFile` (sub_assets YAML) |
+| Prefab | `Prefab::Save` → `.prefab` + `.meta` |
+
+---
+
+## 26. TexturePacking 多规范材质系统 (2026-07-03)
+
+### 26.1 设计
+
+```
+enum TexturePacking : uint32_t {
+    UE4_ORM = 0,       // R=AO, G=Roughness, B=Metallic (引擎默认)
+    glTF_MetalRough,   // B=Metallic, G=Roughness, R=unused; AO from separate slot
+    Separate,          // Independent metallic/roughness/AO textures
+};
+```
+
+GPUMaterial 新增 `uint32_t packing` 字段（复用 `customData` 前的 12 字节 padding 间隙，176B 总大小不变）。
+
+### 26.2 Shader 三分支逻辑
+
+```glsl
+if (mat.useORMMap != 0) {
+    vec3 o = texture(mat.ormBindless).rgb;
+    roughness = o.g * mat.roughness; metallic = o.b * mat.metallic;
+    if (mat.packing == 1u) { // glTF: AO from separate slot
+        ao = (mat.aoBindless != 1) ? texture(mat.aoBindless).r * mat.ao : mat.ao;
+    } else { // UE4_ORM: R=AO
+        ao = o.r * mat.ao;
+    }
+} else if (/*individual maps exist*/) { /* Separate path */ }
+else { /* scalar-only */ }
+```
+
+### 26.3 修改文件
+
+| 层 | 文件 | 改动 |
+|----|------|------|
+| C++ | `VulkanGeometryPool.hpp` | GPUMaterial +`uint32_t packing`+2pad |
+| C++ | `Material.hpp` | `TexturePacking` enum, `BakedPC.Packing`, `SetPacking()` |
+| C++ | `Material.cpp` | `BakeProperties` 保留 Packing; `GetBakedPC` 检查 `m_HasPendingTextures` 自动重试 |
+| C++ | `GDRContext.cpp` | 两处路径同步 `gm.packing` |
+| C++ | `glTFAssetImporter.cpp` | `SetPacking(glTF_MetalRough)` |
+| C++ | `MaterialSerializer.cpp` | Packing 序列化/反序列化 (`.mat` YAML) |
+| GLSL | `gbuffer_gdr_bindless.frag` | 三分支统一逻辑 |
+| GLSL | 5× GPUMaterial struct + HLSL `AyayaGDR.hlsl` | `_pad0→packing` |
+
+---
+
+## 27. OOM 防护与 GPU 内存管理 (2026-07-03)
+
+### 27.1 问题
+
+Sponza 导入时 OOM：115 meshes + 72 4K 纹理。每个纹理 VkImage 默认启用 mipmap → 85MB × 72 = 6.1GB > M1 GPU 预算。
+
+### 27.2 修复
+
+| 修复 | 文件 | 说明 |
+|------|------|------|
+| `GenerateMipmaps=false` | `glTFAssetImporter.cpp` | glTF 纹理 `.meta` 强制关闭 mipmap (64MB/张) |
+| `ProcessDeferredResources(forceAll)` | `VulkanContext.cpp/hpp` | 新增 `forceAll` 参数绕过 3 帧倒计时 |
+| `EndSingleTimeCommands` drain | `VulkanContext.cpp` | `vkDeviceWaitIdle` 后立即 `ProcessDeferredResources(true)` |
+| `RegisterTextureAsset` | `AssetManager.cpp/hpp` | 仅注册 `s_Registry`，不触发 GPU 上传 |
+| `FinalizeglTFImport` drain | `glTFAssetImporter.cpp` | 导入完成后 `vkDeviceWaitIdle + ProcessDeferredResources(true)` |
+| `m_HasPendingTextures` | `Material.hpp/cpp` | `BakeProperties` 检测纹理未就绪 → `GetBakedPC` 自动重试 |
+
+### 27.3 纹理延迟加载流程
+
+```
+导入时: RegisterTextureAsset → s_Registry 有 UUID, s_Assets 无 VkImage
+首帧: GetBakedPC → m_HasPendingTextures → BakeProperties → idx=0 → hasPending=true
+纹理被访问: GetAsset<Texture2D> → LoadAssetFromFile → VkImage 创建 → bindless index 分配
+下一帧: GetBakedPC → hasPending → BakeProperties → idx≠0 → UseORMMap=1 ✅
+```
+
+无需预加载任何纹理，零 OOM 风险。

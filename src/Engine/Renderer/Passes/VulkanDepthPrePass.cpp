@@ -145,9 +145,7 @@ namespace Ayaya {
     }
 
     void VulkanDepthPrePass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
-        if (!m_GDRCtx || m_GDRCtx->InstanceCount == 0) return;
-        if (!m_Pipeline) return;
-
+        if (!m_GDRCtx || !m_Pipeline) return;
         uint32_t instanceCount = std::min(m_GDRCtx->InstanceCount, kMaxInstances);
         auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
             Application::Get().GetWindow().GetContext());
@@ -155,61 +153,65 @@ namespace Ayaya {
         VkCommandBuffer vkCmd = vkCtx->GetCurrentCommandBuffer();
         uint32_t frameIdx = vkCtx->GetCurrentFrameIndex() % vkCtx->GetFramesInFlight();
 
-        // ── Host → Device barrier ──
-        VkMemoryBarrier hostBarrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER };
-        hostBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-        hostBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_INDEX_READ_BIT;
-        vkCmdPipelineBarrier(vkCmd, VK_PIPELINE_STAGE_HOST_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT
-                | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0,
-            1, &hostBarrier, 0, nullptr, 0, nullptr);
+        // ── Compute culling (outside render pass) — only when instances exist ──
+        if (instanceCount > 0) {
+            VkMemoryBarrier hostBarrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER };
+            hostBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+            hostBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_INDEX_READ_BIT;
+            vkCmdPipelineBarrier(vkCmd, VK_PIPELINE_STAGE_HOST_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT
+                    | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0,
+                1, &hostBarrier, 0, nullptr, 0, nullptr);
 
-        // ── Compute culling ──
-        vkCmdBindPipeline(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_CullPipeline);
-        m_GDRCtx->BindSet2(vkCmd, m_CullLayout, VK_PIPELINE_BIND_POINT_COMPUTE, frameIdx);
-        vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-            m_CullLayout, 3, 1, &m_CullSet3Descriptors[frameIdx], 0, nullptr);
+            vkCmdBindPipeline(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_CullPipeline);
+            m_GDRCtx->BindSet2(vkCmd, m_CullLayout, VK_PIPELINE_BIND_POINT_COMPUTE, frameIdx);
+            vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                m_CullLayout, 3, 1, &m_CullSet3Descriptors[frameIdx], 0, nullptr);
 
-        DepthPrePassPC fpc{};
-        fpc.lightModeMask = 1; // GBuffer opaque
-        fpc.overrideInstanceID = 0xFFFFFFFF;
-        glm::mat4 vp = context.ProjectionMatrix * context.ViewMatrix;
-        glm::mat4 vpT = glm::transpose(vp);
-        glm::vec4 rows[4] = { vpT[0], vpT[1], vpT[2], vpT[3] };
-        fpc.planes[0] = glm::normalize(glm::vec4(glm::vec3(rows[3] + rows[0]), rows[3].w + rows[0].w));
-        fpc.planes[1] = glm::normalize(glm::vec4(glm::vec3(rows[3] - rows[0]), rows[3].w - rows[0].w));
-        fpc.planes[2] = glm::normalize(glm::vec4(glm::vec3(rows[3] + rows[1]), rows[3].w + rows[1].w));
-        fpc.planes[3] = glm::normalize(glm::vec4(glm::vec3(rows[3] - rows[1]), rows[3].w - rows[1].w));
-        fpc.planes[4] = glm::normalize(glm::vec4(glm::vec3(rows[3] + rows[2]), rows[3].w + rows[2].w));
-        fpc.planes[5] = glm::normalize(glm::vec4(glm::vec3(rows[3] - rows[2]), rows[3].w - rows[2].w));
-        fpc.instanceCount = instanceCount;
-        vkCmdPushConstants(vkCmd, m_CullLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(fpc), &fpc);
-        uint32_t groupCount = (instanceCount + 63) / 64;
-        vkCmdDispatch(vkCmd, groupCount, 1, 1);
+            DepthPrePassPC fpc{};
+            fpc.lightModeMask = 1;
+            fpc.overrideInstanceID = 0xFFFFFFFF;
+            glm::mat4 vp = context.ProjectionMatrix * context.ViewMatrix;
+            glm::mat4 vpT = glm::transpose(vp);
+            glm::vec4 rows[4] = { vpT[0], vpT[1], vpT[2], vpT[3] };
+            fpc.planes[0] = glm::normalize(glm::vec4(glm::vec3(rows[3] + rows[0]), rows[3].w + rows[0].w));
+            fpc.planes[1] = glm::normalize(glm::vec4(glm::vec3(rows[3] - rows[0]), rows[3].w - rows[0].w));
+            fpc.planes[2] = glm::normalize(glm::vec4(glm::vec3(rows[3] + rows[1]), rows[3].w + rows[1].w));
+            fpc.planes[3] = glm::normalize(glm::vec4(glm::vec3(rows[3] - rows[1]), rows[3].w - rows[1].w));
+            fpc.planes[4] = glm::normalize(glm::vec4(glm::vec3(rows[3] + rows[2]), rows[3].w + rows[2].w));
+            fpc.planes[5] = glm::normalize(glm::vec4(glm::vec3(rows[3] - rows[2]), rows[3].w - rows[2].w));
+            fpc.instanceCount = instanceCount;
+            vkCmdPushConstants(vkCmd, m_CullLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(fpc), &fpc);
+            uint32_t groupCount = (instanceCount + 63) / 64;
+            vkCmdDispatch(vkCmd, groupCount, 1, 1);
 
-        VkBufferMemoryBarrier indirectBarrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
-        indirectBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-        indirectBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
-        indirectBarrier.buffer = m_DrawIndirectBuffer->GetBuffer(frameIdx);
-        indirectBarrier.size = VK_WHOLE_SIZE;
-        vkCmdPipelineBarrier(vkCmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0, 0, nullptr, 1, &indirectBarrier, 0, nullptr);
+            VkBufferMemoryBarrier indirectBarrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
+            indirectBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+            indirectBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+            indirectBarrier.buffer = m_DrawIndirectBuffer->GetBuffer(frameIdx);
+            indirectBarrier.size = VK_WHOLE_SIZE;
+            vkCmdPipelineBarrier(vkCmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0, 0, nullptr, 1, &indirectBarrier, 0, nullptr);
+        }
 
-        // ── Depth-only draw ──
+        // ── Always clear SceneDepth (prevents ghost silhouettes when objects hidden) ──
         auto fbo = context.GetFramebuffer("SceneDepth");
         if (!fbo) return;
         cmd.BeginRenderPass(fbo, /*clearColor=*/false, /*clearDepth=*/true);
-        auto& pool = vkCtx->GetGeometryPool();
-        vkCmdBindIndexBuffer(vkCmd, pool.GetBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        cmd.BindPipeline(m_Pipeline);
-        auto gdrPipe = std::dynamic_pointer_cast<VulkanPipeline>(m_Pipeline);
-        if (gdrPipe && m_GDRCtx) {
-            vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                gdrPipe->GetVulkanPipelineLayout(),
-                2, 1, &m_GDRCtx->Set2Descriptors[frameIdx], 0, nullptr);
+
+        if (instanceCount > 0) {
+            auto& pool = vkCtx->GetGeometryPool();
+            vkCmdBindIndexBuffer(vkCmd, pool.GetBuffer(), 0, VK_INDEX_TYPE_UINT32);
+            cmd.BindPipeline(m_Pipeline);
+            auto gdrPipe = std::dynamic_pointer_cast<VulkanPipeline>(m_Pipeline);
+            if (gdrPipe && m_GDRCtx) {
+                vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    gdrPipe->GetVulkanPipelineLayout(),
+                    2, 1, &m_GDRCtx->Set2Descriptors[frameIdx], 0, nullptr);
+            }
+            vkCmdDrawIndexedIndirect(vkCmd, m_DrawIndirectBuffer->GetBuffer(frameIdx), 0,
+                instanceCount, sizeof(VkDrawIndexedIndirectCommand));
         }
-        vkCmdDrawIndexedIndirect(vkCmd, m_DrawIndirectBuffer->GetBuffer(frameIdx), 0,
-            instanceCount, sizeof(VkDrawIndexedIndirectCommand));
         cmd.EndRenderPass();
     }
 

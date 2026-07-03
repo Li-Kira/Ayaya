@@ -480,6 +480,24 @@ namespace Ayaya {
         }
     }
 
+    void AssetManager::RegisterSubMesh(UUID subHandle, UUID parentHandle, int subMeshIndex,
+                                        const std::string& virtualPath) {
+        AssetMetadata subMeta;
+        subMeta.Type = AssetType::SubMesh;
+        subMeta.VirtualPath = virtualPath;
+        subMeta.ParentHandle = parentHandle;
+        subMeta.SubMeshIndex = subMeshIndex;
+        s_Registry[subHandle] = subMeta;
+        RewriteMetaFile(parentHandle);
+    }
+
+    void AssetManager::RegisterTextureAsset(UUID handle, const std::string& physicalPath) {
+        AssetMetadata meta;
+        meta.Type = AssetType::Texture2D;
+        meta.VirtualPath = VFS::GetVirtualPath(physicalPath);
+        s_Registry[handle] = meta;
+    }
+
     // =====================================================================
     // UpdateMetadataSettings — 更新纹理/模型导入设置并覆写 .meta 文件
     // =====================================================================

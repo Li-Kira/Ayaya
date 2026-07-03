@@ -111,7 +111,7 @@ namespace Ayaya {
             int framesRemaining = 3;
         };
         void QueueDeferredResource(DeferredResource&& resource);
-        void ProcessDeferredResources();
+        void ProcessDeferredResources(bool forceAll = false);
 
     private:
         GLFWwindow* m_WindowHandle;

@@ -29,7 +29,7 @@ struct GPUMaterial {
     int useAlphaMap;
     int alphaBindless;
     	uint lightModeMask;
-	uint _pad0, _pad1, _pad2;  // align customData to 16-byte boundary (match C++ alignas(16))
+	uint packing; uint _pad1, _pad2;  // packing=TexturePacking enum, pads align to 16
 	float customData[16];
 };
 layout(std430, set = 2, binding = 2) readonly buffer MaterialBuffer {
@@ -69,19 +69,27 @@ void main() {
     g_Albedo = vec4(albedo, 1.0);
 
     float metallic, roughness, ao;
+
     if (mat.useORMMap != 0) {
         vec3 o = texture(u_GlobalTextures[nonuniformEXT(mat.ormBindless)], v_TexCoord).rgb;
-        ao = o.r; roughness = o.g; metallic = o.b;
+        roughness = o.g * mat.roughness; metallic = o.b * mat.metallic;
+        if (mat.packing == 1u) {
+            // glTF_MetalRough: AO from separate occlusionTexture (R channel is undefined)
+            ao = (mat.aoBindless != 1)
+                ? texture(u_GlobalTextures[nonuniformEXT(mat.aoBindless)], v_TexCoord).r * mat.ao
+                : mat.ao;
+        } else {
+            // UE4_ORM (default): R=AO
+            ao = o.r * mat.ao;
+        }
+    } else if (mat.metallicBindless != 1 || mat.roughnessBindless != 1 || mat.aoBindless != 1) {
+        // Separate maps (legacy): individual metallic/roughness/AO textures
+        metallic = (mat.metallicBindless != 1) ? texture(u_GlobalTextures[nonuniformEXT(mat.metallicBindless)], v_TexCoord).r * mat.metallic : mat.metallic;
+        roughness = (mat.roughnessBindless != 1) ? texture(u_GlobalTextures[nonuniformEXT(mat.roughnessBindless)], v_TexCoord).r * mat.roughness : mat.roughness;
+        ao = (mat.aoBindless != 1) ? texture(u_GlobalTextures[nonuniformEXT(mat.aoBindless)], v_TexCoord).r * mat.ao : mat.ao;
     } else {
-        // Mirror CPU-side GetRenderScalars(): when a texture map is present
-        // (bindless index ≠ white default=1), override scalar to 1.0 so
-        // shader produces 1.0 * texture = texture — not scalar * texture.
-        float m = (mat.metallicBindless  != 1) ? 1.0 : mat.metallic;
-        float r = (mat.roughnessBindless != 1) ? 1.0 : mat.roughness;
-        float a = (mat.aoBindless        != 1) ? 1.0 : mat.ao;
-        metallic  = m * texture(u_GlobalTextures[nonuniformEXT(mat.metallicBindless)],  v_TexCoord).r;
-        roughness = r * texture(u_GlobalTextures[nonuniformEXT(mat.roughnessBindless)], v_TexCoord).r;
-        ao        = a * texture(u_GlobalTextures[nonuniformEXT(mat.aoBindless)],        v_TexCoord).r;
+        // Scalar-only (no texture maps at all)
+        metallic = mat.metallic; roughness = mat.roughness; ao = mat.ao;
     }
     g_PBR = vec4(metallic, roughness, ao, 1.0);
     // .r = ReceiveShadows flag (read by deferred_lighting.frag as RcvShadow)

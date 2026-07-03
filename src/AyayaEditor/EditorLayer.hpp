@@ -9,6 +9,7 @@
 #include "Panels/HistoryPanel.hpp"
 #include "Panels/FrameDebuggerPanel.hpp"
 #include "Panels/ImportModelPanel.hpp"
+#include "Panels/ImportglTFPanel.hpp"
 #include "Panels/CurveEditorPanel.hpp"
 #include "Panels/TimelinePanel.hpp"
 #include "Engine/Animation/TweenManager.hpp"
@@ -57,12 +58,14 @@ namespace Ayaya {
         void OpenSceneFile(const std::filesystem::path& filepath);
         AssetWatcher& GetAssetWatcher() { return m_AssetWatcher; }
         ImportModelPanel& GetImportModelPanel() { return m_ImportModelPanel; }
+        ImportglTFPanel& GetImportglTFPanel() { return m_ImportglTFPanel; }
         CurveEditorPanel& GetCurveEditorPanel() { return m_CurveEditorPanel; }
         TimelinePanel& GetTimelinePanel() { return m_TimelinePanel; }
         TweenManager& GetTweenManager() { return m_TweenManager; }
 
         // SRP: Renderer accessors for pipeline assignment from UI
         std::shared_ptr<class SceneRenderer> GetSceneRenderer() const { return m_SceneRenderer; }
+        std::shared_ptr<class Scene> GetActiveScene() const { return m_ActiveScene; }
         std::shared_ptr<class SceneRenderer> GetGameRenderer() const { return m_GameRenderer; }
         class PreferencesPanel& GetPreferencesPanel() { return m_PreferencesPanel; }
 
@@ -130,6 +133,7 @@ namespace Ayaya {
         HistoryPanel m_HistoryPanel;
         FrameDebuggerPanel m_FrameDebuggerPanel;
         ImportModelPanel m_ImportModelPanel;
+        ImportglTFPanel m_ImportglTFPanel;
         CurveEditorPanel m_CurveEditorPanel;
         TimelinePanel m_TimelinePanel;
         AssetWatcher m_AssetWatcher;

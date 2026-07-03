@@ -45,8 +45,10 @@ namespace Ayaya {
         int   useAlphaMap;                   // 4
         int   alphaBindless;                 // 4
         uint32_t lightModeMask;              // 4  ← SRP LightMode bitmask
+        uint32_t packing;                    // 4  ← TexturePacking enum (UE4_ORM=0, glTF=1, Separate=2)
+        uint32_t _pad[2];                    // 8  ← fill remaining padding gap before customData
         // TA-extensible shader params: 4×vec4=64 bytes for custom material data
-        alignas(16) float customData[16];   // offset 104, size 64 → total 168
+        alignas(16) float customData[16];   // offset 112, size 64 → total 176
     };
     static_assert(sizeof(GPUMaterial) == 176, "GPUMaterial must be 176 bytes (matches GLSL std430)");
 

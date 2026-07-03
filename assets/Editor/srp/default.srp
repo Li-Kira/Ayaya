@@ -77,9 +77,9 @@ Pipeline:AddPass("WBOIT_Gather", "WBOIT_Gather",
 Pipeline:AddPass("WBOIT_Resolve", "WBOIT_Resolve",
     {"WBOIT_Gather"}, {}, {"Lighting"})
 
--- Outline Pass: selection highlight mask (disabled by default)
+-- Outline Pass: selection highlight mask
 Pipeline:AddPass("Outline", "OutlinePass", {"GBuffer"}, {"Selection"}, {},
-    { Enabled = false })
+    { Enabled = true })
 
 -- Bloom Pass: emissive bloom from HDR (disabled by default)
 Pipeline:AddPass("Bloom", "BloomPass", {"Lighting"}, {"Bloom"}, {},

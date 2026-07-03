@@ -14,6 +14,7 @@ namespace Ayaya {
         out << YAML::Key << "ShaderName" << YAML::Value << material->ShaderName;
         out << YAML::Key << "BlendMode" << YAML::Value << static_cast<int>(material->GetBlendMode());
         out << YAML::Key << "AlphaCutoff" << YAML::Value << material->GetAlphaCutoff();
+        out << YAML::Key << "Packing" << YAML::Value << (uint32_t)material->GetBakedPC().Packing;
         if (!material->GetLightModeStr().empty())
             out << YAML::Key << "LightModes" << YAML::Value << material->GetLightModeStr();
 
@@ -179,6 +180,12 @@ namespace Ayaya {
         addTex  ("u_HeightMap",  "Height/Displacement Map");
         // Emissive (reserved for future implementation)
         addTex  ("u_EmissiveMap","Emissive Map");
+
+        // Restore Packing after all properties are loaded (defaults to UE4_ORM)
+        if (data["Packing"]) {
+            uint32_t p = data["Packing"].as<uint32_t>();
+            if (p <= 2) material->SetPacking(static_cast<Material::TexturePacking>(p));
+        }
 
         return true;
     }
