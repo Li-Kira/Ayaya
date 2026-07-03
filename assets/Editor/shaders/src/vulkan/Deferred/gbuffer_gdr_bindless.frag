@@ -83,10 +83,12 @@ void main() {
             ao = o.r * mat.ao;
         }
     } else if (mat.metallicBindless != 1 || mat.roughnessBindless != 1 || mat.aoBindless != 1) {
-        // Separate maps (legacy): individual metallic/roughness/AO textures
-        metallic = (mat.metallicBindless != 1) ? texture(u_GlobalTextures[nonuniformEXT(mat.metallicBindless)], v_TexCoord).r * mat.metallic : mat.metallic;
-        roughness = (mat.roughnessBindless != 1) ? texture(u_GlobalTextures[nonuniformEXT(mat.roughnessBindless)], v_TexCoord).r * mat.roughness : mat.roughness;
-        ao = (mat.aoBindless != 1) ? texture(u_GlobalTextures[nonuniformEXT(mat.aoBindless)], v_TexCoord).r * mat.ao : mat.ao;
+        // Separate maps (legacy): texture overrides scalar (historical engine behavior).
+        // When a texture map exists, the scalar factor is NOT multiplied — texture value
+        // replaces scalar entirely. The scalar is only used as fallback when no map exists.
+        metallic  = (mat.metallicBindless  != 1) ? texture(u_GlobalTextures[nonuniformEXT(mat.metallicBindless)],  v_TexCoord).r : mat.metallic;
+        roughness = (mat.roughnessBindless != 1) ? texture(u_GlobalTextures[nonuniformEXT(mat.roughnessBindless)], v_TexCoord).r : mat.roughness;
+        ao        = (mat.aoBindless        != 1) ? texture(u_GlobalTextures[nonuniformEXT(mat.aoBindless)],        v_TexCoord).r : mat.ao;
     } else {
         // Scalar-only (no texture maps at all)
         metallic = mat.metallic; roughness = mat.roughness; ao = mat.ao;
