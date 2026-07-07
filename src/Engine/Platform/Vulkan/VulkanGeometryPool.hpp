@@ -57,10 +57,13 @@ namespace Ayaya {
     // No manual SSBO vertex fetch needed.
     class GlobalGeometryPool {
     public:
-        static constexpr VkDeviceSize kDefaultSize = 256ULL * 1024 * 1024;
+        static constexpr VkDeviceSize kDefaultSize = 512ULL * 1024 * 1024;
 
         void Init(VkDevice device, VmaAllocator allocator, VkDeviceSize size = kDefaultSize);
         void Shutdown();
+
+        VkDeviceSize GetSize() const { return m_Size; }
+        VkDeviceSize GetUsedBytes() const { return m_Cursor; }
 
         // Append vertex + index data; return the range for binding.
         // vertexOffset is uint element offset (byteOffset / 4),

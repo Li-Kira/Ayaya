@@ -8,43 +8,47 @@ namespace Ayaya {
     static_assert(sizeof(Vertex) == 44, "Vertex struct size mismatch! Expecting exactly 44 bytes.");
 
     Mesh::Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices,
-               int materialIndex) {
+               int materialIndex, bool createGPUBuffers) {
         m_VertexCount = (uint32_t)vertices.size();
         m_IndexCount = (uint32_t)indices.size();
         m_MaterialIndex = materialIndex;
 
-        // ==========================================
-        // 1. OpenGL 状态机陷阱：严格按照能够成功执行的老顺序！
-        // 先创建 VAO (开启录音机)
-        // ==========================================
-        if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
-            m_VertexArray = VertexArray::Create();
-        }
+        // GDR (GPU-Driven Rendering) path: vertex data is served from GlobalGeometryPool SSBO.
+        // Per-mesh VBO/IBO are redundant — skip allocation to save 70-210 MB GPU memory.
+        if (createGPUBuffers) {
+            // ==========================================
+            // 1. OpenGL 状态机陷阱：严格按照能够成功执行的老顺序！
+            // 先创建 VAO (开启录音机)
+            // ==========================================
+            if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL) {
+                m_VertexArray = VertexArray::Create();
+            }
 
-        // ==========================================
-        // 2. 创建 VBO，设置 Layout，并录制到 VAO 中
-        // ==========================================
-        m_VertexBuffer = VertexBuffer::Create((float*)vertices.data(), vertices.size() * sizeof(Vertex));
-        if (m_VertexBuffer) {
-            m_VertexBuffer->SetLayout({
-                { ShaderDataType::Float3, "a_Position" },
-                { ShaderDataType::Float3, "a_Normal"   },
-                { ShaderDataType::Float2, "a_TexCoord" },
-                { ShaderDataType::Float3, "a_Tangent"  } 
-            });
-        }
-        
-        if (m_VertexArray && m_VertexBuffer) {
-            m_VertexArray->AddVertexBuffer(m_VertexBuffer);
-        }
+            // ==========================================
+            // 2. 创建 VBO，设置 Layout，并录制到 VAO 中
+            // ==========================================
+            m_VertexBuffer = VertexBuffer::Create((float*)vertices.data(), vertices.size() * sizeof(Vertex));
+            if (m_VertexBuffer) {
+                m_VertexBuffer->SetLayout({
+                    { ShaderDataType::Float3, "a_Position" },
+                    { ShaderDataType::Float3, "a_Normal"   },
+                    { ShaderDataType::Float2, "a_TexCoord" },
+                    { ShaderDataType::Float3, "a_Tangent"  }
+                });
+            }
 
-        // ==========================================
-        // 3. 创建 IBO，并录制到 VAO 中
-        // ==========================================
-        m_IndexBuffer = IndexBuffer::Create((uint32_t*)indices.data(), indices.size());
-        
-        if (m_VertexArray && m_IndexBuffer) {
-            m_VertexArray->SetIndexBuffer(m_IndexBuffer);
+            if (m_VertexArray && m_VertexBuffer) {
+                m_VertexArray->AddVertexBuffer(m_VertexBuffer);
+            }
+
+            // ==========================================
+            // 3. 创建 IBO，并录制到 VAO 中
+            // ==========================================
+            m_IndexBuffer = IndexBuffer::Create((uint32_t*)indices.data(), indices.size());
+
+            if (m_VertexArray && m_IndexBuffer) {
+                m_VertexArray->SetIndexBuffer(m_IndexBuffer);
+            }
         }
 
         // ==========================================

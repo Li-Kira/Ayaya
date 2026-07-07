@@ -548,6 +548,56 @@ namespace Ayaya {
             ImGui::PopStyleColor(2);
             ImGui::PopStyleVar(2);
             ImGui::PopFont();
+
+            // ── Right-side performance stats ──
+            {
+                auto& io = ImGui::GetIO();
+                float fps = io.Framerate;
+                float ram = GetPhysicalMemoryUsageMB();
+                float totalRAM = GetTotalPhysicalMemoryMB();
+
+                // GPU VRAM (Vulkan only)
+                float gpuUsed = 0, gpuBudget = 0;
+                if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+                    auto ctx = Application::Get().GetWindow().GetContext();
+                    if (auto vk = std::dynamic_pointer_cast<VulkanContext>(ctx)) {
+                        VmaBudget budgets[VK_MAX_MEMORY_HEAPS]{};
+                        vmaGetHeapBudgets(vk->GetAllocator(), budgets);
+                        for (uint32_t i = 0; i < VK_MAX_MEMORY_HEAPS; ++i) {
+                            gpuUsed   += budgets[i].usage / (1024.0f * 1024.0f);
+                            gpuBudget += budgets[i].budget / (1024.0f * 1024.0f);
+                        }
+                    }
+                }
+
+                // Build text to measure width
+                char buf[256];
+                int len = snprintf(buf, sizeof(buf), "%.0f FPS  %.1f ms | RAM %.0f/%.0fMB",
+                    fps, 1000.0f / fps, ram, totalRAM);
+                if (gpuBudget > 0)
+                    len += snprintf(buf + len, sizeof(buf) - len, " | VRAM %.0f/%.0fMB", gpuUsed, gpuBudget);
+
+                float textW = ImGui::CalcTextSize(buf).x;
+                float rightPad = 20.0f;
+                float textH = ImGui::GetTextLineHeightWithSpacing();
+                float cursorY = (barH - textH) * 0.5f + 4.0f;
+
+                ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() - textW - rightPad, cursorY));
+                ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.65f, 0.68f, 1.0f));
+
+                ImGui::Text("%.0f FPS  %.1f ms | RAM %.0f/%.0fMB",
+                    fps, 1000.0f / fps, ram, totalRAM);
+
+                if (gpuBudget > 0) {
+                    ImGui::SameLine(0, 0);
+                    ImGui::Text(" | VRAM %.0f/%.0fMB", gpuUsed, gpuBudget);
+                }
+
+                ImGui::PopStyleColor();
+                ImGui::PopFont();
+            }
+
             ImGui::EndChild();
         }
 

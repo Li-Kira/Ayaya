@@ -1,6 +1,7 @@
 #include "ayapch.h"
 #include "AssetManager.hpp"
 #include "Prefab.hpp"
+#include "Asset/glTF/glTFAssetImporter.hpp"
 #include "Renderer/Texture.hpp"
 #include "Renderer/TextureCube.hpp"
 #include "Renderer/Model.hpp"
@@ -35,6 +36,7 @@ namespace Ayaya {
     std::queue<std::function<void()>> AssetManager::s_MainThreadQueue;
     std::mutex AssetManager::s_MainThreadQueueMutex;
     std::unordered_map<UUID, std::unordered_set<UUID>> AssetManager::s_ReverseDeps;
+    std::atomic<bool> AssetManager::s_BulkImportInProgress{false};
 
     void AssetManager::Init() {
         AYAYA_CORE_INFO("AssetManager Initialized.");
@@ -1132,29 +1134,29 @@ namespace Ayaya {
             asset = Texture2D::Create(physicalPath);
         }
         else if (metadata.Type == AssetType::SubMesh) {
-            // SubMesh: route through parent Model
+            // SubMesh: route through parent Model.
+            // Must use cgltf ordering (from import), NOT Assimp ordering.
             if (metadata.ParentHandle != 0 && metadata.SubMeshIndex >= 0) {
                 auto parent = AssetManager::GetAsset<Model>(metadata.ParentHandle);
                 if (!parent) {
-                    parent = std::static_pointer_cast<Model>(LoadAssetFromFile(metadata.ParentHandle));
+                    parent = LoadglTFAsModel(physicalPath);
+                    if (!parent)
+                        parent = std::static_pointer_cast<Model>(LoadAssetFromFile(metadata.ParentHandle));
                     if (parent) s_Assets[metadata.ParentHandle] = parent;
                 }
                 if (parent) {
                     auto meshes = parent->GetMeshes();
                     if (metadata.SubMeshIndex < (int)meshes.size()) {
                         auto sm = std::make_shared<Model>(meshes[metadata.SubMeshIndex]);
-                        // Propagate parent's root transform (SwapYZ, GlobalScale) for correct preview orientation
                         sm->GetRootNode().LocalTransform = parent->GetRootNode().LocalTransform;
                         asset = sm;
                     }
                 }
             }
-            // Cache SubMesh in s_Assets so repeated GetAsset calls don't reload parent
             if (asset) s_Assets[handle] = asset;
             return asset;
         }
         else if (metadata.Type == AssetType::Model) {
-            // 【核心修复】：拦截内置几何体，防止传入 Assimp
             if (metadata.VirtualPath == "Primitive::Cube") {
                 asset = std::make_shared<Model>(Mesh::CreateCube(1.0f));
             }
@@ -1165,8 +1167,11 @@ namespace Ayaya {
                 asset = std::make_shared<Model>(Mesh::CreatePlane(1.0f, 1.0f));
             }
             else {
-                // 只有真正的硬盘路径 (如 .obj, .fbx) 才调用 Model 构造函数交给 Assimp
-                asset = std::make_shared<Model>(physicalPath, metadata.ModelSettings);
+                // glTF: use cgltf parser (matches SubMeshIndex from import).
+                // Other formats (obj, fbx): use Assimp.
+                asset = LoadglTFAsModel(physicalPath);
+                if (!asset)
+                    asset = std::make_shared<Model>(physicalPath, metadata.ModelSettings);
             }
         }
         else if (metadata.Type == AssetType::Material) {
@@ -1212,6 +1217,25 @@ namespace Ayaya {
     // 异步预加载：后台线程 CPU 加载 + 主线程回调 GPU 上传
     // 适用场景：ContentBrowser 浏览目录时提前预热纹理，避免拖拽大文件卡 UI
     // =====================================================================
+    // Async load throttling: prevents OOM from 72×4K textures spawning
+    // 72 threads simultaneously (72×64MB stbi + 72×64MB VkImage = ~9GB peak).
+    // Limits concurrent bg threads to kMaxAsyncLoads, queues the rest.
+    // =====================================================================
+    static constexpr int kMaxAsyncLoads = 4;
+    static std::atomic<int> s_ActiveAsyncLoads{0};
+    static std::queue<std::function<void()>> s_PendingAsyncLoads;
+    static std::mutex s_PendingAsyncMutex;
+
+    static void ProcessPendingAsyncLoads() {
+        std::lock_guard<std::mutex> lock(s_PendingAsyncMutex);
+        while (!s_PendingAsyncLoads.empty() && s_ActiveAsyncLoads.load() < kMaxAsyncLoads) {
+            auto fn = std::move(s_PendingAsyncLoads.front());
+            s_PendingAsyncLoads.pop();
+            s_ActiveAsyncLoads.fetch_add(1);
+            std::thread(std::move(fn)).detach();
+        }
+    }
+
     void AssetManager::RequestAsyncLoad(UUID handle) {
         // 已加载到内存，无需重复加载
         if (s_Assets.find(handle) != s_Assets.end()) {
@@ -1237,11 +1261,8 @@ namespace Ayaya {
         auto vpath = metadata.VirtualPath;
         TextureImportSettings texSettings = metadata.TextureSettings;
 
-        AYAYA_CORE_INFO("[Async] Spawning bg thread for asset {0} ({1})", (uint64_t)handle, physicalPath);
-
-        // 后台线程：执行纯 CPU 密集任务（stbi_load 读取解压、Assimp 解析顶点）
-        // GPU 资源创建（VkImage、VkBuffer）通过 SubmitToMainThread 回到主线程执行
-        std::thread([handle, type, physicalPath, vpath, texSettings]() {
+        // Build the background-thread task
+        auto task = [handle, type, physicalPath, vpath, texSettings]() {
             try {
                 if (type == AssetType::Texture2D) {
                     AYAYA_CORE_INFO("[Async] BG: stbi_load start for {0}", physicalPath);
@@ -1281,8 +1302,22 @@ namespace Ayaya {
                 std::lock_guard<std::mutex> lock(s_LoadingMutex);
                 s_LoadingAssets.erase(handle);
                 AYAYA_CORE_TRACE("[Async] Asset {0} removed from loading set", (uint64_t)handle);
+                // Signal completion: decrement active count, process next queued load
+                s_ActiveAsyncLoads.fetch_sub(1);
+                ProcessPendingAsyncLoads();
             });
-        }).detach();
+        };
+
+        // Throttle: spawn immediately if under limit, otherwise queue
+        if (s_ActiveAsyncLoads.load() < kMaxAsyncLoads) {
+            s_ActiveAsyncLoads.fetch_add(1);
+            AYAYA_CORE_INFO("[Async] Spawning bg thread for asset {0} ({1})", (uint64_t)handle, physicalPath);
+            std::thread(std::move(task)).detach();
+        } else {
+            AYAYA_CORE_TRACE("[Async] Queued (throttled) asset {0} — {1} active loads", (uint64_t)handle, s_ActiveAsyncLoads.load());
+            std::lock_guard<std::mutex> lock(s_PendingAsyncMutex);
+            s_PendingAsyncLoads.push(std::move(task));
+        }
     }
 
     // =====================================================================

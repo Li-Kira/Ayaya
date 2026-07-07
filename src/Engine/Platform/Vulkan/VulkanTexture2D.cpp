@@ -435,6 +435,63 @@ namespace Ayaya {
         AYAYA_CORE_INFO("VulkanTexture2D: Pixel data securely uploaded & Layout transitioned for {0}", m_Path.empty() ? "Generated Texture" : m_Path);
     }
 
+    void VulkanTexture2D::SetDataBatched(VkCommandBuffer cmd, VkBuffer stagingBuffer,
+                                         VkDeviceSize stagingOffset, void* data, uint32_t size) {
+        auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+
+        // Transition image to TRANSFER_DST (all mip levels)
+        VkImageMemoryBarrier barrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = m_Image;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = m_MipLevels;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        vkCmdPipelineBarrier(cmd,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        // Copy from staging sub-region to image
+        VkBufferImageCopy region{};
+        region.bufferOffset = stagingOffset;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageOffset = { 0, 0, 0 };
+        region.imageExtent = { m_Width, m_Height, 1 };
+
+        vkCmdCopyBufferToImage(cmd, stagingBuffer, m_Image,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        // Transition to SHADER_READ_ONLY (skip mip generation — caller pre-disables GenerateMipmaps)
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(cmd,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        // Register bindless index
+        if (m_BindlessIndex == 0 && m_ImageView != VK_NULL_HANDLE && m_Sampler != VK_NULL_HANDLE) {
+            m_BindlessIndex = context->GetBindlessManager().AllocateIndex();
+            if (m_BindlessIndex != 0) {
+                context->GetBindlessManager().UpdateBinding(context->GetDevice(), m_BindlessIndex, m_ImageView, m_Sampler);
+            }
+        }
+    }
+
     void VulkanTexture2D::Bind(uint32_t slot) const {
         // Vulkan 不需要全局 Bind，由 VulkanRenderCommandBuffer::BindTexture2D 处理描述符更新
     }

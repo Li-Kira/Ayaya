@@ -4,6 +4,7 @@
 #include "Asset.hpp"
 #include "AssetSettings.hpp"
 
+#include <atomic>
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
@@ -174,6 +175,12 @@ namespace Ayaya {
             return {};
         }
 
+        // ── Bulk import guard: suppress AssetWatcher reloads during glTF import ──
+        // Prevents the file watcher from triggering synchronous LoadAssetFromFile
+        // for every newly-created texture/material/prefab while import is writing files.
+        static bool IsBulkImportInProgress() { return s_BulkImportInProgress.load(std::memory_order_acquire); }
+        static void SetBulkImportInProgress(bool v) { s_BulkImportInProgress.store(v, std::memory_order_release); }
+
         // ==========================================
         // File system mutation APIs (ContentBrowser)
         // ==========================================
@@ -242,6 +249,7 @@ namespace Ayaya {
         static std::mutex s_LoadingMutex;                   // 保护 s_LoadingAssets 的互斥锁
         static std::queue<std::function<void()>> s_MainThreadQueue; // 主线程 GPU 上传任务队列
         static std::mutex s_MainThreadQueueMutex;           // 保护任务队列的互斥锁
+        static std::atomic<bool> s_BulkImportInProgress;    // 批量导入进行中标志（抑制 AssetWatcher）
     };
 
 }

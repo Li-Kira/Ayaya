@@ -67,6 +67,23 @@ namespace Ayaya {
         VkCommandBuffer BeginSingleTimeCommands();
         void EndSingleTimeCommands(VkCommandBuffer commandBuffer);
 
+        // ── Batched texture upload (avoids per-texture device-wait OOM on bulk import) ──
+        // Allocates one large staging buffer + one command buffer for N textures.
+        // Call Begin → UploadTextureToBatch × N → End to submit once.
+        struct TextureUploadBatch {
+            VkBuffer stagingBuffer = VK_NULL_HANDLE;
+            VmaAllocation stagingAllocation = VK_NULL_HANDLE;
+            VmaAllocationInfo stagingAllocInfo{};
+            VkCommandBuffer cmd = VK_NULL_HANDLE;
+            VkDeviceSize totalSize = 0;
+            VkDeviceSize cursor = 0;
+        };
+        TextureUploadBatch BeginTextureUploadBatch(VkDeviceSize totalSizeBytes);
+        void UploadTextureToBatch(TextureUploadBatch& batch, VkImage image,
+                                  uint32_t width, uint32_t height, uint32_t mipLevels,
+                                  VkFormat format, const void* pixelData, uint32_t dataSize);
+        void EndTextureUploadBatch(TextureUploadBatch& batch);
+
         void RecreateSwapChain();
         void SetVSync(bool vsync);
 

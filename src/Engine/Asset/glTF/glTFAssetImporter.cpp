@@ -1,7 +1,6 @@
 #include "ayapch.h"
 #include "glTFAssetImporter.hpp"
 
-#define CGLTF_IMPLEMENTATION
 #include <cgltf/cgltf.h>
 
 #include "Scene/Scene.hpp"
@@ -22,6 +21,10 @@
 #include "Core/VFS.hpp"
 
 #include <fstream>
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include <stb/stb_image_resize2.h>
+#include <stb/stb_image.h>
+#include <stb/stb_image_write.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
@@ -113,7 +116,9 @@ static std::shared_ptr<Mesh> ExtractPrimitive(const cgltf_primitive& prim, int m
         indices.resize(posAcc->count);
         for (cgltf_size i = 0; i < posAcc->count; ++i) indices[i] = (uint32_t)i;
     }
-    return std::make_shared<Mesh>(vertices, indices, matIdx);
+    // Vulkan GDR path: skip per-mesh VBO/IBO — GeometryPool SSBO serves vertex data
+    bool createBuffers = (RendererAPI::GetAPI() == RendererAPI::API::OpenGL);
+    return std::make_shared<Mesh>(vertices, indices, matIdx, createBuffers);
 }
 
 // ==========================================
@@ -172,7 +177,9 @@ static std::shared_ptr<Material> ConvertMaterial(const cgltf_material* mat,
 static void BuildPrefabEntity(const cgltf_node* node, Entity parent, Scene& prefabScene,
                                const std::vector<glTFImportResult::MeshEntry>& meshEntries,
                                const std::vector<glTFImportResult::MatEntry>& matEntries,
-                               const cgltf_data* data) {
+                               const cgltf_data* data,
+                               const glTFImportSettings& settings,
+                               const std::unordered_map<std::string, int>& meshPrimToLinear) {
     Entity e = prefabScene.CreateEntity(node->name && node->name[0] ? node->name : "Node");
 
     glm::mat4 local = GltfNodeToMat4(node);
@@ -193,13 +200,14 @@ static void BuildPrefabEntity(const cgltf_node* node, Entity parent, Scene& pref
             if (multi) target.SetParent(e);
 
             auto& mr = target.AddComponent<MeshRendererComponent>();
-            // Match SubMesh by index encoding: meshIdx*1000 + primitiveIdx
-            int encodedIdx = meshIdx * 1000 + (int)p;
-            for (auto& me : meshEntries) {
-                if (me.SubMeshIndex == encodedIdx) {
-                    mr.ModelHandle = me.Handle;
-                    break;
-                }
+            // Look up SubMesh by linear index from the meshPrimToLinear map
+            std::string key = std::to_string(meshIdx) + ":" + std::to_string(p);
+            auto lit = meshPrimToLinear.find(key);
+            if (lit != meshPrimToLinear.end() && lit->second < (int)meshEntries.size()) {
+                mr.ModelHandle = meshEntries[lit->second].Handle;
+            } else {
+                AYAYA_CORE_WARN("glTF prefab: no SubMesh match for node '{}' mesh[{}] prim[{}] (meshEntries={})",
+                    node->name ? node->name : "(unnamed)", meshIdx, (int)p, meshEntries.size());
             }
             // Match material: primitive material index
             int matIdx = (int)p < (int)data->materials_count ? (int)p : -1;
@@ -209,8 +217,8 @@ static void BuildPrefabEntity(const cgltf_node* node, Entity parent, Scene& pref
         }
     }
 
-    // Light
-    if (node->light) {
+    // Light (respect import settings)
+    if (node->light && settings.ImportLights) {
         switch (node->light->type) {
             case cgltf_light_type_directional: {
                 auto& l = e.AddComponent<DirectionalLightComponent>();
@@ -227,8 +235,8 @@ static void BuildPrefabEntity(const cgltf_node* node, Entity parent, Scene& pref
         }
     }
 
-    // Camera
-    if (node->camera && node->camera->type == cgltf_camera_type_perspective) {
+    // Camera (respect import settings)
+    if (node->camera && settings.ImportCameras && node->camera->type == cgltf_camera_type_perspective) {
         auto& cam = e.AddComponent<CameraComponent>();
         cam.Camera.SetPerspective(node->camera->data.perspective.yfov,
             node->camera->data.perspective.znear,
@@ -237,13 +245,14 @@ static void BuildPrefabEntity(const cgltf_node* node, Entity parent, Scene& pref
 
     // EnTT-safe: copy children before recursion
     std::vector<cgltf_node*> kids(node->children, node->children + node->children_count);
-    for (auto* c : kids) BuildPrefabEntity(c, e, prefabScene, meshEntries, matEntries, data);
+    for (auto* c : kids) BuildPrefabEntity(c, e, prefabScene, meshEntries, matEntries, data, settings, meshPrimToLinear);
 }
 
 // ==========================================
 // Phase 1: Background-thread import
 // ==========================================
-glTFImportResult ImportglTFSceneSync(const std::string& sourcePath) {
+glTFImportResult ImportglTFSceneSync(const std::string& sourcePath,
+                                     const glTFImportSettings& settings) {
     glTFImportResult result;
 
     // === 1. Parse ===
@@ -336,12 +345,40 @@ glTFImportResult ImportglTFSceneSync(const std::string& sourcePath) {
 
         if (texDest.empty()) continue;
 
+        // Downscale textures > 2048 to prevent OOM (4K RGBA = 64MB → 2K = 16MB, 4x savings)
+        {
+            int w, h, comp;
+            if (stbi_info(texDest.c_str(), &w, &h, &comp) && (w > 2048 || h > 2048)) {
+                int newW = w, newH = h;
+                if (w >= h)    { newW = 2048; newH = (int)((float)h * 2048.0f / w); if (newH < 1) newH = 1; }
+                else           { newH = 2048; newW = (int)((float)w * 2048.0f / h); if (newW < 1) newW = 1; }
+
+                uint8_t* src = stbi_load(texDest.c_str(), &w, &h, &comp, 4);
+                if (src) {
+                    std::vector<uint8_t> dst(newW * newH * 4);
+                    bool isSRGB = srgbIndices.count((int)i) > 0;
+                    if (isSRGB)
+                        stbir_resize_uint8_srgb(src, w, h, 0, dst.data(), newW, newH, 0, STBIR_RGBA);
+                    else
+                        stbir_resize_uint8_linear(src, w, h, 0, dst.data(), newW, newH, 0, STBIR_RGBA);
+                    stbi_write_png(texDest.c_str(), newW, newH, 4, dst.data(), newW * 4);
+                    AYAYA_CORE_INFO("glTF import: resized texture {} from {}x{} → {}x{}",
+                        texDest, w, h, newW, newH);
+                    stbi_image_free(src);
+                }
+            }
+        }
+
         // Record for Phase 2 finalization (sRGB flag carried via .meta update)
         UUID texUUID = UUID();
         TextureImportSettings tSet;
         tSet.SRGB = srgbIndices.count((int)i) > 0;
         tSet.FlipY = false;
-        tSet.GenerateMipmaps = false;  // CRITICAL: avoids VkImage mipmap OOM on bulk import
+        tSet.GenerateMipmaps = settings.GenerateMipmaps;
+        if (settings.GenerateMipmaps && data->textures_count > 8) {
+            AYAYA_CORE_WARN("glTF import: {} textures with mipmaps enabled — high memory usage risk",
+                data->textures_count);
+        }
         AssetManager::WriteMetaFile(texDest, texUUID, AssetType::Texture2D, tSet);
         result.CopiedTextures.push_back({texDest, texUUID});
         result.CopiedTextures.back().SRGB = srgbIndices.count((int)i) > 0;
@@ -371,6 +408,10 @@ glTFImportResult ImportglTFSceneSync(const std::string& sourcePath) {
     }
 
     // === 8. Build SubMeshes ===
+    // Use linear index (0,1,2...) for SubMeshIndex — maps directly to cgltf parse order.
+    // The meshPrimToLinear map is used by BuildPrefabEntity to resolve (meshIdx,primIdx) → index.
+    int linearIdx = 0;
+    std::unordered_map<std::string, int> meshPrimToLinear;
     for (cgltf_size i = 0; i < data->meshes_count; i++) {
         for (cgltf_size p = 0; p < data->meshes[i].primitives_count; p++) {
             auto mesh = ExtractPrimitive(data->meshes[i].primitives[p],
@@ -379,8 +420,11 @@ glTFImportResult ImportglTFSceneSync(const std::string& sourcePath) {
 
             UUID subUUID = UUID();
             std::string subName = baseName + "_Mesh" + std::to_string(i) + "_" + std::to_string(p);
-            result.SubMeshes.push_back({subUUID, result.ModelVirtualPath, "", (int)(i*1000 + p), subName});
+            std::string key = std::to_string(i) + ":" + std::to_string(p);
+            meshPrimToLinear[key] = linearIdx;
+            result.SubMeshes.push_back({subUUID, result.ModelVirtualPath, "", linearIdx, subName});
             result.SubMeshData.push_back(mesh);
+            linearIdx++;
         }
     }
 
@@ -392,7 +436,7 @@ glTFImportResult ImportglTFSceneSync(const std::string& sourcePath) {
     cgltf_scene* scene = data->scene ? data->scene : &data->scenes[0];
     for (cgltf_size i = 0; i < scene->nodes_count; i++) {
         BuildPrefabEntity(scene->nodes[i], rootEntity, *prefabScene,
-            result.SubMeshes, result.Materials, data);
+            result.SubMeshes, result.Materials, data, settings, meshPrimToLinear);
     }
 
     result.PrefabPath = DeduplicatePath(destDir + "/" + baseName + ".prefab");
@@ -414,7 +458,7 @@ glTFImportResult ImportglTFSceneSync(const std::string& sourcePath) {
 // ==========================================
 // Phase 2: Main-thread finalization
 // ==========================================
-void FinalizeglTFImport(const glTFImportResult& result) {
+void FinalizeglTFImport(glTFImportResult& result) {
     if (!result.Success) {
         AYAYA_CORE_ERROR("glTF import finalize failed: {}", result.ErrorMsg);
         return;
@@ -425,6 +469,7 @@ void FinalizeglTFImport(const glTFImportResult& result) {
     UUID modelUUID = AssetManager::ImportAsset(result.ModelPhysicalPath);
 
     // Register SubMesh assets (wrap extracted meshes in Model, persist in s_Registry)
+    int subMeshCached = 0;
     for (size_t i = 0; i < result.SubMeshes.size() && i < result.SubMeshData.size(); ++i) {
         auto& sub = result.SubMeshes[i];
         auto& mesh = result.SubMeshData[i];
@@ -433,13 +478,35 @@ void FinalizeglTFImport(const glTFImportResult& result) {
             AssetManager::AddAsset<Model>(sub.Handle, subModel);
             AssetManager::RegisterSubMesh(sub.Handle, modelUUID,
                 sub.SubMeshIndex, result.ModelVirtualPath);
+            subMeshCached++;
         }
     }
+    // Verify: sample SubMesh mesh data (vertex/index counts)
+    uint64_t totalVerts = 0, totalInds = 0;
+    int emptyMeshes = 0;
+    for (size_t vi = 0; vi < result.SubMeshData.size(); vi++) {
+        if (result.SubMeshData[vi]) {
+            totalVerts += result.SubMeshData[vi]->GetVertexCount();
+            totalInds  += result.SubMeshData[vi]->GetIndexCount();
+        } else {
+            emptyMeshes++;
+        }
+    }
+    AYAYA_CORE_TRACE("glTF import: {} SubMeshes, {} total verts, {} total inds, {} empty meshes",
+        result.SubMeshData.size(), totalVerts, totalInds, emptyMeshes);
+    if (emptyMeshes > 0)
+        AYAYA_CORE_WARN("glTF import: {} SubMeshes have NULL mesh data!", emptyMeshes);
+    AYAYA_CORE_TRACE("glTF import: cached {} SubMesh Models in asset pool (total entries: {})",
+        subMeshCached, result.SubMeshes.size());
 
-    // Register textures lazily. BakeProperties auto-retries when bindless indices become
-    // available (m_HasPendingTextures flag). No eager loading → avoids OOM.
-    for (auto& t : result.CopiedTextures)
+    // Register textures lazily, then trigger async preload.
+    // RequestAsyncLoad spawns background threads for stbi_load, then queues main-thread
+    // GPU uploads. By the time the user drags the prefab into the scene, textures are
+    // already GPU-resident → GetAsset<Texture2D> returns cached instantly, no stutter.
+    for (auto& t : result.CopiedTextures) {
         AssetManager::RegisterTextureAsset(t.Handle, t.PhysicalPath);
+        AssetManager::RequestAsyncLoad(t.Handle);
+    }
 
     // Register materials
     for (auto& m : result.Materials) {
@@ -456,11 +523,85 @@ void FinalizeglTFImport(const glTFImportResult& result) {
         if (auto vk = std::dynamic_pointer_cast<VulkanContext>(ctx)) {
             vkDeviceWaitIdle(vk->GetDevice());
             vk->ProcessDeferredResources(true);
+
+            // Log VMA memory budget for diagnostics
+            VmaBudget budgets[VK_MAX_MEMORY_HEAPS]{};
+            vmaGetHeapBudgets(vk->GetAllocator(), budgets);
+            for (uint32_t i = 0; i < VK_MAX_MEMORY_HEAPS; ++i) {
+                if (budgets[i].budget > 0) {
+                    AYAYA_CORE_INFO("glTF import: VMA heap[{}] usage={:.1f}MB / budget={:.1f}MB",
+                        i, budgets[i].usage / (1024.0 * 1024.0),
+                        budgets[i].budget / (1024.0 * 1024.0));
+                }
+            }
         }
     }
 
+    // Free CPU-side mesh data — vertex/index vectors no longer needed after GPU upload
+    size_t freedBytes = 0;
+    for (auto& meshPtr : result.SubMeshData) {
+        if (meshPtr) {
+            freedBytes += meshPtr->GetVertexCount() * sizeof(Vertex)
+                        + meshPtr->GetIndexCount() * sizeof(uint32_t);
+        }
+    }
+    result.SubMeshData.clear();
+    if (freedBytes > 0)
+        AYAYA_CORE_TRACE("glTF import: freed {:.1f} MB CPU geometry data", freedBytes / (1024.0 * 1024.0));
+
     AYAYA_CORE_INFO("glTF import complete: {} nodes, {} meshes, {} materials, {} textures, {} lights",
         result.NodeCount, result.MeshCount, result.MaterialCount, result.TextureCount, result.LightCount);
+
+    // Re-enable AssetWatcher — all files are registered, watcher can safely process future changes
+    AssetManager::SetBulkImportInProgress(false);
+}
+
+// ==========================================
+// Standalone glTF loader — parses with cgltf, returns Model with ALL meshes
+// in cgltf parse order (matching SubMeshIndex from import).
+// ==========================================
+std::shared_ptr<Model> LoadglTFAsModel(const std::string& filePath) {
+    std::string ext = std::filesystem::path(filePath).extension().string();
+    for (auto& c : ext) c = (char)std::tolower(c);
+    if (ext != ".gltf" && ext != ".glb") return nullptr;
+
+    cgltf_options opts{};
+    cgltf_data* data = nullptr;
+    if (cgltf_parse_file(&opts, filePath.c_str(), &data) != cgltf_result_success)
+        return nullptr;
+    if (cgltf_load_buffers(&opts, data, filePath.c_str()) != cgltf_result_success) {
+        cgltf_free(data);
+        return nullptr;
+    }
+
+    // Extract all primitives in cgltf order → matches SubMeshIndex encoding
+    std::vector<std::shared_ptr<Mesh>> allMeshes;
+    for (cgltf_size i = 0; i < data->meshes_count; i++) {
+        for (cgltf_size p = 0; p < data->meshes[i].primitives_count; p++) {
+            auto mesh = ExtractPrimitive(data->meshes[i].primitives[p],
+                (int)p < (int)data->materials_count ? (int)p : -1);
+            if (mesh) allMeshes.push_back(mesh);
+        }
+    }
+    cgltf_free(data);
+
+    uint64_t loadTotalVerts = 0, loadTotalInds = 0;
+    for (auto& m : allMeshes) {
+        loadTotalVerts += m->GetVertexCount();
+        loadTotalInds  += m->GetIndexCount();
+    }
+    AYAYA_CORE_TRACE("LoadglTFAsModel: {} meshes, {} verts, {} inds from {}",
+        allMeshes.size(), loadTotalVerts, loadTotalInds, filePath);
+
+    if (allMeshes.empty()) return nullptr;
+
+    // Model has no default ctor — use first mesh to init, then add rest
+    auto model = std::make_shared<Model>(allMeshes[0]);
+    for (size_t i = 1; i < allMeshes.size(); i++) {
+        model->GetRootNode().Meshes.push_back(allMeshes[i]);
+        const_cast<std::vector<std::shared_ptr<Mesh>>&>(model->GetMeshes()).push_back(allMeshes[i]);
+    }
+    return model;
 }
 
 } // namespace Ayaya

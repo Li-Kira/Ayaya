@@ -162,6 +162,7 @@ namespace Ayaya {
         allocatorInfo.device = m_Device;
         allocatorInfo.instance = m_Instance;
         allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+        allocatorInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
 
         VkResult vmaResult = vmaCreateAllocator(&allocatorInfo, &m_Allocator);
         AYAYA_CORE_ASSERT(vmaResult == VK_SUCCESS, "Failed to create VMA Allocator!");
@@ -828,6 +829,109 @@ namespace Ayaya {
         // Immediately drain deferred-release queue (GPU is idle → safe to destroy).
         // Prevents staging-buffer/VkImage accumulation during bulk imports (OOM on M1).
         ProcessDeferredResources(true);
+
+        vkResetCommandPool(m_Device, m_OneTimeCommandPool, 0);
+    }
+
+    // ==========================================
+    // Batched Texture Upload — single submit for N textures
+    // ==========================================
+    VulkanContext::TextureUploadBatch VulkanContext::BeginTextureUploadBatch(VkDeviceSize totalSizeBytes) {
+        TextureUploadBatch batch;
+        batch.totalSize = totalSizeBytes;
+        batch.cursor = 0;
+
+        // Allocate one large staging buffer for all textures
+        VkBufferCreateInfo bufferInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+        bufferInfo.size = totalSizeBytes;
+        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        VmaAllocationCreateInfo allocInfo{};
+        allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+                        | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+        vmaCreateBuffer(m_Allocator, &bufferInfo, &allocInfo,
+            &batch.stagingBuffer, &batch.stagingAllocation, &batch.stagingAllocInfo);
+
+        // Open one command buffer for all uploads
+        batch.cmd = BeginSingleTimeCommands();
+
+        return batch;
+    }
+
+    void VulkanContext::UploadTextureToBatch(TextureUploadBatch& batch, VkImage image,
+                                             uint32_t width, uint32_t height, uint32_t mipLevels,
+                                             VkFormat format, const void* pixelData, uint32_t dataSize) {
+        // Copy pixel data into staging buffer at current cursor
+        memcpy((char*)batch.stagingAllocInfo.pMappedData + batch.cursor, pixelData, dataSize);
+
+        // Transition image to TRANSFER_DST
+        VkImageMemoryBarrier barrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = image;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = mipLevels;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        vkCmdPipelineBarrier(batch.cmd,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        // Copy from staging to image
+        VkBufferImageCopy region{};
+        region.bufferOffset = batch.cursor;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageOffset = { 0, 0, 0 };
+        region.imageExtent = { width, height, 1 };
+
+        vkCmdCopyBufferToImage(batch.cmd, batch.stagingBuffer, image,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        // Transition image to SHADER_READ_ONLY (skip mip generation for bulk import)
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(batch.cmd,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        batch.cursor += dataSize;
+        // 16-byte alignment for next texture
+        batch.cursor = (batch.cursor + 15) & ~15ull;
+    }
+
+    void VulkanContext::EndTextureUploadBatch(TextureUploadBatch& batch) {
+        vkEndCommandBuffer(batch.cmd);
+
+        VkSubmitInfo submitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &batch.cmd;
+
+        vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(m_GraphicsQueue);
+        vkDeviceWaitIdle(m_Device);
+
+        ProcessDeferredResources(true);
+
+        // Destroy staging buffer
+        vmaDestroyBuffer(m_Allocator, batch.stagingBuffer, batch.stagingAllocation);
+        batch.stagingBuffer = VK_NULL_HANDLE;
 
         vkResetCommandPool(m_Device, m_OneTimeCommandPool, 0);
     }

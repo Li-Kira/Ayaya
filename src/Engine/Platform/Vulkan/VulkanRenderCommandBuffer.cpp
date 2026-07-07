@@ -350,6 +350,8 @@ namespace Ayaya {
         // 3. 【核心修复】：绑定 VBO 和 IBO
         auto vulkanVB = std::dynamic_pointer_cast<VulkanVertexBuffer>(mesh->GetVertexBuffer());
         auto vulkanIB = std::dynamic_pointer_cast<VulkanIndexBuffer>(mesh->GetIndexBuffer());
+        // GDR meshes (createGPUBuffers=false): VBO/IBO are null — per-mesh binding skipped.
+        // Pass is responsible for binding GeometryPool as VBO before issuing indirect draw.
         if (vulkanVB && vulkanIB) {
             VkBuffer vbs[] = { vulkanVB->GetVulkanBuffer() };
             VkDeviceSize offsets[] = { 0 };
@@ -388,6 +390,7 @@ namespace Ayaya {
         // Bind VBO + IBO
         auto vb = std::dynamic_pointer_cast<VulkanVertexBuffer>(mesh->GetVertexBuffer());
         auto ib = std::dynamic_pointer_cast<VulkanIndexBuffer>(mesh->GetIndexBuffer());
+        // GDR meshes (createGPUBuffers=false): VBO/IBO are null — per-mesh binding skipped
         if (vb && ib) {
             VkBuffer vbs[] = { vb->GetVulkanBuffer() };
             VkDeviceSize off[] = { 0 };

@@ -27,6 +27,12 @@ namespace Ayaya {
 
         virtual void SetData(void* data, uint32_t size) override;
 
+        // Batched upload: uses external command buffer + staging buffer sub-region.
+        // Caller manages the batch lifecycle (BeginTextureUploadBatch / EndTextureUploadBatch).
+        // Skips mipmap generation — caller should pre-disable GenerateMipmaps for bulk import.
+        void SetDataBatched(VkCommandBuffer cmd, VkBuffer stagingBuffer,
+                            VkDeviceSize stagingOffset, void* data, uint32_t size);
+
         virtual void Bind(uint32_t slot = 0) const override;
         virtual void Unbind() const override {}
 

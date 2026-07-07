@@ -1,5 +1,6 @@
 #include "ayapch.h"
 #include "Model.hpp"
+#include "Renderer/RendererAPI.hpp"
 #include <functional>
 
 namespace Ayaya {
@@ -122,7 +123,8 @@ namespace Ayaya {
             };
             collectAll(node, glm::mat4(1.0f));
 
-            auto mergedMesh = std::make_shared<Mesh>(allVerts, allIndices);
+            bool createBuffers = (RendererAPI::GetAPI() == RendererAPI::API::OpenGL);
+            auto mergedMesh = std::make_shared<Mesh>(allVerts, allIndices, -1, createBuffers);
             modelNode.Meshes.push_back(mergedMesh);
             m_Meshes.push_back(mergedMesh);
             // Do NOT recurse into children — all geometry is already merged
@@ -189,6 +191,8 @@ namespace Ayaya {
         }
 
         // 把提取出的纯数据交给我们的 Mesh 类生成 OpenGL 缓冲区！
-        return std::make_shared<Mesh>(vertices, indices, (int)mesh->mMaterialIndex);
+        // Vulkan GDR path: skip per-mesh VBO/IBO — GeometryPool SSBO serves vertex data
+        bool createBuffers = (RendererAPI::GetAPI() == RendererAPI::API::OpenGL);
+        return std::make_shared<Mesh>(vertices, indices, (int)mesh->mMaterialIndex, createBuffers);
     }
 }

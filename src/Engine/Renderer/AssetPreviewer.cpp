@@ -1587,6 +1587,14 @@ namespace Ayaya {
         VkCommandBuffer cb=vkCtx->GetCurrentCommandBuffer();
 
         auto& r=s_ThumbQueue.front();
+
+        // Skip prefab thumbnails — accessing mesh data during bulk import
+        // triggers synchronous texture/material loading and geometry resolution.
+        if (r.assetType == 1) {
+            s_ThumbQueue.erase(s_ThumbQueue.begin());
+            return;
+        }
+
         uint32_t fi = vkCtx->GetCurrentFrameIndex() % 3;
         std::shared_ptr<Model> mdl; bool usePBR=false;
         PBRPush pbr{}; PreviewPushConstants wm{};
@@ -1644,6 +1652,9 @@ namespace Ayaya {
                 wm.Albedo=glm::vec4(0.6f,0.6f,0.6f,1.0f);
             }
         }else{
+            // Material thumbnails disabled — triggers synchronous GetAsset<Texture2D>
+            // + BakeProperties during import, causing stutter and OOM pressure.
+            s_ThumbQueue.erase(s_ThumbQueue.begin()); return;
             auto mat=AssetManager::GetAsset<Material>(r.handle); if(!mat){s_ThumbQueue.erase(s_ThumbQueue.begin());return;}
             if(!s_SphereModel){auto sm=Mesh::CreateSphere(0.5f,64,64);s_SphereModel=std::make_shared<Model>(sm);}
             AutoFrameCamera(s_SphereModel,glm::vec2(0.3f,-0.6f),glm::radians(45.0f)); mdl=s_SphereModel;

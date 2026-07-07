@@ -116,10 +116,20 @@ void ImportglTFPanel::ExecuteImport() {
     m_State = ImportState::Hidden;
     std::string pathStr = m_TargetFilePath.string();
 
-    std::thread([pathStr] {
-        auto result = ImportglTFSceneSync(pathStr);
+    glTFImportSettings settings;
+    settings.ImportLights    = m_ImportLights;
+    settings.ImportCameras   = m_ImportCameras;
+    settings.GenerateMipmaps = m_GenerateMipmaps;
+
+    // Suppress AssetWatcher during bulk import — prevents the file watcher from
+    // triggering synchronous LoadAssetFromFile → stbi_load + GPU upload for every
+    // newly-created texture/material/prefab on the main thread.
+    AssetManager::SetBulkImportInProgress(true);
+
+    std::thread([pathStr, settings] {
+        auto result = ImportglTFSceneSync(pathStr, settings);
         if (result.Success)
-            AssetManager::SubmitToMainThread([result] { FinalizeglTFImport(result); });
+            AssetManager::SubmitToMainThread([result]() mutable { FinalizeglTFImport(result); });
         else
             AYAYA_CORE_ERROR("glTF import failed: {}", result.ErrorMsg);
     }).detach();

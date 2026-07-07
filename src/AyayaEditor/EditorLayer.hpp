@@ -13,6 +13,9 @@
 #include "Panels/CurveEditorPanel.hpp"
 #include "Panels/TimelinePanel.hpp"
 #include "Engine/Animation/TweenManager.hpp"
+#ifdef __APPLE__
+#include <sys/sysctl.h>
+#endif
 #include "Asset/AssetWatcher.hpp"
 #include "Renderer/SceneRenderer.hpp"
 #include "Renderer/Framebuffer.hpp"
@@ -221,6 +224,24 @@ namespace Ayaya {
         return 0.0f;
 #else
         return 0.0f; // Linux 等其他平台暂不实现
+#endif
+    }
+
+    // 获取系统总物理内存 (MB)
+    static float GetTotalPhysicalMemoryMB() {
+#ifdef _WIN32
+        MEMORYSTATUSEX memInfo;
+        memInfo.dwLength = sizeof(MEMORYSTATUSEX);
+        if (GlobalMemoryStatusEx(&memInfo))
+            return (float)memInfo.ullTotalPhys / (1024.0f * 1024.0f);
+        return 0.0f;
+#elif defined(__APPLE__)
+        int64_t memsize = 0;
+        size_t len = sizeof(memsize);
+        sysctlbyname("hw.memsize", &memsize, &len, NULL, 0);
+        return (float)memsize / (1024.0f * 1024.0f);
+#else
+        return 0.0f;
 #endif
     }
 }

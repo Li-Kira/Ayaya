@@ -47,6 +47,9 @@ namespace Ayaya {
 
     void AssetWatcher::OnFileEvent(const FileEvent& event) {
         if (!m_Enabled || m_Paused) return;
+        // Suppress all events during bulk import — file writes from glTF import
+        // must not trigger synchronous LoadAssetFromFile on the main thread.
+        if (AssetManager::IsBulkImportInProgress()) return;
         auto pathStr = event.Path.string();
 
         if (pathStr.find(".meta") != std::string::npos) return;

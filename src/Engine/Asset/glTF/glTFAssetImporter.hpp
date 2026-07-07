@@ -12,6 +12,15 @@ namespace Ayaya {
 class AssetManager;
 
 // ==========================================
+// glTF Import Settings — user-configurable options
+// ==========================================
+struct glTFImportSettings {
+    bool ImportLights     = true;
+    bool ImportCameras    = false;
+    bool GenerateMipmaps  = false;
+};
+
+// ==========================================
 // glTF Asset Import — two-phase persistence pipeline.
 // Phase 1 (background): I/O + cgltf parse + file copy + .meta write.
 // Phase 2 (main thread): s_Registry insert + GPU upload + prefab load.
@@ -45,9 +54,14 @@ struct glTFImportResult {
 };
 
 // Phase 1 — Background thread safe (CPU-only: file I/O + cgltf parse).
-glTFImportResult ImportglTFSceneSync(const std::string& sourcePath);
+glTFImportResult ImportglTFSceneSync(const std::string& sourcePath,
+                                     const glTFImportSettings& settings = {});
 
 // Phase 2 — Main thread only (registry insert, GPU uploads via AssetManager, prefab load).
-void FinalizeglTFImport(const glTFImportResult& result);
+void FinalizeglTFImport(glTFImportResult& result);
+
+// Standalone glTF model loader using cgltf (matches SubMeshIndex ordering from import).
+// Returns a Model containing all meshes in cgltf parse order, or nullptr if not a glTF file.
+std::shared_ptr<class Model> LoadglTFAsModel(const std::string& filePath);
 
 } // namespace Ayaya

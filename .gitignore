@@ -3,5 +3,6 @@ build/
 build_xcode/
 documents/
 .vscode/
+.claude/
 CLAUDE.md
 graphify-out/

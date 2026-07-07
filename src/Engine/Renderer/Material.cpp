@@ -108,7 +108,9 @@ namespace Ayaya {
     }
 
     void Material::BakeProperties() {
+        auto savedPacking = m_BakedPC.Packing;  // preserve across reset
         m_BakedPC = BakedPC{};  // reset to defaults (indices point to default 1×1 textures)
+        m_BakedPC.Packing = savedPacking;
         bool hasPending = false;
         for (auto& prop : Properties) {
             if (prop.UniformName == "u_Albedo" && prop.Type == MaterialPropertyType::Vec3) {

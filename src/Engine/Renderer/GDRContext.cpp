@@ -207,13 +207,26 @@ namespace Ayaya {
         RangeCount = rangeCount;
         MaterialCount = materialCount;
         TotalTriangles = 0; TotalVertices = 0;
+        uint32_t emptyRanges = 0;
         for (auto& r : gdrRanges) {
             TotalTriangles += r.indexCount / 3;
             TotalVertices  += r.vertexCount;
+            if (r.vertexCount == 0 || r.indexCount == 0) emptyRanges++;
         }
+        if (emptyRanges > 0)
+            AYAYA_CORE_WARN("GDR: {} of {} ranges EMPTY (vCount==0 or iCount==0)",
+                emptyRanges, rangeCount);
 
         auto t1 = std::chrono::high_resolution_clock::now();
         BuildTimeMs = std::chrono::duration<float, std::milli>(t1 - t0).count();
+
+        VkDeviceSize poolUsed = geoPool.GetUsedBytes();
+        VkDeviceSize poolSize = geoPool.GetSize();
+        if (poolUsed > poolSize * 3 / 4) {
+            AYAYA_CORE_WARN("GDR: GeometryPool {:.1f}MB / {:.1f}MB ({:.0f}%) — approaching capacity!",
+                poolUsed / (1024.0*1024.0), poolSize / (1024.0*1024.0),
+                100.0 * poolUsed / poolSize);
+        }
     }
 
     void GDRContext::BindSet2(VkCommandBuffer cmd, VkPipelineLayout layout,
@@ -244,6 +257,7 @@ namespace Ayaya {
         std::unordered_map<uint64_t, uint32_t> matMap;
 
         auto view = scene->Reg().view<TransformComponent, MeshRendererComponent>();
+        uint32_t entitiesFound = 0, entitiesSkipped = 0;
         for (auto entityID : view) {
             Entity entity{ entityID, scene };
             if (!entity.IsActiveInHierarchy()) continue;
@@ -252,7 +266,14 @@ namespace Ayaya {
             if (!meshComp.CachedModel)
                 meshComp.CachedModel = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
             auto model = meshComp.CachedModel;
-            if (!model) continue;
+            if (!model) {
+                entitiesSkipped++;
+                if (entitiesSkipped <= 3)
+                    AYAYA_CORE_WARN("GDR: entity '{}' ModelHandle={} — not in cache",
+                        entity.GetComponent<TagComponent>().Tag, (uint64_t)meshComp.ModelHandle);
+                continue;
+            }
+            entitiesFound++;
             if (!meshComp.CachedMaterial)
                 meshComp.CachedMaterial = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
             auto material = meshComp.CachedMaterial;
@@ -344,13 +365,31 @@ namespace Ayaya {
         RangeCount = rangeCount;
         MaterialCount = materialCount;
         TotalTriangles = 0; TotalVertices = 0;
+        uint32_t emptyRanges = 0;
         for (auto& r : gdrRanges) {
             TotalTriangles += r.indexCount / 3;
             TotalVertices  += r.vertexCount;
+            if (r.vertexCount == 0 || r.indexCount == 0) emptyRanges++;
         }
+        if (emptyRanges > 0)
+            AYAYA_CORE_WARN("GDR: {} of {} ranges EMPTY (vCount==0 or iCount==0)",
+                emptyRanges, rangeCount);
 
         auto t1 = std::chrono::high_resolution_clock::now();
         BuildTimeMs = std::chrono::duration<float, std::milli>(t1 - t0).count();
+
+        if (entitiesSkipped > 0) {
+            AYAYA_CORE_WARN("GDR BuildFromScene: {} entities found, {} SKIPPED (ModelHandle not in cache)",
+                entitiesFound, entitiesSkipped);
+        }
+
+        VkDeviceSize poolUsed = geoPool.GetUsedBytes();
+        VkDeviceSize poolSize = geoPool.GetSize();
+        if (poolUsed > poolSize * 3 / 4) {
+            AYAYA_CORE_WARN("GDR: GeometryPool {:.1f}MB / {:.1f}MB ({:.0f}%) — approaching capacity!",
+                poolUsed / (1024.0*1024.0), poolSize / (1024.0*1024.0),
+                100.0 * poolUsed / poolSize);
+        }
     }
 
 } // namespace Ayaya

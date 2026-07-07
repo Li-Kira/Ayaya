@@ -1,7 +1,6 @@
 #include "ayapch.h"
 #include "glTFParser.hpp"
 
-#define CGLTF_IMPLEMENTATION
 #include <cgltf/cgltf.h>
 
 #include "Scene/Scene.hpp"
@@ -10,11 +9,13 @@
 #include "Renderer/Material.hpp"
 #include "Renderer/Mesh.hpp"
 #include "Renderer/Model.hpp"
+#include "Renderer/RendererAPI.hpp"
 #include "Asset/AssetManager.hpp"
 #include "Core/Log.hpp"
 #include "Core/UUID.hpp"
 
 #include <glm/glm.hpp>
+#include <fstream>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
@@ -98,7 +99,9 @@ static std::shared_ptr<Mesh> ExtractPrimitiveMesh(const cgltf_primitive& prim, i
         for (cgltf_size i = 0; i < vtxCount; ++i) indices[i] = static_cast<uint32_t>(i);
     }
 
-    return std::make_shared<Mesh>(vertices, indices, materialIndex);
+    // Vulkan GDR path: skip per-mesh VBO/IBO — GeometryPool SSBO serves vertex data
+    bool createBuffers = (RendererAPI::GetAPI() == RendererAPI::API::OpenGL);
+    return std::make_shared<Mesh>(vertices, indices, materialIndex, createBuffers);
 }
 
 // ==========================================
@@ -106,6 +109,7 @@ static std::shared_ptr<Mesh> ExtractPrimitiveMesh(const cgltf_primitive& prim, i
 // ==========================================
 
 static UUID LoadTextureCached(const cgltf_texture* tex, bool sRGB,
+                               const std::string& modelDir,
                                std::unordered_map<std::string, UUID>& cache) {
     if (!tex || !tex->image) return 0;
     const char* uri = tex->image->uri;
@@ -124,17 +128,33 @@ static UUID LoadTextureCached(const cgltf_texture* tex, bool sRGB,
     auto it = cache.find(key);
     if (it != cache.end()) return it->second;
 
-    // TODO: actual texture loading from URI or embedded buffer
-    // For now, return 0 (will be filled in Phase 2.4)
     UUID handle = 0;
 
-    // RawTextureData raw;
-    // if (uri) {
-    //     raw = LoadRawTexture(uri, sRGB);
-    // } else {
-    //     raw = LoadRawTextureFromBuffer(tex->image->buffer_view, sRGB);
-    // }
-    // handle = am.CreateTexture(raw);
+    if (uri && !strstr(uri, "data:")) {
+        // External texture: resolve path relative to model directory,
+        // import via AssetManager to get a registered UUID.
+        // The actual GPU upload happens lazily on first render.
+        std::string resolvedPath = modelDir + uri;
+        if (std::filesystem::exists(resolvedPath)) {
+            handle = AssetManager::ImportAsset(resolvedPath);
+        }
+    } else if (tex->image->buffer_view) {
+        // Embedded texture: extract raw bytes from glTF buffer,
+        // write to a temp file, then import via AssetManager.
+        auto& bv = *tex->image->buffer_view;
+        const uint8_t* src = (const uint8_t*)bv.buffer->data + bv.offset;
+        const char* ext = ".png";
+        if (strstr(tex->image->mime_type, "jpeg") || strstr(tex->image->mime_type, "jpg"))
+            ext = ".jpg";
+
+        std::string tmpPath = modelDir + "embedded_tex_" + std::to_string(reinterpret_cast<uintptr_t>(src)) + ext;
+        if (!std::filesystem::exists(tmpPath)) {
+            std::ofstream(tmpPath, std::ios::binary).write((const char*)src, bv.size);
+        }
+        if (std::filesystem::exists(tmpPath)) {
+            handle = AssetManager::ImportAsset(tmpPath);
+        }
+    }
 
     cache[key] = handle;
     return handle;
@@ -163,7 +183,7 @@ static std::shared_ptr<Material> ConvertMaterial(const cgltf_material* mat,
 
         // BaseColor Texture (sRGB)
         if (pbr.base_color_texture.texture) {
-            UUID h = LoadTextureCached(pbr.base_color_texture.texture, true, texCache);
+            UUID h = LoadTextureCached(pbr.base_color_texture.texture, true, modelDir, texCache);
             if (h) engineMat->SetTexture("u_AlbedoMap", h);
         }
 
@@ -172,20 +192,20 @@ static std::shared_ptr<Material> ConvertMaterial(const cgltf_material* mat,
         // Register as ORM so shader reads o.g=roughness, o.b=metallic.
         // R channel in glTF is undefined (spec says 1.0) — AO comes from separate occlusionTexture.
         if (pbr.metallic_roughness_texture.texture) {
-            UUID h = LoadTextureCached(pbr.metallic_roughness_texture.texture, false, texCache);
+            UUID h = LoadTextureCached(pbr.metallic_roughness_texture.texture, false, modelDir, texCache);
             if (h) engineMat->SetTexture("u_ORMMap", h);
         }
     }
 
     // === Normal Texture (Linear) ===
     if (mat->normal_texture.texture) {
-        UUID h = LoadTextureCached(mat->normal_texture.texture, false, texCache);
+        UUID h = LoadTextureCached(mat->normal_texture.texture, false, modelDir, texCache);
         if (h) engineMat->SetTexture("u_NormalMap", h);
     }
 
     // === Occlusion Texture (Linear, R channel = AO) ===
     if (mat->occlusion_texture.texture) {
-        UUID h = LoadTextureCached(mat->occlusion_texture.texture, false, texCache);
+        UUID h = LoadTextureCached(mat->occlusion_texture.texture, false, modelDir, texCache);
         if (h) engineMat->SetTexture("u_AOMap", h);
     }
 
@@ -193,7 +213,7 @@ static std::shared_ptr<Material> ConvertMaterial(const cgltf_material* mat,
     if (mat->has_emissive_strength || (mat->emissive_texture.texture)) {
         engineMat->SetVec3("u_Emissive", glm::vec3(mat->emissive_factor[0], mat->emissive_factor[1], mat->emissive_factor[2]));
         if (mat->emissive_texture.texture) {
-            UUID h = LoadTextureCached(mat->emissive_texture.texture, true, texCache);
+            UUID h = LoadTextureCached(mat->emissive_texture.texture, true, modelDir, texCache);
             if (h) engineMat->SetTexture("u_EmissiveMap", h);
         }
     }
