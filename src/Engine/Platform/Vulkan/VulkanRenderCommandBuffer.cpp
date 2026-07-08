@@ -350,14 +350,14 @@ namespace Ayaya {
         // 3. 【核心修复】：绑定 VBO 和 IBO
         auto vulkanVB = std::dynamic_pointer_cast<VulkanVertexBuffer>(mesh->GetVertexBuffer());
         auto vulkanIB = std::dynamic_pointer_cast<VulkanIndexBuffer>(mesh->GetIndexBuffer());
-        // GDR meshes (createGPUBuffers=false): VBO/IBO are null — per-mesh binding skipped.
-        // Pass is responsible for binding GeometryPool as VBO before issuing indirect draw.
-        if (vulkanVB && vulkanIB) {
-            VkBuffer vbs[] = { vulkanVB->GetVulkanBuffer() };
-            VkDeviceSize offsets[] = { 0 };
-            vkCmdBindVertexBuffers(cmd, 0, 1, vbs, offsets);
-            vkCmdBindIndexBuffer(cmd, vulkanIB->GetVulkanBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        }
+        // GDR meshes (createGPUBuffers=false): VBO/IBO are null.
+        // These meshes are rendered via vkCmdDrawIndexedIndirect with GeometryPool.
+        // Non-GDR paths (AssetPreviewer, Outline) must skip them.
+        if (!vulkanVB || !vulkanIB) return;
+        VkBuffer vbs[] = { vulkanVB->GetVulkanBuffer() };
+        VkDeviceSize offsets[] = { 0 };
+        vkCmdBindVertexBuffers(cmd, 0, 1, vbs, offsets);
+        vkCmdBindIndexBuffer(cmd, vulkanIB->GetVulkanBuffer(), 0, VK_INDEX_TYPE_UINT32);
 
         // 4. 执行绘制
         uint32_t count = indexCount ? indexCount : mesh->GetIndexCount();
@@ -390,13 +390,12 @@ namespace Ayaya {
         // Bind VBO + IBO
         auto vb = std::dynamic_pointer_cast<VulkanVertexBuffer>(mesh->GetVertexBuffer());
         auto ib = std::dynamic_pointer_cast<VulkanIndexBuffer>(mesh->GetIndexBuffer());
-        // GDR meshes (createGPUBuffers=false): VBO/IBO are null — per-mesh binding skipped
-        if (vb && ib) {
-            VkBuffer vbs[] = { vb->GetVulkanBuffer() };
-            VkDeviceSize off[] = { 0 };
-            vkCmdBindVertexBuffers(cmd, 0, 1, vbs, off);
-            vkCmdBindIndexBuffer(cmd, ib->GetVulkanBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        }
+        // GDR meshes (createGPUBuffers=false): VBO/IBO are null — skip non-GDR draw path
+        if (!vb || !ib) return;
+        VkBuffer vbs[] = { vb->GetVulkanBuffer() };
+        VkDeviceSize off[] = { 0 };
+        vkCmdBindVertexBuffers(cmd, 0, 1, vbs, off);
+        vkCmdBindIndexBuffer(cmd, ib->GetVulkanBuffer(), 0, VK_INDEX_TYPE_UINT32);
 
         uint32_t count = indexCount ? indexCount : mesh->GetIndexCount();
         vkCmdDrawIndexed(cmd, count, instanceCount, 0, 0, firstInstance);

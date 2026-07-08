@@ -147,6 +147,10 @@ namespace Ayaya {
                     } else if (prop.UniformName == "u_AlphaMap") {
                         m_BakedPC.AlphaMapIndex = idx;
                     }
+                } else if (prop.TextureHandle != 0) {
+                    // Texture UUID is registered but not yet GPU-loaded (async load in flight).
+                    // Mark pending so GetBakedPC re-bakes once the texture arrives.
+                    hasPending = true;
                 }
             }
         }

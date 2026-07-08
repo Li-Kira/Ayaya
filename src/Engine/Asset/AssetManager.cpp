@@ -497,6 +497,19 @@ namespace Ayaya {
         AssetMetadata meta;
         meta.Type = AssetType::Texture2D;
         meta.VirtualPath = VFS::GetVirtualPath(physicalPath);
+
+        // If .meta already exists (written by Phase 1 glTF import or prior import),
+        // read its TextureImportSettings to preserve sRGB/Filter/Wrap/FlipY etc.
+        // Without this, RequestAsyncLoad gets default SRGB=true for all textures,
+        // causing gamma correction on linear data (ORM, normal maps).
+        std::string metaPath = physicalPath + ".meta";
+        if (std::filesystem::exists(metaPath)) {
+            UUID metaHandle; AssetType metaType;
+            if (ReadMetaFile(metaPath, metaHandle, metaType, &meta.TextureSettings)) {
+                // .meta settings loaded — SRGB, FlipY, etc. are now correct
+            }
+        }
+
         s_Registry[handle] = meta;
     }
 

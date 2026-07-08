@@ -1590,10 +1590,10 @@ namespace Ayaya {
 
         // Skip prefab thumbnails — accessing mesh data during bulk import
         // triggers synchronous texture/material loading and geometry resolution.
-        if (r.assetType == 1) {
-            s_ThumbQueue.erase(s_ThumbQueue.begin());
-            return;
-        }
+        // Skip all thumbnails — GDR meshes have null VBO/IBO which breaks
+        // the non-GDR DrawIndexed path used by AssetPreviewer.
+        s_ThumbQueue.erase(s_ThumbQueue.begin());
+        return;
 
         uint32_t fi = vkCtx->GetCurrentFrameIndex() % 3;
         std::shared_ptr<Model> mdl; bool usePBR=false;

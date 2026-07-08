@@ -75,7 +75,7 @@ namespace Ayaya {
         Entity m_PrefabEntity;  // right-click → Create Prefab
 
         std::vector<Entity> m_LastSentEntities; // 防重复同步
-        bool m_SelectionDirty = false; // 强制同步标记：用户点击实体时置 true，解决选中同一实体不刷新的问题
+        bool m_SelectionDirty = false;
 
         PropertiesPanel m_PropertiesPanel;
     };

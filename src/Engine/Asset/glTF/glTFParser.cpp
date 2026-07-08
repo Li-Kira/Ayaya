@@ -289,6 +289,10 @@ static void AttachLightToEntity(Entity entity, const cgltf_light* light) {
 static void ParseNode(const cgltf_node* node, Entity parent, Scene& scene,
                       const cgltf_data* data,
                       std::vector<std::shared_ptr<Material>>& materials) {
+    // Skip target-only nodes (no mesh, no light, no camera, no children)
+    if (!node->mesh && !node->light && !node->camera && node->children_count == 0)
+        return;
+
     Entity entity = scene.CreateEntity(node->name && node->name[0] ? node->name : "glTF Node");
 
     // Build world transform
@@ -306,7 +310,7 @@ static void ParseNode(const cgltf_node* node, Entity parent, Scene& scene,
     // Hierarchy
     if (parent) {
         auto& rel = entity.GetComponent<RelationshipComponent>();
-        entity.SetParent(parent);
+        entity.SetParent(parent, false);  // glTF local transforms already relative to parent
     }
 
     // Mesh

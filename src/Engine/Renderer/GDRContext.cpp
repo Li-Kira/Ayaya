@@ -199,6 +199,7 @@ namespace Ayaya {
         uint32_t instCount     = std::min((uint32_t)gdrInstances.size(), kMaxInstances);
         uint32_t rangeCount    = std::min((uint32_t)gdrRanges.size(),    kMaxMeshes);
         uint32_t materialCount = std::min((uint32_t)gdrMaterials.size(), kMaxMaterials);
+
         InstanceSSBO->SetData(gdrInstances.data(), instCount * sizeof(GPUInstance));
         GeometryRangeSSBO->SetData(gdrRanges.data(), rangeCount * sizeof(GeometryRange));
         MaterialSSBO->SetData(gdrMaterials.data(), materialCount * sizeof(GPUMaterial));
@@ -357,6 +358,7 @@ namespace Ayaya {
         uint32_t instCount     = std::min((uint32_t)gdrInstances.size(), kMaxInstances);
         uint32_t rangeCount    = std::min((uint32_t)gdrRanges.size(),    kMaxMeshes);
         uint32_t materialCount = std::min((uint32_t)gdrMaterials.size(), kMaxMaterials);
+
         InstanceSSBO->SetData(gdrInstances.data(), instCount * sizeof(GPUInstance));
         GeometryRangeSSBO->SetData(gdrRanges.data(), rangeCount * sizeof(GeometryRange));
         MaterialSSBO->SetData(gdrMaterials.data(), materialCount * sizeof(GPUMaterial));

@@ -180,6 +180,13 @@ static void BuildPrefabEntity(const cgltf_node* node, Entity parent, Scene& pref
                                const cgltf_data* data,
                                const glTFImportSettings& settings,
                                const std::unordered_map<std::string, int>& meshPrimToLinear) {
+    // Skip target-only nodes. Respect import settings: if lights/cameras
+    // are disabled, a light-only/camera-only node counts as empty.
+    bool hasLight  = node->light && settings.ImportLights;
+    bool hasCamera = node->camera && settings.ImportCameras;
+    bool hasContent = node->mesh || hasLight || hasCamera || node->children_count > 0;
+    if (!hasContent) return;
+
     Entity e = prefabScene.CreateEntity(node->name && node->name[0] ? node->name : "Node");
 
     glm::mat4 local = GltfNodeToMat4(node);
@@ -188,7 +195,7 @@ static void BuildPrefabEntity(const cgltf_node* node, Entity parent, Scene& pref
     auto& tc = e.GetComponent<TransformComponent>();
     tc.Translation = trans; tc.Rotation = glm::eulerAngles(rot); tc.Scale = scale;
 
-    if (parent) e.SetParent(parent);
+    if (parent) e.SetParent(parent, false);  // glTF local transforms are already relative to parent
 
     // Mesh
     if (node->mesh) {
@@ -197,7 +204,7 @@ static void BuildPrefabEntity(const cgltf_node* node, Entity parent, Scene& pref
         for (cgltf_size p = 0; p < node->mesh->primitives_count; ++p) {
             Entity target = multi ? prefabScene.CreateEntity(
                 std::string(node->name && node->name[0] ? node->name : "prim") + "_" + std::to_string(p)) : e;
-            if (multi) target.SetParent(e);
+            if (multi) target.SetParent(e, false);  // glTF local transforms already relative
 
             auto& mr = target.AddComponent<MeshRendererComponent>();
             // Look up SubMesh by linear index from the meshPrimToLinear map
@@ -317,8 +324,13 @@ glTFImportResult ImportglTFSceneSync(const std::string& sourcePath,
     }
 
     // === 6. Extract textures ===
+    // FIXME: skip texture import for mesh-only debugging
+#define SKIP_TEXTURE_IMPORT 0
     std::unordered_map<std::string, UUID> texUUIDs; // URI→UUID cache (dedup)
     for (cgltf_size i = 0; i < data->textures_count; i++) {
+#if SKIP_TEXTURE_IMPORT
+        continue;
+#endif
         auto& img = *data->textures[i].image;
         std::string texName = baseName + "_Tex" + std::to_string(i);
         std::string texDest;
@@ -492,7 +504,12 @@ void FinalizeglTFImport(glTFImportResult& result) {
             emptyMeshes++;
         }
     }
-    AYAYA_CORE_TRACE("glTF import: {} SubMeshes, {} total verts, {} total inds, {} empty meshes",
+    // Log first 5 meshes for cross-reference with LoadglTFAsModel
+    for (int si = 0; si < 5 && si < (int)result.SubMeshData.size(); si++) {
+        auto& m = result.SubMeshData[si];
+        if (m) AYAYA_CORE_INFO("glTF import: SubMesh[{}] v={} i={}", si, m->GetVertexCount(), m->GetIndexCount());
+    }
+    AYAYA_CORE_INFO("glTF import: {} SubMeshes, {} total verts, {} total inds, {} empty meshes",
         result.SubMeshData.size(), totalVerts, totalInds, emptyMeshes);
     if (emptyMeshes > 0)
         AYAYA_CORE_WARN("glTF import: {} SubMeshes have NULL mesh data!", emptyMeshes);
@@ -505,7 +522,9 @@ void FinalizeglTFImport(glTFImportResult& result) {
     // already GPU-resident → GetAsset<Texture2D> returns cached instantly, no stutter.
     for (auto& t : result.CopiedTextures) {
         AssetManager::RegisterTextureAsset(t.Handle, t.PhysicalPath);
+#if !SKIP_TEXTURE_IMPORT
         AssetManager::RequestAsyncLoad(t.Handle);
+#endif
     }
 
     // Register materials
@@ -586,11 +605,13 @@ std::shared_ptr<Model> LoadglTFAsModel(const std::string& filePath) {
     cgltf_free(data);
 
     uint64_t loadTotalVerts = 0, loadTotalInds = 0;
+    int nonzeroMeshCount = 0;
     for (auto& m : allMeshes) {
         loadTotalVerts += m->GetVertexCount();
         loadTotalInds  += m->GetIndexCount();
+        if (m->GetVertexCount() > 0 && m->GetIndexCount() > 0) nonzeroMeshCount++;
     }
-    AYAYA_CORE_TRACE("LoadglTFAsModel: {} meshes, {} verts, {} inds from {}",
+    AYAYA_CORE_INFO("LoadglTFAsModel: {} meshes ({} nonzero), {} verts, {} inds from {}",
         allMeshes.size(), loadTotalVerts, loadTotalInds, filePath);
 
     if (allMeshes.empty()) return nullptr;
