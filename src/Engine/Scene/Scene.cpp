@@ -256,6 +256,7 @@ namespace Ayaya {
         CopyComponentIfExists<MeshRendererComponent>(newEntity, entity);
         CopyComponentIfExists<DirectionalLightComponent>(newEntity, entity);
         CopyComponentIfExists<PointLightComponent>(newEntity, entity);
+        CopyComponentIfExists<SpotLightComponent>(newEntity, entity);
         CopyComponentIfExists<Rigidbody2DComponent>(newEntity, entity);
         CopyComponentIfExists<BoxCollider2DComponent>(newEntity, entity);
         CopyComponentIfExists<LuaScriptComponent>(newEntity, entity);
@@ -306,6 +307,7 @@ namespace Ayaya {
             CopyComponentIfExists<SpriteRendererComponent>(dst, src);
             CopyComponentIfExists<DirectionalLightComponent>(dst, src);
             CopyComponentIfExists<PointLightComponent>(dst, src);
+            CopyComponentIfExists<SpotLightComponent>(dst, src);
             CopyComponentIfExists<Rigidbody2DComponent>(dst, src);
             CopyComponentIfExists<BoxCollider2DComponent>(dst, src);
             CopyComponentIfExists<LuaScriptComponent>(dst, src);

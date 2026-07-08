@@ -36,6 +36,8 @@ namespace Ayaya {
             // 2. Lights
             if (entity.HasComponent<DirectionalLightComponent>())
                 return { ICON_FA_SUN,           ImVec4(0.9f, 0.8f, 0.2f, 1.0f) };  // Gold — Directional Light header
+            if (entity.HasComponent<SpotLightComponent>())
+                return { ICON_FA_LIGHTBULB,     ImVec4(0.4f, 0.7f, 1.0f, 1.0f) };  // Blue — Spot Light header
             if (entity.HasComponent<PointLightComponent>())
                 return { ICON_FA_LIGHTBULB,     ImVec4(0.9f, 0.6f, 0.1f, 1.0f) };  // Orange — Point Light header
 

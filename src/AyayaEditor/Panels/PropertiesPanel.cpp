@@ -95,6 +95,7 @@ namespace Ayaya {
                     else if (m_SelectedEntities[0].HasComponent<UIButtonComponent>())icon = ICON_FA_HAND_POINTER;
                     else if (m_SelectedEntities[0].HasComponent<CameraComponent>())       icon = ICON_FA_VIDEO;
                     else if (m_SelectedEntities[0].HasComponent<DirectionalLightComponent>()) icon = ICON_FA_SUN;
+                    else if (m_SelectedEntities[0].HasComponent<SpotLightComponent>())       icon = ICON_FA_LIGHTBULB;
                     else if (m_SelectedEntities[0].HasComponent<PointLightComponent>())      icon = ICON_FA_LIGHTBULB;
                     ImGui::TextColored(ImVec4(0.7f, 0.8f, 1.0f, 1.0f), "%s %s", icon, tag.Tag.c_str());
                 } else {
@@ -133,6 +134,7 @@ namespace Ayaya {
             DrawSpriteRendererComponent(referenceEntity, uiScale);
             DrawCameraComponent(referenceEntity);
             DrawDirectionalLightComponent(referenceEntity);
+            DrawSpotLightComponent(referenceEntity);
             DrawPointLightComponent(referenceEntity);
             DrawEnvironmentComponent(referenceEntity);
             DrawMeshRendererComponent(referenceEntity, uiScale);
@@ -815,6 +817,87 @@ namespace Ayaya {
             // 处理组件移除的结算
             if (removeComponent) {
                 for (auto e : m_SelectedEntities) e.RemoveComponent<PointLightComponent>();
+            }
+        }
+    }
+
+    void PropertiesPanel::DrawSpotLightComponent(Entity referenceEntity) {
+        bool allHaveSpotLight = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<SpotLightComponent>()) { allHaveSpotLight = false; break; }
+
+        if (allHaveSpotLight) {
+            bool removeComponent = false;
+            if (UI::DrawComponentHeader("Spot Light", ICON_FA_LIGHTBULB " ",
+                                         ImVec4(0.4f, 0.7f, 1.0f, 1.0f),
+                                         (void*)"SpotLightComponent",
+                                         true, &removeComponent)) {
+                auto& refSlc = referenceEntity.GetComponent<SpotLightComponent>();
+
+                auto getTargetName = [&]() -> std::string {
+                    if (m_SelectedEntities.size() == 1) return "'" + m_SelectedEntities[0].GetComponent<TagComponent>().Tag + "'";
+                    return std::to_string(m_SelectedEntities.size()) + " Entities";
+                };
+
+                std::vector<SpotLightComponent> pureOldLights;
+                for (auto e : m_SelectedEntities) pureOldLights.push_back(e.GetComponent<SpotLightComponent>());
+
+                static std::vector<SpotLightComponent> s_OldLights;
+                auto handleDragState = [&](const std::string& actionName) {
+                    if (ImGui::IsItemActivated()) { s_OldLights = pureOldLights; }
+                    if (ImGui::IsItemDeactivatedAfterEdit()) {
+                        auto macroCmd = std::make_shared<MacroCommand>(actionName + " of " + getTargetName());
+                        for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                            macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<SpotLightComponent>>(
+                                m_SelectedEntities[i], s_OldLights[i], m_SelectedEntities[i].GetComponent<SpotLightComponent>()
+                            ));
+                        }
+                        EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
+                    }
+                };
+
+                UI::BeginPropertyTable("SpotLightProps");
+                UI::DrawPropertyLabel("Color");
+                glm::vec3 color = refSlc.Color;
+                if (ImGui::ColorEdit3("##Color", glm::value_ptr(color)))
+                    for (auto e : m_SelectedEntities) e.GetComponent<SpotLightComponent>().Color = color;
+                handleDragState("Change Light Color");
+
+                UI::DrawPropertyLabel("Luminous Power (lm)");
+                float power = refSlc.LuminousPower;
+                if (ImGui::DragFloat("##Power", &power, 50.0f, 0.0f, 100000.0f, "%.0f"))
+                    for (auto e : m_SelectedEntities) e.GetComponent<SpotLightComponent>().LuminousPower = power;
+                handleDragState("Change Luminous Power");
+
+                UI::DrawPropertyLabel("Radius (m)");
+                float radius = refSlc.Radius;
+                if (ImGui::DragFloat("##Radius", &radius, 0.1f, 0.1f, 1000.0f, "%.1f"))
+                    for (auto e : m_SelectedEntities) e.GetComponent<SpotLightComponent>().Radius = radius;
+                handleDragState("Change SpotLight Radius");
+
+                UI::DrawPropertyLabel("Falloff");
+                float falloff = refSlc.Falloff;
+                if (ImGui::DragFloat("##Falloff", &falloff, 0.05f, 0.0f, 10.0f, "%.2f"))
+                    for (auto e : m_SelectedEntities) e.GetComponent<SpotLightComponent>().Falloff = falloff;
+                handleDragState("Change SpotLight Falloff");
+
+                UI::DrawPropertyLabel("Inner Cone Angle (deg)");
+                float innerDeg = glm::degrees(refSlc.InnerConeAngle);
+                if (ImGui::DragFloat("##InnerCone", &innerDeg, 0.5f, 0.0f, 179.0f, "%.1f"))
+                    for (auto e : m_SelectedEntities) e.GetComponent<SpotLightComponent>().InnerConeAngle = glm::radians(innerDeg);
+                handleDragState("Change Inner Cone Angle");
+
+                UI::DrawPropertyLabel("Outer Cone Angle (deg)");
+                float outerDeg = glm::degrees(refSlc.OuterConeAngle);
+                if (ImGui::DragFloat("##OuterCone", &outerDeg, 0.5f, 0.0f, 179.0f, "%.1f"))
+                    for (auto e : m_SelectedEntities) e.GetComponent<SpotLightComponent>().OuterConeAngle = glm::radians(outerDeg);
+                handleDragState("Change Outer Cone Angle");
+
+                ImGui::EndTable();
+                ImGui::TreePop();
+            }
+
+            if (removeComponent) {
+                for (auto e : m_SelectedEntities) e.RemoveComponent<SpotLightComponent>();
             }
         }
     }
@@ -2403,6 +2486,12 @@ namespace Ayaya {
                     ImGui::CloseCurrentPopup();
                 }
             }
+            if (!referenceEntity.HasComponent<SpotLightComponent>()) {
+                if (UI::DrawNativeMenuItem("Spot Light", ICON_FA_LIGHTBULB)) {
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<SpotLightComponent>()) e.AddComponent<SpotLightComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
             if (!referenceEntity.HasComponent<PointLightComponent>()) {
                 if (UI::DrawNativeMenuItem("Point Light", ICON_FA_LIGHTBULB)) {
                     for (auto e : m_SelectedEntities) if (!e.HasComponent<PointLightComponent>()) e.AddComponent<PointLightComponent>();
@@ -2744,7 +2833,8 @@ namespace Ayaya {
                         if (ent.HasComponent<MeshRendererComponent>()) meshCount++;
                         if (ent.HasComponent<CameraComponent>()) cameraCount++;
                         if (ent.HasComponent<DirectionalLightComponent>() ||
-                            ent.HasComponent<PointLightComponent>()) lightCount++;
+                            ent.HasComponent<PointLightComponent>() ||
+                            ent.HasComponent<SpotLightComponent>()) lightCount++;
                         if (ent.HasComponent<SpriteRendererComponent>()) spriteCount++;
                         if (ent.HasComponent<LuaScriptComponent>()) scriptCount++;
                         if (ent.HasComponent<Rigidbody2DComponent>()) physicsCount++;

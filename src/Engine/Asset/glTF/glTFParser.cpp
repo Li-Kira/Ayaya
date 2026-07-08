@@ -270,12 +270,14 @@ static void AttachLightToEntity(Entity entity, const cgltf_light* light) {
             break;
         }
         case cgltf_light_type_spot: {
-            // Fallback to point light + log spot info
-            auto& pl = entity.AddComponent<PointLightComponent>();
-            pl.Color         = glm::vec3(light->color[0], light->color[1], light->color[2]);
-            pl.LuminousPower = light->intensity;
-            pl.Radius        = light->range > 0.0f ? light->range : 10.0f;
-            AYAYA_CORE_INFO("glTF: created SpotLight fallback as PointLight '{}' (spot angle not yet supported)", light->name ? light->name : "");
+            auto& sl = entity.AddComponent<SpotLightComponent>();
+            sl.Color         = glm::vec3(light->color[0], light->color[1], light->color[2]);
+            sl.LuminousPower = light->intensity;
+            sl.Radius        = light->range > 0.0f ? light->range : 10.0f;
+            sl.InnerConeAngle = light->spot_inner_cone_angle;
+            sl.OuterConeAngle = light->spot_outer_cone_angle;
+            AYAYA_CORE_INFO("glTF: created SpotLight '{}' inner={:.2f} outer={:.2f} range={}",
+                light->name ? light->name : "", sl.InnerConeAngle, sl.OuterConeAngle, sl.Radius);
             break;
         }
         default: break;

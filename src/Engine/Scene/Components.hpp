@@ -151,6 +151,21 @@ namespace Ayaya {
     };
 
     // ==========================================
+    // 聚光灯组件 (Spot Light)
+    // ==========================================
+    struct SpotLightComponent {
+        glm::vec3 Color = { 1.0f, 1.0f, 1.0f };
+        float LuminousPower = 1500.0f;       // 光通量 (Lumens)
+        float Radius = 10.0f;                // 衰减半径 (米)
+        float Falloff = 1.0f;                // 衰减指数
+        float InnerConeAngle = 0.0f;         // 内锥角 (弧度) — 全亮度区域半角
+        float OuterConeAngle = glm::radians(45.0f); // 外锥角 (弧度) — 衰减至零的半角
+
+        SpotLightComponent() = default;
+        SpotLightComponent(const SpotLightComponent&) = default;
+    };
+
+    // ==========================================
     // 新增：环境光 / 天空盒组件
     // ==========================================
     enum class EnvironmentType {

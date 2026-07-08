@@ -79,6 +79,12 @@ namespace Ayaya {
                 snap.PointLightIntensity = pl.LuminousPower; snap.PointLightRadius = pl.Radius;
                 snap.HasPointLight = true;
             }
+            if (entity.HasComponent<SpotLightComponent>()) {
+                auto& sl = entity.GetComponent<SpotLightComponent>();
+                snap.SpotLightIntensity = sl.LuminousPower; snap.SpotLightRadius = sl.Radius;
+                snap.SpotLightInnerCone = sl.InnerConeAngle; snap.SpotLightOuterCone = sl.OuterConeAngle;
+                snap.HasSpotLight = true;
+            }
             if (entity.HasComponent<DirectionalLightComponent>()) {
                 snap.DirLightIntensity = entity.GetComponent<DirectionalLightComponent>().Illuminance;
                 snap.HasDirLight = true;
@@ -112,6 +118,11 @@ namespace Ayaya {
             if (snap.HasPointLight && entity.HasComponent<PointLightComponent>()) {
                 auto& pl = entity.GetComponent<PointLightComponent>();
                 pl.LuminousPower = snap.PointLightIntensity; pl.Radius = snap.PointLightRadius;
+            }
+            if (snap.HasSpotLight && entity.HasComponent<SpotLightComponent>()) {
+                auto& sl = entity.GetComponent<SpotLightComponent>();
+                sl.LuminousPower = snap.SpotLightIntensity; sl.Radius = snap.SpotLightRadius;
+                sl.InnerConeAngle = snap.SpotLightInnerCone; sl.OuterConeAngle = snap.SpotLightOuterCone;
             }
             if (snap.HasDirLight && entity.HasComponent<DirectionalLightComponent>())
                 entity.GetComponent<DirectionalLightComponent>().Illuminance = snap.DirLightIntensity;

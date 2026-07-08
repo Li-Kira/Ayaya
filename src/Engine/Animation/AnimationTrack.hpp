@@ -23,6 +23,7 @@ namespace Ayaya {
 
         // Light
         PointLight_Intensity, PointLight_Radius,
+        SpotLight_Intensity, SpotLight_Radius, SpotLight_InnerCone, SpotLight_OuterCone,
         DirLight_Intensity,
 
         // Material
@@ -40,6 +41,7 @@ namespace Ayaya {
             "Sprite_ColorR", "Sprite_ColorG", "Sprite_ColorB", "Sprite_ColorA",
             "Camera_FOV", "Camera_OrthographicSize",
             "PointLight_Intensity", "PointLight_Radius",
+            "SpotLight_Intensity", "SpotLight_Radius", "SpotLight_InnerCone", "SpotLight_OuterCone",
             "DirLight_Intensity",
             "Material_Metallic", "Material_Roughness",
             "UI_Opacity",
@@ -66,6 +68,10 @@ namespace Ayaya {
             {"Camera_OrthographicSize", TargetProperty::Camera_OrthographicSize},
             {"PointLight_Intensity", TargetProperty::PointLight_Intensity},
             {"PointLight_Radius", TargetProperty::PointLight_Radius},
+            {"SpotLight_Intensity", TargetProperty::SpotLight_Intensity},
+            {"SpotLight_Radius", TargetProperty::SpotLight_Radius},
+            {"SpotLight_InnerCone", TargetProperty::SpotLight_InnerCone},
+            {"SpotLight_OuterCone", TargetProperty::SpotLight_OuterCone},
             {"DirLight_Intensity", TargetProperty::DirLight_Intensity},
             {"Material_Metallic", TargetProperty::Material_Metallic},
             {"Material_Roughness", TargetProperty::Material_Roughness},
@@ -92,6 +98,7 @@ namespace Ayaya {
         "Sprite: Color R", "Sprite: Color G", "Sprite: Color B", "Sprite: Color A",
         "Camera: FOV", "Camera: Ortho Size",
         "PointLight: Intensity", "PointLight: Radius",
+        "SpotLight: Intensity", "SpotLight: Radius", "SpotLight: InnerCone", "SpotLight: OuterCone",
         "DirLight: Intensity",
         "Material: Metallic", "Material: Roughness",
         "UI: Opacity",

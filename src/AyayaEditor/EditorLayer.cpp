@@ -47,6 +47,7 @@ namespace Ayaya {
         // Gizmo icons
         m_CameraIcon    = Texture2D::Create("assets/Editor/icons/camera_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png");
         m_PointLightIcon = Texture2D::Create("assets/Editor/icons/lightbulb_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png");
+        m_SpotLightIcon = Texture2D::Create("assets/Editor/icons/lightbulb_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png");
         m_DirLightIcon  = Texture2D::Create("assets/Editor/icons/sunny_128dp_FFFFFF_FILL0_wght400_GRAD0_opsz48.png");
 
         m_SceneRenderer = std::make_shared<SceneRenderer>();
@@ -2830,6 +2831,46 @@ namespace Ayaya {
                         if (i > 0 && prevOk && curOk) drawList->AddLine(prev, cur, ringColor);
                         prev = cur; prevOk = curOk;
                     }
+                }
+            }
+        }
+
+        // ==========================================
+        // 2c. Spot Light: spotlight icon + cone wireframe
+        // ==========================================
+        if (m_ShowLightGizmos) {
+            auto view = m_ActiveScene->Reg().view<TransformComponent, SpotLightComponent>();
+            for (auto entityID : view) {
+                Entity entity{ entityID, m_ActiveScene.get() };
+                if (!entity.IsActiveInHierarchy()) continue;
+
+                auto& lightComp = entity.GetComponent<SpotLightComponent>();
+                glm::vec3 worldPos = entity.GetWorldTransform()[3];
+
+                ImVec2 screenPos;
+                if (ProjectToScreen(worldPos, screenPos)) {
+                    ImU32 tint = IM_COL32((int)(lightComp.Color.r*255), (int)(lightComp.Color.g*255), (int)(lightComp.Color.b*255), 255);
+                    DrawGizmoIcon(entity, screenPos, 40.0f, m_SpotLightIcon, tint);
+                }
+
+                // Cone wireframe — draw 4 lines from origin out to the outer cone
+                ImU32 coneColor = IM_COL32((int)(lightComp.Color.r*255), (int)(lightComp.Color.g*255), (int)(lightComp.Color.b*255), 60);
+                glm::quat rot = glm::quat(entity.GetWorldTransform());
+                glm::vec3 forward = glm::rotate(rot, glm::vec3(0.0f, 0.0f, -1.0f));
+                glm::vec3 right   = glm::rotate(rot, glm::vec3(1.0f, 0.0f, 0.0f));
+                glm::vec3 up      = glm::rotate(rot, glm::vec3(0.0f, 1.0f, 0.0f));
+                float r = lightComp.Radius * 0.7f;
+                float halfAngle = lightComp.OuterConeAngle;
+                glm::vec3 coneEdge0 = forward * cosf(halfAngle) + right * sinf(halfAngle);
+                glm::vec3 coneEdge1 = forward * cosf(halfAngle) - right * sinf(halfAngle);
+                glm::vec3 coneEdge2 = forward * cosf(halfAngle) + up * sinf(halfAngle);
+                glm::vec3 coneEdge3 = forward * cosf(halfAngle) - up * sinf(halfAngle);
+                ImVec2 tip, e0, e1, e2, e3, orig;
+                if (ProjectToScreen(worldPos, tip)) {
+                    if (ProjectToScreen(worldPos + coneEdge0 * r, e0)) drawList->AddLine(tip, e0, coneColor);
+                    if (ProjectToScreen(worldPos + coneEdge1 * r, e1)) drawList->AddLine(tip, e1, coneColor);
+                    if (ProjectToScreen(worldPos + coneEdge2 * r, e2)) drawList->AddLine(tip, e2, coneColor);
+                    if (ProjectToScreen(worldPos + coneEdge3 * r, e3)) drawList->AddLine(tip, e3, coneColor);
                 }
             }
         }

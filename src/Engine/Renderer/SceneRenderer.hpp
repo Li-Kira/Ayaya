@@ -107,6 +107,8 @@ namespace Ayaya {
         std::shared_ptr<UniformBuffer> m_DirLightUniformBuffer;
         std::unique_ptr<class VulkanStorageBuffer> m_PointLightSSBO;
         std::unique_ptr<class VulkanStorageBuffer> m_LightInstanceSSBO;
+        std::unique_ptr<class VulkanStorageBuffer> m_SpotLightSSBO;
+        std::unique_ptr<class VulkanStorageBuffer> m_SpotLightInstanceSSBO;
 
         RenderPipeline m_Pipeline;           // OpenGL
         RenderGraph    m_RenderGraph;        // Vulkan DAG

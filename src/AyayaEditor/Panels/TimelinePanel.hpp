@@ -18,6 +18,8 @@ namespace Ayaya {
         glm::vec4 SpriteColor{1,1,1,1}; bool HasSprite = false;
         float CameraFOV = 0.0f, CameraOrthoSize = 5.0f; bool HasCamera = false;
         float PointLightIntensity = 1500.0f, PointLightRadius = 10.0f; bool HasPointLight = false;
+        float SpotLightIntensity = 1500.0f, SpotLightRadius = 10.0f;
+        float SpotLightInnerCone = 0.0f, SpotLightOuterCone = glm::radians(45.0f); bool HasSpotLight = false;
         float DirLightIntensity = 100000.0f; bool HasDirLight = false;
         float UIOpacity = 1.0f; bool HasUIImage = false, HasUIText = false;
     };

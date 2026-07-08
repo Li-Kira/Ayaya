@@ -37,17 +37,22 @@ namespace Ayaya {
 
     void ShadowPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
         auto lightView = context.ActiveScene->Reg().view<TransformComponent, DirectionalLightComponent>();
-        if (lightView.begin() == lightView.end()) {
-            // 【修改】：安全地输出一个空指针，而不是 (uint32_t)0
-            context.Set("ShadowMap_Output", std::shared_ptr<Framebuffer>(nullptr));
-            return;
-        }
 
+        // Scan for active directional lights (respecting visibility toggle)
         glm::vec3 lightDir = glm::vec3(0.0f);
+        bool hasActiveLight = false;
         for (auto entityID : lightView) {
+            Entity entity{entityID, context.ActiveScene.get()};
+            if (!entity.IsActiveInHierarchy()) continue;
             auto& tc = lightView.get<TransformComponent>(entityID);
             lightDir = glm::normalize(glm::vec3(tc.GetTransform() * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
-            break; 
+            hasActiveLight = true;
+            break;
+        }
+
+        if (!hasActiveLight) {
+            context.Set("ShadowMap_Output", std::shared_ptr<Framebuffer>(nullptr));
+            return;
         }
 
         glm::vec3 lightPos = -lightDir * 20.0f;

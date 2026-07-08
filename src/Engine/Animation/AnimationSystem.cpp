@@ -88,6 +88,23 @@ namespace Ayaya {
                         entity.GetComponent<DirectionalLightComponent>().Illuminance = value;
                     break;
 
+                case TargetProperty::SpotLight_Intensity:
+                    if (entity.HasComponent<SpotLightComponent>())
+                        entity.GetComponent<SpotLightComponent>().LuminousPower = value;
+                    break;
+                case TargetProperty::SpotLight_Radius:
+                    if (entity.HasComponent<SpotLightComponent>())
+                        entity.GetComponent<SpotLightComponent>().Radius = value;
+                    break;
+                case TargetProperty::SpotLight_InnerCone:
+                    if (entity.HasComponent<SpotLightComponent>())
+                        entity.GetComponent<SpotLightComponent>().InnerConeAngle = value;
+                    break;
+                case TargetProperty::SpotLight_OuterCone:
+                    if (entity.HasComponent<SpotLightComponent>())
+                        entity.GetComponent<SpotLightComponent>().OuterConeAngle = value;
+                    break;
+
                 // ---- Material (stub — requires material API) ----
                 case TargetProperty::Material_Metallic:
                 case TargetProperty::Material_Roughness:

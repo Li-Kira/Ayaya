@@ -346,6 +346,22 @@ namespace Ayaya {
     }
 
     void VulkanShadowPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
+        // Check for active directional lights before any GPU work.
+        // If all lights are hidden via visibility toggle, skip the entire shadow pass.
+        auto lightView = context.ActiveScene->Reg().view<TransformComponent, DirectionalLightComponent>();
+        bool hasActiveLight = false;
+        for (auto entityID : lightView) {
+            Entity entity{entityID, context.ActiveScene.get()};
+            if (!entity.IsActiveInHierarchy()) continue;
+            hasActiveLight = true;
+            break;
+        }
+        if (!hasActiveLight) {
+            context.Set("ShadowMap_Output", std::shared_ptr<Framebuffer>(nullptr));
+            context.Set("LightSpaceMatrix", glm::mat4(1.0f));
+            return;
+        }
+
         if (m_UseGDR && m_GDRCtx && m_GDRCtx->InstanceCount > 0)
             ExecuteGDR(context, cmd);
         else
@@ -365,18 +381,21 @@ namespace Ayaya {
 
         uint32_t frameIdx = vkCtx->GetCurrentFrameIndex() % vkCtx->GetFramesInFlight();
 
-        // ── Compute light-space matrix (shared) ──
+        // ── Compute light-space matrix (respect visibility toggle) ──
         auto lightView = context.ActiveScene->Reg().view<TransformComponent, DirectionalLightComponent>();
-        bool hasLight = lightView.begin() != lightView.end();
-        glm::mat4 lightSpaceMatrix(1.0f);
+        glm::vec3 lightDir(0.0f);
+        bool hasActiveLight = false;
+        for (auto entityID : lightView) {
+            Entity entity{entityID, context.ActiveScene.get()};
+            if (!entity.IsActiveInHierarchy()) continue;
+            auto& tc = lightView.get<TransformComponent>(entityID);
+            lightDir = glm::normalize(glm::vec3(tc.GetTransform() * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
+            hasActiveLight = true;
+            break;
+        }
 
-        if (hasLight) {
-            glm::vec3 lightDir(0.0f);
-            for (auto entityID : lightView) {
-                auto& tc = lightView.get<TransformComponent>(entityID);
-                lightDir = glm::normalize(glm::vec3(tc.GetTransform() * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
-                break;
-            }
+        glm::mat4 lightSpaceMatrix(1.0f);
+        if (hasActiveLight) {
             glm::vec3 lightPos = -lightDir * 20.0f;
             glm::mat4 lightProjection = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, 1.0f, 50.0f);
             glm::mat4 depthCorrection = glm::mat4(1.0f);
@@ -670,17 +689,27 @@ namespace Ayaya {
         }
 
         auto lightView = context.ActiveScene->Reg().view<TransformComponent, DirectionalLightComponent>();
-        bool hasLight = lightView.begin() != lightView.end();
+
+        // Scan for active directional lights (respecting visibility toggle)
+        glm::vec3 lightDir(0.0f);
+        bool hasActiveLight = false;
+        for (auto entityID : lightView) {
+            Entity entity{entityID, context.ActiveScene.get()};
+            if (!entity.IsActiveInHierarchy()) continue;
+            auto& tc = lightView.get<TransformComponent>(entityID);
+            lightDir = glm::normalize(glm::vec3(tc.GetTransform() * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
+            hasActiveLight = true;
+            break;
+        }
+
+        if (!hasActiveLight) {
+            context.Set("ShadowMap_Output", std::shared_ptr<Framebuffer>(nullptr));
+            context.Set("LightSpaceMatrix", glm::mat4(1.0f));
+            return;
+        }
 
         glm::mat4 lightSpaceMatrix(1.0f);
-
-        if (hasLight) {
-            glm::vec3 lightDir(0.0f);
-            for (auto entityID : lightView) {
-                auto& tc = lightView.get<TransformComponent>(entityID);
-                lightDir = glm::normalize(glm::vec3(tc.GetTransform() * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
-                break;
-            }
+        {
             glm::vec3 lightPos = -lightDir * 20.0f;
             glm::mat4 lightProjection = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, 1.0f, 50.0f);
             glm::mat4 depthCorrection = glm::mat4(1.0f);
@@ -695,14 +724,13 @@ namespace Ayaya {
 
         cmd.BeginRenderPass(shadowFBO, true, glm::vec4(1.0f));
 
-        if (hasLight) {
-            cmd.BindPipeline(m_Pipeline);
-            context.Stats.ShaderBinds++;
+        cmd.BindPipeline(m_Pipeline);
+        context.Stats.ShaderBinds++;
 
-            auto meshView = context.ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
-            for (auto entityID : meshView) {
-                Entity entity{ entityID, context.ActiveScene.get() };
-                if (!entity.IsActiveInHierarchy()) continue;
+        auto meshView = context.ActiveScene->Reg().view<TransformComponent, MeshRendererComponent>();
+        for (auto entityID : meshView) {
+            Entity entity{ entityID, context.ActiveScene.get() };
+            if (!entity.IsActiveInHierarchy()) continue;
                 auto& meshComp = entity.GetComponent<MeshRendererComponent>();
                 if (!meshComp.CastShadows) continue;
                 auto material = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
@@ -722,7 +750,6 @@ namespace Ayaya {
                         cmd.DrawIndexed(mesh, mesh->GetIndexCount());
                 }
             }
-        }
 
         cmd.EndRenderPass();
 

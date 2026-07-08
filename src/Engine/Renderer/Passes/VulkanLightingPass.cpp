@@ -30,6 +30,8 @@ namespace Ayaya {
             if (m_LV_Set2Layout)      { vkDestroyDescriptorSetLayout(device, m_LV_Set2Layout, nullptr); m_LV_Set2Layout = VK_NULL_HANDLE; }
             if (m_LV_Set2Pool)        { vkDestroyDescriptorPool(device, m_LV_Set2Pool, nullptr);       m_LV_Set2Pool = VK_NULL_HANDLE; }
             if (m_SphereRangeBuffer)  { vmaDestroyBuffer(vkCtx->GetAllocator(), m_SphereRangeBuffer, m_SphereRangeAlloc); m_SphereRangeBuffer = VK_NULL_HANDLE; }
+            if (m_SLV_Set2Layout)    { vkDestroyDescriptorSetLayout(device, m_SLV_Set2Layout, nullptr); m_SLV_Set2Layout = VK_NULL_HANDLE; }
+            if (m_SLV_Set2Pool)      { vkDestroyDescriptorPool(device, m_SLV_Set2Pool, nullptr);       m_SLV_Set2Pool = VK_NULL_HANDLE; }
         }
     }
 
@@ -157,7 +159,52 @@ namespace Ayaya {
             lvAI.pSetLayouts = lvLayouts.data();
             vkAllocateDescriptorSets(device, &lvAI, m_LV_Set2Descriptors.data());
         }
-    }
+
+        // ── 3. Spot Light Volume pipeline (same sphere, cone attenuation shader) ──
+        m_SpotLightVolumeShader = Shader::Create("Deferred/light_volume.vert", "Deferred/light_volume_spot.frag");
+        if (m_SpotLightVolumeShader) {
+            PipelineSpecification slvSpec;
+            slvSpec.Shader = m_SpotLightVolumeShader;
+            slvSpec.Layout = {};
+            slvSpec.Topology = PrimitiveTopology::Triangles;
+            slvSpec.TargetFramebuffer = m_RefFBO;
+            slvSpec.DepthTest = false;
+            slvSpec.DepthWrite = false;
+            slvSpec.Blend = true;
+            slvSpec.BlendMode = BlendModeType::Additive;
+            slvSpec.BackfaceCulling = CullMode::Front;
+            slvSpec.NoGlobalUBOs = false;
+            slvSpec.NoTextureDescriptors = false;
+
+            // Set 2: InstanceSSBO(b=0,V) + SpotLightSSBO(b=1,F) + GeoPool(b=2,V) + SphereRange(b=3,V)
+            VkDescriptorSetLayoutBinding slvBindings[4] = {};
+            slvBindings[0].binding = 0; slvBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            slvBindings[0].descriptorCount = 1; slvBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+            slvBindings[1].binding = 1; slvBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            slvBindings[1].descriptorCount = 1; slvBindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+            slvBindings[2].binding = 2; slvBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            slvBindings[2].descriptorCount = 1; slvBindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+            slvBindings[3].binding = 3; slvBindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            slvBindings[3].descriptorCount = 1; slvBindings[3].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+            VkDescriptorSetLayoutCreateInfo slvLCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+            slvLCI.bindingCount = 4; slvLCI.pBindings = slvBindings;
+            vkCreateDescriptorSetLayout(device, &slvLCI, nullptr, &m_SLV_Set2Layout);
+            VulkanPipeline::s_ExtraSetLayouts.push_back(m_SLV_Set2Layout);
+
+            m_SpotLightVolumePipeline = Pipeline::Create(slvSpec);
+
+            VkDescriptorPoolSize slvPoolSize{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, fiCount * 4 };
+            VkDescriptorPoolCreateInfo slvPCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+            slvPCI.maxSets = fiCount; slvPCI.poolSizeCount = 1; slvPCI.pPoolSizes = &slvPoolSize;
+            vkCreateDescriptorPool(device, &slvPCI, nullptr, &m_SLV_Set2Pool);
+            m_SLV_Set2Descriptors.resize(fiCount);
+            std::vector<VkDescriptorSetLayout> slvLayouts(fiCount, m_SLV_Set2Layout);
+            VkDescriptorSetAllocateInfo slvAI{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+            slvAI.descriptorPool = m_SLV_Set2Pool; slvAI.descriptorSetCount = fiCount;
+            slvAI.pSetLayouts = slvLayouts.data();
+            vkAllocateDescriptorSets(device, &slvAI, m_SLV_Set2Descriptors.data());
+        }  // close if(m_SpotLightVolumeShader)
+    }      // close OnAttach()
 
     void VulkanLightingPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
         auto gbufferFBO = context.GetFramebuffer("GBuffer");
@@ -290,6 +337,65 @@ namespace Ayaya {
                 // Instanced sphere draw (SSBO vertex pulling)
                 vkCmdBindIndexBuffer(vkCmd, geoBuf, m_SphereIndexOffset, VK_INDEX_TYPE_UINT32);
                 vkCmdDrawIndexed(vkCmd, m_SphereIndexCount, (uint32_t)lightCount, 0, 0, 0);
+            }
+        }
+
+        // =====================================================================
+        // Phase 3: Spot Lights (instanced spheres, cone attenuation, additive blend)
+        // =====================================================================
+        int spotCount = context.Get<int>("SpotLightCount", 0);
+        uint64_t spotSSBO = context.Get<uint64_t>("SpotLightSSBO", 0);
+        uint64_t spotInstSSBO = context.Get<uint64_t>("SpotLightInstanceSSBO", 0);
+        if (spotCount > 0 && m_SpotLightVolumePipeline && spotSSBO && spotInstSSBO) {
+            cmd.BindPipeline(m_SpotLightVolumePipeline);
+            auto vkPipe = std::dynamic_pointer_cast<VulkanPipeline>(m_SpotLightVolumePipeline);
+            if (vkPipe) {
+                VkPipelineLayout layout = vkPipe->GetVulkanPipelineLayout();
+
+                // Bind Set 1: GBuffer textures
+                cmd.BindTexture2D(m_SpotLightVolumePipeline, "u_DepthMap",   0, sceneDepthFBO, 0, true);
+                cmd.BindTexture2D(m_SpotLightVolumePipeline, "g_Albedo",     1, gbufferFBO, 1);
+                cmd.BindTexture2D(m_SpotLightVolumePipeline, "g_PBR",        2, gbufferFBO, 2);
+                cmd.BindTexture2D(m_SpotLightVolumePipeline, "g_CustomData", 3, gbufferFBO, 3);
+                cmd.BindTexture2D(m_SpotLightVolumePipeline, "g_Normal",     4, gbufferFBO, 0);
+
+                // Bind Set 2: InstanceSSBO(b=0,V) + SpotLightSSBO(b=1,F) + GeoPool(b=2,V) + SphereRange(b=3,V)
+                VkBuffer geoBuf = vkCtx->GetGeometryPool().GetBuffer();
+                VkDescriptorBufferInfo s2info[4] = {
+                    { (VkBuffer)spotInstSSBO,       0, VK_WHOLE_SIZE },
+                    { (VkBuffer)spotSSBO,           0, VK_WHOLE_SIZE },
+                    { geoBuf,                       0, VK_WHOLE_SIZE },
+                    { m_SphereRangeBuffer,          0, VK_WHOLE_SIZE },
+                };
+                VkWriteDescriptorSet s2writes[4] = {};
+                for (int j = 0; j < 4; j++) {
+                    s2writes[j].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                    s2writes[j].dstSet = m_SLV_Set2Descriptors[fi];
+                    s2writes[j].dstBinding = (uint32_t)j;
+                    s2writes[j].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                    s2writes[j].descriptorCount = 1;
+                    s2writes[j].pBufferInfo = &s2info[j];
+                }
+                vkUpdateDescriptorSets(device, 4, s2writes, 0, nullptr);
+                vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    layout, 2, 1, &m_SLV_Set2Descriptors[fi], 0, nullptr);
+
+                // Push constants (same as point light volume)
+                struct SpotLightVolumePC {
+                    glm::mat4 InverseViewProj;
+                    glm::vec4 ScreenParams;
+                } slvPC;
+                slvPC.InverseViewProj = defPC.InverseViewProj;
+                float vpW2 = (float)lightingFBO->GetSpecification().Width;
+                float vpH2 = (float)lightingFBO->GetSpecification().Height;
+                slvPC.ScreenParams = glm::vec4(1.0f / vpW2, 1.0f / vpH2, vpW2, vpH2);
+                vkCmdPushConstants(vkCmd, layout,
+                    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                    0, sizeof(slvPC), &slvPC);
+
+                cmd.FlushDescriptorSets();
+                vkCmdBindIndexBuffer(vkCmd, geoBuf, m_SphereIndexOffset, VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexed(vkCmd, m_SphereIndexCount, (uint32_t)spotCount, 0, 0, 0);
             }
         }
 

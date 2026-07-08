@@ -177,13 +177,26 @@ namespace Ayaya {
 
         if (entity.HasComponent<PointLightComponent>()) {
             out << YAML::Key << "PointLightComponent";
-            out << YAML::BeginMap; 
+            out << YAML::BeginMap;
             auto& plc = entity.GetComponent<PointLightComponent>();
             out << YAML::Key << "Color" << YAML::Value << plc.Color;
             out << YAML::Key << "LuminousPower" << YAML::Value << plc.LuminousPower;
             out << YAML::Key << "Radius" << YAML::Value << plc.Radius;
             out << YAML::Key << "Falloff" << YAML::Value << plc.Falloff;
-            out << YAML::EndMap; 
+            out << YAML::EndMap;
+        }
+
+        if (entity.HasComponent<SpotLightComponent>()) {
+            out << YAML::Key << "SpotLightComponent";
+            out << YAML::BeginMap;
+            auto& slc = entity.GetComponent<SpotLightComponent>();
+            out << YAML::Key << "Color" << YAML::Value << slc.Color;
+            out << YAML::Key << "LuminousPower" << YAML::Value << slc.LuminousPower;
+            out << YAML::Key << "Radius" << YAML::Value << slc.Radius;
+            out << YAML::Key << "Falloff" << YAML::Value << slc.Falloff;
+            out << YAML::Key << "InnerConeAngle" << YAML::Value << slc.InnerConeAngle;
+            out << YAML::Key << "OuterConeAngle" << YAML::Value << slc.OuterConeAngle;
+            out << YAML::EndMap;
         }
 
         // ==========================================
@@ -535,6 +548,17 @@ namespace Ayaya {
                 if (pointLightComponent["LuminousPower"]) plc.LuminousPower = pointLightComponent["LuminousPower"].as<float>();
                 if (pointLightComponent["Radius"]) plc.Radius = pointLightComponent["Radius"].as<float>();
                 if (pointLightComponent["Falloff"]) plc.Falloff = pointLightComponent["Falloff"].as<float>();
+            }
+
+            auto spotLightComponent = entity["SpotLightComponent"];
+            if (spotLightComponent) {
+                auto& slc = deserializedEntity.AddComponent<SpotLightComponent>();
+                if (spotLightComponent["Color"]) slc.Color = spotLightComponent["Color"].as<glm::vec3>();
+                if (spotLightComponent["LuminousPower"]) slc.LuminousPower = spotLightComponent["LuminousPower"].as<float>();
+                if (spotLightComponent["Radius"]) slc.Radius = spotLightComponent["Radius"].as<float>();
+                if (spotLightComponent["Falloff"]) slc.Falloff = spotLightComponent["Falloff"].as<float>();
+                if (spotLightComponent["InnerConeAngle"]) slc.InnerConeAngle = spotLightComponent["InnerConeAngle"].as<float>();
+                if (spotLightComponent["OuterConeAngle"]) slc.OuterConeAngle = spotLightComponent["OuterConeAngle"].as<float>();
             }
 
             // ==========================================

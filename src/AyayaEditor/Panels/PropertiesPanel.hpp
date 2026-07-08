@@ -49,6 +49,7 @@ namespace Ayaya {
         void DrawSpriteRendererComponent(Entity entity, float uiScale);
         void DrawDirectionalLightComponent(Entity referenceEntity);
         void DrawPointLightComponent(Entity referenceEntity);
+        void DrawSpotLightComponent(Entity referenceEntity);
         void DrawEnvironmentComponent(Entity referenceEntity);
         void DrawMeshRendererComponent(Entity referenceEntity, float uiScale);
         void DrawPostProcessVolumeComponent(Entity referenceEntity, float uiScale);

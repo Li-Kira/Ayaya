@@ -178,6 +178,7 @@ namespace Ayaya {
         // Gizmo icon textures
         std::shared_ptr<Texture2D> m_CameraIcon;
         std::shared_ptr<Texture2D> m_PointLightIcon;
+        std::shared_ptr<Texture2D> m_SpotLightIcon;
         std::shared_ptr<Texture2D> m_DirLightIcon;
 
         // 统计

@@ -82,6 +82,14 @@ namespace Ayaya {
         glm::vec4 colorAndFalloff;    // rgb=radiance, w=falloff
     };
 
+    // Spot lights — separate SSBO (64 bytes per light, max 256)
+    struct GPUSpotLight {
+        glm::vec4 positionAndRadius;      // xyz=world pos, w=radius
+        glm::vec4 colorAndFalloff;        // rgb=candelas, w=falloff
+        glm::vec4 directionAndConeAngles; // xyz=cone dir, w=innerConeCos
+        glm::vec4 outerConeAndPad;        // x=outerConeCos, yzw=unused (vec4 required for MoltenVK)
+    };
+
     // static std::shared_ptr<UniformBuffer> s_CameraUniformBuffer;
     // static std::shared_ptr<UniformBuffer> s_LightUniformBuffer;
 
@@ -253,6 +261,13 @@ namespace Ayaya {
             m_LightInstanceSSBO = std::make_unique<VulkanStorageBuffer>(
                 65536 * sizeof(glm::mat4),
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+            // Spot light SSBO (max 256 spot lights, 64 bytes each)
+            m_SpotLightSSBO = std::make_unique<VulkanStorageBuffer>(
+                256 * sizeof(GPUSpotLight),
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+            m_SpotLightInstanceSSBO = std::make_unique<VulkanStorageBuffer>(
+                256 * sizeof(glm::mat4),
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
             auto camUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_CameraUniformBuffer);
             auto dirLightUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_DirLightUniformBuffer);
@@ -404,6 +419,8 @@ namespace Ayaya {
         bool hasDirLight = false;
         auto dirLightGroup = scene->Reg().view<TransformComponent, DirectionalLightComponent>();
         for (auto entityID : dirLightGroup) {
+            Entity entity{entityID, scene.get()};
+            if (!entity.IsActiveInHierarchy()) continue;
             auto [transform, dlc] = dirLightGroup.get<TransformComponent, DirectionalLightComponent>(entityID);
             glm::quat orientation = glm::quat(transform.Rotation);
             glm::vec3 dir = glm::rotate(orientation, glm::vec3(0.0f, 0.0f, -1.0f));
@@ -425,6 +442,8 @@ namespace Ayaya {
             Frustum frustum(vp);
             auto pointLightGroup = scene->Reg().view<TransformComponent, PointLightComponent>();
             for (auto entityID : pointLightGroup) {
+                Entity entity{entityID, scene.get()};
+                if (!entity.IsActiveInHierarchy()) continue;
                 auto [transform, plc] = pointLightGroup.get<TransformComponent, PointLightComponent>(entityID);
                 // CPU frustum culling — skip lights entirely outside the view
                 // Build AABB from the light's bounding sphere for Frustum::IsBoxVisible
@@ -470,6 +489,63 @@ namespace Ayaya {
                     m_LightInstanceSSBO->SetData(instances.data(),
                         lightCount * sizeof(glm::mat4));
                     m_RenderContext.Set("InstanceSSBO", (uint64_t)m_LightInstanceSSBO->GetBuffer(fi));
+                }
+            }
+        }
+
+        // Spot lights — separate SSBO (max 256, cone-direction + cone-angle aware)
+        {
+            std::vector<GPUSpotLight> gpuSpotLights;
+            glm::mat4 vp = m_RenderContext.ProjectionMatrix * m_RenderContext.ViewMatrix;
+            Frustum frustum(vp);
+            auto spotLightGroup = scene->Reg().view<TransformComponent, SpotLightComponent>();
+            for (auto entityID : spotLightGroup) {
+                Entity entity{entityID, scene.get()};
+                if (!entity.IsActiveInHierarchy()) continue;
+                auto [transform, slc] = spotLightGroup.get<TransformComponent, SpotLightComponent>(entityID);
+                // CPU frustum culling
+                AABB lightAABB;
+                lightAABB.Min = transform.Translation - glm::vec3(slc.Radius);
+                lightAABB.Max = transform.Translation + glm::vec3(slc.Radius);
+                if (!frustum.IsBoxVisible(lightAABB, glm::mat4(1.0f))) continue;
+                // Cone direction: entity rotation applied to -Z (engine forward)
+                glm::quat orientation = glm::quat(transform.Rotation);
+                glm::vec3 coneDir = glm::rotate(orientation, glm::vec3(0.0f, 0.0f, -1.0f));
+                float candelas = slc.LuminousPower / (4.0f * glm::pi<float>());
+                gpuSpotLights.push_back({
+                    glm::vec4(transform.Translation, slc.Radius),
+                    glm::vec4(slc.Color * candelas, slc.Falloff),
+                    glm::vec4(coneDir, cosf(slc.InnerConeAngle)),
+                    glm::vec4(cosf(slc.OuterConeAngle), 0.0f, 0.0f, 0.0f),
+                });
+            }
+            uint32_t spotCount = (uint32_t)gpuSpotLights.size();
+            if (m_SpotLightSSBO) {
+                struct { uint32_t count; uint32_t _pad[3]; } header = { spotCount, {} };
+                std::vector<uint8_t> buffer(sizeof(header) + spotCount * sizeof(GPUSpotLight));
+                memcpy(buffer.data(), &header, sizeof(header));
+                if (spotCount > 0)
+                    memcpy(buffer.data() + sizeof(header), gpuSpotLights.data(),
+                           spotCount * sizeof(GPUSpotLight));
+                m_SpotLightSSBO->SetData(buffer.data(), buffer.size());
+            }
+            m_RenderContext.Set("SpotLightCount", (int)spotCount);
+            if (m_SpotLightSSBO && m_SpotLightInstanceSSBO) {
+                auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+                    Application::Get().GetWindow().GetContext());
+                if (vkCtx) {
+                    uint32_t fi = vkCtx->GetCurrentFrameIndex() % vkCtx->GetFramesInFlight();
+                    m_RenderContext.Set("SpotLightSSBO", (uint64_t)m_SpotLightSSBO->GetBuffer(fi));
+                    std::vector<glm::mat4> instances(spotCount);
+                    for (uint32_t i = 0; i < spotCount; i++) {
+                        glm::vec3 pos = glm::vec3(gpuSpotLights[i].positionAndRadius);
+                        float radius = gpuSpotLights[i].positionAndRadius.w;
+                        instances[i] = glm::translate(glm::mat4(1.0f), pos)
+                                     * glm::scale(glm::mat4(1.0f), glm::vec3(radius));
+                    }
+                    m_SpotLightInstanceSSBO->SetData(instances.data(),
+                        spotCount * sizeof(glm::mat4));
+                    m_RenderContext.Set("SpotLightInstanceSSBO", (uint64_t)m_SpotLightInstanceSSBO->GetBuffer(fi));
                 }
             }
         }

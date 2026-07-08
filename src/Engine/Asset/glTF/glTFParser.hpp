@@ -13,6 +13,7 @@ class Scene;
 class AssetManager;
 struct DirectionalLightComponent;
 struct PointLightComponent;
+struct SpotLightComponent;
 
 // ==========================================
 // glTF Scene Parser — cgltf-backed, dedicated glTF 2.0 fast path.

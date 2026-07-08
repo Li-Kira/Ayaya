@@ -21,6 +21,7 @@
 #include "Core/VFS.hpp"
 
 #include <fstream>
+#include <yaml-cpp/yaml.h>
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include <stb/stb_image_resize2.h>
 #include <stb/stb_image.h>
@@ -64,6 +65,19 @@ static std::string DeduplicatePath(const std::string& path) {
         std::string candidate = (parent / (stem + "_" + std::to_string(i) + ext)).string();
         if (!std::filesystem::exists(candidate)) return candidate;
     }
+}
+
+// ==========================================
+// Try to read existing UUID from .meta file.
+// Returns 0 if .meta doesn't exist or is corrupt.
+// ==========================================
+static UUID TryReadExistingUUID(const std::string& physicalPath) {
+    std::string metaPath = physicalPath + ".meta";
+    if (!std::filesystem::exists(metaPath)) return 0;
+    UUID handle; AssetType type;
+    if (AssetManager::ReadMetaFile(metaPath, handle, type))
+        return handle;
+    return 0;
 }
 
 // ==========================================
@@ -238,6 +252,14 @@ static void BuildPrefabEntity(const cgltf_node* node, Entity parent, Scene& pref
                 l.LuminousPower = node->light->intensity;
                 l.Radius = node->light->range > 0 ? node->light->range : 10.0f; break;
             }
+            case cgltf_light_type_spot: {
+                auto& sl = e.AddComponent<SpotLightComponent>();
+                sl.Color = glm::vec3(node->light->color[0], node->light->color[1], node->light->color[2]);
+                sl.LuminousPower = node->light->intensity;
+                sl.Radius = node->light->range > 0 ? node->light->range : 10.0f;
+                sl.InnerConeAngle = node->light->spot_inner_cone_angle;
+                sl.OuterConeAngle = node->light->spot_outer_cone_angle; break;
+            }
             default: break;
         }
     }
@@ -285,16 +307,20 @@ glTFImportResult ImportglTFSceneSync(const std::string& sourcePath,
 
     // === 3. Copy source .gltf/.glb ===
     std::string gltfExt  = std::filesystem::path(sourcePath).extension().string();
-    std::string gltfDest = DeduplicatePath(destDir + "/" + baseName + gltfExt);
+    // Detect re-import: if a .meta already exists at the base destination,
+    // we're re-importing → overwrite in place, reuse UUIDs from .meta.
+    // If no .meta → new import → deduplicate to avoid overwriting other files.
+    bool isReimport = std::filesystem::exists(destDir + "/" + baseName + gltfExt + ".meta");
+    std::string gltfDest;
+    if (isReimport)
+        gltfDest = destDir + "/" + baseName + gltfExt;
+    else
+        gltfDest = DeduplicatePath(destDir + "/" + baseName + gltfExt);
     std::filesystem::copy_file(sourcePath, gltfDest, std::filesystem::copy_options::overwrite_existing);
     result.ModelPhysicalPath = gltfDest;
     result.ModelVirtualPath  = VFS::GetVirtualPath(gltfDest);
-    result.ModelHandle       = UUID(); // reuse if .meta exists
-    std::string metaPath = gltfDest + ".meta";
-    if (std::filesystem::exists(metaPath)) {
-        // Reuse existing UUID on re-import
-        result.ModelHandle = UUID(); // TODO: parse from .meta
-    }
+    result.ModelHandle       = TryReadExistingUUID(gltfDest);
+    if (result.ModelHandle == 0) result.ModelHandle = UUID();
 
     // === 4. Copy external .bin ===
     for (cgltf_size i = 0; i < data->buffers_count; i++) {
@@ -303,7 +329,7 @@ glTFImportResult ImportglTFSceneSync(const std::string& sourcePath,
             auto binSrc = std::filesystem::weakly_canonical(glTFDir / UrlDecode(data->buffers[i].uri));
             if (std::filesystem::exists(binSrc)) {
                 std::string binDest = destDir + "/" + std::filesystem::path(binSrc).filename().string();
-                binDest = DeduplicatePath(binDest);
+                if (!isReimport) binDest = DeduplicatePath(binDest);
                 std::filesystem::copy_file(binSrc, binDest, std::filesystem::copy_options::overwrite_existing);
             }
         }
@@ -341,7 +367,10 @@ glTFImportResult ImportglTFSceneSync(const std::string& sourcePath,
             auto glTFDir = std::filesystem::path(sourcePath).parent_path();
             auto srcPath = std::filesystem::weakly_canonical(glTFDir / decoded);
             auto srcFn = srcPath.filename().string();
-            texDest = DeduplicatePath(destDir + "/textures/" + srcFn);
+            if (isReimport)
+                texDest = destDir + "/textures/" + srcFn;
+            else
+                texDest = DeduplicatePath(destDir + "/textures/" + srcFn);
             if (std::filesystem::exists(srcPath))
                 std::filesystem::copy_file(srcPath, texDest, std::filesystem::copy_options::overwrite_existing);
         } else if (img.buffer_view) {
@@ -349,7 +378,10 @@ glTFImportResult ImportglTFSceneSync(const std::string& sourcePath,
             const char* ext = ".png";
             if (strstr(img.mime_type, "jpeg") || strstr(img.mime_type, "jpg")) ext = ".jpg";
             texName += ext;
-            texDest = DeduplicatePath(destDir + "/textures/" + texName);
+            if (isReimport)
+                texDest = destDir + "/textures/" + texName;
+            else
+                texDest = DeduplicatePath(destDir + "/textures/" + texName);
             auto& bv = *img.buffer_view;
             const uint8_t* src = (const uint8_t*)bv.buffer->data + bv.offset;
             std::ofstream(texDest, std::ios::binary).write((const char*)src, bv.size);
@@ -382,7 +414,8 @@ glTFImportResult ImportglTFSceneSync(const std::string& sourcePath,
         }
 
         // Record for Phase 2 finalization (sRGB flag carried via .meta update)
-        UUID texUUID = UUID();
+        UUID texUUID = TryReadExistingUUID(texDest);
+        if (texUUID == 0) texUUID = UUID();
         TextureImportSettings tSet;
         tSet.SRGB = srgbIndices.count((int)i) > 0;
         tSet.FlipY = false;
@@ -405,21 +438,39 @@ glTFImportResult ImportglTFSceneSync(const std::string& sourcePath,
         std::string matName = mat->Name.empty() ? "Material_" + std::to_string(i) : mat->Name;
         // Sanitize filename
         for (auto& c : matName) if (c == '/' || c == '\\' || c == ':') c = '_';
-        std::string matPath = DeduplicatePath(destDir + "/Materials/" + matName + ".mat");
+        std::string matPath;
+        if (isReimport)
+            matPath = destDir + "/Materials/" + matName + ".mat";
+        else
+            matPath = DeduplicatePath(destDir + "/Materials/" + matName + ".mat");
         MaterialSerializer::Serialize(mat, matPath);
 
-        UUID matUUID;
-        std::string matMetaPath = matPath + ".meta";
-        if (std::filesystem::exists(matMetaPath)) {
-            matUUID = UUID(); // TODO: read existing
-        } else {
-            matUUID = UUID();
-        }
+        UUID matUUID = TryReadExistingUUID(matPath);
+        if (matUUID == 0) matUUID = UUID();
         AssetManager::WriteMetaFile(matPath, matUUID, AssetType::Material);
         result.Materials.push_back({matUUID, VFS::GetVirtualPath(matPath), matPath});
     }
 
     // === 8. Build SubMeshes ===
+    // On re-import, read parent model's .meta to recover existing SubMesh UUIDs
+    // keyed by sub_mesh_index (the linear index matches the previous import).
+    std::unordered_map<int, UUID> reusedSubMeshUUIDs;
+    if (isReimport) {
+        std::string modelMetaPath = gltfDest + ".meta";
+        if (std::filesystem::exists(modelMetaPath)) {
+            try {
+                YAML::Node metaYaml = YAML::LoadFile(modelMetaPath);
+                if (metaYaml["sub_assets"]) {
+                    for (auto sub : metaYaml["sub_assets"]) {
+                        if (sub["uuid"] && sub["sub_mesh_index"].IsDefined()) {
+                            reusedSubMeshUUIDs[sub["sub_mesh_index"].as<int>()] = UUID(sub["uuid"].as<uint64_t>());
+                        }
+                    }
+                }
+            } catch (...) {} // .meta parse failure → fall through, generate new UUIDs
+        }
+    }
+
     // Use linear index (0,1,2...) for SubMeshIndex — maps directly to cgltf parse order.
     // The meshPrimToLinear map is used by BuildPrefabEntity to resolve (meshIdx,primIdx) → index.
     int linearIdx = 0;
@@ -430,7 +481,8 @@ glTFImportResult ImportglTFSceneSync(const std::string& sourcePath,
                 (int)p < (int)data->materials_count ? (int)p : -1);
             if (!mesh) continue;
 
-            UUID subUUID = UUID();
+            auto it = reusedSubMeshUUIDs.find(linearIdx);
+            UUID subUUID = (it != reusedSubMeshUUIDs.end()) ? it->second : UUID();
             std::string subName = baseName + "_Mesh" + std::to_string(i) + "_" + std::to_string(p);
             std::string key = std::to_string(i) + ":" + std::to_string(p);
             meshPrimToLinear[key] = linearIdx;
@@ -451,9 +503,13 @@ glTFImportResult ImportglTFSceneSync(const std::string& sourcePath,
             result.SubMeshes, result.Materials, data, settings, meshPrimToLinear);
     }
 
-    result.PrefabPath = DeduplicatePath(destDir + "/" + baseName + ".prefab");
+    if (isReimport)
+        result.PrefabPath = destDir + "/" + baseName + ".prefab";
+    else
+        result.PrefabPath = DeduplicatePath(destDir + "/" + baseName + ".prefab");
     prefab->Save(result.PrefabPath);
-    result.PrefabHandle = UUID();
+    result.PrefabHandle = TryReadExistingUUID(result.PrefabPath);
+    if (result.PrefabHandle == 0) result.PrefabHandle = UUID();
     AssetManager::WriteMetaFile(result.PrefabPath, result.PrefabHandle, AssetType::Prefab);
 
     result.Success = true;

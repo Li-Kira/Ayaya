@@ -59,5 +59,12 @@ namespace Ayaya {
         VkDescriptorSetLayout m_LV_Set2Layout = VK_NULL_HANDLE;
         VkDescriptorPool     m_LV_Set2Pool = VK_NULL_HANDLE;
         std::vector<VkDescriptorSet> m_LV_Set2Descriptors;
+
+        // Spot Light Volume rendering (same sphere mesh, different shader with cone attenuation)
+        std::shared_ptr<Shader> m_SpotLightVolumeShader;
+        std::shared_ptr<Pipeline> m_SpotLightVolumePipeline;
+        VkDescriptorSetLayout m_SLV_Set2Layout = VK_NULL_HANDLE;
+        VkDescriptorPool     m_SLV_Set2Pool = VK_NULL_HANDLE;
+        std::vector<VkDescriptorSet> m_SLV_Set2Descriptors;
     };
 }

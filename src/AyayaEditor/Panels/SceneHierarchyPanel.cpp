@@ -144,6 +144,12 @@ namespace Ayaya {
                         entity.GetComponent<PointLightComponent>().LuminousPower = 1500.0f;
                         SetSelectedEntity(entity);
                     }
+                    if (UI::DrawNativeMenuItem("Spot Light", ICON_FA_LIGHTBULB)) {
+                        Entity entity = m_Context->CreateEntity("Spot Light");
+                        entity.AddComponent<SpotLightComponent>();
+                        entity.GetComponent<SpotLightComponent>().LuminousPower = 1500.0f;
+                        SetSelectedEntity(entity);
+                    }
                     UI::EndNativeMenu();
                 }
 
@@ -322,6 +328,8 @@ namespace Ayaya {
                         pfScene->Reg().emplace<DirectionalLightComponent>(dst.GetEntityHandle(), src.GetComponent<DirectionalLightComponent>());
                     if (src.HasComponent<PointLightComponent>())
                         pfScene->Reg().emplace<PointLightComponent>(dst.GetEntityHandle(), src.GetComponent<PointLightComponent>());
+                    if (src.HasComponent<SpotLightComponent>())
+                        pfScene->Reg().emplace<SpotLightComponent>(dst.GetEntityHandle(), src.GetComponent<SpotLightComponent>());
 
                     auto& srcRel = src.GetComponent<RelationshipComponent>();
                     for (auto childID : srcRel.Children) {
