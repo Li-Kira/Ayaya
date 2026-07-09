@@ -241,7 +241,7 @@ void main() {
 
     // 【核心修复】：只有当环境贴图存在时，才去采样天空盒！
     if (u_EnvMapEnabled) {
-        irradiance += texture(u_IrradianceMap, N).rgb * u_Intensity;
+        irradiance = texture(u_IrradianceMap, N).rgb * u_Intensity;
         
         const float MAX_REFLECTION_LOD = 4.0; 
         vec3 R = reflect(-V, N);

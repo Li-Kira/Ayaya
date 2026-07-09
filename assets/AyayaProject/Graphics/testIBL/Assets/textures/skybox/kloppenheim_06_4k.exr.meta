@@ -1,0 +1,9 @@
+uuid: 9754623647489991872
+type: 2
+virtual_path: project://textures/skybox/kloppenheim_06_4k.exr
+import_settings:
+  filter: 0
+  wrap: 0
+  srgb: true
+  mipmaps: true
+  flip_y: true

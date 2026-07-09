@@ -1,0 +1,9 @@
+uuid: 1397105662072306163
+type: 2
+virtual_path: project://textures/skybox/studio_small_09_4k.exr
+import_settings:
+  filter: 0
+  wrap: 0
+  srgb: true
+  mipmaps: true
+  flip_y: true

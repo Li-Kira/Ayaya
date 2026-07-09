@@ -21,9 +21,18 @@ namespace Ayaya {
         std::string SourcePath;
         TextureImportSettings ImportSettings;
 
-        ~RawTextureData() {
-            if (Pixels) { stbi_image_free(Pixels); Pixels = nullptr; }
+        enum class AllocatorType { None, STB, StandardMalloc };
+        AllocatorType Allocator = AllocatorType::None;
+
+        void Free() {
+            if (!Pixels) return;
+            if (Allocator == AllocatorType::STB) stbi_image_free(Pixels);
+            else if (Allocator == AllocatorType::StandardMalloc) free(Pixels);
+            Pixels = nullptr;
+            Allocator = AllocatorType::None;
         }
+
+        ~RawTextureData() { Free(); }
 
         RawTextureData() = default;
 
@@ -31,18 +40,22 @@ namespace Ayaya {
             : Pixels(other.Pixels), Width(other.Width), Height(other.Height)
             , Channels(other.Channels), IsHDR(other.IsHDR)
             , SourcePath(std::move(other.SourcePath))
-            , ImportSettings(other.ImportSettings) {
+            , ImportSettings(other.ImportSettings)
+            , Allocator(other.Allocator) {
             other.Pixels = nullptr;
+            other.Allocator = AllocatorType::None;
         }
 
         RawTextureData& operator=(RawTextureData&& other) noexcept {
             if (this != &other) {
-                if (Pixels) stbi_image_free(Pixels);
+                Free();
                 Pixels = other.Pixels; other.Pixels = nullptr;
                 Width = other.Width; Height = other.Height;
                 Channels = other.Channels; IsHDR = other.IsHDR;
                 SourcePath = std::move(other.SourcePath);
                 ImportSettings = other.ImportSettings;
+                Allocator = other.Allocator;
+                other.Allocator = AllocatorType::None;
             }
             return *this;
         }

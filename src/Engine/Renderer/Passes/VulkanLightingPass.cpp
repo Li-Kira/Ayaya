@@ -256,9 +256,10 @@ namespace Ayaya {
 
         DeferredLightingPushConstants defPC{};
         defPC.LightSpaceMatrix = context.Get<glm::mat4>("LightSpaceMatrix", glm::mat4(1.0f));
-        defPC.AmbientColor = context.Get<glm::vec3>("EnvironmentAmbientColor", glm::vec3(0.1f));
+        defPC.AmbientColor = context.Get<glm::vec3>("EnvironmentAmbientColor", glm::vec3(0.1f))
+                           * context.Get<float>("EnvironmentIntensity", 1.0f);
         defPC.Intensity = context.Get<float>("EnvironmentIntensity", 1.0f);
-        defPC.EnvMapEnabled = (irrMap && preMap) ? 1 : 0;
+        defPC.EnvMapEnabled = ((irrMap && preMap) && context.Get<bool>("HasEnvironmentIBL", false)) ? 1 : 0;
         defPC.EnableSSAO = (enableSSAO && ssaoFBO != nullptr) ? 1 : 0;
         defPC.InverseViewProj = glm::inverse(context.ProjectionMatrix * context.ViewMatrix);
         cmd.PushConstantData(m_DeferredPipeline, &defPC, sizeof(DeferredLightingPushConstants));

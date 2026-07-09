@@ -119,6 +119,7 @@ namespace Ayaya {
         std::shared_ptr<Texture2D>   BRDFLUT;
         float EnvironmentIntensity = 1.0f;
         glm::vec3 EnvironmentAmbientColor = { 0.1f, 0.1f, 0.1f };
+        bool HasEnvironmentIBL = false;
         glm::vec4 ClearColor = { 0.06f, 0.06f, 0.065f, 1.0f };
 
         struct_CameraData CameraData;
@@ -654,6 +655,7 @@ namespace Ayaya {
         m_RenderContext.Set("EnableOutline", config.EnableOutline);
         m_RenderContext.Set("HoveredEntity", config.HoveredEntity);
         m_RenderContext.Set("SelectedEntities", config.SelectedEntities);
+        m_RenderContext.Set("HasEnvironmentIBL", m_Data->HasEnvironmentIBL);
         m_RenderContext.Set("EnvironmentIntensity", m_Data->EnvironmentIntensity);
         m_RenderContext.Set("EnvironmentAmbientColor", m_Data->EnvironmentAmbientColor);
 
@@ -866,6 +868,7 @@ namespace Ayaya {
 
     void SceneRenderer::SetEnvironment(EnvironmentComponent& envComp) {
         if (envComp.Type == EnvironmentType::None) {
+            m_Data->HasEnvironmentIBL = false;
             m_Data->EnvironmentCubemap = nullptr;
             m_Data->IrradianceMap = nullptr;
             m_Data->PrefilterMap = nullptr;
@@ -942,6 +945,7 @@ namespace Ayaya {
                 }
             }
 
+            m_Data->HasEnvironmentIBL = true;
             m_Data->EnvironmentCubemap = newEnvCubemap;
             m_Data->IrradianceMap = newIrradiance;
             m_Data->PrefilterMap = newPrefilter;

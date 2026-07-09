@@ -3,8 +3,11 @@
 #include "Renderer/Renderer.hpp"
 #include "Platform/OpenGL/OpenGLTexture2D.hpp"
 #include "Platform/Vulkan/VulkanTexture2D.hpp"
-#include "Asset/AssetManager.hpp" 
+#include "Asset/AssetManager.hpp"
 #include "Core/Log.hpp"
+#include <OpenEXR/ImfRgbaFile.h>
+#include <OpenEXR/ImfArray.h>
+#include <cstdlib>
 
 namespace Ayaya {
 
@@ -61,18 +64,49 @@ namespace Ayaya {
         UUID handle = AssetManager::FindHandleForPath(path);
         if (handle != 0) raw.ImportSettings = AssetManager::GetMetadata(handle).TextureSettings;
 
-        bool isHDR = stbi_is_hdr(path.c_str());
-        raw.IsHDR = isHDR;
-
-        stbi_set_flip_vertically_on_load(raw.ImportSettings.FlipY ? 1 : 0);
+        bool isEXR = (std::filesystem::path(path).extension() == ".exr");
+        bool isHDR = !isEXR && stbi_is_hdr(path.c_str());
+        raw.IsHDR = isHDR || isEXR;
 
         int w, h, c;
-        if (isHDR)
-            raw.Pixels = stbi_loadf(path.c_str(), &w, &h, &c, STBI_rgb_alpha);
-        else
-            raw.Pixels = stbi_load(path.c_str(), &w, &h, &c, STBI_rgb_alpha);
-
-        raw.Width = w; raw.Height = h; raw.Channels = c;
+        if (isEXR) {
+            try {
+                Imf::RgbaInputFile file(path.c_str());
+                Imath::Box2i dw = file.dataWindow();
+                w = dw.max.x - dw.min.x + 1;
+                h = dw.max.y - dw.min.y + 1;
+                Imf::Array2D<Imf::Rgba> px(h, w);
+                file.setFrameBuffer(&px[0][0] - dw.min.x - dw.min.y * w, 1, w);
+                file.readPixels(dw.min.y, dw.max.y);
+                // Convert half-float Rgba → float RGBA (malloc, freed in RawTextureData::Free via free())
+                float* out = (float*)malloc(w * h * 4 * sizeof(float));
+                if (out) {
+                    for (int y = 0; y < h; y++)
+                        for (int x = 0; x < w; x++) {
+                            // OpenEXR origin is bottom-left; flip to top-left
+                            int srcY = h - 1 - y;
+                            out[(y * w + x) * 4 + 0] = px[srcY][x].r;
+                            out[(y * w + x) * 4 + 1] = px[srcY][x].g;
+                            out[(y * w + x) * 4 + 2] = px[srcY][x].b;
+                            out[(y * w + x) * 4 + 3] = px[srcY][x].a;
+                        }
+                    raw.Pixels = out;
+                    raw.Width = w; raw.Height = h; raw.Channels = 4;
+                    raw.Allocator = RawTextureData::AllocatorType::StandardMalloc;  // uses free()
+                }
+            } catch (const std::exception& e) {
+                AYAYA_CORE_ERROR("Texture2D::LoadEXR failed: {0} — {1}", path, e.what());
+            }
+        } else {
+            stbi_set_flip_vertically_on_load(raw.ImportSettings.FlipY ? 1 : 0);
+            if (isHDR)
+                raw.Pixels = stbi_loadf(path.c_str(), &w, &h, &c, STBI_rgb_alpha);
+            else
+                raw.Pixels = stbi_load(path.c_str(), &w, &h, &c, STBI_rgb_alpha);
+            raw.Width = w; raw.Height = h; raw.Channels = c;
+            if (raw.Pixels)
+                raw.Allocator = RawTextureData::AllocatorType::STB;
+        }
 
         if (!raw.Pixels)
             AYAYA_CORE_ERROR("Texture2D::LoadRawDataFromDisk failed: {0}", path);

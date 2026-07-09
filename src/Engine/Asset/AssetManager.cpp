@@ -218,7 +218,7 @@ namespace Ayaya {
     static bool IsSupportedAssetFile(const std::filesystem::path& path) {
         std::string ext = path.extension().string();
         return ext == ".png"  || ext == ".jpg" || ext == ".jpeg" ||
-               ext == ".bmp"  || ext == ".hdr" ||
+               ext == ".bmp"  || ext == ".hdr" || ext == ".exr" ||
                ext == ".obj"  || ext == ".fbx" || ext == ".gltf" || ext == ".glb" ||
                ext == ".mat"  || ext == ".lua" || ext == ".cube" ||
                ext == ".prefab" || ext == ".ayaya" || ext == ".curve" ||
@@ -1086,7 +1086,7 @@ namespace Ayaya {
         // 确定资产类型
         AssetType type = AssetType::None;
         std::string ext = filepath.extension().string();
-        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".hdr" || ext == ".bmp") type = AssetType::Texture2D;
+        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".hdr" || ext == ".exr" || ext == ".bmp") type = AssetType::Texture2D;
         else if (ext == ".obj" || ext == ".fbx" || ext == ".gltf" || ext == ".glb") type = AssetType::Model;
         else if (ext == ".mat")                              type = AssetType::Material;
         else if (ext == ".prefab")                           type = AssetType::Prefab;

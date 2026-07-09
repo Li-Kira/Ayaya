@@ -64,6 +64,15 @@ if (Vulkan_FOUND)
 else()
     message(FATAL_ERROR "Vulkan SDK NOT FOUND! Please install LunarG Vulkan SDK.")
 endif()
+
+# OpenEXR for .exr HDR texture loading
+find_package(OpenEXR REQUIRED)
+if (OpenEXR_FOUND)
+    message(STATUS "OpenEXR Found: ${OpenEXR_INCLUDE_DIRS}")
+else()
+    message(FATAL_ERROR "OpenEXR NOT FOUND! Install with: brew install openexr")
+endif()
+
 add_definitions(-DGLFW_INCLUDE_NONE -DGLFW_INCLUDE_VULKAN)
 
 # 4. 收集底层引擎核心源文件 (Ayaya Library)
@@ -172,7 +181,7 @@ find_library(ASSIMP_LIB NAMES assimp assimp-vc143-mt assimp-vc142-mt PATHS "${VE
 
 if(APPLE)
     # Mac 平台链接
-    target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${APPLE_FRAMEWORKS} yaml-cpp ${ASSIMP_LIB} box2d Lua Vulkan::Vulkan)
+    target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${APPLE_FRAMEWORKS} yaml-cpp ${ASSIMP_LIB} box2d Lua Vulkan::Vulkan OpenEXR::OpenEXR)
 elseif(WIN32)
     # Windows 平台链接
     target_link_libraries(Ayaya PUBLIC ${GLFW_LIB} ${OPENGL_LIB} yaml-cpp ${ASSIMP_LIB} box2d Lua Vulkan::Vulkan)

@@ -53,7 +53,7 @@ namespace Ayaya {
 
         std::string ext = path.extension().string();
         for (auto& c : ext) c = (char)std::tolower(c);
-        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".hdr" || ext == ".bmp") {
+        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".hdr" || ext == ".exr" || ext == ".bmp") {
             return AssetManager::GetAsset<Texture2D>(handle);
         }
 
@@ -698,7 +698,7 @@ namespace Ayaya {
             UI::MenuSeparator();
             if (UI::DrawNativeMenuItem("Import Asset...", ICON_FA_FILE_IMPORT)) {
                 std::string filepath = FileDialogs::OpenFile(
-                    "Supported Assets (*.png *.jpg *.jpeg *.bmp *.hdr *.obj *.fbx *.gltf *.glb *.mat *.lua *.cube *.prefab *.ayaya)");
+                    "Supported Assets (*.png *.jpg *.jpeg *.bmp *.hdr *.exr *.obj *.fbx *.gltf *.glb *.mat *.lua *.cube *.prefab *.ayaya)");
                 if (!filepath.empty()) {
                     std::string ext = std::filesystem::path(filepath).extension().string();
                     for (auto& c : ext) c = (char)std::tolower(c);

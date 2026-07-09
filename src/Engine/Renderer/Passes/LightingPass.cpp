@@ -148,7 +148,8 @@ namespace Ayaya {
 
         auto irrMap = context.Get<std::shared_ptr<TextureCube>>("IrradianceMap", nullptr);
         auto preMap = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap", nullptr);
-        if (irrMap && preMap) {
+        bool hasEnvIBL = context.Get<bool>("HasEnvironmentIBL", false);
+        if (irrMap && preMap && hasEnvIBL) {
             // 【核心改造 3】：直接传入 TextureCube 对象
             cmd.BindTextureCube(m_DeferredPipeline, "u_IrradianceMap",  8, irrMap);
             cmd.BindTextureCube(m_DeferredPipeline, "u_PrefilteredMap", 9, preMap);

@@ -150,7 +150,7 @@ void main() {
     vec3 kSi=F_ibl,kDi=(1.0-kSi)*(1.0-Metallic);
     vec3 irr=pc.u_AmbientColor; vec3 spI=vec3(0.0);
     if(pc.u_EnvMapEnabled==1){
-        irr+=texture(u_IrradianceMap,N).rgb*pc.u_Intensity;
+        irr=texture(u_IrradianceMap,N).rgb*pc.u_Intensity;
         vec3 R=reflect(-V,N);
         vec3 pf=textureLod(u_PrefilteredMap,R,Roughness*4.0).rgb*pc.u_Intensity;
         vec2 brdf=texture(u_BRDFLUT,vec2(max(NdV,1e-5),Roughness)).rg;

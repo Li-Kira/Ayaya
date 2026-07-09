@@ -234,7 +234,7 @@ void main() {
     vec3 kD_ibl = (vec3(1.0) - kS_ibl) * (1.0 - metallic);
 
     vec3 irradiance = u_Push.EnvironmentAmbientColor.rgb;
-    irradiance += texture(u_IrradianceMap, N).rgb * u_Push.EnvironmentIntensity;
+    irradiance = texture(u_IrradianceMap, N).rgb * u_Push.EnvironmentIntensity;
     vec3 diffuse = irradiance * albedo;
 
     const float MAX_REFLECTION_LOD = 4.0;

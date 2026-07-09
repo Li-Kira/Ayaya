@@ -977,7 +977,7 @@ namespace Ayaya {
                     if (refEnv.Type == EnvironmentType::HDR_Equirectangular || refEnv.Type == EnvironmentType::LDR_Equirectangular) {
                         UI::DrawPropertyLabel("Equirectangular Map");
 
-                        std::string pathDisplay = "Drop .hdr / .jpg here";
+                        std::string pathDisplay = "Drop .hdr / .exr / .jpg here";
                         if (refEnv.EquirectangularHandle != 0) {
                             AssetMetadata meta = AssetManager::GetMetadata(refEnv.EquirectangularHandle);
                             const std::string& vpath = meta.VirtualPath;
