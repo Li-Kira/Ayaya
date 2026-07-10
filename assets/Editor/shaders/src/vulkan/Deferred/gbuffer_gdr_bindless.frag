@@ -38,6 +38,7 @@ layout(std430, set = 2, binding = 2) readonly buffer MaterialBuffer {
 
 vec3 GetNormalFromMap(uint normalIdx) {
     vec3 tN = texture(u_GlobalTextures[nonuniformEXT(normalIdx)], v_TexCoord).xyz * 2.0 - 1.0;
+    tN.g = -tN.g; // Vulkan negative-viewport compensation (dFdy inversion)
     vec3 Q1 = dFdx(v_FragPos), Q2 = dFdy(v_FragPos);
     vec2 st1 = dFdx(v_TexCoord), st2 = dFdy(v_TexCoord);
     vec3 N = normalize(v_Normal);
@@ -74,7 +75,8 @@ void main() {
         vec3 o = texture(u_GlobalTextures[nonuniformEXT(mat.ormBindless)], v_TexCoord).rgb;
         roughness = o.g * mat.roughness; metallic = o.b * mat.metallic;
         if (mat.packing == 1u) {
-            // glTF_MetalRough: AO from separate occlusionTexture (R channel is undefined)
+            // glTF_MetalRough: AO from separate occlusionTexture; R channel undefined in the ORM texture.
+            // When no separate AO map exists, use scalar AO (1.0 = no occlusion).
             ao = (mat.aoBindless != 1)
                 ? texture(u_GlobalTextures[nonuniformEXT(mat.aoBindless)], v_TexCoord).r * mat.ao
                 : mat.ao;

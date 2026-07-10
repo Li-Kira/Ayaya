@@ -49,20 +49,29 @@ struct GDRContext {
     // Build SSBO data from sorted RenderQueue (called once per frame, before both passes).
     void BuildFromRenderQueue(const RenderQueue& queue,
                               GlobalGeometryPool& geoPool,
-                              uint32_t frameIndex);
+                              uint64_t frameNumber);
 
     // Build SSBO data directly from ECS — all blend modes uploaded, GPU masks handle filtering
     void BuildFromScene(class Scene* scene,
                         GlobalGeometryPool& geoPool,
-                        uint32_t frameIndex);
+                        uint64_t frameNumber);
 
     // Convenience: bind set=2 at the given pipeline bind point.
     void BindSet2(VkCommandBuffer cmd, VkPipelineLayout layout,
                   VkPipelineBindPoint bindPoint, uint32_t frameIndex) const;
 
+    // Query the SSBO material index assigned by BuildFromScene.
+    // Returns 0 if the material hasn't been built this frame.
+    uint32_t GetMaterialSSBOIndex(const Material* mat) const;
+
+    // Clear all per-scene caches and force a full rebuild on the next frame.
+    // Does NOT touch GeometryPool caches — those are global and persist across scenes.
+    void ResetCachesAndForceRebuild();
+
 private:
     VkDevice m_Device = VK_NULL_HANDLE;         // cached for Shutdown (no ctx dependency)
-    uint32_t m_LastBuiltFrame = UINT32_MAX;   // guard against redundant same-frame rebuilds
+    uint64_t m_LastBuiltFrameNumber = UINT64_MAX;  // monotonic frame guard (never wraps)
+    std::unordered_map<const Material*, uint32_t> m_MaterialToIndex; // Material* → SSBO index
 };
 
 } // namespace Ayaya

@@ -95,6 +95,7 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
 
 vec3 GetNormalFromMap(vec3 worldNormal, vec3 worldPos, vec2 texCoord) {
     vec3 tangentNormal = texture(u_NormalMap, texCoord).xyz * 2.0 - 1.0;
+    tangentNormal.g = -tangentNormal.g; // Vulkan negative-viewport compensation
     vec3 Q1  = dFdx(worldPos);
     vec3 Q2  = dFdy(worldPos);
     vec2 st1 = dFdx(texCoord);

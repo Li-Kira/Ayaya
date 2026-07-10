@@ -151,7 +151,7 @@ target_precompile_headers(Ayaya PRIVATE
 
 # 6. 设置包含路径
 # 增加了 ${VENDOR_INCLUDE}，让 Windows 和 Mac 都能在 vendor 目录下找到 Assimp
-find_path(ASSIMP_INCLUDE_DIR NAMES assimp/Importer.hpp PATHS "${VENDOR_INCLUDE}" /opt/homebrew/include /usr/local/include /usr/include)
+find_path(ASSIMP_INCLUDE_DIR NAMES assimp/Importer.hpp PATHS "${VENDOR_INCLUDE}" NO_DEFAULT_PATH REQUIRED)
 
 target_include_directories(Ayaya PUBLIC 
     "${CMAKE_CURRENT_SOURCE_DIR}/src" 
@@ -177,7 +177,7 @@ target_include_directories(Ayaya PUBLIC
 # 7. 链接第三方库
 find_library(GLFW_LIB NAMES glfw glfw3 PATHS "${VENDOR_LIB}" NO_DEFAULT_PATH)
 # 增加了 Windows 平台常见的 Assimp 静态库名 (assimp-vc143-mt 等) 和 vendor 路径
-find_library(ASSIMP_LIB NAMES assimp assimp-vc143-mt assimp-vc142-mt PATHS "${VENDOR_LIB}" /opt/homebrew/lib /usr/local/lib /usr/lib)
+find_library(ASSIMP_LIB NAMES assimp assimp-vc143-mt assimp-vc142-mt PATHS "${VENDOR_LIB}" NO_DEFAULT_PATH REQUIRED)
 
 if(APPLE)
     # Mac 平台链接

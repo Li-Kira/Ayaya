@@ -1,6 +1,6 @@
 # Ayaya Engine — Vulkan 渲染架构与管线深度分析报告
 
-> **初始报告:** 2026-06-18 | **更新:** 2026-07-03 (负视口坐标系终极修复 + glTF场景解析器 + TexturePacking多规范支持 + OOM修复)
+> **初始报告:** 2026-06-18 | **更新:** 2026-07-10 (GDR渲染正确性修复 + Transform缓存安全 + 场景切换状态清理)
 > **分析范围:** `/src/Engine/Platform/Vulkan/` (28 文件), `/src/Engine/Renderer/` (抽象层 + 12 个 Pass + SRP), `/assets/Editor/shaders/src/vulkan/` (58 个 Shader), `/src/Engine/Asset/glTF/` (新增)
 
 ---
@@ -25,6 +25,7 @@
 25. [glTF 场景解析器 + 资产持久化 (2026-07-03)](#25-gltf-场景解析器--资产持久化-2026-07-03)
 26. [TexturePacking 多规范材质系统 (2026-07-03)](#26-texturepacking-多规范材质系统-2026-07-03)
 27. [OOM 防护与 GPU 内存管理 (2026-07-03)](#27-oom-防护与-gpu-内存管理-2026-07-03)
+28. [GDR 渲染正确性修复 (2026-07-10)](#28-gdr-渲染正确性修复-2026-07-10)
 
 ---
 
@@ -2426,3 +2427,118 @@ Sponza 导入时 OOM：115 meshes + 72 4K 纹理。每个纹理 VkImage 默认�
 ```
 
 无需预加载任何纹理，零 OOM 风险。
+
+---
+
+## 28. GDR 渲染正确性修复 (2026-07-10)
+
+> **范围:** Material Binding, Transform Cache Safety, GPU Indirect Buffer Cleanup, Scene-Change State Invalidation
+> **修改文件:** 25 files (+192/-46)
+
+### 28.1 MaterialHash 12-bit 碰撞
+
+**问题:** `GDRContext::BuildFromScene` 和 `RenderQueue` SortKey 使用 `MaterialHandle & 0xFFF` (12-bit) 做材质去重。64-bit 随机 UUID 截断到 4096 个槽位，Sponza 的 ~100 个材质碰撞概率 >70%。碰撞时 mesh A 使用 mesh B 的 GPUMaterial → 错误纹理绑定 → 贴图拉伸。
+
+**修复:**
+- `GDRContext.cpp`: `matMap` 改为 `m_MaterialToIndex`，key 为 `Material*` 指针 (零碰撞)
+- `SceneRenderer.cpp`: SortKey 的 MaterialHash 改为查询 `GetMaterialSSBOIndex()` 返回的 SSBO 索引 (顺序 ID 天然 <4096)
+- `RenderQueue.hpp`: SortKey 12-bit bitfield **保持不变** — 顺序 ID 不会溢出，64-bit 单指令排序性能无损
+
+### 28.2 Triple-Buffer 帧数守卫过期
+
+**问题:** `m_LastBuiltFrame == frameIndex` 守卫中 `frameIndex` 是 `frame % 3`。第 4 帧时 wrap 回 0，`BuildFromScene` 被跳过，SSBO 数据 3 帧过期 → 几何尖刺。
+
+**修复:**
+- `GDRContext.hpp/cpp`: `m_LastBuiltFrameNumber` 改为 `uint64_t` 单调计数器，永不 wrap
+- `SceneRenderer.cpp`: 传递 `GetCurrentFrameIndex()` (绝对帧号) 而非 `% 3`
+
+### 28.3 TransformComponent 缓存跨场景泄漏
+
+**问题:** `TransformComponent` 使用 `= default` 拷贝构造/赋值，`mutable` 缓存字段 (`CachedWorldMatrix`, `LastLocalHash`, `LastParentWorldHash`) 在 `InstantiatePrefab` 的 `dst = src` 赋值时从 prefab 内部场景泄漏到目标场景。`GetWorldTransform()` 的哈希检查可能误命中 → 返回过期世界矩阵。
+
+**修复:** `Components.hpp` 自定义拷贝构造和拷贝赋值运算符：仅拷贝逻辑状态 (Translation/Rotation/Scale)，主动清零全部缓存字段。编译器自动在所有 `dst = src` 站点调用 → 零手动维护负担。
+
+### 28.4 SceneHierarchyPanel 待处理实体列表泄漏
+
+**问题:** `SetContext()` 切换场景时清空了 `m_SelectedEntities` 但未清空 `m_EntitiesToDestroy/m_ToUnparent/m_ToDuplicate/m_PrefabEntity/m_LastClicked/m_ShiftClickTarget`。切换后这些列表持有旧场景已销毁实体的悬空 `m_Scene` 指针 → use-after-free / 堆损坏。
+
+**修复:** `SetContext()` 中清空全部 7 个待处理列表。
+
+### 28.5 右键 Create Prefab 手动 cloneRecursive 绕过 SetParent
+
+**问题:** `SceneHierarchyPanel` 的手写 `cloneRecursive` 直接操作 `dstRel.Parent = handle` + `Children.push_back()`，未调用 `SetParent()`，导致子实体未被从 `m_RootEntities` 移除、未调用 `PropagateActiveState`、无循环防护。
+
+**修复:** 改为调用 `dstChild.SetParent(dst, false)`，与 `Scene::InstantiatePrefab` 保持一致。
+
+### 28.6 glTF 材质索引使用循环计数器
+
+**问题:** `glTFParser.cpp` 和 `glTFAssetImporter.cpp` (3 处) 使用 `(int)p` (primitive loop index) 作为 glTF 材质索引，而非查询 `cgltf_material_index()`。glTF 规范不保证 primitive 顺序与材质引用一致。
+
+**修复:** 改为 `prim.material ? (int)cgltf_material_index(data, prim.material) : -1`
+
+### 28.7 glTFParser 缺失 SetPacking
+
+**问题:** `glTFParser::ConvertMaterial` 仅调用 `BakeProperties()` 未调用 `SetPacking(glTF_MetalRough)`，材质默认 `UE4_ORM` → ORM R 通道被误读为 AO (glTF 规范中 R 通道为 undefined) → 死黑 AO。
+
+**修复:** 替换为 `engineMat->SetPacking(Material::TexturePacking::glTF_MetalRough)`
+
+### 28.8 WBOIT 半透明路径忽视 Packing
+
+**问题:** `wboit_gather_bindless.frag` 始终 `AO = orm.r` 不检查 packing 模式。glTF 半透明材质 ORM R 通道 undefined。
+
+**修复:** 添加 `u_Packing` push constant 字段，三分支 AO 路由逻辑对标 `gbuffer_gdr_bindless.frag`。
+
+### 28.9 Normal Map Y-Flip (Vulkan 负视口)
+
+**问题:** Vulkan `viewport.height = -height` 反转 `dFdy`，导致屏幕空间 TBN 重建中切线方向翻转。法线贴图凸起变凹陷。
+
+**修复:** 4 个 fragment shader 中 `tN.g = -tN.g` (解码后取反 G 通道)。
+
+### 28.10 AssetPreviewer Vulkan 描述符集空指针崩溃
+
+**问题:** AssetPreviewer 的 `Pipeline::Create()` 在 `SceneRenderer` 注册 `s_GlobalUBOs` 之前调用 → Set 0 描述符引用空 buffer → `VkDescriptorSet 0x0` → 打开项目时崩溃。
+
+**修复:** Pipeline 创建前注册 Camera UBO 到 `s_GlobalUBOs`，缩略图生成路径加空指针守卫。
+
+### 28.11 GPU Indirect Draw Buffer 残留
+
+**问题:** 新空场景 `instanceCount == 0` 时 compute culling shader dispatch 0 个线程组，indirect draw buffer 三重缓冲槽位保留旧场景绘制命令。后续帧槽位轮转时 GPU 读取过期命令 → 渲染已删除几何体。
+
+**修复:**
+- `VulkanGbufferPass.cpp`: Indirect buffer 创建添加 `VK_BUFFER_USAGE_TRANSFER_DST_BIT`
+- Execute 外层 `else` 分支 (`instanceCount == 0`): `vkCmdFillBuffer` 零填充整个 indirect buffer + barrier
+
+### 28.12 GDRContext 场景切换缓存失效
+
+**问题:** `m_MaterialToIndex` (Material*→SSBO index) 和 `m_LastBuiltFrameNumber` 在场景切换后不失效。新场景从旧场景继承材质映射 → 错误的 GPUMaterial 索引。
+
+**修复:**
+- `GDRContext::ResetCachesAndForceRebuild()`: 清除 `m_MaterialToIndex`，重置 `InstanceCount/MaterialCount/RangeCount` 为 0，`m_LastBuiltFrameNumber = UINT64_MAX`
+- `SceneRenderer::GetGDRContext()` 新增访问器
+- `EditorLayer::NewScene()/OpenScene()/OpenSceneFile()` 中调用该方法
+- **不触及** `GlobalGeometryPool::m_MeshRanges` — 那是全局几何体缓存，跨场景复用
+
+### 28.13 待解决问题
+
+| 问题 | 症状 | 状态 |
+|------|------|------|
+| **新建场景 + Prefab 实例化 Mesh 位置乱飘** | InstantiatePrefab 创建实体后在新建场景中渲染位置错误，但 save+reopen 后正确。CPU 端 transform 已验证正确，GDR world position 与 InstantiatePrefab dump 一致。根因不在数据链路。 | 🔴 未解决 |
+
+### 28.14 修改文件清单
+
+| 层 | 文件 | 关键改动 |
+|----|------|---------|
+| C++ | `GDRContext.hpp/cpp` | MaterialHash 碰撞修复 + 帧守卫 + ResetCachesAndForceRebuild |
+| C++ | `SceneRenderer.hpp/cpp` | 绝对帧号 + MaterialHash 查询 + GetGDRContext |
+| C++ | `Components.hpp` | TransformComponent 自定义拷贝语义 |
+| C++ | `Scene.cpp` | InstantiatePrefab transform copy (无需改动 — 自定义 operator= 自动生效) |
+| C++ | `glTFParser.cpp` | 材质索引 + SetPacking |
+| C++ | `glTFAssetImporter.cpp` | 材质索引 (3 处) |
+| C++ | `EditorLayer.cpp` | NewScene/OpenScene/OpenSceneFile 中调用 ResetCachesAndForceRebuild |
+| C++ | `SceneHierarchyPanel.cpp` | SetContext 清理 + cloneRecursive SetParent |
+| C++ | `VulkanGbufferPass.cpp` | Indirect buffer TRANSFER_DST + vkCmdFillBuffer 位置修正 |
+| C++ | `VulkanWBOITPass.hpp/cpp` | Packing push constant |
+| C++ | `AssetPreviewer.cpp` | 描述符集空指针守卫 |
+| GLSL | `gbuffer*.frag` ×3, `pbr_forward.frag` | Normal map Y-flip |
+| GLSL | `wboit_gather_bindless.frag` | Packing-aware AO + u_Packing push constant |
+

@@ -22,6 +22,15 @@ namespace Ayaya {
         m_SelectedEntities.clear();
         m_VisibleNodes.clear();
         m_LastSentEntities.clear();
+        // Clear all pending entity operation lists — their Entity objects hold
+        // raw m_Scene pointers to the OLD scene. After a scene switch the old
+        // scene may be destroyed; operating on stale entities would be use-after-free.
+        m_EntitiesToDestroy.clear();
+        m_EntitiesToUnparent.clear();
+        m_EntitiesToDuplicate.clear();
+        m_PrefabEntity = {};
+        m_LastClickedEntity = {};
+        m_ShiftClickTarget = {};
         m_PropertiesPanel.SetContext(context);
     }
 
@@ -335,10 +344,7 @@ namespace Ayaya {
                     for (auto childID : srcRel.Children) {
                         Entity srcChild{ childID, srcScene };
                         Entity dstChild = cloneRecursive(srcChild, srcScene);
-                        auto& dstRel = dstChild.GetComponent<RelationshipComponent>();
-                        dstRel.Parent = dst.GetEntityHandle();
-                        auto& dstParentRel = dst.GetComponent<RelationshipComponent>();
-                        dstParentRel.Children.push_back(dstChild.GetEntityHandle());
+                        dstChild.SetParent(dst, false);  // handles root-list removal, cycle guard, PropagateActiveState
                     }
                     return dst;
                 };

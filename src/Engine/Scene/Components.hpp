@@ -53,8 +53,31 @@ namespace Ayaya {
         mutable uint64_t  LastParentWorldHash = 0;
 
         TransformComponent() = default;
-        TransformComponent(const TransformComponent&) = default;
         TransformComponent(const glm::vec3& translation) : Translation(translation) {}
+
+        // Custom copy: only copy logical state, NOT mutable caches.
+        // Prevents stale world-transform cache from leaking across scenes
+        // (e.g. when InstantiatePrefab clones entities into a new scene).
+        TransformComponent(const TransformComponent& other)
+            : Translation(other.Translation), Rotation(other.Rotation), Scale(other.Scale)
+        {}
+
+        TransformComponent& operator=(const TransformComponent& other) {
+            if (this == &other) return *this;
+            Translation = other.Translation;
+            Rotation    = other.Rotation;
+            Scale       = other.Scale;
+            CachedWorldMatrix  = glm::mat4(1.0f);
+            LastLocalHash      = 0;
+            LastParentWorldHash = 0;
+            return *this;
+        }
+
+        void ResetCache() {
+            CachedWorldMatrix  = glm::mat4(1.0f);
+            LastLocalHash      = 0;
+            LastParentWorldHash = 0;
+        }
 
         glm::mat4 GetTransform() const {
             glm::mat4 rotation = glm::toMat4(glm::quat(Rotation));

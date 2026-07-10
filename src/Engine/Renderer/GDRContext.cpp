@@ -100,10 +100,10 @@ namespace Ayaya {
 
     void GDRContext::BuildFromRenderQueue(const RenderQueue& queue,
                                           GlobalGeometryPool& geoPool,
-                                          uint32_t frameIndex) {
-        // Guard: if already built this frame (e.g., Game viewport built it), skip.
-        if (m_LastBuiltFrame == frameIndex) return;
-        m_LastBuiltFrame = frameIndex;
+                                          uint64_t frameNumber) {
+        // Guard: skip redundant same-frame rebuilds (monotonic, never wraps).
+        if (m_LastBuiltFrameNumber == frameNumber) return;
+        m_LastBuiltFrameNumber = frameNumber;
 
         auto t0 = std::chrono::high_resolution_clock::now();
 
@@ -120,7 +120,7 @@ namespace Ayaya {
         gdrRanges.reserve(64);
 
         std::unordered_map<Mesh*, uint32_t> meshToRange;
-        std::unordered_map<uint64_t, uint32_t> matMap;
+        m_MaterialToIndex.clear();
 
         for (const auto& pkt : queue.Packets) {
             SortKey k; k.Value = pkt.SortKey;
@@ -139,15 +139,14 @@ namespace Ayaya {
                 meshToRange[pkt.MeshAsset.get()] = rangeIdx;
             }
 
-            // Deduplicate materials → GPUMaterial index
-            uint64_t matHash = k.Bits.MaterialHash;
+            // Deduplicate materials → GPUMaterial index (pointer-based, zero collision)
             uint32_t matIdx;
-            auto mit = matMap.find(matHash);
-            if (mit != matMap.end()) {
+            auto mit = m_MaterialToIndex.find(pkt.MaterialAsset.get());
+            if (mit != m_MaterialToIndex.end()) {
                 matIdx = mit->second;
             } else {
                 matIdx = (uint32_t)gdrMaterials.size();
-                matMap[matHash] = matIdx;
+                m_MaterialToIndex[pkt.MaterialAsset.get()] = matIdx;
                 GPUMaterial gm{};
                 auto& b = pkt.MaterialAsset->GetBakedPC();
                 gm.albedo    = b.Albedo;
@@ -240,10 +239,11 @@ namespace Ayaya {
 
     void GDRContext::BuildFromScene(Scene* scene,
                                     GlobalGeometryPool& geoPool,
-                                    uint32_t frameIndex) {
+                                    uint64_t frameNumber) {
         if (!scene) return;
-        if (m_LastBuiltFrame == frameIndex) return;
-        m_LastBuiltFrame = frameIndex;
+        // Guard: skip redundant same-frame rebuilds (monotonic, never wraps).
+        if (m_LastBuiltFrameNumber == frameNumber) return;
+        m_LastBuiltFrameNumber = frameNumber;
 
         auto t0 = std::chrono::high_resolution_clock::now();
 
@@ -255,7 +255,7 @@ namespace Ayaya {
         gdrRanges.reserve(64);
 
         std::unordered_map<Mesh*, uint32_t> meshToRange;
-        std::unordered_map<uint64_t, uint32_t> matMap;
+        m_MaterialToIndex.clear();
 
         auto view = scene->Reg().view<TransformComponent, MeshRendererComponent>();
         uint32_t entitiesFound = 0, entitiesSkipped = 0;
@@ -282,7 +282,7 @@ namespace Ayaya {
             // All blend modes (Opaque, Masked, Translucent) are uploaded to SSBO.
             // GPU compute shaders filter by required LightMode mask — zero CPU cost.
             glm::mat4 transform = entity.GetWorldTransform();
-            uint64_t matHash = meshComp.MaterialHandle & 0xFFF;
+            Material* matPtr = material.get();
 
             for (auto& mesh : model->GetMeshes()) {
                 if (gdrInstances.size() >= kMaxInstances) {
@@ -305,12 +305,12 @@ namespace Ayaya {
                 }
 
                 uint32_t matIdx;
-                auto mit = matMap.find(matHash);
-                if (mit != matMap.end()) {
+                auto mit = m_MaterialToIndex.find(matPtr);
+                if (mit != m_MaterialToIndex.end()) {
                     matIdx = mit->second;
                 } else {
                     matIdx = (uint32_t)gdrMaterials.size();
-                    matMap[matHash] = matIdx;
+                    m_MaterialToIndex[matPtr] = matIdx;
                     GPUMaterial gm{};
                     if (material) {
                         auto& b = material->GetBakedPC();
@@ -392,6 +392,36 @@ namespace Ayaya {
                 poolUsed / (1024.0*1024.0), poolSize / (1024.0*1024.0),
                 100.0 * poolUsed / poolSize);
         }
+    }
+
+    uint32_t GDRContext::GetMaterialSSBOIndex(const Material* mat) const {
+        auto it = m_MaterialToIndex.find(mat);
+        return (it != m_MaterialToIndex.end()) ? it->second : 0;
+    }
+
+    void GDRContext::ResetCachesAndForceRebuild() {
+        // Clear per-scene material→SSBO mapping.
+        // Material* pointers are stable (owned by AssetManager) but the SSBO
+        // index assignment is scene-specific — materials from the old scene
+        // must not leak into the new scene's MaterialSSBO layout.
+        m_MaterialToIndex.clear();
+
+        // Reset counters so the next BuildFromScene produces a clean SSBO
+        // state for the new (potentially empty) scene.
+        InstanceCount = 0;
+        RangeCount    = 0;
+        MaterialCount = 0;
+        TotalTriangles = 0;
+        TotalVertices  = 0;
+
+        // Invalidate the monotonic frame guard: force the very next
+        // BuildFromScene call to execute unconditionally, regardless of
+        // whether the caller passes the same frameNumber as a previous call.
+        m_LastBuiltFrameNumber = UINT64_MAX;
+
+        // NOTE: GeometryPool (GlobalGeometryPool) caches are NOT cleared.
+        // m_MeshRanges inside GeometryPool maps Mesh*→GeometryRange and is
+        // a global write-once cache that persists across all scenes.
     }
 
 } // namespace Ayaya

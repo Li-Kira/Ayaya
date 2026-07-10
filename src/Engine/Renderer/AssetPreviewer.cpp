@@ -551,6 +551,15 @@ namespace Ayaya {
             // Camera UBO for Vulkan (matches set=0 binding=0 in shader)
             s_CameraUBO = UniformBuffer::Create(sizeof(PreviewCameraUBO), 0);
 
+            // Register camera UBO globally before pipeline creation.
+            // Pipeline::Create reads s_GlobalUBOs to write Set 0 descriptor sets;
+            // if empty, descriptor sets get null buffer references → Vulkan errors.
+            auto uboVk = std::dynamic_pointer_cast<VulkanUniformBuffer>(s_CameraUBO);
+            if (uboVk)
+                for (uint32_t i = 0; i < 3; i++)
+                    VulkanPipeline::SetGlobalUniformBuffer(0, i,
+                        uboVk->GetBuffer(i), sizeof(PreviewCameraUBO));
+
             // Pipeline for Vulkan preview rendering
             PipelineSpecification pipeSpec;
             pipeSpec.Shader = s_PreviewShader;
@@ -612,7 +621,11 @@ namespace Ayaya {
                 setInfo.descriptorPool = s_ThumbnailVk.pool;
                 setInfo.descriptorSetCount = 1;
                 setInfo.pSetLayouts = &layout;
-                vkAllocateDescriptorSets(device, &setInfo, &s_ThumbnailVk.descriptorSet);
+                VkResult allocRes = vkAllocateDescriptorSets(device, &setInfo, &s_ThumbnailVk.descriptorSet);
+                if (allocRes != VK_SUCCESS) {
+                    AYAYA_CORE_ERROR("AssetPreviewer: Failed to allocate thumbnail descriptor set! Result={}", (int)allocRes);
+                    s_ThumbnailVk.descriptorSet = VK_NULL_HANDLE;
+                }
 
                 VkDescriptorBufferInfo bufferInfo{};
                 bufferInfo.buffer = s_ThumbnailVk.uboBuffer;
@@ -753,6 +766,7 @@ namespace Ayaya {
 
     std::shared_ptr<Texture2D> AssetPreviewer::GenerateThumbnail(UUID modelHandle, uint32_t size) {
         (void)size;
+        if (!s_ThumbnailVk.initialized) return nullptr; // Vulkan resources not ready — skip silently
         auto model = AssetManager::GetAsset<Model>(modelHandle);
         if (!model) {
             AssetManager::RequestAsyncLoad(modelHandle);
@@ -888,6 +902,11 @@ namespace Ayaya {
                                   vkPipeline->GetVulkanPipeline());
 
                 // Bind dedicated thumbnail descriptor set (isolated from frame loop)
+                if (s_ThumbnailVk.descriptorSet == VK_NULL_HANDLE) {
+                    AYAYA_CORE_WARN("AssetPreviewer: thumbnail descriptor set not ready, skipping");
+                    vkEndCommandBuffer(cmd);
+                    return nullptr;
+                }
                 vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     vkPipeline->GetVulkanPipelineLayout(), 0, 1,
                     &s_ThumbnailVk.descriptorSet, 0, nullptr);
@@ -1038,6 +1057,7 @@ namespace Ayaya {
 
     std::shared_ptr<Texture2D> AssetPreviewer::RenderRealtimePreview(UUID modelHandle, glm::vec2 cameraAngle, uint32_t size) {
         (void)size;
+        if (!s_ThumbnailVk.initialized) return nullptr;
         auto model = AssetManager::GetAsset<Model>(modelHandle);
         if (!model) {
             AssetManager::RequestAsyncLoad(modelHandle);
@@ -1053,6 +1073,7 @@ namespace Ayaya {
     // ---- Material thumbnail: render a sphere with the material applied ----
     std::shared_ptr<Texture2D> AssetPreviewer::GenerateThumbnailForMaterial(UUID materialHandle, uint32_t size) {
         (void)size;
+        if (!s_ThumbnailVk.initialized) return nullptr;
         auto material = AssetManager::GetAsset<Material>(materialHandle);
         if (!material) return nullptr;
 
@@ -1300,6 +1321,7 @@ namespace Ayaya {
     // ---- Prefab realtime preview: render ALL mesh entities with their transforms ----
     std::shared_ptr<Texture2D> AssetPreviewer::RenderRealtimePreviewForPrefab(UUID prefabHandle, glm::vec2 cameraAngle, uint32_t size) {
         (void)size;
+        if (!s_ThumbnailVk.initialized) return nullptr;
         auto prefab = AssetManager::GetAsset<Prefab>(prefabHandle);
         if (!prefab) return nullptr;
 
@@ -1581,6 +1603,7 @@ namespace Ayaya {
 
     void AssetPreviewer::ProcessOneThumbnail() {
         if(s_ThumbQueue.empty()||RendererAPI::GetAPI()!=RendererAPI::API::Vulkan) return;
+        if(!s_ThumbnailVk.initialized||s_ThumbnailVk.descriptorSet==VK_NULL_HANDLE) return;
         auto vkCtx=std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         auto vkPipe=std::dynamic_pointer_cast<VulkanPipeline>(s_PreviewPipeline);
         if(!vkCtx||!vkPipe) return;

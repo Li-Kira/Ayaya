@@ -26,6 +26,7 @@ namespace Ayaya {
         uint32_t RoughnessMapIndex;                // offset 112 (4B)
         uint32_t AOMapIndex;                       // offset 116 (4B)
         float  Alpha;                              // offset 120 (4B)
+        uint32_t Packing;                          // offset 124 (4B) — TexturePacking enum
     };
     static_assert(sizeof(WBOITGatherPushConstants) <= 256,
         "WBOITGatherPushConstants must fit within push constant limit");

@@ -433,6 +433,7 @@ namespace Ayaya {
                 pc.MetallicMapIndex = baked.MetallicMapIndex;
                 pc.RoughnessMapIndex = baked.RoughnessMapIndex;
                 pc.AOMapIndex = baked.AOMapIndex;
+                pc.Packing = (uint32_t)baked.Packing;
             } else {
                 pc.Albedo = glm::vec4(1); pc.Metallic = 0;
                 pc.Roughness = 0.5f; pc.AO = 1; pc.Alpha = 0.5f;

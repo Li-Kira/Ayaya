@@ -560,8 +560,9 @@ namespace Ayaya {
             auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
                 Application::Get().GetWindow().GetContext());
             if (vkCtx) {
-                uint32_t frameIdx = vkCtx->GetCurrentFrameIndex() % vkCtx->GetFramesInFlight();
-                m_GDRContext->BuildFromScene(scene.get(), vkCtx->GetGeometryPool(), frameIdx);
+                uint64_t frameNumber = vkCtx->GetCurrentFrameIndex(); // absolute, monotonic — never wraps
+                uint32_t frameIdx = frameNumber % vkCtx->GetFramesInFlight();
+                m_GDRContext->BuildFromScene(scene.get(), vkCtx->GetGeometryPool(), frameNumber);
             }
         }
         auto tCull1 = std::chrono::high_resolution_clock::now();
@@ -611,7 +612,7 @@ namespace Ayaya {
                     packet.GPUInstanceIndex = instIdx;
                     SortKey key; key.Value = 0;
                     key.Bits.BucketID = bucket;
-                    key.Bits.MaterialHash = (meshComp.MaterialHandle & 0xFFF);
+                    key.Bits.MaterialHash = m_GDRContext->GetMaterialSSBOIndex(material.get()) & 0xFFF;
                     key.Bits.EntityID = static_cast<uint32_t>(entityID) & 0xFFFF;
                     key.Bits.Depth = 0;
                     packet.SortKey = key.Value;

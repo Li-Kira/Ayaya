@@ -404,7 +404,7 @@ namespace Ayaya {
             // Indirect draw buffer (triple-buffered)
             m_DrawIndirectBuffer = std::make_unique<VulkanStorageBuffer>(
                 kGDRMaxInstances * sizeof(VkDrawIndexedIndirectCommand),
-                VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+                VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
             // Pre-bind set=3 descriptor (single binding, VkBuffer handles never change)
             for (uint32_t i = 0; i < fiCount; i++) {
@@ -468,7 +468,7 @@ namespace Ayaya {
             // Phase 2 indirect buffer
             m_Phase2IndirectBuffer = std::make_unique<VulkanStorageBuffer>(
                 kGDRMaxInstances * sizeof(VkDrawIndexedIndirectCommand),
-                VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+                VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
             // Set=3 layout V2: binding 0=Main (read), binding 1=Phase2 (write)
             VkDescriptorSetLayoutBinding v2Bindings[2] = {};
@@ -668,6 +668,7 @@ namespace Ayaya {
                     vkCmdDispatch(vkCmd, hizGroupCount, 1, 1);
 
                     // Compute → Indirect barrier (Hi-Z cull also wrote IndirectBuffer)
+                    VkBufferMemoryBarrier indirectBarrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
                     indirectBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
                     indirectBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
                     indirectBarrier.buffer = m_DrawIndirectBuffer->GetBuffer(frameIdx);
@@ -707,7 +708,20 @@ namespace Ayaya {
                     cmd.RecordIndirectDraw(instanceCount, m_GDRCtx->TotalTriangles);
                 }
             } else {
-                // No instances: still clear GBuffer to prevent ghost rendering
+                // No instances: zero-fill indirect buffer to prevent stale draw commands
+                // from a previous scene resurrecting when triple-buffer slot wraps around.
+                vkCmdFillBuffer(vkCmd, m_DrawIndirectBuffer->GetBuffer(frameIdx),
+                    0, kGDRMaxInstances * sizeof(VkDrawIndexedIndirectCommand), 0);
+                VkBufferMemoryBarrier fillBarrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
+                fillBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                fillBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+                fillBarrier.buffer = m_DrawIndirectBuffer->GetBuffer(frameIdx);
+                fillBarrier.size = VK_WHOLE_SIZE;
+                vkCmdPipelineBarrier(vkCmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0,
+                    0, nullptr, 1, &fillBarrier, 0, nullptr);
+
+                // Still clear GBuffer to prevent ghost rendering
                 cmd.BeginRenderPass(colorFBO, true, glm::vec4(0.0f));
             }
         }

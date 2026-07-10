@@ -230,8 +230,9 @@ static void BuildPrefabEntity(const cgltf_node* node, Entity parent, Scene& pref
                 AYAYA_CORE_WARN("glTF prefab: no SubMesh match for node '{}' mesh[{}] prim[{}] (meshEntries={})",
                     node->name ? node->name : "(unnamed)", meshIdx, (int)p, meshEntries.size());
             }
-            // Match material: primitive material index
-            int matIdx = (int)p < (int)data->materials_count ? (int)p : -1;
+            // Match material: query actual glTF material index via cgltf_material_index
+            const auto& prim = node->mesh->primitives[p];
+            int matIdx = prim.material ? (int)cgltf_material_index(data, prim.material) : -1;
             if (matIdx >= 0 && matIdx < (int)matEntries.size()) {
                 mr.MaterialHandle = matEntries[matIdx].Handle;
             }
@@ -477,8 +478,9 @@ glTFImportResult ImportglTFSceneSync(const std::string& sourcePath,
     std::unordered_map<std::string, int> meshPrimToLinear;
     for (cgltf_size i = 0; i < data->meshes_count; i++) {
         for (cgltf_size p = 0; p < data->meshes[i].primitives_count; p++) {
-            auto mesh = ExtractPrimitive(data->meshes[i].primitives[p],
-                (int)p < (int)data->materials_count ? (int)p : -1);
+            const auto& prim = data->meshes[i].primitives[p];
+            int matIdx = prim.material ? (int)cgltf_material_index(data, prim.material) : -1;
+            auto mesh = ExtractPrimitive(data->meshes[i].primitives[p], matIdx);
             if (!mesh) continue;
 
             auto it = reusedSubMeshUUIDs.find(linearIdx);
@@ -653,8 +655,9 @@ std::shared_ptr<Model> LoadglTFAsModel(const std::string& filePath) {
     std::vector<std::shared_ptr<Mesh>> allMeshes;
     for (cgltf_size i = 0; i < data->meshes_count; i++) {
         for (cgltf_size p = 0; p < data->meshes[i].primitives_count; p++) {
-            auto mesh = ExtractPrimitive(data->meshes[i].primitives[p],
-                (int)p < (int)data->materials_count ? (int)p : -1);
+            const auto& prim = data->meshes[i].primitives[p];
+            int matIdx = prim.material ? (int)cgltf_material_index(data, prim.material) : -1;
+            auto mesh = ExtractPrimitive(data->meshes[i].primitives[p], matIdx);
             if (mesh) allMeshes.push_back(mesh);
         }
     }

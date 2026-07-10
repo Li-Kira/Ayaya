@@ -29,6 +29,7 @@ layout(push_constant) uniform PushConstants {
 
 vec3 GetNormalFromMap() {
     vec3 tN = texture(u_NormalMap, v_TexCoord).xyz * 2.0 - 1.0;
+    tN.g = -tN.g; // Vulkan negative-viewport compensation
     vec3 Q1 = dFdx(v_FragPos), Q2 = dFdy(v_FragPos);
     vec2 st1 = dFdx(v_TexCoord), st2 = dFdy(v_TexCoord);
     vec3 N = normalize(v_Normal);

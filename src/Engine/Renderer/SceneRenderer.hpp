@@ -58,6 +58,7 @@ namespace Ayaya {
 
         // Shared GDR data hub (GPUInstance[], GeometryRange[], GPUMaterial[] + set=2 descriptors)
         std::shared_ptr<struct GDRContext> m_GDRContext;  // per-renderer (dual-viewport safe)
+        GDRContext* GetGDRContext() { return m_GDRContext.get(); }
         void OnWindowResize(uint32_t width, uint32_t height);
         void MarkViewportDirty() { m_ViewportDirty = true; }
         void* GetFinalColorAttachmentRendererID();

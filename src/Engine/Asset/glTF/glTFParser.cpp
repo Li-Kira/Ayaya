@@ -235,7 +235,7 @@ static std::shared_ptr<Material> ConvertMaterial(const cgltf_material* mat,
     // === Double Sided ===
     // (handled at mesh/pipeline level — see mesh rendering)
 
-    engineMat->BakeProperties();
+    engineMat->SetPacking(Material::TexturePacking::glTF_MetalRough);
     return engineMat;
 }
 
@@ -323,7 +323,7 @@ static void ParseNode(const cgltf_node* node, Entity parent, Scene& scene,
 
         for (cgltf_size p = 0; p < node->mesh->primitives_count; ++p) {
             const auto& prim = node->mesh->primitives[p];
-            int matIdx = static_cast<int>(p < static_cast<cgltf_size>(materials.size()) ? p : -1);
+            int matIdx = prim.material ? (int)cgltf_material_index(data, prim.material) : -1;
 
             auto mesh = ExtractPrimitiveMesh(prim, matIdx);
             if (!mesh) continue;

@@ -7,6 +7,7 @@
 #include "Core/Log.hpp"
 #include <OpenEXR/ImfRgbaFile.h>
 #include <OpenEXR/ImfArray.h>
+#include <stb/stb_image_resize2.h>
 #include <cstdlib>
 
 namespace Ayaya {
@@ -15,6 +16,12 @@ namespace Ayaya {
     // 1. 从文件路径创建贴图
     // ==========================================
     std::shared_ptr<Texture2D> Texture2D::Create(const std::string& path) {
+        // EXR files must go through LoadRawDataFromDisk (OpenEXR), not stb_image
+        if (std::filesystem::path(path).extension() == ".exr") {
+            auto raw = LoadRawDataFromDisk(path);
+            if (raw.Pixels) return CreateFromRawData(raw);
+            return nullptr;
+        }
         switch (RendererAPI::GetAPI()) {
             case RendererAPI::API::None:    AYAYA_CORE_ERROR("RendererAPI::None is currently not supported!"); return nullptr;
             case RendererAPI::API::OpenGL:  return std::make_shared<OpenGLTexture2D>(path);
@@ -92,7 +99,7 @@ namespace Ayaya {
                         }
                     raw.Pixels = out;
                     raw.Width = w; raw.Height = h; raw.Channels = 4;
-                    raw.Allocator = RawTextureData::AllocatorType::StandardMalloc;  // uses free()
+                    raw.Allocator = RawTextureData::AllocatorType::StandardMalloc;
                 }
             } catch (const std::exception& e) {
                 AYAYA_CORE_ERROR("Texture2D::LoadEXR failed: {0} — {1}", path, e.what());

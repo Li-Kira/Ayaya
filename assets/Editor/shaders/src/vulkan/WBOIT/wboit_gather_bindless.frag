@@ -44,6 +44,7 @@ layout(push_constant) uniform PC {
     uint   u_RoughnessMapIndex;                // offset 112 (4B)
     uint   u_AOMapIndex;                       // offset 116 (4B)
     float  u_Alpha;                            // offset 120 (4B)
+    uint   u_Packing;                          // offset 124 (4B) — TexturePacking enum
 } pc;
 
 const float PI = 3.14159265359;
@@ -83,9 +84,17 @@ void main() {
 
     if (pc.u_UseORMMap != 0u) {
         vec3 orm = texture(u_GlobalTextures[nonuniformEXT(pc.u_ORMMapIndex)], v_TexCoord).rgb;
-        AO        = orm.r;
         Roughness = max(orm.g * pc.u_Roughness, 0.04);
         Metallic  = orm.b * pc.u_Metallic;
+        if (pc.u_Packing == 1u) {
+            // glTF_MetalRough: R channel is undefined; AO from separate occlusionTexture or scalar
+            AO = (pc.u_AOMapIndex != 1u)
+                ? texture(u_GlobalTextures[nonuniformEXT(pc.u_AOMapIndex)], v_TexCoord).r * pc.u_AO
+                : pc.u_AO;
+        } else {
+            // UE4_ORM (default): R=AO
+            AO = orm.r * pc.u_AO;
+        }
     } else {
         Metallic  *= texture(u_GlobalTextures[nonuniformEXT(pc.u_MetallicMapIndex)],  v_TexCoord).r;
         Roughness *= texture(u_GlobalTextures[nonuniformEXT(pc.u_RoughnessMapIndex)], v_TexCoord).r;

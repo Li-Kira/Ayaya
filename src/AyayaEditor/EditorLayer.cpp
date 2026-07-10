@@ -9,6 +9,7 @@
 #include "Engine/Core/Application.hpp"
 #include "Project/Project.hpp"
 #include "Core/VFS.hpp"
+#include "Renderer/GDRContext.hpp"
 #include "Platform/Vulkan/VulkanContext.hpp"
 
 #include <glad/glad.h>
@@ -907,6 +908,11 @@ namespace Ayaya {
         // 【核心修复】：新建场景时，彻底清空撤销历史！
         m_CommandHistory.Clear();
 
+        // Reset GDR caches: material mappings and frame guards are scene-specific.
+        // GeometryPool caches (mesh uploads) are NOT cleared — global, persists across scenes.
+        if (m_SceneRenderer) m_SceneRenderer->GetGDRContext()->ResetCachesAndForceRebuild();
+        if (m_GameRenderer)  m_GameRenderer->GetGDRContext()->ResetCachesAndForceRebuild();
+
         AYAYA_CORE_INFO("Created a new empty scene with default camera.");
     }
 
@@ -929,6 +935,9 @@ namespace Ayaya {
             m_HoveredEntity = {};
             m_SceneHierarchyPanel.SetSelectedEntity({});
             m_CommandHistory.Clear();
+
+            if (m_SceneRenderer) m_SceneRenderer->GetGDRContext()->ResetCachesAndForceRebuild();
+            if (m_GameRenderer)  m_GameRenderer->GetGDRContext()->ResetCachesAndForceRebuild();
 
             auto activeHandles = m_ActiveScene->GetActiveAssetHandles();
             AssetManager::UnloadUnusedAssets(activeHandles);
@@ -954,6 +963,9 @@ namespace Ayaya {
             m_HoveredEntity = {};
             m_SceneHierarchyPanel.SetSelectedEntity({});
             m_CommandHistory.Clear();
+
+            if (m_SceneRenderer) m_SceneRenderer->GetGDRContext()->ResetCachesAndForceRebuild();
+            if (m_GameRenderer)  m_GameRenderer->GetGDRContext()->ResetCachesAndForceRebuild();
 
             auto activeHandles = m_ActiveScene->GetActiveAssetHandles();
             AssetManager::UnloadUnusedAssets(activeHandles);
