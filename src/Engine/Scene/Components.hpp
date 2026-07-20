@@ -87,7 +87,7 @@ namespace Ayaya {
         }
 
         uint64_t ComputeLocalHash() const {
-            uint64_t h = 0;
+            uint64_t h = 0x9e3779b9;  // non-zero seed prevents false cache HIT when all hashes cancel
             auto mix = [&](float v) { h ^= std::hash<float>{}(v) + 0x9e3779b9 + (h << 6) + (h >> 2); };
             mix(Translation.x); mix(Translation.y); mix(Translation.z);
             mix(Rotation.x);    mix(Rotation.y);    mix(Rotation.z);

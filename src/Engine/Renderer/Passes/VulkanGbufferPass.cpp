@@ -417,6 +417,28 @@ namespace Ayaya {
                 vkUpdateDescriptorSets(device, 1, &w, 0, nullptr);
             }
 
+            // Zero-fill all indirect draw buffer slots at init time.
+            // Ensures no triple-buffer slot ever contains stale draw commands
+            // from previous pipeline instances (critical for Apple Silicon/MoltenVK).
+            {
+                VkCommandBuffer initCmd = vkCtx->BeginSingleTimeCommands();
+                for (uint32_t i = 0; i < fiCount; i++) {
+                    vkCmdFillBuffer(initCmd, m_DrawIndirectBuffer->GetBuffer(i),
+                        0, kGDRMaxInstances * sizeof(VkDrawIndexedIndirectCommand), 0);
+                }
+                VkBufferMemoryBarrier initBarrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
+                initBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                initBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT
+                                           | VK_ACCESS_SHADER_READ_BIT
+                                           | VK_ACCESS_SHADER_WRITE_BIT;
+                initBarrier.buffer = m_DrawIndirectBuffer->GetBuffer(0);
+                initBarrier.size = VK_WHOLE_SIZE;
+                vkCmdPipelineBarrier(initCmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    0, 0, nullptr, 1, &initBarrier, 0, nullptr);
+                vkCtx->EndSingleTimeCommands(initCmd);
+            }
+
             // Build compute shader module from SPIR-V
             VkShaderModule compModule = VK_NULL_HANDLE;
             {
@@ -507,6 +529,26 @@ namespace Ayaya {
                 w[1].descriptorCount = 1; w[1].pBufferInfo = &phase2I;
                 vkUpdateDescriptorSets(device, 2, w, 0, nullptr);
             }
+
+            // Zero-fill Phase2 indirect buffer at init time.
+            {
+                VkCommandBuffer initCmd = vkCtx->BeginSingleTimeCommands();
+                for (uint32_t i = 0; i < fiCount; i++) {
+                    vkCmdFillBuffer(initCmd, m_Phase2IndirectBuffer->GetBuffer(i),
+                        0, kGDRMaxInstances * sizeof(VkDrawIndexedIndirectCommand), 0);
+                }
+                VkBufferMemoryBarrier initBarrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
+                initBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                initBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT
+                                           | VK_ACCESS_SHADER_READ_BIT
+                                           | VK_ACCESS_SHADER_WRITE_BIT;
+                initBarrier.buffer = m_Phase2IndirectBuffer->GetBuffer(0);
+                initBarrier.size = VK_WHOLE_SIZE;
+                vkCmdPipelineBarrier(initCmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    0, 0, nullptr, 1, &initBarrier, 0, nullptr);
+                vkCtx->EndSingleTimeCommands(initCmd);
+            }
         } // Phase 2 buffer + descriptor sets (no Hi-Z dependency)
 
         // ── Hi-Z Occlusion Culling resources ──
@@ -562,13 +604,6 @@ namespace Ayaya {
     bool clearDepth = (depthFBO == nullptr);
     if (context.Settings.count("GBuffer.ClearDepth"))
         clearDepth = context.Get<int>("GBuffer.ClearDepth", 1) != 0;
-
-    auto* queue = context.RenderQueue;
-    if (!queue || (!m_GDRCtx || m_GDRCtx->InstanceCount == 0)) {
-        cmd.BeginRenderPass(colorFBO, true, glm::vec4(0.0f));
-        cmd.EndRenderPass();
-        return;
-    }
 
     // ── GPU-Driven Rendering — build SSBO data, compute cull, indirect draw ──
     {
@@ -708,18 +743,25 @@ namespace Ayaya {
                     cmd.RecordIndirectDraw(instanceCount, m_GDRCtx->TotalTriangles);
                 }
             } else {
-                // No instances: zero-fill indirect buffer to prevent stale draw commands
-                // from a previous scene resurrecting when triple-buffer slot wraps around.
-                vkCmdFillBuffer(vkCmd, m_DrawIndirectBuffer->GetBuffer(frameIdx),
-                    0, kGDRMaxInstances * sizeof(VkDrawIndexedIndirectCommand), 0);
-                VkBufferMemoryBarrier fillBarrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
-                fillBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                fillBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
-                fillBarrier.buffer = m_DrawIndirectBuffer->GetBuffer(frameIdx);
-                fillBarrier.size = VK_WHOLE_SIZE;
-                vkCmdPipelineBarrier(vkCmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0,
-                    0, nullptr, 1, &fillBarrier, 0, nullptr);
+                // No instances: zero-fill ALL indirect draw buffer slots to prevent
+                // stale draw commands from a previous scene resurrecting when the
+                // triple-buffer slot wraps around. This is critical for Apple Silicon
+                // (MoltenVK/TBDR) where uninitialized buffer regions may leak stale data.
+                if (m_DrawIndirectBuffer) {
+                    uint32_t fiCount = vkCtx->GetFramesInFlight();
+                    for (uint32_t i = 0; i < fiCount; i++) {
+                        vkCmdFillBuffer(vkCmd, m_DrawIndirectBuffer->GetBuffer(i),
+                            0, kGDRMaxInstances * sizeof(VkDrawIndexedIndirectCommand), 0);
+                    }
+                    VkBufferMemoryBarrier fillBarrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
+                    fillBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                    fillBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+                    fillBarrier.buffer = m_DrawIndirectBuffer->GetBuffer(0);
+                    fillBarrier.size = VK_WHOLE_SIZE;
+                    vkCmdPipelineBarrier(vkCmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0,
+                        0, nullptr, 1, &fillBarrier, 0, nullptr);
+                }
 
                 // Still clear GBuffer to prevent ghost rendering
                 cmd.BeginRenderPass(colorFBO, true, glm::vec4(0.0f));

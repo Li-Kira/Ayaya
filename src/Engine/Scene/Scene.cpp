@@ -64,6 +64,16 @@ namespace Ayaya {
         return entity;
     }
 
+    void Scene::Clear() {
+        auto roots = m_RootEntities;  // copy — DestroyEntity mutates the vector
+        for (auto handle : roots) {
+            Entity e{ handle, this };
+            DestroyEntity(e);
+        }
+        m_RootEntities.clear();
+        m_EntityMap.clear();
+    }
+
     void Scene::DestroyEntity(Entity entity) {
         auto& rel = entity.GetComponent<RelationshipComponent>();
 
@@ -321,6 +331,8 @@ namespace Ayaya {
                 Entity srcChild{ childID, source };
                 Entity dstChild = cloneRecursive(srcChild, source);
                 dstChild.SetParent(dst, false);
+                // Defensive: ensure cache is clean after reparenting
+                dstChild.GetComponent<TransformComponent>().ResetCache();
             }
 
             return dst;

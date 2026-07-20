@@ -20,6 +20,12 @@ namespace Ayaya {
     }
 
     bool Prefab::Load(const std::string& filepath) {
+        // Clear stale entities if the scene is being reloaded (e.g., after
+        // the prefab was already loaded once). Without this, Deserialize
+        // adds new entities alongside old ones, and m_RootEntity may point
+        // to a stale root entity — causing InstantiatePrefab to clone
+        // entities with wrong hierarchy/transforms.
+        if (m_Scene) m_Scene->Clear();
         if (!m_Scene) m_Scene = std::make_shared<Scene>();
 
         EditorState dummy;

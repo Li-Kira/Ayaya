@@ -1,7 +1,9 @@
 # Ayaya Engine — Vulkan 渲染架构与管线深度分析报告
 
-> **初始报告:** 2026-06-18 | **更新:** 2026-07-10 (GDR渲染正确性修复 + Transform缓存安全 + 场景切换状态清理)
-> **分析范围:** `/src/Engine/Platform/Vulkan/` (28 文件), `/src/Engine/Renderer/` (抽象层 + 12 个 Pass + SRP), `/assets/Editor/shaders/src/vulkan/` (58 个 Shader), `/src/Engine/Asset/glTF/` (新增)
+> **初始报告:** 2026-06-18 | **更新:** 2026-07-20 (GDR 间接绘制缓冲区死代码修复 + Prefab 实例化位置 Bug 归因)
+> **分析范围:** `/src/Engine/Platform/Vulkan/` (29 文件), `/src/Engine/Renderer/` (抽象层 + Passes + SRP), `/assets/Editor/shaders/src/vulkan/` (68 个 Shader), `/src/Engine/Asset/glTF/`
+
+> **⚠️ 文档说明:** 本文档是按时间线累积更新的"活文档"。第1-9节为原始基线报告；第10-28节记录了后续迭代中实际落地的优化与修复。若前后描述有冲突，以后续章节为准。
 
 ---
 
@@ -15,8 +17,17 @@
 6. [延迟渲染管线逐 Pass 分析](#6-延迟渲染管线逐-pass-分析)
 7. [Shader 架构](#7-shader-架构)
 8. [材质与资产系统](#8-材质与资产系统)
-9. [深度优化机会评估](#9-深度优化机会评估)
-10. [GDR 性能优化](#18-gdr-性能优化-2026-06-20)
+9. [深度优化机会评估](#9-深度优化机会评估) *(注：部分优化已在后续章节落地)*
+10. [Bindless Material Texture — 落地实现](#10-bindless-material-texture--落地实现)
+11. [Mipmap 自动生成](#11-mipmap-自动生成)
+12. [RenderGraph Pass 剔除](#12-rendergraph-pass-剔除)
+13. [GPU-Driven Rendering — 四步实现](#13-gpu-driven-rendering--四步实现)
+14. [材质系统清理](#14-材质系统清理)
+15. [Bug 修复清单](#15-bug-修复清单)
+16. [更新后的优化评估](#16-更新后的优化评估)
+17. [GDR Bug 排查与修复记录](#17-gdr-bug-排查与修复记录)
+18. [GDR 性能优化 (2026-06-20)](#18-gdr-性能优化-2026-06-20)
+19. [MoltenVK/M1 兼容性 + Hi-Z 鲁棒性修复](#19-moltenvkm1-兼容性--hi-z-鲁棒性修复-2026-06-23)
 20. [SRP Scriptable Render Pipeline (2026-06-24)](#20-srp-scriptable-render-pipeline-2026-06-24)
 21. [SRP 透明管线 + 引擎加固 (2026-06-26)](#21-srp-透明管线--引擎加固-2026-06-26)
 22. [SRP 透明管线调试 + ByteAddressBuffer (2026-06-29)](#22-srp-透明管线调试全记录--byteaddressbuffer-兼容性修复-2026-06-29)
@@ -26,6 +37,8 @@
 26. [TexturePacking 多规范材质系统 (2026-07-03)](#26-texturepacking-多规范材质系统-2026-07-03)
 27. [OOM 防护与 GPU 内存管理 (2026-07-03)](#27-oom-防护与-gpu-内存管理-2026-07-03)
 28. [GDR 渲染正确性修复 (2026-07-10)](#28-gdr-渲染正确性修复-2026-07-10)
+29. [附录：补充架构主题](#29-附录补充架构主题)
+30. [Prefab 实例化 Mesh 位置 Bug 归因与修复 (2026-07-20)](#30-prefab-实例化-mesh-位置-bug-归因与修复-2026-07-20)
 
 ---
 
@@ -62,18 +75,20 @@
 
 ### 1.3 关键数字
 
-| 指标 | 数值 |
-|------|------|
-| Frames in Flight | 3 |
-| GBuffer 附件数 | 4 MRT (RG16F + RGBA8×3) + SceneDepth 外置 |
-| 最大点光源数 | 4 (Deferred) / 8 (WBOIT) |
-| Push Constants 上限 | 256 bytes |
-| 纹理描述符集 Ring Buffer | 1000 个/帧 (~10x 余量) |
-| Bindless 纹理容量 | min(perStageSamplers, perSetSamplers, 100000) |
-| GPU Timestamp 查询数 | 96 (16 passes × 2 slots × 3 frames) |
-| WBOIT 最大实例数 | 2048 |
-| GBuffer 最大实例数 | 4096 |
-| UI 批次最大 Quad 数 | 10000 (16 纹理槽位) |
+| 指标 | 数值 | 备注 |
+|------|------|------|
+| Frames in Flight | 3 | |
+| GBuffer 附件数 | 4 MRT (RG16F + RGBA8×3)，SceneDepth 外置 (DepthPrePass 输出) | |
+| 点光源上限 | 65536 (SSBO 动态数组) | 原固定上限已移除 |
+| Push Constants 上限 | 256 bytes | |
+| 纹理描述符集 Ring Buffer | 1000 个/帧 (~10x 余量) | |
+| Bindless 纹理容量 | min(perStageSamplers, perSetSamplers, 100000) | |
+| GPU Timestamp 查询数 | 96 (16 passes × 2 slots × 3 frames) | |
+| GDR 最大实例数 | 65536 | 自 18.1 节从 4096 提升 |
+| GDR 最大材质数 | 512 | |
+| GDR 最大几何区段数 | 1024 | |
+| 几何池大小 | 512 MB (默认) | |
+| GPUMaterial 大小 | 176 bytes (含 64B customData) | |
 
 ---
 
@@ -242,15 +257,12 @@ UI:           64 bytes (mat4 ortho projection)
 ```
 
 **关键特征:**
-- 始终 mipLevels = 1 (无 Mipmap)
-- Anisotropy 禁用
+- Mipmap 自动生成 (默认启用 `GenerateMipmaps=true`，压缩格式/无线性 blit 支持时禁用) — 详见第 11 节
+- Anisotropy 禁用 (`anisotropyEnable=false`, `maxAnisotropy=1.0f`)
 - Staging buffer 即用即毁
 - Bindless 索引通过 `AllocateIndex()` 分配，`FreeIndex()` 回收 (free-list)
 
-**优化点 #3:** 无 Mipmap 生成——所有纹理以最高分辨率采样。对于远处物体和 IBL prefiltered map，缺少 mipmap 导致:
-- 纹理采样 Cache 效率低
-- 远处物体出现锯齿/摩尔纹
-- 带宽浪费
+> **✅ 已修复 (第 11 节):** 原报告记录的"始终 mipLevels = 1"已在后续迭代中通过 `vkCmdBlitImage` 逐级 mip chain 生成修复。非压缩格式默认自动生成 mipmap。
 
 ### 4.2 VulkanFramebuffer
 
@@ -292,10 +304,12 @@ SetDataAllFrames(data, size):
 
 ```
 与 UniformBuffer 相同的三帧 persistent-mapped 模式
-用途: GBuffer 实例化 Transform 数组 (SSBO, Set=2, Binding=0)
+用途: GDR Instance SSBO (Set=2, Binding=0, 65536 实例)
       WBOIT 实例化 Transform 数组 (SSBO, Set=2, Binding=0)
+      Point Light SSBO (65536 光源)
+      Spot Light SSBO
 
-kMaxInstances: GBuffer = 4096, WBOIT = 2048
+kMaxInstances: 65536 (原 4096, 自第 18.1 节盲提交重构后提升)
 ```
 
 ### 4.5 VulkanBindlessManager
@@ -312,10 +326,11 @@ kMaxInstances: GBuffer = 4096, WBOIT = 2048
 
 使用场景:
   - UI Pass 的 bindless 纹理数组
-  - GBuffer GDR (GPU-Driven) 路径的 bindless material textures (计划中)
+  - GBuffer GDR (GPU-Driven) 路径的 bindless material textures ✅ 已落地
+  - WBOIT GDR 路径的 bindless material textures ✅ 已落地
 ```
 
-**优化点 #4:** Bindless 目前仅 UI Pass 使用。整个延迟渲染管线仍然使用传统 Set=1 纹理绑定方式——GBuffer/Lighting/WBOIT 每个 material 切换都需 `vkUpdateDescriptorSets`。将 material textures 全部迁移到 bindless 可大幅减少 descriptor set 写入。
+**优化点 #4:** Bindless 起初仅 UI Pass 使用。整个延迟渲染管线仍使用传统 Set=1 纹理绑定——GBuffer/Lighting/WBOIT 每个 material 切换都需 `vkUpdateDescriptorSets`。将 material textures 全部迁移到 bindless 可大幅减少 descriptor set 写入。**→ 已在第 10 节完成：GBuffer 和 WBOIT 的 bindless 路径已落地。**
 
 ---
 
@@ -384,9 +399,9 @@ For each Pass in topological order:
 
 ### 5.5 Pass Culling
 
-`RGPass::IsCulled` 字段已预留但**未实现**。所有 Pass 总是执行。
+> **✅ 已实现 (第 12 节):** Pass culling 已在后续迭代中落地。`ApplyPerFrameCulling()` 每帧根据场景设置 (SSAO/Bloom/Outline/FXAA/WBOIT) 标记 culled pass，`Compile()` 阶段从 DAG 中剪枝。本节保留原始分析供参考。
 
-**优化点 #6:** 实现 Pass culling——如果 Pass 的输入纹理无人写入 (如 SSAO 禁用、WBOIT 无半透明物体)，直接跳过整个 Pass + 其屏障。
+`RGPass::IsCulled` 字段已预留但在原始基线中**未实现**。当前状态：**已实现**，详见第 12 节。
 
 ---
 
@@ -395,55 +410,57 @@ For each Pass in topological order:
 ### 6.1 管线拓扑总览
 
 ```
-RenderGraph 执行顺序 (13 Passes):
+RenderGraph 执行顺序 (C++ 默认路径 13 Passes, SRP 默认路径 12 Passes):
                                   写入目标 (分辨率)
 Stage 0─────────────────────────────────────────────
-  DepthPrePass        [SceneDepth]      VP×VP R8+Depth  ← 深度预通道 (2026-06-28)
+  DepthPrePass        [SceneDepth]      VP×VP R8+Depth  ← 仅 C++ 默认路径 (SRP 中未注册)
 Stage 1─────────────────────────────────────────────
-  ShadowPass          [ShadowMap]       4096×4096 Depth
+  ShadowPass          [ShadowMap]       4096×4096 Depth (GPU-Driven, compute culling)
   GBufferPass         [GBuffer]         VP×VP 4-MRT (depth via SceneDepth LEQUAL)
 Stage 1.5───────────────────────────────────────────
-  SSAOPass            [SSAO_Final]      VP/2 × VP/2 R8
+  SSAOPass            [SSAO_Final]      VP/2 × VP/2 R8 (条件性启用)
 Stage 2─────────────────────────────────────────────
-  LightingPass        [Lighting]        VP×VP RGBA16F+Depth
+  LightingPass        [Lighting]        VP×VP RGBA16F+Depth (SSBO 动态点光源上限 65536)
 Stage 3─────────────────────────────────────────────
   ForwardBlendPass    [Lighting] LOAD   Skybox+Grid+Sprite
 Stage 3.1-3.2───────────────────────────────────────
-  WBOITGatherPass     [WBOIT_Gather]    VP×VP RGBA16F+RG16F
+  WBOITGatherPass     [WBOIT_Gather]    VP×VP RGBA16F+RG16F (条件性启用)
   WBOITResolvePass    [Lighting] LOAD   合成半透明
 Stage 3.5───────────────────────────────────────────
-  OutlinePass         [Selection]       VP×VP RGBA8
+  OutlinePass         [Selection]       VP×VP RGBA8 (条件性启用)
 Stage 4─────────────────────────────────────────────
-  BloomPass           [Bloom]           VP/2 × VP/2 RGBA16F
+  BloomPass           [Bloom]           VP/2 × VP/2 RGBA16F (条件性启用)
   PostProcessPass     [FinalOutput]     VP×VP RGBA8
 Stage 5─────────────────────────────────────────────
-  FXAAPass            [FXAA]            VP×VP RGBA8
+  FXAAPass            [FXAA]            VP×VP RGBA8 (条件性启用)
   UIPass              [FXAA] LOAD       UI 叠加
 ```
 
 ### 6.2 ShadowPass
 
 ```
-资源: 写入 ShadowMap (2048×2048, Depth Only)
-Push: LightSpaceMatrix (mat4) + Transform (mat4)
-执行: 遍历 CastShadows=true 的实体，逐个 DrawIndexed
+资源: 写入 ShadowMap (4096×4096, Depth Only)
+执行: GPU-Driven compute culling (cull_shadow.comp)
+      双路径: Atomic (桌面, vkCmdDrawIndexedIndirectCount) / Fixed-Slot (MoltenVK, vkCmdDrawIndexedIndirect)
       Fragment Shader 为空 (仅写深度)
-      无实例化
+      支持 Opaque + Masked 分 bin
 ```
 
 ### 6.3 GBufferPass — 最复杂的 Pass
 
 ```
-资源: 写入 GBuffer (5 附件):
+资源: 写入 GBuffer (4 MRT + SceneDepth LEQUAL):
   Attach 0: RG16F  — Normal (octahedral encoded) + 预留
   Attach 1: RGBA8 — Albedo + Roughness
   Attach 2: RGBA8 — Metallic + AO + flags
   Attach 3: RGBA8 — receiveShadows + isSelected + clipZ + 预留
-  Attach 4: Depth
+  SceneDepth 由 DepthPrePass 外置提供 (仅 C++ 默认路径)
 
-Push: Transform + PBR scalars + Texture usage flags (7 个 map enable bits)
+> ⚠️ 此节描述的是原始 3-Phase 架构。该架构已被 GDR (GPU-Driven Rendering) 单一路径
+> 完全替代 — 详见第 13 节。Phase 1-3 的 ~180 行代码已被移除。
+```
 
-三阶段执行:
+**原始三阶段执行 (已废弃):**
   Phase 1 — 扫描: 在排序好的 RenderQueue 中找出连续相同 (Mesh, MaterialHash) 的批次
                    排除单实例条目
   Phase 2 — 实例化: 每组用一次 DrawIndexedInstanced(count, firstInstance)
@@ -452,7 +469,7 @@ Push: Transform + PBR scalars + Texture usage flags (7 个 map enable bits)
   Phase 3 — 逐对象: 单实例 + 非可实例化对象，传统单 DrawIndexed
                    材质属性逐 Property 遍历绑定
 
-⚠️ GDR Shader: gbuffer_gdr.vert 已编译但未使用 (等待 bindless fragment shader)
+⚠️ GDR Shader: gbuffer_gdr.vert + gbuffer_gdr_bindless.frag 已完全集成 (第 13 节)。原始 Phase 1-3 架构已废弃。
 ```
 
 **优化点 #7:** Phase 3 (逐对象绘制) 和 Phase 2 (实例化) 之间的切换是隐式的——如果大部分 mesh 只出现 1 次，实例化没有收益但仍有 Phase 1 的扫描开销。可添加启发式: 如果单实例占比 > 80%，跳过 Phase 1+2。
@@ -492,10 +509,11 @@ Push: LightSpaceMatrix + AmbientColor + Intensity + EnvMapEnabled + EnableSSAO +
 执行: 全屏三角形 (DrawArrays(3))
      重建世界坐标 (depth + inverseVP)
      解码 Octahedral Normal
-     PBR: Directional Light (含 shadow PCF 3×3) + 4 Point Lights + IBL + SSAO
+     PBR: Directional Light (含 shadow PCF 3×3) + SSBO 动态点光源 (上限 65536) + IBL + SSAO
+     ⚠️ SSBO 点光源系统: 不再有 4 光源硬编码上限, fragment shader 循环遍历 SSBO 中的实际光源列表
 ```
 
-**优化点 #9:** 当前 point light culling 仅在 CPU 端做粗略剔除。所有 4 个点光源的 shading 在全屏范围内计算，即使光源影响半径很小。优化:
+**优化点 #9:** 当前 point light culling 仅在 CPU 端做粗略剔除。所有点光源的 shading 在全屏范围内计算，即使光源影响半径很小 (shader 内部有距离 early-out)。优化:
 - Tile-based Light Culling (Compute Shader pre-pass)
 - 或者在 Fragment Shader 中做 early-out (距离检查)
 
@@ -616,20 +634,37 @@ UI 批次系统:
 ```
 assets/Editor/shaders/src/vulkan/
 ├── 2D/          sprite.vert/.frag
+├── Custom/      test_compute.comp
 ├── Debug/       debug, pbr_forward
-├── Deferred/    gbuffer*.vert, gbuffer.frag, deferred_lighting
+├── Deferred/    gbuffer*.vert, gbuffer.frag, deferred_lighting,
+│                cull.comp, cull_hiz.comp, cull_hiz_phase2.comp,
+│                hiz_build.comp, hiz_downsample.comp
 ├── Fallback/    fallback (magenta debug)
+├── Generic/     AyayaGDR.hlsl (GDR 标准库)
 ├── IBL/         equirectangular→cubemap, irradiance, prefilter, brdf
 ├── PostProcess/ bloom_downsample/upsample, clear, fxaa, postprocess
 ├── Preview/     preview, preview_pbr (AssetPreviewer)
-├── SSAO/        ssao_generate, ssao_blur
-├── Shadow/      shadow_map
+├── Shadow/      cull_shadow.comp, shadow_map
 ├── Skybox/      skybox
 ├── UI/          grid, outline, selection_mask, ui
 └── WBOIT/       wboit_gather, wboit_resolve, wboit_gather_instanced
 
-总计: 49 个 Shader 文件，无 Compute Shader (.comp)
+总计: ~68 个 Shader 文件，含 7 个 Compute Shader (.comp) + HLSL 支持
 ```
+
+**Compute Shaders (新增):**
+
+| Shader | 功能 |
+|--------|------|
+| `cull.comp` | GDR 6-平面视锥体 GPU 剔除 |
+| `cull_hiz.comp` | Hi-Z 时间性遮挡剔除 (已构建但禁用) |
+| `cull_hiz_phase2.comp` | Hi-Z Phase 2 — 全 texel 遍历误剔除消除 (已构建但禁用) |
+| `hiz_build.comp` | Hi-Z 深度金字塔 level-0 构建 |
+| `hiz_downsample.comp` | Hi-Z 2×2 MAX 降采样 mip 链 |
+| `cull_shadow.comp` | Shadow Pass GPU 剔除 (双路径: atomic/fixed-slot) |
+| `test_compute.comp` | 自定义计算着色器测试 |
+
+**HLSL Shader 支持 (新增):** 详见第 29 节附录。引擎支持通过 DXC 编译 HLSL→SPIR-V，`AyayaGDR.hlsl` 为所有 GDR shader 提供标准库。
 
 ### 7.2 PBR 材质模型
 
@@ -728,45 +763,56 @@ Scene::GetActiveAssetHandles() → 遍历所有实体组件
 
 ## 9. 深度优化机会评估
 
+> **⚠️ 重要说明:** 此章为原始基线报告 (2026-06-18) 的优化评估。在后续开发中，本节列出的多项"未来优化"已经实际落地。本节保留原始分析供参考；
+> **已落地项的实际架构细节请参见后续章节：**
+> - 9.1 Bindless Material → 第 10 节 (已实现)
+> - 9.4 Mipmap 生成 → 第 11 节 (已实现)
+> - 9.5 Depth Pre-Pass → 第 6.1 节 Stage 0 (已实现, C++ 默认路径)
+> - 9.6 Pass Culling → 第 12 节 (已实现)
+> - 9.10 GPU-Driven Rendering → 第 13 节 (已实现)
+> - 9.16 EndSingleTimeCommands 异步化 → 第 23 节 (已实现)
+>
+> **第 16 节"更新后的优化评估"提供了完成后的全面状态刷新。**
+
 以下优化按 **影响程度** 和 **实现难度** 分级。
 
 ### 🔴 Tier 1 — 高影响、中低难度
 
-| # | 优化项 | 问题 | 方案 | 预期收益 |
-|---|--------|------|------|---------|
-| **9.1** | **Material Textures → Bindless** | 当前每 draw 做 `vkUpdateDescriptorSets` (Set 1)，大量重复 descriptor write。GBuffer/Lighting/WBOIT 全部使用传统 Set=1 | 将 material textures 全部迁移到 bindless 纹理数组。Per-draw 仅 push 一个 bindless index 数组 | Draw call 开销降低 30-50%，CPU 瓶颈场景显著提升 |
-| **9.2** | **Tile-Based Light Culling** | 4 个点光源全屏计算，即使光源影响半径远小于屏幕 | Compute Shader pre-pass 做 frustum-aligned tile culling，生成 per-tile light list | Lighting Pass 的 Fragment Shader 计算量降低 50-80% (多光源场景) |
-| **9.3** | **Shadow Map: 单级 → CSM 3-4 级** | 单张 Shadow Map 2048 → 大场景阴影精度严重不足 | 实现 3-4 级 Cascaded Shadow Maps，按相机距离分配分辨率 | 阴影质量质的飞跃，且近处阴影精度大幅提升 |
-| **9.4** | **Mipmap 生成** | 所有纹理 mipLevels=1，远处物体采样效率极低 | 上传纹理后自动生成 mipmap chain (`vkCmdBlitImage`) | Cache 命中率提升，消除远处锯齿/摩尔纹，带宽降低 |
+| # | 优化项 | 问题 | 方案 | 预期收益 | 状态 |
+|---|--------|------|------|---------|------|
+| **9.1** | **Material Textures → Bindless** | 当前每 draw 做 `vkUpdateDescriptorSets` (Set 1)，大量重复 descriptor write。GBuffer/Lighting/WBOIT 全部使用传统 Set=1 | 将 material textures 全部迁移到 bindless 纹理数组。Per-draw 仅 push 一个 bindless index 数组 | Draw call 开销降低 30-50%，CPU 瓶颈场景显著提升 | ✅ 第 10 节 |
+| **9.2** | **Tile-Based Light Culling** | 点光源全屏计算，即使光源影响半径远小于屏幕 (当前 SSBO 已支持动态数量，shader 内部有距离 early-out) | Compute Shader pre-pass 做 frustum-aligned tile culling，生成 per-tile light list | Lighting Pass 的 Fragment Shader 计算量降低 50-80% (多光源场景) | 🔴 未实现 |
+| **9.3** | **Shadow Map: 单级 → CSM 3-4 级** | 单张 Shadow Map 4096 → 大场景远处阴影精度不足 | 实现 3-4 级 Cascaded Shadow Maps，按相机距离分配分辨率 | 阴影质量质的飞跃，且近处阴影精度大幅提升 | 🔴 未实现 |
+| **9.4** | **Mipmap 生成** | 所有纹理 mipLevels=1，远处物体采样效率极低 | 上传纹理后自动生成 mipmap chain (`vkCmdBlitImage`) | Cache 命中率提升，消除远处锯齿/摩尔纹，带宽降低 | ✅ 第 11 节 |
 
 ### 🟡 Tier 2 — 中影响、中等难度
 
-| # | 优化项 | 问题 | 方案 | 预期收益 |
-|---|--------|------|------|---------|
-| **9.5** | **GBuffer 深度预 Pass** (✅ 已实现) | GBuffer Pass fragment shader 含完整 PBR，overdraw 浪费 | DepthPrePass (depth-only, ColorWrite=0) + GBuffer LEQUAL | Early-Z 硬件剔除，复杂场景 GBuffer 片段数减少 |
-| **9.6** | **RenderGraph Pass Culling** | `RGPass::IsCulled` 已预留但未实现。禁用 SSAO/Bloom/FXAA 时 Pass 仍然注册+执行空回调 | 实现 IsCulled 逻辑：如果 Pass 的输出无人消费或输入为空，从 DAG 剔除 | 功能禁用时节省 GPU 时间 + 屏障开销 |
-| **9.7** | **Instance 化 Sprite 渲染** | ForwardBlendPass 的 Sprite 每 quad 独立 `DrawTriangleStrip(4)` | 使用 SSBO 实例化 (同 GBuffer Phase 2)，批量提交 sprite transforms | 大量 2D 元素时 draw call 数量降低 100-1000x |
-| **9.8** | **SSAO → GTAO 升级** | SSAO 使用传统 32-sample 半球采样，缺乏时空稳定性 | 实现 GTAO (Ground Truth AO) 或 CACAO | AO 质量提升 + 可能性能改善 (更少样本) |
-| **9.9** | **Compute Shader 后处理** | SSAO/Bloom 全部用 Fragment Shader 全屏三角形实现。Bloom 需要 9 个子 Pass | 将 SSAO Blur/Bloom Upsample 用 Compute Shader + shared memory 合并 | GPU 利用率提升，减少 RenderPass 切换开销 |
+| # | 优化项 | 问题 | 方案 | 预期收益 | 状态 |
+|---|--------|------|------|---------|------|
+| **9.5** | **GBuffer 深度预 Pass** | GBuffer Pass fragment shader 含完整 PBR，overdraw 浪费 | DepthPrePass (depth-only, ColorWrite=0) + GBuffer LEQUAL | Early-Z 硬件剔除，复杂场景 GBuffer 片段数减少 | ✅ C++ 默认路径 |
+| **9.6** | **RenderGraph Pass Culling** | `RGPass::IsCulled` 已预留。禁用 SSAO/Bloom/FXAA 时 Pass 仍然注册+执行空回调 | 实现 IsCulled 逻辑：如果 Pass 的输出无人消费或输入为空，从 DAG 剔除 | 功能禁用时节省 GPU 时间 + 屏障开销 | ✅ 第 12 节 |
+| **9.7** | **Instance 化 Sprite 渲染** | ForwardBlendPass 的 Sprite 每 quad 独立 `DrawTriangleStrip(4)` | 使用 SSBO 实例化 (同 GBuffer Phase 2)，批量提交 sprite transforms | 大量 2D 元素时 draw call 数量降低 100-1000x | 🔴 未实现 |
+| **9.8** | **SSAO → GTAO 升级** | SSAO 使用传统 32-sample 半球采样，缺乏时空稳定性 | 实现 GTAO (Ground Truth AO) 或 CACAO | AO 质量提升 + 可能性能改善 (更少样本) | 🔴 未实现 |
+| **9.9** | **Compute Shader 后处理** | SSAO/Bloom 全部用 Fragment Shader 全屏三角形实现。Bloom 需要 9 个子 Pass | 将 SSAO Blur/Bloom Upsample 用 Compute Shader + shared memory 合并 | GPU 利用率提升，减少 RenderPass 切换开销 | 🔴 未实现 |
 
 ### 🟢 Tier 3 — 低影响或高难度
 
-| # | 优化项 | 问题 | 方案 | 预期收益 |
-|---|--------|------|------|---------|
-| **9.10** | **GPU-Driven Rendering** | 当前在 CPU 做 frustum culling + draw call 生成。gbuffer_gdr.vert 已编写但未使用 | 完成 GPU-Driven 路径：GPU frustum/occlusion culling → indirect draw。需要 Compute Shader | CPU 瓶颈场景大幅改善，但工程量大 |
-| **9.11** | **Variable Rate Shading** | 全屏统一 shading rate | VRS Tier 1/2: 对低对比度区域降低 shading rate | 10-30% fragment shading 节省 (需硬件支持) |
-| **9.12** | **Async Compute** | 所有 Pass 在 Graphics Queue 串行执行 | SSAO/Bloom 移到 Async Compute Queue 与 GBuffer/Lighting 并行 | GPU 占用率提升 10-20% |
-| **9.13** | **Mesh Shading** | 传统 Vertex Shader pipeline | 替换为 Mesh Shader (VK_EXT_mesh_shader) | GPU 驱动的几何处理，更灵活的 LOD |
-| **9.14** | **Bindless Material 全量迁移** | 仅 UI 使用 bindless | 所有 material textures (GBuffer/Lighting/WBOIT) 使用 bindless + `nonuniformEXT` | Set=1 描述符写入完全消除 |
+| # | 优化项 | 问题 | 方案 | 预期收益 | 状态 |
+|---|--------|------|------|---------|------|
+| **9.10** | **GPU-Driven Rendering** | 当前在 CPU 做 frustum culling + draw call 生成。gbuffer_gdr.vert 已编写但未使用 | 完成 GPU-Driven 路径：GPU frustum/occlusion culling → indirect draw | CPU 瓶颈场景大幅改善 | ✅ 第 13 节 |
+| **9.11** | **Variable Rate Shading** | 全屏统一 shading rate | VRS Tier 1/2: 对低对比度区域降低 shading rate | 10-30% fragment shading 节省 (需硬件支持) | 🔴 未实现 |
+| **9.12** | **Async Compute** | 所有 Pass 在 Graphics Queue 串行执行 | SSAO/Bloom 移到 Async Compute Queue 与 GBuffer/Lighting 并行 | GPU 占用率提升 10-20% | 🔴 未实现 |
+| **9.13** | **Mesh Shading** | 传统 Vertex Shader pipeline | 替换为 Mesh Shader (VK_EXT_mesh_shader) | GPU 驱动的几何处理，更灵活的 LOD | 🔴 未实现 |
+| **9.14** | **Bindless Material 全量迁移** | 仅 UI 使用 bindless | 所有 material textures (GBuffer/Lighting/WBOIT) 使用 bindless + `nonuniformEXT` | Set=1 描述符写入完全消除 | ✅ 第 10 节 |
 
 ### 🔵 架构改进 (非性能)
 
-| # | 改进项 | 问题 | 方案 |
-|---|--------|------|------|
-| **9.15** | **Depth Layout 双轨追踪** | `RGTexture::CurrentLayout` 仅追踪单一布局，color+depth 纹理的 depth 布局可能不准确 | 实现 `ColorLayout` + `DepthLayout` 独立追踪，确保 depth correctly transitioned |
-| **9.16** | **EndSingleTimeCommands 异步化** (✅ 已完成) | ~~一次性命令使用 `vkQueueWaitIdle` 全局阻塞~~ | FBO 异步创建路径：`Invalidate(VkCommandBuffer)` 将布局屏障录制到主 CB，消除 GPU 等待 |
-| **9.17** | **VulkanForwardTestPass 清理** | 独立的 Forward 渲染路径 (~300 行)，不在活跃管线中 | 删除或合并到 RenderGraph 作为可选 forward pass |
-| **9.18** | **Shader Variant 统一** | GBuffer 有 3 个 vertex shader 变体 (single/instanced/gdr)，需手动维护 | 评估是否可通过 specialization constant 合并 |
+| # | 改进项 | 问题 | 方案 | 状态 |
+|---|--------|------|------|------|
+| **9.15** | **Depth Layout 双轨追踪** | `RGTexture::CurrentLayout` 仅追踪单一布局，color+depth 纹理的 depth 布局可能不准确 | 实现 `ColorLayout` + `DepthLayout` 独立追踪 | ✅ 已实现 (RenderGraph.hpp) |
+| **9.16** | **EndSingleTimeCommands 异步化** | 一次性命令使用 `vkQueueWaitIdle` 全局阻塞 | FBO 异步创建路径：将布局屏障录制到主 CB，消除 GPU 等待 | ✅ 第 23 节 |
+| **9.17** | **VulkanForwardTestPass 清理** | 独立的 Forward 渲染路径 (~300 行)，不在活跃管线中 | 删除或合并到 RenderGraph 作为可选 forward pass | 🔴 未处理 |
+| **9.18** | **Shader Variant 统一** | GBuffer 有多个 vertex shader 变体 (已由 GDR 替代) | 评估是否可通过 specialization constant 合并 | 🔴 已过时 (GDR 替代) |
 
 ---
 
@@ -782,36 +828,39 @@ Scene::GetActiveAssetHandles() → 遍历所有实体组件
 6. **实例化渲染** — GBuffer 和 WBOIT 的 SSBO-based instancing 有效减少 draw calls
 7. **PBR + IBL** — 完整的物理渲染材质模型
 
-### 关键瓶颈评估
+### 关键瓶颈评估 (当前状态)
 
-| 瓶颈 | 位置 | 严重程度 |
-|------|------|---------|
-| **Per-Draw Descriptor Write** | GBuffer Phase 3 逐材质纹理绑定，每次 `vkUpdateDescriptorSets` | 高 — CPU 瓶颈场景 |
-| **无 Mipmap** | 所有纹理 `mipLevels=1` | 中高 — Cache/带宽 |
-| **全屏 Point Light Shading** | LightingPass fragment shader | 中 — GPU 瓶颈 |
-| **单一 Shadow Map** | ShadowPass → LightingPass | 中 — 视觉质量 |
-| **SSAO 32-sample 半球** | SSAOPass Generate | 中 — GPU 瓶颈 |
-| **Bloom 9 子 Pass** | BloomPass | 低中 — RenderPass 切换 |
-| **Pass Culling 未实现** | RenderGraph | 低 — 功能禁用时浪费 |
+| 瓶颈 | 位置 | 原先严重程度 | 当前状态 |
+|------|------|---------|---------|
+| **Per-Draw Descriptor Write** | GBuffer Phase 3 (旧) | 高 | ✅ 已消除 — Bindless + GDR 间接绘制 |
+| **无 Mipmap** | 所有纹理 | 中高 | ✅ 已修复 — 默认自动生成 mipmap |
+| **全屏 Point Light Shading** | LightingPass fragment shader | 中 | ⚠️ SSBO 动态光源已解除数量限制，但仍是全屏遍历 |
+| **单一 Shadow Map** | ShadowPass → LightingPass | 中 | 🔴 未修复 — 仍为单级 4096×4096 |
+| **SSAO 32-sample 半球** | SSAOPass Generate | 中 | 🔴 未修复 |
+| **Bloom 9 子 Pass** | BloomPass | 低中 | 🔴 未修复 |
+| **Pass Culling 未实现** | RenderGraph | 低 | ✅ 已实现 — ApplyPerFrameCulling |
 
 ### 建议的优化路线
 
-```
-Phase 1 (Quick Wins):
-  9.1 Bindless Material → 减少描述符开销
-  9.4 Mipmap 生成 → 视觉质量 + Cache
-  9.6 Pass Culling → 功能禁用时零开销
+> **⚠️ 此路线为原始基线建议。Phase 1 和 Phase 3 的核心项已在后续开发中全部完成。**
+> **当前未完成的高优先级项：9.2 (Tile Light Culling), 9.3 (CSM), 9.7 (Instanced Sprites)。**
 
-Phase 2 (Quality + Performance):
+```
+✅ Phase 1 (Quick Wins) — 已完成:
+  9.1 Bindless Material → 第 10 节
+  9.4 Mipmap 生成 → 第 11 节
+  9.6 Pass Culling → 第 12 节
+
+Phase 2 (Quality + Performance) — 待实现:
   9.3 CSM Shadow Maps → 阴影质量
   9.2 Tile Light Culling → GPU 计算量
   9.7 Instanced Sprites → Draw call 减少
   9.9 Compute Post-Processing → GPU 并行度
 
-Phase 3 (Advanced):
-  9.5 Depth Pre-Pass → 复杂场景优化
-  9.10 GPU-Driven Rendering → CPU 解放
-  9.12 Async Compute → GPU 占用率
+✅ Phase 3 (Advanced) — 已完成:
+  9.5 Depth Pre-Pass → C++ 默认路径 (Stage 0)
+  9.10 GPU-Driven Rendering → 第 13 节
+  9.12 Async Compute → 未实现
 ```
 
 ---
@@ -1319,11 +1368,13 @@ if (!vkCtx || !m_GDRPipeline) {
 
 ### 17.3 C++/GLSL 结构体内存对齐验证
 
+> **注:** 此表反映 GDR 初版 (2026-06-20) 的状态。后续 GPUMaterial 已扩展至 176B (增加 lightModeMask + packing + customData[16])，详见第 18.5 节和第 26 节。
+
 | 结构体 | C++ sizeof | GLSL std430 ArrayStride | static_assert |
 |--------|-----------|------------------------|---------------|
 | `GeometryRange` | 16 | 16 | ✅ |
 | `GPUInstance` | 96 | 96 | ✅ |
-| `GPUMaterial` | 112 | 112 | ✅ |
+| `GPUMaterial` (初版) | 112 | 112 | ✅ |
 
 ---
 
@@ -2429,7 +2480,6 @@ Sponza 导入时 OOM：115 meshes + 72 4K 纹理。每个纹理 VkImage 默认�
 无需预加载任何纹理，零 OOM 风险。
 
 ---
-
 ## 28. GDR 渲染正确性修复 (2026-07-10)
 
 > **范围:** Material Binding, Transform Cache Safety, GPU Indirect Buffer Cleanup, Scene-Change State Invalidation
@@ -2522,7 +2572,7 @@ Sponza 导入时 OOM：115 meshes + 72 4K 纹理。每个纹理 VkImage 默认�
 
 | 问题 | 症状 | 状态 |
 |------|------|------|
-| **新建场景 + Prefab 实例化 Mesh 位置乱飘** | InstantiatePrefab 创建实体后在新建场景中渲染位置错误，但 save+reopen 后正确。CPU 端 transform 已验证正确，GDR world position 与 InstantiatePrefab dump 一致。根因不在数据链路。 | 🔴 未解决 |
+| **新建场景 + Prefab 实例化 Mesh 位置乱飘** | InstantiatePrefab 创建实体后在新建场景中渲染位置错误，但 save+reopen 后正确。CPU 端 transform 已验证正确，GDR world position 与 InstantiatePrefab dump 一致。 | ✅ 已归因修复 (2026-07-20)，详见第 30 节 |
 
 ### 28.14 修改文件清单
 
@@ -2541,4 +2591,216 @@ Sponza 导入时 OOM：115 meshes + 72 4K 纹理。每个纹理 VkImage 默认�
 | C++ | `AssetPreviewer.cpp` | 描述符集空指针守卫 |
 | GLSL | `gbuffer*.frag` ×3, `pbr_forward.frag` | Normal map Y-flip |
 | GLSL | `wboit_gather_bindless.frag` | Packing-aware AO + u_Packing push constant |
+
+---
+
+## 29. 附录：补充架构主题
+
+> 以下主题在原报告 (第 1-9 节) 中未覆盖，但在引擎发展过程中已成为 Vulkan 渲染架构的重要组成部分。
+
+### 29.1 HLSL Shader 支持
+
+引擎支持通过 Microsoft DXC (`dxc`) 将 HLSL 编译为 SPIR-V，与 GLSL→SPIR-V 路径并行。
+
+**编译流程:**
+
+```bash
+# Vertex shader: VS_Main 入口点, vs_6_0 profile
+dxc -spirv -T vs_6_0 -E VS_Main -fvk-use-dx-layout <file>.hlsl -Fo <output>.vert.spv
+
+# Pixel shader: PS_Main 入口点, ps_6_0 profile
+dxc -spirv -T ps_6_0 -E PS_Main -fvk-use-dx-layout <file>.hlsl -Fo <output>.frag.spv
+
+# Compute shader: CS_Main 入口点, cs_6_0 profile
+dxc -spirv -T cs_6_0 -E CS_Main -fvk-use-dx-layout <file>.hlsl -Fo <output>.comp.spv
+```
+
+**AyayaGDR.hlsl — 标准库:**
+
+所有 GDR shader 共享的标准 HLSL 头文件，提供:
+- `[[vk::binding]]` 声明 (Camera UBO Set 0, Frustum Push Constants, GDR SSBOs Set 2)
+- `GetAyayaVertex(vertexID, instanceID)` — 从 `StructuredBuffer<uint>` 解包顶点数据
+- `overrideInstanceID` 机制 — GDR 路径使用 `SV_InstanceID`，CPU 透明路径使用显式实例索引
+
+**MoltenVK 兼容性:** `ByteAddressBuffer` 在 MoltenVK 上不可靠，所有 GDR shader 使用 `StructuredBuffer<uint>` + 手动 uint 打包/解包。详见第 22.3 节。
+
+### 29.2 Generic Pass System (TA 零 C++ 扩展)
+
+三种通用 Pass 类型注册在 `PassRegistry` 中，可在 `.srp` 脚本中直接引用，无需 C++ 重编译：
+
+| Pass 类型 | 用途 | 管线缓存 Key |
+|-----------|------|-------------|
+| **GenericDrawPass** | 全几何渲染 + GDR compute culling + 间接绘制 | (shader, depth/blend/cull state, LightMode) |
+| **GenericComputePass** | 任意 compute shader dispatch | shader 路径 |
+| **GenericFullScreenPass** | 全屏后处理 (fragment shader + 全屏三角形) | (fragShader, blendMode, targetFormat) |
+
+**Queue 分流:** `GenericDrawPass` 支持 Opaque (GDR 间接绘制) 和 Transparent (CPU 排序 + 顺序绘制) 两种模式，通过 Lua `Queue` 参数控制。
+
+### 29.3 LightModeTagRegistry
+
+**设计:** 单例注册表，将人类可读的 Pass 名称 (如 `"GBuffer"`, `"Hologram"`) 映射到 uint32 bitmask 的位位置。
+
+**位分配:**
+- Bit 0-3: 引擎内置 (GBuffer=1, ShadowCaster=2, Forward=4, DepthPrePass=8)
+- Bit 4+: 用户自定义 (`RegisterTag("MyPass")`)
+
+**材质路由:** 每个材质携带 `lightModeMask` 字段。GPU compute culling 将 mask 与 Pass 的接受 mask 做 AND 运算，仅匹配的实例被绘制。这使单个材质能精确控制出现在哪些 Pass 中 (例如全息材质仅在全息 Pass 渲染)。
+
+**序列化:** `.mat` 文件通过 `m_LightModeStr` 持久化 (如 `"GBuffer,ShadowCaster"`)，`SetLightModeMask()` 同步更新字符串。
+
+### 29.4 CustomPostProcess 扩展系统
+
+`SceneRenderer` 维护 `m_CustomPostProcesses` 向量，支持用户定义的 RenderGraph 后处理 Pass:
+
+- **DeclareResources** — 声明输入/输出纹理，支持 ping-pong 链式串联
+- **InsertBeforeToneMapping** — 控制插入位置 (HDR 空间 vs LDR 空间)
+- **Add/Remove API** — 运行时管理 Pass 链
+
+当前为预留架构，面向未来用户脚本集成。
+
+### 29.5 Editor 双 Renderer 架构
+
+`EditorLayer` 持有两个 `SceneRenderer` 实例:
+
+| 实例 | 用途 | Viewport |
+|------|------|----------|
+| `m_SceneRenderer` | 编辑器视口渲染 | Editor viewport |
+| `m_GameRenderer` | 游戏视口渲染 | Game viewport |
+
+**场景隔离:** Play 模式通过 YAML 序列化 deep-copy 创建运行时场景副本 (`temp_play_scene.ayaya`)，编辑完全隔离于运行中的游戏。
+
+**SRP 独立:** 每个 Renderer 通过 `RegisterPassInstance()` 注册独立的 Pass 实例和 UBO 绑定，防止两个视口共享状态。
+
+### 29.6 ECS-Based UI System
+
+`UILayoutSystem` 是构建在 ECS 上的完整 2D UI 框架:
+
+| 组件 | 用途 |
+|------|------|
+| `RectTransformComponent` | 锚点、轴心、位置、尺寸、旋转 (替代 3D Transform) |
+| `CanvasComponent` | 渲染模式 (ScreenSpaceOverlay/Camera/WorldSpace)、排序层级 |
+| `UIImageComponent` | 颜色着色 + 纹理句柄 |
+| `UITextComponent` | 文本字符串、字体句柄、颜色、字号 |
+| `UIButtonComponent` | Normal/Hover/Pressed/Disabled 状态 + 颜色过渡 + Lua 回调 |
+
+`UILayoutSystem` 每帧计算屏幕空间变换矩阵，结果缓存在 `RectTransformComponent` 中。`UIPass` 作为独立的 RenderGraph Pass (在 FXAA 之后) 渲染 UI quads，使用 bindless 纹理索引和 premultiplied alpha 混合。
+
+### 29.7 Hi-Z 遮挡剔除 (已构建但禁用)
+
+完整的 Hi-Z 遮挡剔除系统已构建但通过硬编码 `false` 条件禁用:
+
+- **Hi-Z 深度金字塔:** 仍然每帧构建 (`hiz_build.comp` + `hiz_downsample.comp`)
+- **两阶段剔除:** `cull_hiz.comp` (切线锥面解析 AABB) + `cull_hiz_phase2.comp` (全 texel 遍历)
+- **已知问题:** 前景遮挡物在粗 mip 级别中向外"晕染"，会错误剔除后方物体 (详见第 19.7 节)
+- **禁用原因:** 误剔除问题尚未解决，开启会导致视觉瑕疵
+
+### 29.8 其他未覆盖的架构组件
+
+| 组件 | 简述 |
+|------|------|
+| **`.ayashader` 资产格式** (AssetType 12) | YAML 定义 HLSL 源路径 + 渲染状态 + 材质属性模板，拖放生成 `.mat` 文件 |
+| **Scene 两阶段反序列化** | Entity 先创建，Parent 关系在第二阶段延迟解析 |
+| **VFS 路径解析** | `engine://` / `project://` 虚拟路径方案，映射到物理目录 |
+| **PostProcessVolumeComponent** | 场景级 ECS 组件控制 Tonemap/Bloom/SSAO/FXAA，注入到 RenderContext |
+| **AssetPreviewer** | 静态无头渲染器，独立 forward pipeline，生成 3D 模型缩略图 |
+| **AssetWatcher 热重载** | 300ms debounce + 拓扑排序级联重载 + 资产指针事件驱动作废 |
+| **Python 构建工具** | `compile_glsl.py` / `compile_hlsl.py` — 批量 shader 编译与变体生成 |
+
+---
+
+## 30. Prefab 实例化 Mesh 位置 Bug 归因与修复 (2026-07-20)
+
+> **原始问题 (28.13):** 新建场景 + 拖入 glTF Prefab (Sponza, 547 实体) → Mesh 位置错误；OBJ Prefab (backpack, 80 实体) 正常。Save + Reopen 后 glTF 位置也正常。
+> **修改规模:** 4 文件, +80/-30 行
+
+### 30.1 问题归因
+
+经过完整的 CPU 数据链路追踪 (ECS Transform → GDR SSBO → GPUInstance)，确认 **CPU 侧世界坐标计算完全正确**。GDR SSBO dump 验证 transform 矩阵无误。根因在 GPU 侧。
+
+**关键发现：`vkCmdFillBuffer` 死代码**
+
+`VulkanGbufferPass::Execute` 中原有的 early return (空队列或 `InstanceCount==0` 时直接返回) 挡在 `vkCmdFillBuffer` 之前，导致间接绘制缓冲区 **从未被清零**：
+
+```cpp
+// Bug: early return 阻止了 vkCmdFillBuffer 执行
+if (!queue || (!m_GDRCtx || m_GDRCtx->InstanceCount == 0)) {
+    cmd.BeginRenderPass(colorFBO, true, glm::vec4(0.0f));
+    cmd.EndRenderPass();
+    return;  // ← vkCmdFillBuffer 在之后的 else 分支，永不到达
+}
+```
+
+**影响:** 三重缓冲的间接绘制槽位在场景切换时保留上一场景的过期 `VkDrawIndexedIndirectCommand`。Apple Silicon (MoltenVK/TBDR) 上，Metal 对未初始化 buffer 的资源追踪可能导致过期命令泄漏到绘制管线。
+
+**为什么 Save+Reopen 正常:** `OpenScene()` 调用 `ResetCachesAndForceRebuild()` + 全新 `Deserialize`，所有 GDR SSBO 和间接绘制缓冲区从干净状态重建。`InstantiatePrefab` 则在已有场景中增量添加实体，且无 GDR 重置调用。
+
+**为什么 OBJ Prefab 正常:** OBJ 仅 80 个实体，glTF Sponza 有 405 个 mesh 实体。更大的实例数量意味着 compute culling 后的 indirect draw command 写入范围和过期数据的重叠概率更高。
+
+**为什么是顶点位置而非材质/纹理:** 只有间接绘制命令会影响 `vkCmdDrawIndexedIndirect` 的 `firstInstance` 和 `vertexOffset` 参数。过期命令会使用错误的顶点偏移读取几何池数据 → 拉取出错顶点 → 三角形错位。
+
+### 30.2 修复方案
+
+#### 修复 1 — 移除 Early Return，激活 vkCmdFillBuffer
+
+**文件:** `src/Engine/Renderer/Passes/VulkanGbufferPass.cpp`
+
+删除阻塞 `vkCmdFillBuffer` 的 early return (行 566-571)。空场景时代码正常流到 `instanceCount == 0` 分支，执行间接缓冲区清零。
+
+#### 修复 2 — 清零全部 Triple-Buffer 槽位
+
+原 `instanceCount == 0` 分支仅清零**当前帧**的 1 个槽位。修复后清零**全部 3 个**槽位：
+
+```cpp
+// Before: 仅清零当前帧槽位
+vkCmdFillBuffer(vkCmd, m_DrawIndirectBuffer->GetBuffer(frameIdx), ...);
+
+// After: 清零全部 3 个槽位
+for (uint32_t i = 0; i < fiCount; i++)
+    vkCmdFillBuffer(vkCmd, m_DrawIndirectBuffer->GetBuffer(i), ...);
+```
+
+#### 修复 3 — 初始化时清零间接缓冲区
+
+`OnAttach()` 中为 `m_DrawIndirectBuffer` 和 `m_Phase2IndirectBuffer` 添加 init-time 清零，确保 Pipeline 创建后所有槽位从零状态开始，永不含过期数据。
+
+#### 修复 4 — Prefab 实例化后刷新 GDR 缓存
+
+**文件:** `src/AyayaEditor/Panels/SceneHierarchyPanel.cpp`, `src/Engine/Renderer/SceneRenderer.hpp/cpp`
+
+`InstantiatePrefab` 后调用 `ResetGDRCaches()`，对齐 `NewScene/OpenScene` 的行为模式：
+
+```cpp
+// SceneHierarchyPanel — prefab drop deferred action
+editor.GetSceneRenderer()->ResetGDRCaches();
+editor.GetGameRenderer()->ResetGDRCaches();
+```
+
+### 30.3 附加加固
+
+同一轮修复中额外加固了 Transform 缓存安全性：
+
+| 改动 | 文件 | 说明 |
+|------|------|------|
+| 哈希种子非零化 | `Components.hpp`, `Entity.hpp` | `ComputeLocalHash` 和 `HashMat4` 种子从 `0` 改为 `0x9e3779b9`，防止全零数据导致缓存误命中 |
+| SetParent 缓存失效 | `Entity.hpp` | `SetParent()` 末尾显式调用 `ResetCache()`，确保重定父节点后旧世界矩阵立即失效 |
+| InstantiatePrefab 防御性清理 | `Scene.cpp` | `SetParent(false)` 后追加 `ResetCache()` |
+| Scene::Clear() | `Scene.hpp/cpp` | 新增清空所有实体的方法 |
+| Prefab::Load 重复加载保护 | `Prefab.cpp` | 重新加载前先 `Clear()`，防止新旧实体叠加 |
+
+### 30.4 未解决问题
+
+**BUG-12: 透明管线无渲染输出** (第 21.4 节) — 全链路确认正常但 `vkCmdDrawIndexed` 无视觉输出。排查方向：管线 `colorWriteMask`、render pass `storeOp`、或 FBO 注入问题。
+
+### 30.5 修改文件清单
+
+| 文件 | 关键改动 |
+|------|---------|
+| `VulkanGbufferPass.cpp` | 删除 early return + 全槽位 vkCmdFillBuffer + init 清零 |
+| `SceneHierarchyPanel.cpp` | Prefab drop 后 ResetGDRCaches |
+| `SceneRenderer.hpp/cpp` | 新增 ResetGDRCaches() |
+| `Components.hpp` | ComputeLocalHash 非零种子 |
+| `Entity.hpp` | HashMat4 非零种子 + SetParent 内 ResetCache |
+| `Scene.cpp` | Clear() + InstantiatePrefab ResetCache |
+| `Scene.hpp` | Clear() 声明 |
+| `Prefab.cpp` | Load 重复加载保护 |
 

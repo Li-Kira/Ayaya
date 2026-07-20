@@ -30,6 +30,9 @@ namespace Ayaya {
         // 销毁一个实体
         void DestroyEntity(Entity entity);
 
+	// Clear all entities from the scene (for reuse, e.g. Prefab::Load)
+	void Clear();
+
         // ==============================================
         // 核心：复制一个实体及其所有的子节点和组件
         // ==============================================

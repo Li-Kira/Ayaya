@@ -331,7 +331,12 @@ namespace Ayaya {
         if (RendererAPI::GetAPI() == RendererAPI::API::OpenGL)
             m_Pipeline.OnResize(width, height);
     }
-    
+
+    void SceneRenderer::ResetGDRCaches() {
+        if (m_GDRContext)
+            m_GDRContext->ResetCachesAndForceRebuild();
+    }
+
     void SceneRenderer::BeginScene(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix, const glm::vec3& cameraPosition) {
     ResetStats();
 

@@ -58,7 +58,7 @@ namespace Ayaya {
         }
 
         static uint64_t HashMat4(const glm::mat4& m) {
-            uint64_t h = 0;
+            uint64_t h = 0x9e3779b9;  // non-zero seed prevents false cache HIT
             auto mix = [&](float v) { h ^= std::hash<float>{}(v) + 0x9e3779b9 + (h << 6) + (h >> 2); };
             mix(m[0].x); mix(m[0].y); mix(m[0].z); mix(m[0].w);
             mix(m[1].x); mix(m[1].y); mix(m[1].z); mix(m[1].w);
@@ -118,6 +118,10 @@ namespace Ayaya {
                 ourTransform.Rotation = glm::eulerAngles(rotation);
                 ourTransform.Scale = scale;
             }
+
+            // Invalidate TransformComponent cache — the parent changed,
+            // so any previously-cached world matrix is now stale.
+            ourTransform.ResetCache();
 
             m_Scene->PropagateActiveState(*this);
         }

@@ -227,7 +227,17 @@ namespace Ayaya {
                                 UUID h = droppedHandle; auto ctx = m_Context; auto* self = this;
                                 Application::SubmitDeferredAction([ctx, self, h]() {
                                     auto p = AssetManager::GetAsset<Prefab>(h);
-                                    if (p) { Entity e = ctx->InstantiatePrefab(p.get()); if (e) self->SetSelectedEntity(e); }
+                                    if (p) {
+                                        Entity e = ctx->InstantiatePrefab(p.get());
+                                        if (e) {
+                                            self->SetSelectedEntity(e);
+                                            // Invalidate GDR caches to force a clean SSBO rebuild.
+                                            // Mirrors the pattern in EditorLayer::NewScene/OpenScene.
+                                            auto& editor = EditorLayer::Get();
+                                            editor.GetSceneRenderer()->ResetGDRCaches();
+                                            editor.GetGameRenderer()->ResetGDRCaches();
+                                        }
+                                    }
                                 });
                             }
                         }
