@@ -2,3 +2,4 @@ Project:
   Name: testShadow
   StartScene: Scenes/testShadow.ayaya
   AssetDirectory: Assets
+  DefaultSRPScript: 0

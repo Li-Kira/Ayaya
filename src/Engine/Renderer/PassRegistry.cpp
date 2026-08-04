@@ -8,6 +8,8 @@
 #include "Renderer/Passes/VulkanLightingPass.hpp"
 #include "Renderer/Passes/VulkanForwardBlendPass.hpp"
 #include "Renderer/Passes/VulkanSSAOPass.hpp"
+#include "Renderer/Passes/VulkanSSRPass.hpp"
+#include "Renderer/Passes/VulkanApplyReflectionPass.hpp"
 #include "Renderer/Passes/VulkanOutlinePass.hpp"
 #include "Renderer/Passes/VulkanBloomPass.hpp"
 #include "Renderer/Passes/VulkanPostProcessPass.hpp"
@@ -144,6 +146,8 @@ namespace Ayaya {
                             std::shared_ptr<RenderPass> lightingPass,
                             std::shared_ptr<RenderPass> forwardBlendPass,
                             std::shared_ptr<RenderPass> ssaoPass,
+                            std::shared_ptr<RenderPass> ssrPass,
+                            std::shared_ptr<RenderPass> applyReflectionPass,
                             std::shared_ptr<RenderPass> outlinePass,
                             std::shared_ptr<RenderPass> bloomPass,
                             std::shared_ptr<RenderPass> postProcessPass,
@@ -189,6 +193,20 @@ namespace Ayaya {
             using Fn = void(*)(RGBuilder&, uint32_t, uint32_t);
             return std::make_unique<StandardPassFactory<RenderPass, Fn>>(
                 VulkanSSAOPass::DeclareResources, ssaoPass);
+        });
+
+        // SSRPass
+        Register("SSRPass", [ssrPass]() -> std::unique_ptr<IPassFactory> {
+            using Fn = void(*)(RGBuilder&, uint32_t, uint32_t);
+            return std::make_unique<StandardPassFactory<RenderPass, Fn>>(
+                VulkanSSRPass::DeclareResources, ssrPass);
+        });
+
+        // ApplyReflection — UE-style hierarchical SSR/IBL specular replacement
+        Register("ApplyReflection", [applyReflectionPass]() -> std::unique_ptr<IPassFactory> {
+            using Fn = void(*)(RGBuilder&, uint32_t, uint32_t);
+            return std::make_unique<StandardPassFactory<RenderPass, Fn>>(
+                VulkanApplyReflectionPass::DeclareResources, applyReflectionPass);
         });
 
         // LightingPass — special: extra ReadTexture("SSAO_Final")

@@ -124,6 +124,8 @@ namespace Ayaya {
         std::shared_ptr<RenderPass> m_LightingPass;
         std::shared_ptr<RenderPass> m_ForwardBlendPass;
         std::shared_ptr<RenderPass> m_SSAOPass;
+        std::shared_ptr<RenderPass> m_SSRPass;
+        std::shared_ptr<RenderPass> m_ApplyReflectionPass;
         std::shared_ptr<RenderPass> m_OutlinePass;
         std::shared_ptr<RenderPass> m_BloomPass;
         std::shared_ptr<RenderPass> m_PostProcessPass;

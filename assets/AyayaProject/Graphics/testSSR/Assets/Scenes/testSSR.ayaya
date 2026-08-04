@@ -2,8 +2,8 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition: [-2.5962868, 2.111395, 4.5988035]
-  CameraDistance: 4.0768633
+  CameraPosition: [-2.171883, 1.8309842, 4.0884533]
+  CameraDistance: 3.3563037
   CameraPitch: -0.39971608
   CameraYaw: 5.589475
   CameraFocalPoint: [-0.19504786, 0.52485573, 1.7112856]
@@ -61,47 +61,17 @@ Entities:
       CubemapHandle: 0
     RelationshipComponent:
       Parent: 0
-  - Entity: 3511314518912848117
-    TagComponent:
-      Tag: Cube
-      IsActive: true
-    TransformComponent:
-      Translation: [0.3507349, -0.026332468, 0.508359]
-      Rotation: [0, -0, 0]
-      Scale: [1, 1, 1]
-    MeshRendererComponent:
-      ModelHandle: 16140901000000000001
-      MaterialHandle: 13774308301806651622
-      CastShadows: true
-      ReceiveShadows: true
-    RelationshipComponent:
-      Parent: 0
   - Entity: 13464463400447904707
     TagComponent:
       Tag: Floor
       IsActive: true
     TransformComponent:
       Translation: [0, -0.98502016, 0]
-      Rotation: [0, 0, 0]
+      Rotation: [0, -0, 0]
       Scale: [12.886407, 0.8245674, 12.886407]
     MeshRendererComponent:
       ModelHandle: 16140901000000000001
-      MaterialHandle: 13774308301806651622
-      CastShadows: true
-      ReceiveShadows: true
-    RelationshipComponent:
-      Parent: 0
-  - Entity: 3820141738589717809
-    TagComponent:
-      Tag: Sphere
-      IsActive: true
-    TransformComponent:
-      Translation: [1.644043, -0.04235842, 1.622345]
-      Rotation: [0, 0, 0]
-      Scale: [1, 1, 1]
-    MeshRendererComponent:
-      ModelHandle: 16140901000000000002
-      MaterialHandle: 13774308301806651622
+      MaterialHandle: 10985787954181154388
       CastShadows: true
       ReceiveShadows: true
     RelationshipComponent:
@@ -111,12 +81,42 @@ Entities:
       Tag: Plane
       IsActive: true
     TransformComponent:
-      Translation: [2.2405396, 0.21371458, 2.53302]
-      Rotation: [1.5091423, 9.683578e-07, 0.5709486]
-      Scale: [0.9999994, 1.000001, 1.000001]
+      Translation: [2.2582412, 0.2091211, 2.3154542]
+      Rotation: [1.5091424, 1.1463302e-06, 0.57094866]
+      Scale: [0.99999946, 1.0000038, 1.0000035]
     MeshRendererComponent:
       ModelHandle: 16140901000000000003
-      MaterialHandle: 13774308301806651622
+      MaterialHandle: 17230568973637819293
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 3511314518912848117
+    TagComponent:
+      Tag: Cube
+      IsActive: true
+    TransformComponent:
+      Translation: [0.30784756, -0.026332468, 0.22069651]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000001
+      MaterialHandle: 17230568973637819293
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 3820141738589717809
+    TagComponent:
+      Tag: Sphere
+      IsActive: true
+    TransformComponent:
+      Translation: [1.7866863, -0.04235842, 1.3081621]
+      Rotation: [0, -0, 0]
+      Scale: [1, 1, 1]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000002
+      MaterialHandle: 17230568973637819293
       CastShadows: true
       ReceiveShadows: true
     RelationshipComponent:
@@ -142,7 +142,7 @@ Entities:
       EnableSSAO: true
       SSAORadius: 0.15
       SSAOBias: 0.111
-      EnableSSR: false
+      EnableSSR: true
       SSRMaxSteps: 64
       SSRStepSize: 0.5
       SSRThickness: 0.3

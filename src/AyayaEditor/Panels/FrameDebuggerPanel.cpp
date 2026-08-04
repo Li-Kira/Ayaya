@@ -28,6 +28,8 @@ namespace Ayaya {
         }
         if (pass == "OutlinePass") return "Mask";
         if (pass == "BloomPass")   return "Bloom";
+        if (pass == "SSRPass")            return "Reflection";
+        if (pass == "ApplyReflection")   return "Lighting";
         if (pass == "PostProcessPass") return "ToneMapped";
         if (pass == "FXAAPass")    return "Anti-Aliased";
         return "???";
@@ -85,7 +87,9 @@ namespace Ayaya {
         m_PassTextures.push_back({"ShadowPass",      "ShadowMap"});
         m_PassTextures.push_back({"GBufferPass",     "GBuffer"});
         m_PassTextures.push_back({"SSAOPass",        "SSAO_Final"});
-        m_PassTextures.push_back({"WBOIT_Gather",    "WBOIT_Gather"});
+        m_PassTextures.push_back({"SSRPass",            "SSR_Result"});
+        m_PassTextures.push_back({"ApplyReflection",   "Lighting"});
+        m_PassTextures.push_back({"WBOIT_Gather",       "WBOIT_Gather"});
         m_PassTextures.push_back({"LightingPass",    "Lighting"});
         m_PassTextures.push_back({"OutlinePass",     "Selection"});
         m_PassTextures.push_back({"BloomPass",       "Bloom"});

@@ -232,6 +232,13 @@ namespace Ayaya {
             out << YAML::Key << "EnableSSAO" << YAML::Value << ppv.EnableSSAO;
             out << YAML::Key << "SSAORadius" << YAML::Value << ppv.SSAORadius;
             out << YAML::Key << "SSAOBias" << YAML::Value << ppv.SSAOBias;
+            out << YAML::Key << "EnableSSR" << YAML::Value << ppv.EnableSSR;
+            out << YAML::Key << "SSRMaxSteps" << YAML::Value << ppv.SSRMaxSteps;
+            out << YAML::Key << "SSRStepSize" << YAML::Value << ppv.SSRStepSize;
+            out << YAML::Key << "SSRThickness" << YAML::Value << ppv.SSRThickness;
+            out << YAML::Key << "SSREdgeFade" << YAML::Value << ppv.SSREdgeFade;
+            out << YAML::Key << "SSRRoughnessCutoff" << YAML::Value << ppv.SSRRoughnessCutoff;
+            out << YAML::Key << "SSRMaxBinarySteps" << YAML::Value << ppv.SSRMaxBinarySteps;
             out << YAML::EndMap;
         }
 
@@ -593,6 +600,13 @@ namespace Ayaya {
                 if (ppvComponent["EnableSSAO"]) ppv.EnableSSAO = ppvComponent["EnableSSAO"].as<bool>();
                 if (ppvComponent["SSAORadius"]) ppv.SSAORadius = ppvComponent["SSAORadius"].as<float>();
                 if (ppvComponent["SSAOBias"])   ppv.SSAOBias   = ppvComponent["SSAOBias"].as<float>();
+                if (ppvComponent["EnableSSR"]) ppv.EnableSSR = ppvComponent["EnableSSR"].as<bool>();
+                if (ppvComponent["SSRMaxSteps"]) ppv.SSRMaxSteps = ppvComponent["SSRMaxSteps"].as<float>();
+                if (ppvComponent["SSRStepSize"]) ppv.SSRStepSize = ppvComponent["SSRStepSize"].as<float>();
+                if (ppvComponent["SSRThickness"]) ppv.SSRThickness = ppvComponent["SSRThickness"].as<float>();
+                if (ppvComponent["SSREdgeFade"]) ppv.SSREdgeFade = ppvComponent["SSREdgeFade"].as<float>();
+                if (ppvComponent["SSRRoughnessCutoff"]) ppv.SSRRoughnessCutoff = ppvComponent["SSRRoughnessCutoff"].as<float>();
+                if (ppvComponent["SSRMaxBinarySteps"]) ppv.SSRMaxBinarySteps = ppvComponent["SSRMaxBinarySteps"].as<int>();
             }
 
             auto animController = entity["AnimationControllerComponent"];

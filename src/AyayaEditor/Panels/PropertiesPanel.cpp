@@ -1708,6 +1708,56 @@ namespace Ayaya {
                 }
                 ImGui::EndTable();
 
+                ImGui::Spacing();
+                ImGui::SeparatorText("SSR (Screen-Space Reflections)");
+
+                UI::BeginPropertyTable("PPV_SSR", 100.0f, 0.8f);
+                UI::DrawPropertyLabel("Enable SSR");
+                bool enableSSR = refPPV.EnableSSR;
+                if (ImGui::Checkbox("##EnableSSR", &enableSSR)) {
+                    std::vector<PostProcessVolumeComponent> oldComps = pureOldPPVs;
+                    for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().EnableSSR = enableSSR;
+                    commitInstantCommand("Toggle Enable SSR", oldComps);
+                }
+                if (enableSSR) {
+                    UI::DrawPropertyLabel("  Max Steps");
+                    float maxSteps = refPPV.SSRMaxSteps;
+                    if (ImGui::DragFloat("##SSRMaxSteps", &maxSteps, 1.0f, 16.0f, 256.0f, "%.0f"))
+                        for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().SSRMaxSteps = maxSteps;
+                    handleDragState("Change SSR Max Steps");
+
+                    UI::DrawPropertyLabel("  Step Size");
+                    float stepSize = refPPV.SSRStepSize;
+                    if (ImGui::DragFloat("##SSRStepSize", &stepSize, 0.05f, 0.1f, 2.0f, "%.2f"))
+                        for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().SSRStepSize = stepSize;
+                    handleDragState("Change SSR Step Size");
+
+                    UI::DrawPropertyLabel("  Thickness");
+                    float thickness = refPPV.SSRThickness;
+                    if (ImGui::DragFloat("##SSRThickness", &thickness, 0.01f, 0.01f, 2.0f, "%.2f"))
+                        for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().SSRThickness = thickness;
+                    handleDragState("Change SSR Thickness");
+
+                    UI::DrawPropertyLabel("  Roughness Cutoff");
+                    float roughCut = refPPV.SSRRoughnessCutoff;
+                    if (ImGui::DragFloat("##SSRRoughCut", &roughCut, 0.01f, 0.1f, 1.0f, "%.2f"))
+                        for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().SSRRoughnessCutoff = roughCut;
+                    handleDragState("Change SSR Roughness Cutoff");
+
+                    UI::DrawPropertyLabel("  Edge Fade");
+                    float edgeFade = refPPV.SSREdgeFade;
+                    if (ImGui::DragFloat("##SSREdgeFade", &edgeFade, 0.01f, 0.0f, 0.5f, "%.2f"))
+                        for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().SSREdgeFade = edgeFade;
+                    handleDragState("Change SSR Edge Fade");
+
+                    UI::DrawPropertyLabel("  Binary Steps");
+                    int binSteps = refPPV.SSRMaxBinarySteps;
+                    if (ImGui::DragInt("##SSRBinSteps", &binSteps, 1.0f, 2, 16))
+                        for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().SSRMaxBinarySteps = binSteps;
+                    handleDragState("Change SSR Binary Steps");
+                }
+                ImGui::EndTable();
+
                 ImGui::TreePop();
             }
 

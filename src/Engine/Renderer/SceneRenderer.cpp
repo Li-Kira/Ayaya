@@ -39,6 +39,8 @@
 #include "Renderer/Passes/VulkanBloomPass.hpp"
 #include "Renderer/Passes/VulkanFXAAPass.hpp"
 #include "Renderer/Passes/VulkanSSAOPass.hpp"
+#include "Renderer/Passes/VulkanSSRPass.hpp"
+#include "Renderer/Passes/VulkanApplyReflectionPass.hpp"
 #include "Renderer/Passes/VulkanWBOITPass.hpp"
 #include "Renderer/GDRContext.hpp"
 #include "Renderer/PassRegistry.hpp"
@@ -228,6 +230,8 @@ namespace Ayaya {
             m_PostProcessPass = std::make_shared<VulkanPostProcessPass>();
             m_FXAAPass        = std::make_shared<VulkanFXAAPass>();
             m_SSAOPass        = std::make_shared<VulkanSSAOPass>();
+            m_SSRPass         = std::make_shared<VulkanSSRPass>();
+            m_ApplyReflectionPass = std::make_shared<VulkanApplyReflectionPass>();
             m_UIPass          = std::make_shared<UIPass>();
             m_WBOITPass       = std::make_shared<VulkanWBOITPass>();
 
@@ -281,6 +285,8 @@ namespace Ayaya {
             m_GBufferPass->OnAttach();
             m_DepthPass->OnAttach();
             m_SSAOPass->OnAttach();
+            m_SSRPass->OnAttach();
+            m_ApplyReflectionPass->OnAttach();
             m_LightingPass->OnAttach();
             m_ForwardBlendPass->OnAttach();
             m_OutlinePass->OnAttach();
@@ -294,7 +300,7 @@ namespace Ayaya {
             PassRegistry::Init(m_GDRContext,
                                m_ShadowPass, m_GBufferPass, m_DepthPass,
                                m_LightingPass, m_ForwardBlendPass,
-                               m_SSAOPass, m_OutlinePass, m_BloomPass,
+                               m_SSAOPass, m_SSRPass, m_ApplyReflectionPass, m_OutlinePass, m_BloomPass,
                                m_PostProcessPass, m_FXAAPass, m_UIPass,
                                m_WBOITPass);
         }
@@ -710,6 +716,32 @@ namespace Ayaya {
         m_RenderContext.Set("SSAORadius", ssaoRadius);
         m_RenderContext.Set("SSAOBias", ssaoBias);
 
+        // ── SSR settings ──
+        bool enableSSR = false;
+        float ssrMaxSteps = 64.0f, ssrStepSize = 0.5f, ssrThickness = 0.3f;
+        float ssrEdgeFade = 0.1f, ssrRoughnessCutoff = 1.0f;
+        int   ssrMaxBinarySteps = 8;
+        for (auto entityID : volumeView) {
+            auto& volume = volumeView.get<PostProcessVolumeComponent>(entityID);
+            if (volume.IsGlobal) {
+                enableSSR = volume.EnableSSR;
+                ssrMaxSteps = volume.SSRMaxSteps;
+                ssrStepSize = volume.SSRStepSize;
+                ssrThickness = volume.SSRThickness;
+                ssrEdgeFade = volume.SSREdgeFade;
+                ssrRoughnessCutoff = volume.SSRRoughnessCutoff;
+                ssrMaxBinarySteps = volume.SSRMaxBinarySteps;
+                break;
+            }
+        }
+        m_RenderContext.Set("EnableSSR", enableSSR);
+        m_RenderContext.Set("SSR_MaxSteps", ssrMaxSteps);
+        m_RenderContext.Set("SSR_StepSize", ssrStepSize);
+        m_RenderContext.Set("SSR_Thickness", ssrThickness);
+        m_RenderContext.Set("SSR_EdgeFade", ssrEdgeFade);
+        m_RenderContext.Set("SSR_RoughnessCutoff", ssrRoughnessCutoff);
+        m_RenderContext.Set("SSR_MaxBinarySteps", ssrMaxBinarySteps);
+
         // ── Inject SRP global shader params ──
         if (m_PipelineBuilder) {
             const auto* globals = m_PipelineBuilder->GetBakedParams("__Globals__");
@@ -1009,6 +1041,14 @@ namespace Ayaya {
                 },
                 [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_LightingPass) m_LightingPass->Execute(ctx, c); });
 
+            m_RenderGraph.AddPass("SSRPass",
+                [&](RGBuilder& b) { VulkanSSRPass::DeclareResources(b, vpW, vpH); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_SSRPass) m_SSRPass->Execute(ctx, c); });
+
+            m_RenderGraph.AddPass("ApplyReflection",
+                [&](RGBuilder& b) { VulkanApplyReflectionPass::DeclareResources(b, vpW, vpH); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_ApplyReflectionPass) m_ApplyReflectionPass->Execute(ctx, c); });
+
             m_RenderGraph.AddPass("ForwardBlend",
                 [&](RGBuilder& b) { VulkanForwardBlendPass::DeclareResources(b, vpW, vpH); },
                 [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_ForwardBlendPass) m_ForwardBlendPass->Execute(ctx, c); });
@@ -1100,6 +1140,8 @@ namespace Ayaya {
         m_PipelineBuilder->RegisterPassInstance("GBufferPass",     m_GBufferPass);
         m_PipelineBuilder->RegisterPassInstance("DepthPrePass",    m_DepthPass);
         m_PipelineBuilder->RegisterPassInstance("SSAOPass",        m_SSAOPass);
+        m_PipelineBuilder->RegisterPassInstance("SSRPass",         m_SSRPass);
+        m_PipelineBuilder->RegisterPassInstance("ApplyReflection", m_ApplyReflectionPass);
         m_PipelineBuilder->RegisterPassInstance("LightingPass",    m_LightingPass);
         m_PipelineBuilder->RegisterPassInstance("ForwardBlend",    m_ForwardBlendPass);
         m_PipelineBuilder->RegisterPassInstance("WBOIT_Gather",   nullptr, m_WBOITPass);
@@ -1153,6 +1195,7 @@ namespace Ayaya {
         // If PassType is empty (hardcoded default path), fall back to Name matching.
 
         bool enableSSAO    = m_RenderContext.Get<bool>("EnableSSAO", false);
+        bool enableSSR     = m_RenderContext.Get<bool>("EnableSSR", false);
         bool enableBloom   = m_RenderContext.Get<bool>("EnableBloom", true);
         bool enableOutline = m_RenderContext.Get<bool>("EnableOutline", false);
         bool enableFXAA    = m_RenderContext.Get<bool>("EnableFXAA", false);
@@ -1172,8 +1215,11 @@ namespace Ayaya {
             if (type == "BloomPass")       pass->IsCulled = !enableBloom;
             if (type == "OutlinePass")     pass->IsCulled = !enableOutline;
             // FXAA uses push-constant toggle (passthrough when disabled) — never cull.
-            if (type == "WBOIT_Gather")    pass->IsCulled = !hasTranslucent;
-            if (type == "WBOIT_Resolve")   pass->IsCulled = !hasTranslucent;
+            if (type == "SSRPass")            pass->IsCulled = !enableSSR;
+            // ApplyReflection is NEVER culled — it provides IBL specular fallback
+            // even when SSR is disabled (ssr.a=0 → pure cubemap specular).
+            if (type == "WBOIT_Gather")       pass->IsCulled = !hasTranslucent;
+            if (type == "WBOIT_Resolve")      pass->IsCulled = !hasTranslucent;
         }
     }
 

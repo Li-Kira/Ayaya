@@ -58,13 +58,14 @@ namespace Ayaya {
     // RGBuilder — Pass 声明资源依赖的 DSL
     //
     // 在 graph.AddPass(name, setup, execute) 的 setup lambda 中使用：
-    //   builder.ReadTexture("InputName");              // 只读
-    //   builder.WriteTexture("OutputName", fboSpec);   // 独占写入
-    //   builder.ReadWriteTexture("TargetName", spec);  // 读+写（累加/半透明）
+    //   builder.ReadTexture("InputName");                  // 只读
+    //   builder.WriteTexture("OutputName", fboSpec);        // 独占写入 (默认 CLEAR)
+    //   builder.WriteTexture("OutputName", fboSpec, Load);  // 独占写入 (LOAD, 保留旧内容)
+    //   builder.ReadWriteTexture("TargetName", spec);       // 读+写（累加/半透明, 默认 LOAD）
     //
     // 规则：
     //   - 同一个纹理可被多个 Pass 读取
-    //   - WriteTexture 首次注册时创建纹理，重复调用视为冲突（报错）
+    //   - WriteTexture 首次注册时创建纹理，重复调用通过隐式边串行化
     //   - ReadWriteTexture 允许多个 Pass 读写同一纹理，自动建立隐式时序依赖
     //     （后写入者依赖先写入者，确保累加顺序正确）
     // ==========================================
@@ -74,8 +75,10 @@ namespace Ayaya {
 
         void ReadTexture(const std::string& name);
         void ReadTextureAsDepth(const std::string& name);  // depth attachment usage — keep ATTACHMENT layout, not SHADER_READ_ONLY
-        void WriteTexture(const std::string& name, const FramebufferSpecification& spec);
-        void ReadWriteTexture(const std::string& name, const FramebufferSpecification& spec);
+        void WriteTexture(const std::string& name, const FramebufferSpecification& spec,
+                          AttachmentLoadOp loadOp = AttachmentLoadOp::Clear);
+        void ReadWriteTexture(const std::string& name, const FramebufferSpecification& spec,
+                              AttachmentLoadOp loadOp = AttachmentLoadOp::Load);
 
         // Mark this pass as culled — it will be excluded from the DAG at Compile time.
         // Consuming passes are responsible for their own fallback textures.
@@ -94,8 +97,9 @@ namespace Ayaya {
     // Name          — 唯一标识符
     // TextureReads  — 此 Pass 消费的纹理名列表
     // TextureWrites — 此 Pass 产出的纹理名列表
+    // WriteLoadOps  — 每个写入目标的 AttachmentLoadOp (Load=保留旧内容, Clear=清零)
     // HasSideEffect — 即使 Write 列表为空也强制执行（用于 UI Pass 等）
-    // IsCulled      — 帧间剔除标记（当前未实现，预留）
+    // IsCulled      — 帧间剔除标记
     // ==========================================
     class RGPass {
     public:
@@ -105,6 +109,7 @@ namespace Ayaya {
 
         std::vector<std::string> TextureReads;
         std::vector<std::string> TextureWrites;
+        std::unordered_map<std::string, AttachmentLoadOp> WriteLoadOps;
         std::unordered_set<std::string> DepthReadTextures; // reads used as depth attachment (keep ATTACHMENT layout)
 
         bool HasSideEffect = false;

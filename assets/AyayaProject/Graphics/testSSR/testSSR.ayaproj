@@ -1,0 +1,5 @@
+Project:
+  Name: testSSR
+  StartScene: Scenes/testSSR.ayaya
+  AssetDirectory: Assets
+  DefaultSRPScript: 0

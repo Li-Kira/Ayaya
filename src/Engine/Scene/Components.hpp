@@ -240,6 +240,15 @@ namespace Ayaya {
         float SSAORadius = 0.5f;
         float SSAOBias   = 0.025f;
 
+        // --- SSR ---
+        bool  EnableSSR = false;
+        float SSRMaxSteps = 64.0f;
+        float SSRStepSize = 0.5f;
+        float SSRThickness = 0.3f;
+        float SSREdgeFade = 0.1f;
+        float SSRRoughnessCutoff = 1.0f;
+        int   SSRMaxBinarySteps = 8;
+
         PostProcessVolumeComponent() = default;
         PostProcessVolumeComponent(const PostProcessVolumeComponent&) = default;
     };

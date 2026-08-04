@@ -14,6 +14,10 @@ namespace Ayaya {
         FramebufferSpecification hdr;
         hdr.Width = width; hdr.Height = height; hdr.Samples = 1;
         hdr.Attachments = {FramebufferTextureFormat::RGBA16F, FramebufferTextureFormat::Depth};
+        // WriteTexture (not ReadWrite): ForwardBlend internally does LOAD overlay
+        // (BeginRenderPass with clear=false), but declaring ReadWriteTexture would
+        // add Lighting to TextureReads → backward read edge in Compile step 2
+        // (producers["Lighting"] = WBOIT_Resolve → backward edge to ForwardBlend).
         builder.WriteTexture("Lighting", hdr);
     }
 

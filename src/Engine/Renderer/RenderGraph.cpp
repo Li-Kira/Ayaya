@@ -41,15 +41,18 @@ namespace Ayaya {
         if (tex) tex->IsRead = true;
     }
 
-    void RGBuilder::WriteTexture(const std::string& name, const FramebufferSpecification& spec) {
+    void RGBuilder::WriteTexture(const std::string& name, const FramebufferSpecification& spec,
+                                  AttachmentLoadOp loadOp) {
         m_Pass.TextureWrites.push_back(name);
+        m_Pass.WriteLoadOps[name] = loadOp;
         auto& tex = m_Graph.RegisterTexture(name, spec);
         tex.IsWritten = true;
     }
 
-    void RGBuilder::ReadWriteTexture(const std::string& name, const FramebufferSpecification& spec) {
+    void RGBuilder::ReadWriteTexture(const std::string& name, const FramebufferSpecification& spec,
+                                      AttachmentLoadOp loadOp) {
         ReadTexture(name);
-        WriteTexture(name, spec);
+        WriteTexture(name, spec, loadOp);
     }
 
     // ==========================================
@@ -191,17 +194,34 @@ namespace Ayaya {
             }
         }
 
-        // Step 1: 建立生产者映射 + 隐式多生产者链 (仅活跃 Pass)
+        // Step 1: 生产者映射 + 隐式版本追踪 + 读边 (仅活跃 Pass)
+        //   Iterate passes in declaration order. For each pass:
+        //     a) Process reads using the CURRENT state of producers —
+        //        i.e. the latest version of each texture produced *before* this pass.
+        //     b) Process writes, updating producers and creating serialization edges.
+        //   This implements implicit version tracking: a pass reading Lighting at
+        //   position N sees LightingPass (not WBOIT_Resolve at position N+3).
         std::unordered_map<std::string, std::string> producers;
         std::vector<std::pair<std::string, std::string>> implicitEdges;
+        std::vector<std::pair<std::string, std::string>> readEdges;
         for (auto& p : active) {
+            // a) Read edges: use current producers (version at this point in the pipeline)
+            for (auto& r : p->TextureReads) {
+                if (std::find(p->TextureWrites.begin(), p->TextureWrites.end(), r)
+                    != p->TextureWrites.end())
+                    continue;
+                auto it = producers.find(r);
+                if (it != producers.end() && it->second != p->Name) {
+                    readEdges.push_back({it->second, p->Name});
+                }
+            }
+            // b) Write chain: update producers, create implicit serialization edges
             for (auto& w : p->TextureWrites) {
                 auto it = producers.find(w);
                 if (it != producers.end() && it->second != p->Name) {
                     implicitEdges.push_back({it->second, p->Name});
                 }
                 producers[w] = p->Name;
-                // Mark texture as written
                 auto* tex = GetTexture(w);
                 if (tex) tex->IsWritten = true;
             }
@@ -212,16 +232,10 @@ namespace Ayaya {
         std::unordered_map<std::string, int> deg;
         for (auto& p : active) deg[p->Name] = 0;
 
-        for (auto& p : active) {
-            for (auto& r : p->TextureReads) {
-                auto it = producers.find(r);
-                if (it != producers.end() && it->second != p->Name) {
-                    edges[it->second].push_back(p->Name);
-                    deg[p->Name]++;
-                }
-            }
+        for (auto& [from, to] : readEdges) {
+            edges[from].push_back(to);
+            deg[to]++;
         }
-
         for (auto& [from, to] : implicitEdges) {
             edges[from].push_back(to);
             deg[to]++;

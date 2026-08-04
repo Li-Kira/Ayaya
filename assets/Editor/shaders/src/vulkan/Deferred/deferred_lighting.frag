@@ -157,7 +157,7 @@ void main() {
         spI=pf*(F_ibl*brdf.x+brdf.y);
     }
     float ssao=(pc.u_EnableSSAO==1)?texture(u_SSAO,v_TexCoord).r:1.0;
-    vec3 amb=(kDi*irr*Albedo+spI)*AO*ssao;
+    vec3 amb=(kDi*irr*Albedo)*AO*ssao;
 
 #if DEBUG_MODE == 7
     FragColor = vec4(amb, 1.0); return;

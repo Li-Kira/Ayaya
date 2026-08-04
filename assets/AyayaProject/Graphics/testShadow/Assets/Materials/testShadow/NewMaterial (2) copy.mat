@@ -1,4 +1,4 @@
-MaterialName: Default PBR
+MaterialName: NewMaterial (2)
 ShaderName: PBR
 BlendMode: 0
 AlphaCutoff: 0.5
@@ -8,10 +8,18 @@ Properties:
     DisplayName: Albedo Color
     Type: 4
     Vec3Value: [1, 1, 1]
+  - UniformName: u_UseAlbedoMap
+    DisplayName: Enable Albedo Map
+    Type: 2
+    BoolValue: false
   - UniformName: u_AlbedoMap
     DisplayName: Albedo Texture
     Type: 8
     TextureHandle: 0
+  - UniformName: u_UseNormalMap
+    DisplayName: Enable Normal Map
+    Type: 2
+    BoolValue: false
   - UniformName: u_NormalMap
     DisplayName: Normal Map
     Type: 8
@@ -20,6 +28,10 @@ Properties:
     DisplayName: Metallic
     Type: 0
     FloatValue: 0
+  - UniformName: u_UseMetallicMap
+    DisplayName: Enable Metallic Map
+    Type: 2
+    BoolValue: false
   - UniformName: u_MetallicMap
     DisplayName: Metallic Texture
     Type: 8
@@ -27,7 +39,11 @@ Properties:
   - UniformName: u_Roughness
     DisplayName: Roughness
     Type: 0
-    FloatValue: 0.5
+    FloatValue: 1
+  - UniformName: u_UseRoughnessMap
+    DisplayName: Enable Roughness Map
+    Type: 2
+    BoolValue: false
   - UniformName: u_RoughnessMap
     DisplayName: Roughness Texture
     Type: 8
@@ -36,8 +52,20 @@ Properties:
     DisplayName: Ambient Occlusion
     Type: 0
     FloatValue: 1
+  - UniformName: u_UseAOMap
+    DisplayName: Enable AO Map
+    Type: 2
+    BoolValue: false
   - UniformName: u_AOMap
     DisplayName: AO Texture
+    Type: 8
+    TextureHandle: 0
+  - UniformName: u_Alpha
+    DisplayName: Alpha Multiplier
+    Type: 0
+    FloatValue: 1
+  - UniformName: u_AlphaMap
+    DisplayName: Alpha/Opacity Map
     Type: 8
     TextureHandle: 0
   - UniformName: u_ORMMap
@@ -50,13 +78,5 @@ Properties:
     TextureHandle: 0
   - UniformName: u_EmissiveMap
     DisplayName: Emissive Map
-    Type: 8
-    TextureHandle: 0
-  - UniformName: u_Alpha
-    DisplayName: Alpha Multiplier
-    Type: 0
-    FloatValue: 1
-  - UniformName: u_AlphaMap
-    DisplayName: Alpha/Opacity Map
     Type: 8
     TextureHandle: 0
