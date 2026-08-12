@@ -9,7 +9,7 @@ namespace Ayaya {
 
     void VulkanApplyReflectionPass::DeclareResources(RGBuilder& builder,
                                                       uint32_t width, uint32_t height) {
-        builder.ReadTexture("SSR_Result");
+        builder.ReadTexture("SSR_Blurred");
         builder.ReadTexture("GBuffer");
         builder.ReadTexture("SceneDepth");
         builder.ReadTexture("SSAO_Final");
@@ -55,7 +55,7 @@ namespace Ayaya {
         // → ssrWeight=0 → pure IBL cubemap specular fallback.
 
         auto lightingFBO   = context.GetFramebuffer("Lighting");
-        auto ssrFBO        = context.GetFramebuffer("SSR_Result");
+        auto ssrFBO        = context.GetFramebuffer("SSR_Blurred");
         auto gbufferFBO    = context.GetFramebuffer("GBuffer");
         auto sceneDepthFBO = context.GetFramebuffer("SceneDepth");
         auto ssaoFBO       = context.GetFramebuffer("SSAO_Final");

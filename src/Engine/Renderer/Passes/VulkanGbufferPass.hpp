@@ -22,6 +22,13 @@ namespace Ayaya {
 
         void SetGDRContext(std::shared_ptr<GDRContext> ctx) { m_GDRCtx = ctx; }
 
+        // Hi-Z accessors for downstream passes (SSR, etc.)
+        VkImageView GetHiZImageView(uint32_t frameIdx) const { return m_HiZFrames[frameIdx].view; }
+        VkSampler   GetHiZSampler() const { return m_HiZFrames[0].sampler; }
+        uint32_t    GetHiZMipCount() const { return m_HiZMipLevels; }
+        // Current frame write index (Hi-Z was just built at this slot)
+        uint32_t    GetCurrentHiZIndex() const { return (m_HiZFrameCount - 1) % 3; }
+
     private:
         std::shared_ptr<Framebuffer> m_RefFBO;  // format reference FBO for GDR pipeline creation
         std::shared_ptr<GDRContext>  m_GDRCtx;   // shared GDR data hub

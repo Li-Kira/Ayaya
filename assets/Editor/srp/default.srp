@@ -27,6 +27,8 @@ Pipeline:DeclareTexture("Lighting", {"RGBA16F", "Depth"}, vpW, vpH)
 
 Pipeline:DeclareTexture("SSR_Result", {"RGBA16F"}, vpW / 2, vpH / 2)
 
+Pipeline:DeclareTexture("SSR_Blurred", {"RGBA16F"}, vpW / 2, vpH / 2)
+
 Pipeline:DeclareTexture("Selection", {"RGBA8"}, vpW, vpH)
 
 Pipeline:DeclareTexture("WBOIT_Gather", {"RGBA16F", "RG16F"}, vpW, vpH)
@@ -71,11 +73,16 @@ Pipeline:AddPass("SSR", "SSRPass",
     {"SceneDepth", "GBuffer", "Lighting"}, {"SSR_Result"}, {},
     { Enabled = false })
 
+-- SSR Blur: roughness-driven bilateral blur on SSR_Result
+Pipeline:AddPass("SSRBlur", "SSRBlurPass",
+    {"SSR_Result", "GBuffer", "SceneDepth"}, {"SSR_Blurred"}, {},
+    { Enabled = false })
+
 -- Apply Reflection: UE-style hierarchical SSR/IBL specular replacement.
 -- Computes specular: SSR on hit, IBL cubemap on miss, roughness-controlled transition.
 -- LoadOps={Lighting="LOAD"} preserves existing Lighting (diffuse + direct specular + IBL diffuse).
 Pipeline:AddPass("ApplyReflection", "ApplyReflection",
-    {"SSR_Result", "GBuffer", "SceneDepth", "SSAO_Final"}, {"Lighting"}, {},
+    {"SSR_Blurred", "GBuffer", "SceneDepth", "SSAO_Final"}, {"Lighting"}, {},
     { Enabled = false, LoadOps = { Lighting = "LOAD" } })
 
 -- Forward Blend: skybox + grid + sprites overlaid onto Lighting HDR (LOAD overlay)

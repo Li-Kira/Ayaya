@@ -72,13 +72,14 @@ void main() {
     // ssr.a encodes: edgeFade * max(fresnel, 0.1) * metallic * hitFound
     // The march pass discards metallic<0.02, so dielectrics get ssr.a=0 (→ IBL fallback).
     // Future: remove discard, let Fresnel control reflection strength for all surfaces.
-    float roughnessFactor = 1.0 - smoothstep(pc.u_RoughnessStart, pc.u_RoughnessEnd, roughness);
+    float roughnessFactor = 1.0 - smoothstep(0.2, 0.6, roughness);
     float ssrWeight = ssr.a * roughnessFactor;
 
-    // === 4. Hierarchical replacement — mix pure reflection light first ===
+    // === 4. Hierarchical replacement — premultiplied alpha additive blend ===
+    // ssr.rgb is premultiplied: hitColor * alpha. Hardware bilinear preserves energy.
     // SSR hit  → replace IBL cubemap sample with screen-space reflection
     // SSR miss → fallback to PrefilteredMap cubemap
-    vec3 reflectionLight = mix(iblColor, ssr.rgb, ssrWeight);
+    vec3 reflectionLight = ssr.rgb * roughnessFactor + iblColor * (1.0 - ssrWeight);
 
     // === 5. Apply BRDF + occlusion uniformly ===
     // Both SSR and IBL receive the same Fresnel, geometry, and occlusion modulation.

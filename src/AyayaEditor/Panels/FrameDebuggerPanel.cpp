@@ -29,6 +29,7 @@ namespace Ayaya {
         if (pass == "OutlinePass") return "Mask";
         if (pass == "BloomPass")   return "Bloom";
         if (pass == "SSRPass")            return "Reflection";
+        if (pass == "SSRBlurPass")       return "Blurred";
         if (pass == "ApplyReflection")   return "Lighting";
         if (pass == "PostProcessPass") return "ToneMapped";
         if (pass == "FXAAPass")    return "Anti-Aliased";
@@ -88,6 +89,7 @@ namespace Ayaya {
         m_PassTextures.push_back({"GBufferPass",     "GBuffer"});
         m_PassTextures.push_back({"SSAOPass",        "SSAO_Final"});
         m_PassTextures.push_back({"SSRPass",            "SSR_Result"});
+        m_PassTextures.push_back({"SSRBlurPass",       "SSR_Blurred"});
         m_PassTextures.push_back({"ApplyReflection",   "Lighting"});
         m_PassTextures.push_back({"WBOIT_Gather",       "WBOIT_Gather"});
         m_PassTextures.push_back({"LightingPass",    "Lighting"});
@@ -207,6 +209,8 @@ namespace Ayaya {
                 bool runtimeActive = true;
                 if (info.PassName == "SSAOPass")
                     runtimeActive = ctx.Get<bool>("EnableSSAO", false);
+                if (info.PassName == "SSRPass" || info.PassName == "SSRBlurPass")
+                    runtimeActive = ctx.Get<bool>("EnableSSR", false);
 
                 if (!exists || !runtimeActive) continue;
                 visibleOrder++;
@@ -288,6 +292,7 @@ namespace Ayaya {
             if (it == snapFBs.end() || !it->second) continue;
             // Runtime check: skip disabled passes (e.g. SSAO when EnableSSAO=false)
             if (info.PassName == "SSAOPass" && !ctx.Get<bool>("EnableSSAO", false)) continue;
+            if ((info.PassName == "SSRPass" || info.PassName == "SSRBlurPass") && !ctx.Get<bool>("EnableSSR", false)) continue;
             visiblePasses.push_back(p);
         }
 

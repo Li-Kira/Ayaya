@@ -1,10 +1,10 @@
 # Ayaya Vulkan Rendering Engine — Architecture Report
 
-> **Date:** 2026-08-03
+> **Date:** 2026-08-07
 > **Branch:** `feature/gpu-driven-bindless`
 > **Backend:** Vulkan 1.3 with Dynamic Rendering
 > **Platforms:** macOS (MoltenVK), Windows (Native)
-> **Analysis Scope:** 14 subsystems — RenderGraph, SceneRenderer, GDR, all 14 passes, Vulkan backend, shaders (68+ files), SRP, IBL, WBOIT, SSAO, SSR (WIP), asset pipeline, editor
+> **Analysis Scope:** 14 subsystems — RenderGraph, SceneRenderer, GDR, all 16 passes, Vulkan backend, shaders (72+ files), SRP, IBL, WBOIT, SSAO, SSR (fully implemented), asset pipeline, editor
 
 ---
 
@@ -23,7 +23,7 @@
 11. [Post-Processing Pipeline](#11-post-processing-pipeline)
 12. [Asset System Integration](#12-asset-system-integration)
 13. [Editor Integration](#13-editor-integration)
-14. [Current WIP: Screen-Space Reflections](#14-current-wip-screen-space-reflections)
+14. [Screen-Space Reflections (SSR)](#14-screen-space-reflections-ssr)
 15. [Known Issues & Future Directions](#15-known-issues--future-directions)
 
 ---
@@ -177,7 +177,7 @@ struct StateSnapshot {
 
 `ApplyPerFrameCulling()` toggles `RGPass::IsCulled` per frame based on scene settings read from `RenderContext`:
 - `SSAOPass` → `EnableSSAO`
-- `SSRPass` / `SSRCompositePass` → `EnableSSR`
+- `SSRPass` / `SSRBlurPass` → `EnableSSR` (ApplyReflection never culled)
 - `BloomPass` → `EnableBloom`
 - `OutlinePass` → `EnableOutline`
 - `WBOIT_Gather` / `WBOIT_Resolve` → translucent packets in queue
@@ -233,7 +233,7 @@ class IPassFactory {
 ### 14 Shared Pass Instances
 
 All `shared_ptr<RenderPass>`:
-`m_ShadowPass`, `m_GBufferPass`, `m_DepthPass`, `m_SSAOPass`, `m_SSRPass`, `m_SSRCompositePass`, `m_LightingPass`, `m_ForwardBlendPass`, `m_WBOITPass`, `m_OutlinePass`, `m_BloomPass`, `m_PostProcessPass`, `m_FXAAPass`, `m_UIPass`
+`m_ShadowPass`, `m_GBufferPass`, `m_DepthPass`, `m_SSAOPass`, `m_SSRPass`, `m_SSRBlurPass`, `m_ApplyReflectionPass`, `m_LightingPass`, `m_ForwardBlendPass`, `m_WBOITPass`, `m_OutlinePass`, `m_BloomPass`, `m_PostProcessPass`, `m_FXAAPass`, `m_UIPass`
 
 ### SSBOs for Lighting
 
@@ -468,7 +468,7 @@ Same triple-buffered persistent-mapped pattern. `SetData()` writes current frame
 
 ```
 Shadow → DepthPrePass → GBuffer → (SSAO) → (SSR) → Lighting →
-  (SSRComposite) → ForwardBlend → (WBOIT_Gather → WBOIT_Resolve) →
+  SSR → SSRBlur → ApplyReflection → ForwardBlend → (WBOIT_Gather → WBOIT_Resolve) →
   Outline → Bloom → PostProcess → FXAA → UI
 ```
 
@@ -726,7 +726,7 @@ A single large descriptor set (`VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER`, Set 
 | `Shadow/` | 8 | Shadow GDR opaque/masked, culling (atomic+fixed variants), legacy shadow_map |
 | `Skybox/` | 2 | Cubemap skybox (depth=1.0, rotation-only view) |
 | `SSAO/` | 2 | SSAO generate (64-sample hemisphere) + bilateral blur (cross-bilateral depth+normal) |
-| `SSR/` | 4 | SSR ray-march + composite (WIP — composite is UV gradient stub) |
+| `SSR/` | 6 | SSR ray-march (ssr_march) + roughness bilateral blur (ssr_blur) + UE-style composite (apply_reflection) |
 | `UI/` | 8 | UI quads (bindless), editor grid (dual-grid + fwidth AA), outline mask (solid color), selection mask |
 | `WBOIT/` | 5 | Gather (non-instanced + instanced + bindless variants), resolve (weighted blend) |
 
@@ -837,7 +837,7 @@ struct PassBakedParams {
 
 Global factory registry mapping pass type names to `IPassFactory` instances. Lazy-instantiation: first `Get(name)` creates the factory via stored lambda.
 
-**17 registered in `Init()`:** ShadowPass, GBufferPass, DepthPrePass, SSAOPass, SSRPass, SSRCompositePass, LightingPass, ForwardBlend, WBOIT_Gather, WBOIT_Resolve, OutlinePass, BloomPass, PostProcessPass, FXAAPass, UIPass + GenericDrawPass, GenericComputePass, GenericFullScreenPass.
+**18 registered in `Init()`:** ShadowPass, GBufferPass, DepthPrePass, SSAOPass, SSRPass, SSRBlurPass, ApplyReflection, LightingPass, ForwardBlend, WBOIT_Gather, WBOIT_Resolve, OutlinePass, BloomPass, PostProcessPass, FXAAPass, UIPass + GenericDrawPass, GenericComputePass, GenericFullScreenPass.
 
 ### Generic Pass System — Zero-CPP Pipeline Extension
 
@@ -1083,57 +1083,141 @@ Static headless renderer for 3D model/material/prefab thumbnails:
 
 ---
 
-## 14. Current WIP: Screen-Space Reflections
+## 14. Screen-Space Reflections (SSR)
 
-### New Files (untracked, branch `feature/gpu-driven-bindless`)
+> **Status:** Fully implemented (Aug 2026). UE-style hierarchical SSR with Hi-Z acceleration, Blue Noise jitter, roughness-driven bilateral blur, and premultiplied alpha compositing.
 
+### 14.1 Architecture Overview
+
+Three-pass SSR pipeline inserted between Lighting and ForwardBlend:
+
+```
+Lighting_NoSpecIBL → SSR (½-res ray march) → SSRBlur (½-res bilateral) → ApplyReflection (full-res composite) → ForwardBlend
+```
+
+**Key design:** IBL specular is *removed* from the Lighting pass (`deferred_lighting.frag`, line 160: `+spI` deleted). The ApplyReflection pass is the sole provider of specular IBL — computing it from the PrefilteredMap cubemap, and replacing it with SSR where the ray-march finds a screen-space hit.
+
+### 14.2 File Inventory (20 files)
+
+**Shader source (6):**
+| File | Size | Purpose |
+|------|------|---------|
+| `SSR/ssr_march.vert` | 394B | Fullscreen triangle, half-res |
+| `SSR/ssr_march.frag` | ~7.9KB | **Core** — Hi-Z accelerated ray-march, outputs `SSR_Result` (RGBA16F) |
+| `SSR/ssr_blur.vert` | 299B | Fullscreen triangle, half-res |
+| `SSR/ssr_blur.frag` | ~2.0KB | Roughness-driven bilateral blur, outputs `SSR_Blurred` |
+| `SSR/apply_reflection.vert` | 299B | Fullscreen triangle, full-res |
+| `SSR/apply_reflection.frag` | ~3.8KB | UE-style hierarchical replacement composite |
+
+**C++ Pass classes (6):**
 | File | Purpose |
 |------|---------|
-| `VulkanSSRPass.hpp/.cpp` | SSR ray-march pass at half resolution |
-| `VulkanSSRCompositePass.hpp/.cpp` | Blend SSR result back into `Lighting` HDR buffer |
-| `SSR/ssr_march.vert` | Fullscreen triangle (Vulkan NDC, Y-up for negative viewport) |
-| `SSR/ssr_march.frag` | 119-line SSR ray-march: depth reconstruction, oct-encoded normal decode, linear step + binary refinement, edge fade + Fresnel |
-| `SSR/ssr_composite.vert` | Fullscreen triangle |
-| `SSR/ssr_composite.frag` | **Stub** — outputs UV gradient `(v_TexCoord.x, v_TexCoord.y, 0.0, 0.5)` |
+| `VulkanSSRPass.hpp/.cpp` | SSR ray-march pass: Hi-Z descriptor set, Blue Noise, push constants |
+| `VulkanSSRBlurPass.hpp/.cpp` | 2-pass separable bilateral blur (Horiz + Vert), internal FBO |
+| `VulkanApplyReflectionPass.hpp/.cpp` | Full-res composite: PrefilteredMap + BRDF LUT + SSR_Blurred → additive blend onto Lighting |
 
-### ECS Changes (`Components.hpp`)
+**Pipeline integration (8 modified):**
+| File | Change |
+|------|--------|
+| `deferred_lighting.frag` (+ 2× SPIR-V) | Removed `+spI` from ambient term |
+| `SceneRenderer.hpp/.cpp` | 3 new pass members, construction, OnAttach, RenderGraph, SRP, culling |
+| `PassRegistry.hpp/.cpp` | 3 new factories (`SSRPass`, `SSRBlurPass`, `ApplyReflection`), Init signature extended |
+| `RenderGraph.hpp/.cpp` | `WriteLoadOps` support, single-pass producer mapping DAG fix |
+| `VulkanGBufferPass.hpp` | Public Hi-Z getters (`GetHiZImageView`, `GetHiZSampler`, `GetHiZMipCount`) |
+| `default.srp` | `SSR_Result`, `SSR_Blurred` textures + 3 pass declarations |
+| `Components.hpp` + `SceneSerializer.cpp` | 7 SSR ECS parameters |
+| `PropertiesPanel.cpp` + `FrameDebuggerPanel.cpp` | SSR UI controls + debug entries |
 
-7 new fields on `PostProcessVolumeComponent`:
-- `bool EnableSSR = false`
-- `float SSRMaxSteps = 64.0`, `SSRStepSize = 0.5`, `SSRThickness = 0.3`
-- `float SSREdgeFade = 0.1`, `SSRRoughnessCutoff = 1.0`
-- `int SSRMaxBinarySteps = 8`
+### 14.3 SSR Pass — Hi-Z Accelerated Ray March (`ssr_march.frag`)
 
-All serialized to/from YAML via `SceneSerializer`. Editor UI in `PropertiesPanel` with drag controls (16-256 steps, 0.1-2.0 step size, etc.), wired to undo/redo via `MacroCommand`.
+**Inputs (Set 1):** `u_DepthMap(0)`, `g_Albedo(1)`, `g_PBR(2)`, `g_Normal(4)`, `u_Lighting(6)`, `u_BlueNoise(7)`
+**Inputs (Set 2):** `u_HiZ(0)` — Hi-Z depth pyramid from GBufferPass
+**Output:** `SSR_Result` — half-res RGBA16F, premultiplied alpha (`hitColor * alpha, alpha`)
 
-### SSR March Algorithm (`ssr_march.frag`)
+**Algorithm steps:**
 
-- Per-pixel:
-  - Discards if depth ≥ 1.0 (sky)
-  - Reconstructs view-space position from linear depth + inverse projection
-  - Decodes world-space normal from oct-encoded GBuffer slot 4, transforms to view-space
-  - Reads roughness (from `g_Albedo.a`) and metallic (from `g_PBR.r`)
-  - Discards if roughness > cutoff or metallic < 0.02 (non-metallic = no reflection)
-  - Computes reflection vector R in view space, projects start/end to NDC
-  - Linear ray-march along UV line: steps forward testing ray-Z against scene-Z from depth buffer
-  - When ray-Z crosses behind scene-Z → binary search refinement (up to `MaxBinarySteps` iterations)
-  - Samples `u_Lighting` at hit UV with roughness-based LOD bias
-  - Outputs `hitColor.rgb` with alpha = `edgeFade * fresnel * metallic * hitFound`
+1. **Surface reconstruction:** `ViewPosFromDepth` (NDC Y-flip compensated) → viewPos. OctDecode GBuffer normal → `mat3(View)*N` to view space. Roughness from `g_PBR.g`.
 
-### RenderGraph Changes in This Branch
+2. **Filtering:** `roughness > RoughnessCutoff` → discard. No metallic cull — Fresnel controls reflection strength for all surfaces.
 
-- **`WriteLoadOps` map** added to `RGPass` for per-output `AttachmentLoadOp` control
-- **`WriteTexture()`/`ReadWriteTexture()`** signatures updated with optional `loadOp` parameter
-- **DAG compilation fix:** Single-pass producer mapping (reads before writes per pass) for correct read-producer versioning. Fixes bug where a pass reading `"Lighting"` at position N would see `WBOIT_Resolve` (at N+3) as its producer instead of `LightingPass`.
+3. **Reflection direction:** Blue Noise jitter on normal: `N_jittered = N + jitter * roughness * 0.3`. `R = reflect(-V, N_jittered)`.
 
-### Integration Status
+4. **Hi-Z traversal:** Ray projected to screen UV start→end. DDA cell crossing algorithm traverses the depth pyramid:
+   - Start at coarsest mip (e.g., mip 10)
+   - Sample Hi-Z cell: `minDepth = textureLod(u_HiZ, cellCenter, mip).r` (MAX-reduced, conservative)
+   - `rayZ > minDepth` → ray behind everything in cell → DDA-skip to cell boundary, upgrade mip
+   - `rayZ <= minDepth` → potential intersection → descend one mip (`prevUV` reset)
+   - At mip 0: linear NDC Z comparison (`mix(zStart, zEnd, t)`) with thickness test against `u_DepthMap`
 
-- SSR passes added to default RenderGraph (between SSAO and ForwardBlend)
-- `PassRegistry` updated with `"SSRPass"` and `"SSRCompositePass"` factories
-- Per-frame culling via `EnableSSR` in `ApplyPerFrameCulling()`
-- Frame debugger entries: `"SSRPass"` → `"Reflection"`, displays `"SSR_Result"`; `"SSRCompositePass"` → `"Lighting"`
-- Default SRP: SSR passes declared with `Enabled = false`
-- **`ssr_composite.frag` is a stub** — SSR-to-Lighting blend not yet implemented
+5. **Hit detection (mip 0):** Crossing test (`prevRayZ <= prevSceneZ + Thickness && rayZ > sceneZ`) prevents false hits at depth discontinuities. Binary refinement in NDC Z space (perspective-correct midpoint via `mix(fPos, bPos, t)` where `t` from NDC Z midpoint). Samples `u_Lighting` at refined UV.
+
+6. **Output:** `alpha = clamp(edgeFade * max(fresnel * 3.0, 0.1) * hitFound, 0.0, 1.0)`. Premultiplied: `FragColor = vec4(hitColor.rgb * alpha, alpha)`.
+
+**Push constants (232 bytes):** `InvProj(64)`, `Proj(64)`, `View(64)`, `MaxSteps(4)`, `StepSize(4)`, `Thickness(4)`, `EdgeFade(4)`, `MaxBinarySteps(4)`, `RoughnessCutoff(4)`, `Enabled(4)`, `HiZMipCount(4)`, `_pad2(4)`.
+
+### 14.4 SSRBlur Pass — Roughness-Driven Bilateral Blur (`ssr_blur.frag`)
+
+**Algorithm:** 2-pass separable bilateral blur (C++ dispatches Horz + Vert with `BlurDir` push constant). Continuous radius with edge fading prevents integer-truncation banding.
+
+**Key features:**
+- `fRadius = roughness * 8.0` (continuous float, not truncated to int)
+- `maxRadius = ceil(fRadius)` — loop range
+- `edgeFade = clamp(fRadius - dist + 1.0, 0.0, 1.0)` — smooth transition when radius crosses integer boundaries
+- Dynamic Gaussian sigma: `sigma = max(fRadius * 0.5, 0.5)`
+- Depth weight: `exp(-abs(centerDepth - sampleDepth) * DepthThreshold)` — edge-preserving bilateral
+- **Premultiplied alpha aware:** Weights do NOT multiply `sampleSSR.a` (color already premultiplied)
+
+**Internal FBO:** Half-res RGBA16F (`m_BlurXFBO`), manually transitioned (not RenderGraph-managed). Final output writes to RenderGraph-managed `SSR_Blurred`.
+
+### 14.5 ApplyReflection Pass — UE-Style Hierarchical Replacement (`apply_reflection.frag`)
+
+**Inputs (Set 1):** `u_SSRResult(0)` — SSR_Blurred, `g_Albedo(1)`, `g_Normal(2)`, `g_PBR(3)`, `u_DepthMap(4)`, `u_SSAO(5)`, `u_PrefilteredMap(6)` (cube), `u_BRDFLUT(7)`
+
+**Composite formula (premultiplied alpha):**
+```
+specularBRDF = F_SchlickR(NdotV, F0, roughness) * brdf.x + brdf.y
+iblColor = PrefilteredMap(R, roughness*4.0) * EnvIntensity
+ssrWeight = ssr.a * (1.0 - smoothstep(0.2, 0.6, roughness))
+reflectionLight = ssr.rgb * roughnessFactor + iblColor * (1.0 - ssrWeight)
+finalSpecular = reflectionLight * specularBRDF * ao * ssao
+→ additive blend (One/One, LoadOp::Load) onto Lighting
+```
+
+**Key properties:**
+- **Never culled:** Provides IBL specular fallback even when SSR is disabled (ssrFBO null → BlackTexture → ssrWeight=0 → pure IBL cubemap)
+- **Premultiplied alpha:** `ssr.rgb` already has alpha baked in — hardware bilinear upsampling from half-res preserves energy at reflection edges, eliminating dark halos
+- **Roughness-controlled transition:** `smoothstep(0.2, 0.6, roughness)` — mirror surfaces get full SSR, rough surfaces fall back to IBL cubemap
+
+### 14.6 Lighting Pass Modification
+
+`deferred_lighting.frag` line 160: `vec3 amb = (kDi * irr * Albedo) * AO * ssao;` — IBL specular (`spI`) removed from the ambient term. The Lighting buffer now contains only IBL diffuse + direct lighting. Specular IBL is computed independently by ApplyReflection.
+
+### 14.7 Hi-Z Integration
+
+The existing Hi-Z depth pyramid (built in `VulkanGBufferPass::BuildHiZ`, R32_SFLOAT, MAX-reduced mip chain) is exposed via public getters:
+- `GetHiZImageView(frameIdx)` — full mip chain view
+- `GetHiZSampler()` — NEAREST, CLAMP_TO_EDGE
+- `GetHiZMipCount()` — `floor(log2(max(w,h))) + 1`
+- `GetCurrentHiZIndex()` — ring buffer index of most recently built Hi-Z
+
+SSRPass injects a Hi-Z descriptor set layout (Set 2, Binding 0) via `VulkanPipeline::s_ExtraSetLayouts` during `OnAttach`. At runtime, descriptor sets are written with the current frame's Hi-Z image+sampler and bound via `vkCmdBindDescriptorSets` at set=2.
+
+### 14.8 Key Bug Fixes Applied
+
+| Bug | Symptom | Fix |
+|-----|---------|-----|
+| NDC Y-flip missing in ray march UV | Vertically mirrored reflections | `1.0 - uv.y*2.0` in both UV→NDC and NDC→UV conversion |
+| Roughness read from `g_Albedo.a` (always 1.0) | All reflections maximally blurred | Read from `g_PBR.g` (GBuffer attachment 2) |
+| Alpha extrapolation > 1.0 at grazing angles | Red-black artifacts | `clamp(alpha, 0.0, 1.0)` |
+| ApplyReflection culled with SSR | IBL disappears when SSR off | ApplyReflection never culled — always provides IBL fallback |
+| "Hit within thickness" shortcut without binary refinement | Stair-step banding | All hits go through binary refinement |
+| Missing crossing test | Vertical smearing | `prevRayZ <= prevSceneZ + Thickness` check |
+| View-space binary search midpoint (no perspective correction) | Wobbly edges | NDC Z space midpoint via `mix(fPos, bPos, t)` |
+| Metallic factor in alpha formula | Dielectrics get zero SSR | Removed — Fresnel alone controls reflection strength |
+| `textureLod(u_Lighting, ..., roughness*4.0)` on non-mipmapped FBO | Undefined behavior | Changed to `textureLod(..., 0.0)` |
+| Thickness `* 0.01` over-scaling | Missed hits at grazing angles | Direct NDC Z comparison: `rayZ < sceneZ + Thickness` |
+| Non-premultiplied alpha + hardware bilinear | Dark halos at reflection edges | Full premultiplied alpha pipeline: `FragColor = vec4(color*alpha, alpha)` |
+| `int(roughness*8.0)` truncation | Blur radius banding | Continuous `fRadius` + `edgeFade` + dynamic sigma |
 
 ---
 
@@ -1142,8 +1226,7 @@ All serialized to/from YAML via `SceneSerializer`. Editor UI in `PropertiesPanel
 ### Known Issues
 
 1. **Hi-Z occlusion culling fully built but disabled** via hardcoded `if (false && ...)`. Depth pyramid still constructed every frame (wasted GPU work).
-2. **`ssr_composite.frag` is a stub** — SSR composite pass doesn't blend SSR into Lighting.
-3. **`VulkanClearPass` is an empty stub** — not wired into the RenderGraph DAG.
+2. **`VulkanClearPass` is an empty stub** — not wired into the RenderGraph DAG.
 4. **Duplicate `#include "VulkanOutlinePass.hpp"`** in `SceneRenderer.cpp` (lines 36-37).
 5. **`ChangeComponentCommand<T>` duplicated** in `Core/EditorCommands.hpp` and `Commands/ChangeComponentCommand.hpp`.
 6. **No CI/CD, no tests, no linting** — no automated build pipeline, no unit/integration tests, no `.clang-format` or `.clang-tidy` configuration.

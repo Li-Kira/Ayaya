@@ -40,6 +40,7 @@
 #include "Renderer/Passes/VulkanFXAAPass.hpp"
 #include "Renderer/Passes/VulkanSSAOPass.hpp"
 #include "Renderer/Passes/VulkanSSRPass.hpp"
+#include "Renderer/Passes/VulkanSSRBlurPass.hpp"
 #include "Renderer/Passes/VulkanApplyReflectionPass.hpp"
 #include "Renderer/Passes/VulkanWBOITPass.hpp"
 #include "Renderer/GDRContext.hpp"
@@ -231,6 +232,7 @@ namespace Ayaya {
             m_FXAAPass        = std::make_shared<VulkanFXAAPass>();
             m_SSAOPass        = std::make_shared<VulkanSSAOPass>();
             m_SSRPass         = std::make_shared<VulkanSSRPass>();
+            m_SSRBlurPass      = std::make_shared<VulkanSSRBlurPass>();
             m_ApplyReflectionPass = std::make_shared<VulkanApplyReflectionPass>();
             m_UIPass          = std::make_shared<UIPass>();
             m_WBOITPass       = std::make_shared<VulkanWBOITPass>();
@@ -286,6 +288,12 @@ namespace Ayaya {
             m_DepthPass->OnAttach();
             m_SSAOPass->OnAttach();
             m_SSRPass->OnAttach();
+            // Wire Hi-Z from GBufferPass to SSRPass for accelerated ray march
+            if (auto* ssrPass = dynamic_cast<VulkanSSRPass*>(m_SSRPass.get())) {
+                ssrPass->SetHiZSource(dynamic_cast<VulkanGBufferPass*>(m_GBufferPass.get()));
+                ssrPass->SetUseHiZ(false);  // TODO: toggle for A/B comparison
+            }
+            m_SSRBlurPass->OnAttach();
             m_ApplyReflectionPass->OnAttach();
             m_LightingPass->OnAttach();
             m_ForwardBlendPass->OnAttach();
@@ -300,7 +308,7 @@ namespace Ayaya {
             PassRegistry::Init(m_GDRContext,
                                m_ShadowPass, m_GBufferPass, m_DepthPass,
                                m_LightingPass, m_ForwardBlendPass,
-                               m_SSAOPass, m_SSRPass, m_ApplyReflectionPass, m_OutlinePass, m_BloomPass,
+                               m_SSAOPass, m_SSRPass, m_SSRBlurPass, m_ApplyReflectionPass, m_OutlinePass, m_BloomPass,
                                m_PostProcessPass, m_FXAAPass, m_UIPass,
                                m_WBOITPass);
         }
@@ -310,6 +318,7 @@ namespace Ayaya {
         PassRegistry::Shutdown();
         UIPass::Shutdown();
         VulkanSSAOPass::ReleaseNoiseTexture();
+        VulkanSSRPass::ReleaseBlueNoiseTexture();
         // s_CameraUniformBuffer.reset();
         // s_LightUniformBuffer.reset();
         s_SkyboxMesh.reset();
@@ -1045,6 +1054,10 @@ namespace Ayaya {
                 [&](RGBuilder& b) { VulkanSSRPass::DeclareResources(b, vpW, vpH); },
                 [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_SSRPass) m_SSRPass->Execute(ctx, c); });
 
+            m_RenderGraph.AddPass("SSRBlurPass",
+                [&](RGBuilder& b) { VulkanSSRBlurPass::DeclareResources(b, vpW, vpH); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_SSRBlurPass) m_SSRBlurPass->Execute(ctx, c); });
+
             m_RenderGraph.AddPass("ApplyReflection",
                 [&](RGBuilder& b) { VulkanApplyReflectionPass::DeclareResources(b, vpW, vpH); },
                 [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_ApplyReflectionPass) m_ApplyReflectionPass->Execute(ctx, c); });
@@ -1141,6 +1154,7 @@ namespace Ayaya {
         m_PipelineBuilder->RegisterPassInstance("DepthPrePass",    m_DepthPass);
         m_PipelineBuilder->RegisterPassInstance("SSAOPass",        m_SSAOPass);
         m_PipelineBuilder->RegisterPassInstance("SSRPass",         m_SSRPass);
+        m_PipelineBuilder->RegisterPassInstance("SSRBlurPass",     m_SSRBlurPass);
         m_PipelineBuilder->RegisterPassInstance("ApplyReflection", m_ApplyReflectionPass);
         m_PipelineBuilder->RegisterPassInstance("LightingPass",    m_LightingPass);
         m_PipelineBuilder->RegisterPassInstance("ForwardBlend",    m_ForwardBlendPass);
@@ -1216,6 +1230,7 @@ namespace Ayaya {
             if (type == "OutlinePass")     pass->IsCulled = !enableOutline;
             // FXAA uses push-constant toggle (passthrough when disabled) — never cull.
             if (type == "SSRPass")            pass->IsCulled = !enableSSR;
+            if (type == "SSRBlurPass")        pass->IsCulled = !enableSSR;
             // ApplyReflection is NEVER culled — it provides IBL specular fallback
             // even when SSR is disabled (ssr.a=0 → pure cubemap specular).
             if (type == "WBOIT_Gather")       pass->IsCulled = !hasTranslucent;

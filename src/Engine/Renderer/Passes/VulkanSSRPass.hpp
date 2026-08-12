@@ -10,7 +10,7 @@ namespace Ayaya {
     class VulkanSSRPass : public RenderPass {
     public:
         VulkanSSRPass();
-        virtual ~VulkanSSRPass() override = default;
+        ~VulkanSSRPass() override;
 
         virtual void OnAttach() override;
         virtual void OnResize(uint32_t width, uint32_t height) override;
@@ -18,6 +18,13 @@ namespace Ayaya {
 
         static void DeclareResources(class RGBuilder& builder,
                                      uint32_t width, uint32_t height);
+
+        static std::shared_ptr<Texture2D> GetBlueNoiseTexture();
+        static void ReleaseBlueNoiseTexture();
+
+        void SetHiZSource(class VulkanGBufferPass* gbuffer) { m_GBufferPass = gbuffer; }
+        void SetUseHiZ(bool use) { m_UseHiZ = use; }
+        bool IsUsingHiZ() const { return m_UseHiZ; }
 
     private:
         // March pipeline (fullscreen triangle ray march)
@@ -28,6 +35,14 @@ namespace Ayaya {
         // Internal half-res FBO (SSR_Result is RenderGraph-managed)
         std::shared_ptr<Framebuffer> m_ReflectionFBO;
         uint32_t m_LastW = 0, m_LastH = 0;
+
+        class VulkanGBufferPass* m_GBufferPass = nullptr;
+        bool m_UseHiZ = true;  // toggle for A/B comparison (Hi-Z vs linear march)
+
+        // Hi-Z resources for accelerated ray march
+        VkDescriptorSetLayout m_HiZSetLayout = VK_NULL_HANDLE;
+        VkDescriptorPool      m_HiZPool       = VK_NULL_HANDLE;
+        VkDescriptorSet       m_HiZSets[3]    = {};
     };
 
 } // namespace Ayaya

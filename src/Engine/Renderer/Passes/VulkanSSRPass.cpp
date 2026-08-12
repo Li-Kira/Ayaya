@@ -1,11 +1,63 @@
 #include "ayapch.h"
 #include "VulkanSSRPass.hpp"
+#include "VulkanGBufferPass.hpp"
 #include "Renderer/RenderGraph.hpp"
+#include "Platform/Vulkan/VulkanContext.hpp"
+#include "Platform/Vulkan/VulkanPipeline.hpp"
+#include "Core/Application.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace Ayaya {
 
+    // ── Blue Noise texture (64×64 RGBA8, shared across all SSR pass instances) ──
+    static std::shared_ptr<Texture2D> s_BlueNoise;
+
+    std::shared_ptr<Texture2D> VulkanSSRPass::GetBlueNoiseTexture() {
+        if (!s_BlueNoise) {
+            s_BlueNoise = Texture2D::Create(64, 64);
+            if (s_BlueNoise) {
+                // Fill with precomputed blue noise directions (hash-based pseudo-random)
+                std::vector<uint32_t> noise(64 * 64);
+                for (int y = 0; y < 64; y++) {
+                    for (int x = 0; x < 64; x++) {
+                        // Simple hash-based blue noise approximation
+                        uint32_t h = uint32_t(x * 193 + y * 397 + (x ^ y) * 277) * 0x9E3779B9u;
+                        h = (h ^ (h >> 16)) * 0x85EBCA6Bu;
+                        h = h ^ (h >> 13);
+                        // Pack as RGBA8: .rg = direction in [-1,1], .ba = 0
+                        float angle = float(h) / float(0xFFFFFFFFu) * 6.2831853f;
+                        uint8_t r = uint8_t((cos(angle) * 0.5f + 0.5f) * 255.0f);
+                        uint8_t g = uint8_t((sin(angle) * 0.5f + 0.5f) * 255.0f);
+                        noise[y * 64 + x] = r | (uint32_t(g) << 8) | (0u << 16) | (255u << 24);
+                    }
+                }
+                s_BlueNoise->SetData(noise.data(), sizeof(uint32_t) * 64 * 64);
+            }
+        }
+        return s_BlueNoise;
+    }
+
+    void VulkanSSRPass::ReleaseBlueNoiseTexture() {
+        s_BlueNoise.reset();
+    }
+
     VulkanSSRPass::VulkanSSRPass() { m_PassName = "SSR"; }
+
+    VulkanSSRPass::~VulkanSSRPass() {
+        auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+            Application::Get().GetWindow().GetContext());
+        VkDevice device = vkCtx ? vkCtx->GetDevice() : VK_NULL_HANDLE;
+        if (device) {
+            if (m_HiZPool != VK_NULL_HANDLE) {
+                vkDestroyDescriptorPool(device, m_HiZPool, nullptr);
+                m_HiZPool = VK_NULL_HANDLE;
+            }
+            if (m_HiZSetLayout != VK_NULL_HANDLE) {
+                vkDestroyDescriptorSetLayout(device, m_HiZSetLayout, nullptr);
+                m_HiZSetLayout = VK_NULL_HANDLE;
+            }
+        }
+    }
 
     void VulkanSSRPass::DeclareResources(RGBuilder& builder,
                                           uint32_t width, uint32_t height) {
@@ -25,17 +77,59 @@ namespace Ayaya {
             return;
         }
 
+        // ── Hi-Z descriptor set layout (Set 2, Binding 0: sampler2D) ──
+        {
+            auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+                Application::Get().GetWindow().GetContext());
+            VkDevice device = vkCtx ? vkCtx->GetDevice() : VK_NULL_HANDLE;
+            if (device) {
+                VkDescriptorSetLayoutBinding hizBinding{};
+                hizBinding.binding = 0;
+                hizBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                hizBinding.descriptorCount = 1;
+                hizBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+                VkDescriptorSetLayoutCreateInfo layoutCI{};
+                layoutCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+                layoutCI.bindingCount = 1;
+                layoutCI.pBindings = &hizBinding;
+                vkCreateDescriptorSetLayout(device, &layoutCI, nullptr, &m_HiZSetLayout);
+
+                VkDescriptorPoolSize poolSize{};
+                poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                poolSize.descriptorCount = 3; // per frame-in-flight
+
+                VkDescriptorPoolCreateInfo poolCI{};
+                poolCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+                poolCI.maxSets = 3;
+                poolCI.poolSizeCount = 1;
+                poolCI.pPoolSizes = &poolSize;
+                vkCreateDescriptorPool(device, &poolCI, nullptr, &m_HiZPool);
+
+                VkDescriptorSetLayout layouts[3] = { m_HiZSetLayout, m_HiZSetLayout, m_HiZSetLayout };
+                VkDescriptorSetAllocateInfo allocInfo{};
+                allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+                allocInfo.descriptorPool = m_HiZPool;
+                allocInfo.descriptorSetCount = 3;
+                allocInfo.pSetLayouts = layouts;
+                vkAllocateDescriptorSets(device, &allocInfo, m_HiZSets);
+            }
+        }
+
         FramebufferSpecification ref;
         ref.Width = 1280; ref.Height = 720; ref.Samples = 1;
         ref.Attachments = { FramebufferTextureFormat::RGBA16F };
         m_RefFBO = Framebuffer::Create(ref);
 
+        // Inject Hi-Z set layout before pipeline creation
+        VulkanPipeline::s_ExtraSetLayouts.push_back(m_HiZSetLayout);
         PipelineSpecification ps;
         ps.Shader = m_MarchShader; ps.TargetFramebuffer = m_RefFBO; ps.Layout = {};
         ps.Topology = PrimitiveTopology::TriangleStrip;
         ps.DepthTest = false; ps.DepthWrite = false; ps.Blend = false;
         ps.BackfaceCulling = CullMode::None;
         m_MarchPipeline = Pipeline::Create(ps);
+        VulkanPipeline::s_ExtraSetLayouts.clear();
         if (!m_MarchPipeline)
             AYAYA_CORE_ERROR("[SSRPass] Failed to create SSR march pipeline!");
     }
@@ -79,6 +173,45 @@ namespace Ayaya {
         cmd.BindTexture2D(m_MarchPipeline, "g_Albedo",   1, gbufferFBO, 1);
         cmd.BindTexture2D(m_MarchPipeline, "g_PBR",      2, gbufferFBO, 2);
         cmd.BindTexture2D(m_MarchPipeline, "u_Lighting", 6, lightingFBO, 0);
+        auto blueNoise = GetBlueNoiseTexture();
+        if (blueNoise)
+            cmd.BindTexture2D(m_MarchPipeline, "u_BlueNoise", 7, blueNoise);
+
+        // ── Hi-Z binding (Set 2, Binding 0) for accelerated ray march ──
+        // Always bind Hi-Z set: pipeline layout declares Set 2 (injected via s_ExtraSetLayouts),
+        // so Vulkan requires a compatible descriptor set bound at draw time regardless of m_UseHiZ.
+        // The shader won't access u_HiZ when HiZMipCount==0, but the binding must be present.
+        if (m_GBufferPass && m_HiZSetLayout) {
+            auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
+                Application::Get().GetWindow().GetContext());
+            if (vkCtx) {
+                uint32_t fi = vkCtx->GetCurrentFrameIndex();
+                uint32_t hizIdx = m_GBufferPass->GetCurrentHiZIndex();
+
+                VkDescriptorImageInfo hizInfo{};
+                hizInfo.sampler     = m_GBufferPass->GetHiZSampler();
+                hizInfo.imageView   = m_GBufferPass->GetHiZImageView(hizIdx);
+                hizInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+                VkWriteDescriptorSet w{};
+                w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                w.dstSet          = m_HiZSets[fi];
+                w.dstBinding      = 0;
+                w.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                w.descriptorCount = 1;
+                w.pImageInfo      = &hizInfo;
+                vkUpdateDescriptorSets(vkCtx->GetDevice(), 1, &w, 0, nullptr);
+
+                auto vkPipe = std::dynamic_pointer_cast<VulkanPipeline>(m_MarchPipeline);
+                if (vkPipe) {
+                    vkCmdBindDescriptorSets(
+                        vkCtx->GetCurrentCommandBuffer(),
+                        VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        vkPipe->GetVulkanPipelineLayout(),
+                        2, 1, &m_HiZSets[fi], 0, nullptr);
+                }
+            }
+        }
 
         struct alignas(16) SSR_PC {
             glm::mat4 InvProj;         // 64  @ 0
@@ -91,7 +224,8 @@ namespace Ayaya {
             int   MaxBinarySteps;      // 4   @ 208
             float RoughnessCutoff;     // 4   @ 212
             int   Enabled;             // 4   @ 216
-            float _pad;                // 4   @ 220
+            int   HiZMipCount;         // 4   @ 220
+            float _pad2;               // 4   @ 224
         } pc;
         pc.InvProj  = glm::inverse(context.ProjectionMatrix);
         pc.Proj     = context.ProjectionMatrix;
@@ -103,7 +237,8 @@ namespace Ayaya {
         pc.MaxBinarySteps = context.Get<int>("SSR_MaxBinarySteps", 8);
         pc.RoughnessCutoff = context.Get<float>("SSR_RoughnessCutoff", 1.0f);
         pc.Enabled = 1;
-        pc._pad = 0.0f;
+        pc.HiZMipCount = (m_UseHiZ && m_GBufferPass) ? int(m_GBufferPass->GetHiZMipCount()) : 0;
+        pc._pad2 = 0.0f;
         cmd.PushConstantData(m_MarchPipeline, &pc, sizeof pc);
         context.RecordAndCheckDrawCall("SSR", "SSR_Result", "ssr_march", 1);
         cmd.DrawArrays(3);
