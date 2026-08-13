@@ -12,12 +12,14 @@
 namespace Ayaya {
 
     void VulkanGBufferPass::DeclareResources(RGBuilder& builder, uint32_t width, uint32_t height) {
-        // GBuffer: 4 MRT (no depth — SceneDepth provides it)
+        // GBuffer: 5 MRT (no depth — SceneDepth provides it)
+        // attachment 4 = per-object velocity (RG16F) — UE5-style motion vector
         FramebufferSpecification colorSpec;
         colorSpec.Width = width; colorSpec.Height = height; colorSpec.Samples = 1;
         colorSpec.Attachments = {
             FramebufferTextureFormat::RG16F, FramebufferTextureFormat::RGBA8,
-            FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::RGBA8
+            FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::RGBA8,
+            FramebufferTextureFormat::RG16F
         };
         builder.WriteTexture("GBuffer", colorSpec);
 
@@ -348,7 +350,8 @@ namespace Ayaya {
         refSpec.Width = 1280; refSpec.Height = 720; refSpec.Samples = 1;
         refSpec.Attachments = {
             FramebufferTextureFormat::RG16F, FramebufferTextureFormat::RGBA8,
-            FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::RGBA8
+            FramebufferTextureFormat::RGBA8, FramebufferTextureFormat::RGBA8,
+            FramebufferTextureFormat::RG16F
             // No depth — SceneDepth provides it at render time via BeginRenderPass(colorFBO, depthFBO)
         };
         m_RefFBO = Framebuffer::Create(refSpec);
@@ -859,6 +862,18 @@ void VulkanGBufferPass::BuildHiZ(VkCommandBuffer vkCmd, uint32_t writeIdx,
     auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
         Application::Get().GetWindow().GetContext());
     VkDevice device = vkCtx->GetDevice();
+
+    // ── Rebuild Hi-Z if viewport size changed (rare resize event) ──
+    // The Hi-Z is otherwise created at the fixed ref FBO size (1280×720),
+    // which mismatches the actual depth buffer on non-default viewports.
+    uint32_t fboW = gbufferFBO->GetSpecification().Width;
+    uint32_t fboH = gbufferFBO->GetSpecification().Height;
+    if (fboW != m_HiZViewportW || fboH != m_HiZViewportH) {
+        vkDeviceWaitIdle(device);  // ensure previous-frame SSR finished using old Hi-Z
+        CleanupHiZ();
+        InitHiZResources(device, vkCtx->GetAllocator(), vkCtx->GetFramesInFlight(), fboW, fboH);
+    }
+
     auto& hz = m_HiZFrames[writeIdx];
 
     // ── Transition GBuffer depth: ATTACHMENT → READ_ONLY for compute sampling ──

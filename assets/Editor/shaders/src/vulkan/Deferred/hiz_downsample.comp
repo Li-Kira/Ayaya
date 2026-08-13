@@ -1,15 +1,16 @@
 #version 450
 
-// Hi-Z Depth Pyramid — 2×2 MAX Downsample (adaptive boundary-safe)
+// Hi-Z Depth Pyramid — 2×2 MIN Downsample (adaptive boundary-safe)
 // Reads source mip level, writes the next (half-resolution) mip level.
-// MAX reduction is correct for Standard-Z (Vulkan [0,1], 0=near, 1=far):
-// each mip stores "furthest depth in this region" — a conservative
-// occluder that keeps objects visible unless fully behind.
+// MIN reduction is correct for SSR screen-space ray marching:
+// each mip stores "nearest depth in this region" — a conservative bound that
+// lets the ray skip a cell only when it is entirely in front of the nearest surface.
+// (Occlusion culling used MAX; it is disabled, so switching to MIN is safe.)
 //
 // Dynamic boundary handling: fixed 2×2 texelFetchOffset would skip the
 // rightmost/bottommost pixel rows when the source mip has odd dimensions.
 // The adaptive loop extends the sampling range at edges to capture every
-// source pixel, preventing occlusion data loss at odd-resolution mip levels.
+// source pixel, preventing depth data loss at odd-resolution mip levels.
 
 layout(local_size_x = 16, local_size_y = 16) in;
 
@@ -29,10 +30,10 @@ void main() {
     int maxX = (uv.x == dstSize.x - 1) ? (srcSize.x - 1) : (base.x + 1);
     int maxY = (uv.y == dstSize.y - 1) ? (srcSize.y - 1) : (base.y + 1);
 
-    float maxDepth = 0.0;
+    float minDepth = 1.0;
     for (int y = base.y; y <= maxY; ++y)
         for (int x = base.x; x <= maxX; ++x)
-            maxDepth = max(maxDepth, texelFetch(u_SrcMip, ivec2(x, y), 0).r);
+            minDepth = min(minDepth, texelFetch(u_SrcMip, ivec2(x, y), 0).r);
 
-    imageStore(u_DstMip, uv, vec4(maxDepth));
+    imageStore(u_DstMip, uv, vec4(minDepth));
 }

@@ -72,6 +72,10 @@ private:
     VkDevice m_Device = VK_NULL_HANDLE;         // cached for Shutdown (no ctx dependency)
     uint64_t m_LastBuiltFrameNumber = UINT64_MAX;  // monotonic frame guard (never wraps)
     std::unordered_map<const Material*, uint32_t> m_MaterialToIndex; // Material* → SSBO index
+
+    // Previous-frame per-entity world transforms, keyed by full 32-bit entity ID.
+    // Populated by BuildFromScene; read for motion vectors (prevTransform).
+    std::unordered_map<uint32_t, glm::mat4> m_PrevWorldTransforms;
 };
 
 } // namespace Ayaya

@@ -5,12 +5,14 @@ layout(location = 0) out vec2 g_Normal;
 layout(location = 1) out vec4 g_Albedo;
 layout(location = 2) out vec4 g_PBR;
 layout(location = 3) out vec4 g_CustomData;
+layout(location = 4) out vec2 g_Velocity;
 
 layout(location = 0) in vec3 v_FragPos;
 layout(location = 1) in vec3 v_Normal;
 layout(location = 2) in vec2 v_TexCoord;
 layout(location = 3) flat in uint v_MaterialIdx;
 layout(location = 4) flat in uint v_Flags;
+layout(location = 5) in vec2 v_Velocity;
 
 // set=1: bindless texture array
 layout(set = 1, binding = 0) uniform sampler2D u_GlobalTextures[];
@@ -99,4 +101,5 @@ void main() {
     // .r = ReceiveShadows flag (read by deferred_lighting.frag as RcvShadow)
     float rcvShadow = ((v_Flags & 2u) != 0u) ? 1.0 : 0.0;
     g_CustomData = vec4(rcvShadow, 0.0, 0.0, 1.0);
+    g_Velocity = v_Velocity;
 }

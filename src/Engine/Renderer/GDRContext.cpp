@@ -256,6 +256,9 @@ namespace Ayaya {
 
         std::unordered_map<Mesh*, uint32_t> meshToRange;
         m_MaterialToIndex.clear();
+        // Double-buffer: read prev transforms from m_PrevWorldTransforms, write current to new map.
+        std::unordered_map<uint32_t, glm::mat4> newPrevTransforms;
+        newPrevTransforms.reserve(256);
 
         auto view = scene->Reg().view<TransformComponent, MeshRendererComponent>();
         uint32_t entitiesFound = 0, entitiesSkipped = 0;
@@ -282,6 +285,13 @@ namespace Ayaya {
             // All blend modes (Opaque, Masked, Translucent) are uploaded to SSBO.
             // GPU compute shaders filter by required LightMode mask — zero CPU cost.
             glm::mat4 transform = entity.GetWorldTransform();
+            // Per-object previous-frame transform (motion vector): lookup full entity ID.
+            uint32_t fullEntityId = static_cast<uint32_t>(entityID);
+            glm::mat4 prevTransform = transform;  // first appearance → no motion
+            auto prevIt = m_PrevWorldTransforms.find(fullEntityId);
+            if (prevIt != m_PrevWorldTransforms.end())
+                prevTransform = prevIt->second;
+            newPrevTransforms[fullEntityId] = transform;
             Material* matPtr = material.get();
 
             for (auto& mesh : model->GetMeshes()) {
@@ -335,6 +345,7 @@ namespace Ayaya {
 
                 GPUInstance gi{};
                 gi.transform = transform;
+                gi.prevTransform = prevTransform;
                 AABB aabb = mesh->GetAABB();
                 glm::vec3 center = (aabb.Min + aabb.Max) * 0.5f;
                 glm::vec3 worldCenter = glm::vec3(transform * glm::vec4(center, 1.0f));
@@ -354,6 +365,9 @@ namespace Ayaya {
                 gdrInstances.push_back(gi);
             }
         }
+
+        // Swap prev-transform maps — dropped entities are automatically evicted.
+        m_PrevWorldTransforms = std::move(newPrevTransforms);
 
         uint32_t instCount     = std::min((uint32_t)gdrInstances.size(), kMaxInstances);
         uint32_t rangeCount    = std::min((uint32_t)gdrRanges.size(),    kMaxMeshes);

@@ -1720,19 +1720,25 @@ namespace Ayaya {
                     commitInstantCommand("Toggle Enable SSR", oldComps);
                 }
                 if (enableSSR) {
+                    UI::DrawPropertyLabel("  Intensity");
+                    float intensity = refPPV.SSRIntensity;
+                    if (ImGui::DragFloat("##SSRIntensity", &intensity, 0.01f, 0.0f, 2.0f, "%.2f"))
+                        for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().SSRIntensity = intensity;
+                    handleDragState("Change SSR Intensity");
+
                     UI::DrawPropertyLabel("  Max Steps");
                     float maxSteps = refPPV.SSRMaxSteps;
                     if (ImGui::DragFloat("##SSRMaxSteps", &maxSteps, 1.0f, 16.0f, 256.0f, "%.0f"))
                         for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().SSRMaxSteps = maxSteps;
                     handleDragState("Change SSR Max Steps");
 
-                    UI::DrawPropertyLabel("  Step Size");
+                    UI::DrawPropertyLabel("  Step Size (world)");
                     float stepSize = refPPV.SSRStepSize;
-                    if (ImGui::DragFloat("##SSRStepSize", &stepSize, 0.05f, 0.1f, 2.0f, "%.2f"))
+                    if (ImGui::DragFloat("##SSRStepSize", &stepSize, 0.05f, 0.05f, 2.0f, "%.2f"))
                         for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().SSRStepSize = stepSize;
                     handleDragState("Change SSR Step Size");
 
-                    UI::DrawPropertyLabel("  Thickness");
+                    UI::DrawPropertyLabel("  Thickness (world)");
                     float thickness = refPPV.SSRThickness;
                     if (ImGui::DragFloat("##SSRThickness", &thickness, 0.01f, 0.01f, 2.0f, "%.2f"))
                         for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().SSRThickness = thickness;
@@ -1755,6 +1761,12 @@ namespace Ayaya {
                     if (ImGui::DragInt("##SSRBinSteps", &binSteps, 1.0f, 2, 16))
                         for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().SSRMaxBinarySteps = binSteps;
                     handleDragState("Change SSR Binary Steps");
+
+                    UI::DrawPropertyLabel("  Temporal Blend");
+                    float tempBlend = refPPV.SSRTemporalBlend;
+                    if (ImGui::DragFloat("##SSRTempBlend", &tempBlend, 0.01f, 0.01f, 1.0f, "%.2f"))
+                        for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().SSRTemporalBlend = tempBlend;
+                    handleDragState("Change SSR Temporal Blend");
                 }
                 ImGui::EndTable();
 

@@ -22,7 +22,7 @@ layout(push_constant) uniform PC {
     float u_RoughnessCutoff;
     int   u_Enabled;
     int   u_HiZMipCount;
-    float _pad2;
+    int   u_FrameIndex;
 } pc;
 
 vec3 OctDecode(vec2 f) {
@@ -58,144 +58,88 @@ void main() {
 
     vec3 V = normalize(-viewPos);
 
-    // Blue Noise normal jitter — roughness-driven cone scattering
-    vec2 noiseUV = v_TexCoord * vec2(textureSize(u_DepthMap, 0)) / 64.0;
-    vec3 jitter  = texture(u_BlueNoise, noiseUV).rgb * 2.0 - 1.0;
-    float coneAngle = roughness * 0.3;
-    vec3 N_jittered = normalize(N + jitter * coneAngle);
+    // Blue Noise normal jitter — roughness-driven cone scattering (tangent-space)
+    // Use only .rg (2D direction); .b is 0 in the blue-noise texture, and reading it
+    // via .rgb * 2 - 1 would introduce a constant z=-1 bias that tilts the normal.
+    // Temporal jitter: offset the noise sampling every frame so the temporal accumulation
+    // can average out the jitter noise (a STATIC pattern can't be smoothed over time).
+    float frameHash = fract(sin(float(pc.u_FrameIndex) * 12.9898) * 43758.5453);
+    vec2  noiseOffset = vec2(frameHash, fract(frameHash * 7.0)) * 64.0;
+    vec2  noiseUV = v_TexCoord * vec2(textureSize(u_DepthMap, 0)) / 64.0 + noiseOffset;
+    vec2 jitter2D = texture(u_BlueNoise, noiseUV).rg * 2.0 - 1.0;  // (cos, sin) ∈ [-1,1]²
+
+    // Orthonormal tangent basis from the normal (view space)
+    vec3 helper = (abs(N.z) < 0.999) ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    vec3 T = normalize(cross(helper, N));
+    vec3 B = cross(N, T);
+
+    float coneAngle = roughness * 0.15;  // reduced jitter → less noise (temporal handles blur)
+    vec3 N_jittered = normalize(N + (T * jitter2D.x + B * jitter2D.y) * coneAngle);
     vec3 R = reflect(-V, N_jittered);
 
-    // ── Hi-Z accelerated ray march ──
-    // Traverses the depth pyramid in screen space, jumping over empty cells.
-    // Falls back to NDC-Z binary refinement at mip 0 for pixel-accurate intersection.
-    // When HiZMipCount <= 0, falls back to linear screen-space stepping.
+    // ── View-space ray march with view-space thickness (UE5-style) ──
+    // Parameterize the ray in view space, project each step EXACTLY (depth linear, UV exact).
     float maxDist = pc.u_MaxSteps * pc.u_StepSize;
+    float stepVS  = maxDist / float(int(pc.u_MaxSteps));
+    float thicknessVS = pc.u_Thickness * 0.1;  // view-space (world units) hit tolerance
 
-    // Project ray start and end to screen UV
-    vec3 rayEndVS = viewPos + R * maxDist;
-    vec4 cs = pc.u_Proj * vec4(viewPos, 1.0);
-    vec4 ce = pc.u_Proj * vec4(rayEndVS, 1.0);
-    float zStart = cs.z / cs.w;
-    float zEnd   = ce.z / ce.w;
-    vec2 uvStart = vec2(cs.x / cs.w * 0.5 + 0.5, 1.0 - (cs.y / cs.w * 0.5 + 0.5));
-    vec2 uvEnd   = vec2(ce.x / ce.w * 0.5 + 0.5, 1.0 - (ce.y / ce.w * 0.5 + 0.5));
-    vec2 ssDir   = uvEnd - uvStart;
-    float ssDist = length(ssDir);
-    if (ssDist < 0.0001) discard;
-    ssDir /= ssDist;
+    // Ray origin biased along normal by a MINIMAL amount (avoids self-intersection
+    // without skipping steps — a large bias loses the contact point).
+    vec3 rayOriginVS = viewPos + N * 0.02;
 
     float hitFound = 0.0;
     vec4 hitColor = vec4(0.0);
+    vec3 prevRayVS  = rayOriginVS;
+    float prevRayDepth  = 0.0;
+    float prevSceneDepth = 0.0;
+    bool prevValid   = false;
 
-    if (pc.u_HiZMipCount > 0) {
-    // ═══════════════════════════════════════════════════════════════
-    // Hi-Z DDA traversal — logarithmic search through depth pyramid
-    // ═══════════════════════════════════════════════════════════════
-    float mipLevel = max(float(pc.u_HiZMipCount) - 1.0, 0.0);
-    vec2 uv = uvStart;
-    vec2 prevUV = uvStart;
+    for (int i = 1; i <= int(pc.u_MaxSteps); i++) {
+        vec3 rayPosVS = rayOriginVS + R * stepVS * float(i);
 
-    int maxIters = int(pc.u_MaxSteps) * 2;
-    for (int iter = 0; iter < maxIters; iter++) {
-        if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) break;
+        // Project current step to NDC (exact, negative-viewport Y-flip)
+        vec4 clipPos = pc.u_Proj * vec4(rayPosVS, 1.0);
+        vec3 ndcPos  = clipPos.xyz / clipPos.w;
+        vec2 rayUV   = vec2(ndcPos.x * 0.5 + 0.5, 1.0 - (ndcPos.y * 0.5 + 0.5));
 
-        int mip = int(mipLevel);
-        float cellSize = exp2(float(mip)) / float(textureSize(u_HiZ, mip).x);
+        if (any(lessThan(rayUV, vec2(0.0))) || any(greaterThan(rayUV, vec2(1.0)))) break;
 
-        // Current Hi-Z cell bounds
-        vec2 cellMin = floor(uv / cellSize) * cellSize;
-        vec2 sampleUV = clamp(cellMin + cellSize * 0.5, 0.0, 1.0);
+        float rayZ   = ndcPos.z;  // exact NDC Z
+        float sceneZ = textureLod(u_DepthMap, rayUV, 0).r;
+        if (sceneZ >= 1.0) { prevRayVS = rayPosVS; prevRayDepth = -rayPosVS.z; prevValid = false; continue; }
 
-        // Conservative min-depth from Hi-Z (MAX-reduced: furthest depth in this cell)
-        float minDepth = textureLod(u_HiZ, sampleUV, float(mip)).r;
+        // View-space depths (linear, positive in front of camera)
+        float rayDepth = -rayPosVS.z;
+        // Reconstruct surface view-space depth from NDC Z: viewZ = m23 / (-ndcZ - m22)
+        float sceneDepth = -(pc.u_Proj[3][2] / (-sceneZ - pc.u_Proj[2][2]));
 
-        // Ray Z at current UV — linear NDC Z interpolation (standard approximation).
-        float t = distance(uvStart, uv) / max(ssDist, 1e-6);
-        float rayZ = mix(zStart, zEnd, clamp(t, 0.0, 1.0));
+        // Crossing test (view-space thickness, correct at all distances)
+        bool crossed = prevValid && (prevRayDepth <= prevSceneDepth + thicknessVS) && (rayDepth > sceneDepth);
 
-        if (rayZ > minDepth) {
-            // Ray is behind everything in this cell → DDA cell crossing (robust vs AABB)
-            vec2 crossStep = sign(ssDir);
-            vec2 crossUV   = cellMin + max(crossStep, vec2(0.0)) * cellSize;
-            vec2 tCross    = (crossUV - uv) / max(abs(ssDir), 1e-6);
-            float tExit    = min(tCross.x, tCross.y) + 0.0001;
-            prevUV = uv;
-            uv += ssDir * tExit;
-            mipLevel = min(mipLevel + 1.0, float(pc.u_HiZMipCount) - 1.0);
-        } else {
-            // Ray may intersect geometry in this cell
-            if (mip <= 0) {
-                // At mip 0: check actual depth and binary-refine
-                float sceneZ = textureLod(u_DepthMap, uv, 0).r;
-                if (sceneZ < 1.0 && rayZ > sceneZ && rayZ < sceneZ + pc.u_Thickness) {
-                    // Binary refinement between prevUV (front) and uv (back)
-                    vec3 prevVS = viewPos + R * (maxDist * distance(uvStart, prevUV) / max(ssDist, 1e-6));
-                    vec3 currVS = viewPos + R * (maxDist * distance(uvStart, uv) / max(ssDist, 1e-6));
-                    float fZ = 0.0, bZ = 0.0;
-                    {
-                        vec4 fc = pc.u_Proj * vec4(prevVS, 1.0);
-                        vec4 bc = pc.u_Proj * vec4(currVS, 1.0);
-                        fZ = fc.z / fc.w; bZ = bc.z / bc.w;
-                    }
-                    vec3 fPos = prevVS, bPos = currVS;
-                    for (int j = 0; j < int(pc.u_MaxBinarySteps); j++) {
-                        float mZ = (fZ + bZ) * 0.5;
-                        float frac = (mZ - fZ) / max(bZ - fZ, 1e-6);
-                        vec3 mPos = mix(fPos, bPos, clamp(frac, 0.001, 0.999));
-                        vec4 mClip = pc.u_Proj * vec4(mPos, 1.0);
-                        vec3 mNDC  = mClip.xyz / mClip.w;
-                        vec2 mUV   = vec2(mNDC.x * 0.5 + 0.5, 1.0 - (mNDC.y * 0.5 + 0.5));
-                        float mSceneZ = textureLod(u_DepthMap, mUV, 0).r;
-                        if (mSceneZ >= 1.0 || mNDC.z > mSceneZ) {
-                            bZ = mZ; bPos = mPos;
-                        } else {
-                            fZ = mZ; fPos = mPos;
-                        }
-                    }
-                    vec4 fClip = pc.u_Proj * vec4(fPos, 1.0);
-                    vec3 fNDC  = fClip.xyz / fClip.w;
-                    vec2 fUV   = vec2(fNDC.x * 0.5 + 0.5, 1.0 - (fNDC.y * 0.5 + 0.5));
-                    hitColor = textureLod(u_Lighting, fUV, 0.0);
-                    hitFound = 1.0;
-                    break;
+        if (crossed || rayDepth > sceneDepth + thicknessVS) {
+            // View-space midpoint binary refinement (perspective-correct)
+            vec3 fPos = prevRayVS, bPos = rayPosVS;
+            for (int j = 0; j < int(pc.u_MaxBinarySteps); j++) {
+                vec3 mPos = (fPos + bPos) * 0.5;
+                vec4 mClip = pc.u_Proj * vec4(mPos, 1.0);
+                vec3 mNDC  = mClip.xyz / mClip.w;
+                vec2 mUV   = vec2(mNDC.x * 0.5 + 0.5, 1.0 - (mNDC.y * 0.5 + 0.5));
+                float mSceneZ = textureLod(u_DepthMap, mUV, 0).r;
+                if (mSceneZ >= 1.0 || mNDC.z > mSceneZ) {
+                    bPos = mPos;
+                } else {
+                    fPos = mPos;
                 }
-                // No hit at mip 0, advance one pixel
-                prevUV = uv;
-                uv += ssDir * cellSize;
-            } else {
-                // Descend one mip level — reset prevUV so binary refinement has a tight search range.
-                prevUV = uv;
-                mipLevel -= 1.0;
             }
-        }
-    }
-    } else {
-    // ═══════════════════════════════════════════════════════════════
-    // Linear screen-space ray march — no Hi-Z acceleration
-    // ═══════════════════════════════════════════════════════════════
-    for (int i = 0; i < int(pc.u_MaxSteps); i++) {
-        float t = (float(i) + 0.5) / float(pc.u_MaxSteps);
-        vec2 uv_i = mix(uvStart, uvEnd, t);
-
-        if (any(lessThan(uv_i, vec2(0.0))) || any(greaterThan(uv_i, vec2(1.0)))) break;
-
-        float rayZ = mix(zStart, zEnd, t);
-        float sceneZ = textureLod(u_DepthMap, uv_i, 0).r;
-        if (sceneZ >= 1.0) continue;
-
-        // Cross-check: ray crosses from in-front to behind the surface
-        if (i > 0) {
-            float tPrev = (float(i) - 0.5) / float(pc.u_MaxSteps);
-            float prevRayZ = mix(zStart, zEnd, tPrev);
-            if (prevRayZ > sceneZ + pc.u_Thickness) continue; // already behind at prev step → skip
-        }
-
-        if (rayZ > sceneZ && rayZ < sceneZ + pc.u_Thickness) {
-            hitColor = textureLod(u_Lighting, uv_i, 0.0);
+            vec4 fClip = pc.u_Proj * vec4(fPos, 1.0);
+            vec3 fNDC  = fClip.xyz / fClip.w;
+            vec2 fUV   = vec2(fNDC.x * 0.5 + 0.5, 1.0 - (fNDC.y * 0.5 + 0.5));
+            hitColor = textureLod(u_Lighting, fUV, 0.0);  // 0.0 — Lighting FBO has no mip chain
             hitFound = 1.0;
             break;
         }
-    }
+
+        prevRayVS = rayPosVS; prevRayDepth = rayDepth; prevSceneDepth = sceneDepth; prevValid = true;
     }
 
     float edgeFade = smoothstep(0.0, pc.u_EdgeFade, v_TexCoord.x)

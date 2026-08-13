@@ -225,20 +225,21 @@ namespace Ayaya {
             float RoughnessCutoff;     // 4   @ 212
             int   Enabled;             // 4   @ 216
             int   HiZMipCount;         // 4   @ 220
-            float _pad2;               // 4   @ 224
+            int   FrameIndex;          // 4   @ 224
         } pc;
         pc.InvProj  = glm::inverse(context.ProjectionMatrix);
         pc.Proj     = context.ProjectionMatrix;
         pc.View     = context.ViewMatrix;
-        pc.MaxSteps = context.Get<float>("SSR_MaxSteps", 64.0f);
-        pc.StepSize = context.Get<float>("SSR_StepSize", 0.5f);
+        pc.MaxSteps = context.Get<float>("SSR_MaxSteps", 128.0f);
+        pc.StepSize = context.Get<float>("SSR_StepSize", 0.125f);
         pc.Thickness = context.Get<float>("SSR_Thickness", 0.3f);
-        pc.EdgeFade = context.Get<float>("SSR_EdgeFade", 0.1f);
+        pc.EdgeFade = context.Get<float>("SSR_EdgeFade", 0.2f);
         pc.MaxBinarySteps = context.Get<int>("SSR_MaxBinarySteps", 8);
         pc.RoughnessCutoff = context.Get<float>("SSR_RoughnessCutoff", 1.0f);
         pc.Enabled = 1;
         pc.HiZMipCount = (m_UseHiZ && m_GBufferPass) ? int(m_GBufferPass->GetHiZMipCount()) : 0;
-        pc._pad2 = 0.0f;
+        static uint32_t s_SSRFrameCounter = 0;  // monotonic frame counter for temporal jitter
+        pc.FrameIndex = int(s_SSRFrameCounter++);
         cmd.PushConstantData(m_MarchPipeline, &pc, sizeof pc);
         context.RecordAndCheckDrawCall("SSR", "SSR_Result", "ssr_march", 1);
         cmd.DrawArrays(3);

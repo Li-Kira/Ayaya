@@ -41,12 +41,13 @@ struct FrustumPC {
 // ── GDR SSBO structs (must match C++ VulkanGeometryPool.hpp) ──
 
 struct GPUInstance {
-    float4x4 transform;       // offset 0,  size 64
-    float4   boundingSphere;  // offset 64, size 16
-    uint     geometryRangeIdx;// offset 80
-    uint     materialIdx;     // offset 84
-    uint     entityId;        // offset 88
-    uint     flags;           // offset 92
+    float4x4 transform;       // offset 0,  size 64 — current world
+    float4x4 prevTransform;   // offset 64, size 64 — previous frame world (motion vector)
+    float4   boundingSphere;  // offset 128, size 16
+    uint     geometryRangeIdx;// offset 144
+    uint     materialIdx;     // offset 148
+    uint     entityId;        // offset 152
+    uint     flags;           // offset 156
 };
 
 struct GeometryRange {

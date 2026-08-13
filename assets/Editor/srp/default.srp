@@ -29,6 +29,8 @@ Pipeline:DeclareTexture("SSR_Result", {"RGBA16F"}, vpW / 2, vpH / 2)
 
 Pipeline:DeclareTexture("SSR_Blurred", {"RGBA16F"}, vpW / 2, vpH / 2)
 
+Pipeline:DeclareTexture("SSR_Temporal", {"RGBA16F"}, vpW / 2, vpH / 2)
+
 Pipeline:DeclareTexture("Selection", {"RGBA8"}, vpW, vpH)
 
 Pipeline:DeclareTexture("WBOIT_Gather", {"RGBA16F", "RG16F"}, vpW, vpH)
@@ -78,11 +80,18 @@ Pipeline:AddPass("SSRBlur", "SSRBlurPass",
     {"SSR_Result", "GBuffer", "SceneDepth"}, {"SSR_Blurred"}, {},
     { Enabled = false })
 
+-- SSR Temporal: temporal reprojection + roughness-adaptive blend + neighborhood clamp
+-- Reads per-object velocity from GBuffer attachment 4 (UE5-style motion vector)
+Pipeline:AddPass("SSRTemporal", "SSRTemporalPass",
+    {"SSR_Blurred", "SceneDepth", "GBuffer"}, {"SSR_Temporal"}, {},
+    { Enabled = false })
+
 -- Apply Reflection: UE-style hierarchical SSR/IBL specular replacement.
+-- Reads SSR_Temporal (temporally stable) instead of raw SSR_Blurred.
 -- Computes specular: SSR on hit, IBL cubemap on miss, roughness-controlled transition.
 -- LoadOps={Lighting="LOAD"} preserves existing Lighting (diffuse + direct specular + IBL diffuse).
 Pipeline:AddPass("ApplyReflection", "ApplyReflection",
-    {"SSR_Blurred", "GBuffer", "SceneDepth", "SSAO_Final"}, {"Lighting"}, {},
+    {"SSR_Temporal", "GBuffer", "SceneDepth", "SSAO_Final"}, {"Lighting"}, {},
     { Enabled = false, LoadOps = { Lighting = "LOAD" } })
 
 -- Forward Blend: skybox + grid + sprites overlaid onto Lighting HDR (LOAD overlay)

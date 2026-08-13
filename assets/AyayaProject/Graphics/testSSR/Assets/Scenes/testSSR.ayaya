@@ -2,19 +2,19 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition: [-2.171883, 1.8309842, 4.0884533]
-  CameraDistance: 3.3563037
-  CameraPitch: -0.39971608
-  CameraYaw: 5.589475
-  CameraFocalPoint: [-0.19504786, 0.52485573, 1.7112856]
+  CameraPosition: [-5.0186386, 4.6694202, 7.3312163]
+  CameraDistance: 8.326315
+  CameraPitch: -0.50850093
+  CameraYaw: 5.578797
+  CameraFocalPoint: [-0.30898666, 0.6156006, 1.7892632]
 Entities:
   - Entity: 13032611445651691836
     TagComponent:
       Tag: Main Camera
       IsActive: true
     TransformComponent:
-      Translation: [-1.41, 0.8, 3.95]
-      Rotation: [-0.22526963, -0.79203045, 0]
+      Translation: [-1.41, 1.6, 3.95]
+      Rotation: [-0.43825218, -0.74490654, 0]
       Scale: [1, 1, 1]
     CameraComponent:
       Primary: true
@@ -143,11 +143,13 @@ Entities:
       SSAORadius: 0.15
       SSAOBias: 0.111
       EnableSSR: true
-      SSRMaxSteps: 64
-      SSRStepSize: 0.5
-      SSRThickness: 0.3
-      SSREdgeFade: 0.1
-      SSRRoughnessCutoff: 1
-      SSRMaxBinarySteps: 8
+      SSRIntensity: 1
+      SSRMaxSteps: 256
+      SSRStepSize: 0.05
+      SSRThickness: 0.01
+      SSREdgeFade: 0.2
+      SSRRoughnessCutoff: 0.6
+      SSRMaxBinarySteps: 15
+      SSRTemporalBlend: 0.05
     RelationshipComponent:
       Parent: 0

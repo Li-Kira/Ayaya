@@ -15,6 +15,7 @@ layout(local_size_x = 64) in;
 
 struct GPUInstance {
     mat4 transform;
+    mat4 prevTransform;
     vec4 boundingSphere;
     uint geometryRangeIdx;
     uint materialIdx;

@@ -9,7 +9,7 @@ namespace Ayaya {
 
     void VulkanApplyReflectionPass::DeclareResources(RGBuilder& builder,
                                                       uint32_t width, uint32_t height) {
-        builder.ReadTexture("SSR_Blurred");
+        builder.ReadTexture("SSR_Temporal");
         builder.ReadTexture("GBuffer");
         builder.ReadTexture("SceneDepth");
         builder.ReadTexture("SSAO_Final");
@@ -55,12 +55,17 @@ namespace Ayaya {
         // → ssrWeight=0 → pure IBL cubemap specular fallback.
 
         auto lightingFBO   = context.GetFramebuffer("Lighting");
-        auto ssrFBO        = context.GetFramebuffer("SSR_Blurred");
         auto gbufferFBO    = context.GetFramebuffer("GBuffer");
         auto sceneDepthFBO = context.GetFramebuffer("SceneDepth");
         auto ssaoFBO       = context.GetFramebuffer("SSAO_Final");
         if (!lightingFBO || !gbufferFBO || !sceneDepthFBO) return;
-        // ssrFBO may be null when SSR pass is culled — handled below with BlackTexture fallback
+
+        // When SSR is disabled, the SSRTemporal pass is culled but the RenderGraph still
+        // injects a stale SSR_Temporal FBO for our ReadTexture. Force a null so we fall
+        // back to BlackTexture (pure IBL cubemap specular) instead of stale SSR.
+        auto ssrFBO = context.Get<bool>("EnableSSR", false)
+                    ? context.GetFramebuffer("SSR_Temporal")
+                    : nullptr;
 
         // ── IBL resources ──
         auto prefilterMap = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap");
@@ -103,14 +108,14 @@ namespace Ayaya {
             float     EnvIntensity;       //  4  @ 76
             float     RoughnessStart;     //  4  @ 80
             float     RoughnessEnd;       //  4  @ 84
-            float     _pad;               //  4  @ 88
+            float     SSRIntensity;       //  4  @ 88
         } pc;
         pc.InverseViewProj = glm::inverse(context.ProjectionMatrix * context.ViewMatrix);
         pc.CameraPosition  = context.CameraPosition;
         pc.EnvIntensity    = envIntensity;
         pc.RoughnessStart  = roughnessStart;
         pc.RoughnessEnd    = roughnessEnd;
-        pc._pad = 0.0f;
+        pc.SSRIntensity    = context.Get<float>("SSR_Intensity", 1.0f);
         cmd.PushConstantData(m_Pipeline, &pc, sizeof pc);
 
         context.RecordAndCheckDrawCall("Apply Reflection", "Lighting", "apply_reflection", 1);

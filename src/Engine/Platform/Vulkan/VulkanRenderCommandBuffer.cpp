@@ -552,6 +552,7 @@ namespace Ayaya {
     static VkImageLayout ToVkImageLayout(ImageLayout layout) {
         switch (layout) {
             case ImageLayout::Undefined:                      return VK_IMAGE_LAYOUT_UNDEFINED;
+            case ImageLayout::General:                       return VK_IMAGE_LAYOUT_GENERAL;
             case ImageLayout::ColorAttachmentOptimal:         return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             case ImageLayout::DepthStencilAttachmentOptimal:  return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
             case ImageLayout::ShaderReadOnlyOptimal:          return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

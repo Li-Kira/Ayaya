@@ -15,7 +15,7 @@ layout(push_constant) uniform PC {
     float u_EnvIntensity;
     float u_RoughnessStart;
     float u_RoughnessEnd;
-    float _pad;
+    float u_SSRIntensity;
 } pc;
 
 layout(location = 0) in vec2 v_TexCoord;
@@ -79,7 +79,9 @@ void main() {
     // ssr.rgb is premultiplied: hitColor * alpha. Hardware bilinear preserves energy.
     // SSR hit  → replace IBL cubemap sample with screen-space reflection
     // SSR miss → fallback to PrefilteredMap cubemap
-    vec3 reflectionLight = ssr.rgb * roughnessFactor + iblColor * (1.0 - ssrWeight);
+    float ssrIntensity = pc.u_SSRIntensity;
+    vec3 reflectionLight = ssr.rgb * (roughnessFactor * ssrIntensity)
+                         + iblColor * (1.0 - ssrWeight * ssrIntensity);
 
     // === 5. Apply BRDF + occlusion uniformly ===
     // Both SSR and IBL receive the same Fresnel, geometry, and occlusion modulation.

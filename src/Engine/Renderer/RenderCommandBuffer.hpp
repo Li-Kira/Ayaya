@@ -17,6 +17,7 @@ namespace Ayaya {
     // ==========================================
     enum class ImageLayout {
         Undefined = 0,
+        General,
         ColorAttachmentOptimal,
         DepthStencilAttachmentOptimal,
         ShaderReadOnlyOptimal,

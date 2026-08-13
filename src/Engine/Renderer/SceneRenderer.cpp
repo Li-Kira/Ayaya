@@ -41,6 +41,7 @@
 #include "Renderer/Passes/VulkanSSAOPass.hpp"
 #include "Renderer/Passes/VulkanSSRPass.hpp"
 #include "Renderer/Passes/VulkanSSRBlurPass.hpp"
+#include "Renderer/Passes/VulkanSSRTemporalPass.hpp"
 #include "Renderer/Passes/VulkanApplyReflectionPass.hpp"
 #include "Renderer/Passes/VulkanWBOITPass.hpp"
 #include "Renderer/GDRContext.hpp"
@@ -65,13 +66,14 @@
 
 namespace Ayaya {
     struct struct_CameraData {
-        glm::mat4 ViewProjection;   // 64   (offset 0)
-        glm::mat4 View;             // 64   (offset 64)
-        glm::vec3 CameraPosition;   // 12   (offset 128)
-        float     _padding0;        //  4   (offset 140)
-        glm::vec4 ScreenParams;     // 16   (offset 144) — x=w, y=h, z=1+1/w, w=1+1/h
-        glm::vec4 Time;             // 16   (offset 160) — x=t/20, y=t, z=t*2, w=t*3
-    }; // 176 bytes
+        glm::mat4 ViewProjection;      // 64   (offset 0)
+        glm::mat4 View;                // 64   (offset 64)
+        glm::vec3 CameraPosition;      // 12   (offset 128)
+        float     _padding0;           //  4   (offset 140)
+        glm::vec4 ScreenParams;        // 16   (offset 144) — x=w, y=h, z=1+1/w, w=1+1/h
+        glm::vec4 Time;                // 16   (offset 160) — x=t/20, y=t, z=t*2, w=t*3
+        glm::mat4 PrevViewProjection;  // 64   (offset 176) — previous frame VP (motion vector)
+    }; // 240 bytes (16-aligned)
 
     // Directional light only (small UBO, Set 0 Binding 2)
     struct struct_DirLight {
@@ -109,6 +111,9 @@ namespace Ayaya {
         glm::mat4 ProjectionMatrix;
         glm::mat4 ViewProjectionMatrix;
         glm::vec3 CameraPosition;
+
+        glm::mat4 PrevViewMatrix;       // for temporal reprojection (SSR/TAA)
+        glm::mat4 PrevProjectionMatrix; // from the previous frame
         
         std::shared_ptr<Texture2D> WhiteTexture;
         std::shared_ptr<Texture2D> BlackTexture;
@@ -231,8 +236,9 @@ namespace Ayaya {
             m_PostProcessPass = std::make_shared<VulkanPostProcessPass>();
             m_FXAAPass        = std::make_shared<VulkanFXAAPass>();
             m_SSAOPass        = std::make_shared<VulkanSSAOPass>();
-            m_SSRPass         = std::make_shared<VulkanSSRPass>();
-            m_SSRBlurPass      = std::make_shared<VulkanSSRBlurPass>();
+            m_SSRPass            = std::make_shared<VulkanSSRPass>();
+            m_SSRBlurPass        = std::make_shared<VulkanSSRBlurPass>();
+            m_SSRTemporalPass    = std::make_shared<VulkanSSRTemporalPass>();
             m_ApplyReflectionPass = std::make_shared<VulkanApplyReflectionPass>();
             m_UIPass          = std::make_shared<UIPass>();
             m_WBOITPass       = std::make_shared<VulkanWBOITPass>();
@@ -291,9 +297,10 @@ namespace Ayaya {
             // Wire Hi-Z from GBufferPass to SSRPass for accelerated ray march
             if (auto* ssrPass = dynamic_cast<VulkanSSRPass*>(m_SSRPass.get())) {
                 ssrPass->SetHiZSource(dynamic_cast<VulkanGBufferPass*>(m_GBufferPass.get()));
-                ssrPass->SetUseHiZ(false);  // TODO: toggle for A/B comparison
+                ssrPass->SetUseHiZ(false);  // view-space marching (Hi-Z depth convention issue unresolved)
             }
             m_SSRBlurPass->OnAttach();
+            m_SSRTemporalPass->OnAttach();
             m_ApplyReflectionPass->OnAttach();
             m_LightingPass->OnAttach();
             m_ForwardBlendPass->OnAttach();
@@ -308,7 +315,7 @@ namespace Ayaya {
             PassRegistry::Init(m_GDRContext,
                                m_ShadowPass, m_GBufferPass, m_DepthPass,
                                m_LightingPass, m_ForwardBlendPass,
-                               m_SSAOPass, m_SSRPass, m_SSRBlurPass, m_ApplyReflectionPass, m_OutlinePass, m_BloomPass,
+                               m_SSAOPass, m_SSRPass, m_SSRBlurPass, m_SSRTemporalPass, m_ApplyReflectionPass, m_OutlinePass, m_BloomPass,
                                m_PostProcessPass, m_FXAAPass, m_UIPass,
                                m_WBOITPass);
         }
@@ -400,6 +407,17 @@ namespace Ayaya {
         float t = fmodf((float)glfwGetTime(), 3600.0f);  // mod 3600 prevents float precision loss
         m_Data->CameraData.Time = glm::vec4(t / 20.0f, t, t * 2.0f, t * 3.0f);
         
+        // ── Temporal reprojection: expose previous frame matrices ──
+        m_RenderContext.Set("PrevViewMatrix", m_Data->PrevViewMatrix);
+        m_RenderContext.Set("PrevProjectionMatrix", m_Data->PrevProjectionMatrix);
+        m_RenderContext.Set("PrevViewProjectionMatrix",
+            m_Data->PrevProjectionMatrix * m_Data->PrevViewMatrix);
+        m_Data->CameraData.PrevViewProjection =
+            m_Data->PrevProjectionMatrix * m_Data->PrevViewMatrix;
+        // flip for next frame
+        m_Data->PrevViewMatrix = m_Data->ViewMatrix;
+        m_Data->PrevProjectionMatrix = m_Data->ProjectionMatrix;
+
         // ==========================================
         // 4. 【核心修复】：上传数据到当前实例私有的 UBO
         // ==========================================
@@ -727,29 +745,35 @@ namespace Ayaya {
 
         // ── SSR settings ──
         bool enableSSR = false;
-        float ssrMaxSteps = 64.0f, ssrStepSize = 0.5f, ssrThickness = 0.3f;
-        float ssrEdgeFade = 0.1f, ssrRoughnessCutoff = 1.0f;
+        float ssrIntensity = 1.0f;
+        float ssrMaxSteps = 128.0f, ssrStepSize = 0.25f, ssrThickness = 0.3f;
+        float ssrEdgeFade = 0.2f, ssrRoughnessCutoff = 0.6f;
         int   ssrMaxBinarySteps = 8;
+        float ssrTemporalBlend = 0.05f;
         for (auto entityID : volumeView) {
             auto& volume = volumeView.get<PostProcessVolumeComponent>(entityID);
             if (volume.IsGlobal) {
                 enableSSR = volume.EnableSSR;
+                ssrIntensity = volume.SSRIntensity;
                 ssrMaxSteps = volume.SSRMaxSteps;
                 ssrStepSize = volume.SSRStepSize;
                 ssrThickness = volume.SSRThickness;
                 ssrEdgeFade = volume.SSREdgeFade;
                 ssrRoughnessCutoff = volume.SSRRoughnessCutoff;
                 ssrMaxBinarySteps = volume.SSRMaxBinarySteps;
+                ssrTemporalBlend = volume.SSRTemporalBlend;
                 break;
             }
         }
         m_RenderContext.Set("EnableSSR", enableSSR);
+        m_RenderContext.Set("SSR_Intensity", ssrIntensity);
         m_RenderContext.Set("SSR_MaxSteps", ssrMaxSteps);
         m_RenderContext.Set("SSR_StepSize", ssrStepSize);
         m_RenderContext.Set("SSR_Thickness", ssrThickness);
         m_RenderContext.Set("SSR_EdgeFade", ssrEdgeFade);
         m_RenderContext.Set("SSR_RoughnessCutoff", ssrRoughnessCutoff);
         m_RenderContext.Set("SSR_MaxBinarySteps", ssrMaxBinarySteps);
+        m_RenderContext.Set("SSR_TemporalBlend", ssrTemporalBlend);
 
         // ── Inject SRP global shader params ──
         if (m_PipelineBuilder) {
@@ -1058,6 +1082,10 @@ namespace Ayaya {
                 [&](RGBuilder& b) { VulkanSSRBlurPass::DeclareResources(b, vpW, vpH); },
                 [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_SSRBlurPass) m_SSRBlurPass->Execute(ctx, c); });
 
+            m_RenderGraph.AddPass("SSRTemporalPass",
+                [&](RGBuilder& b) { VulkanSSRTemporalPass::DeclareResources(b, vpW, vpH); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_SSRTemporalPass) m_SSRTemporalPass->Execute(ctx, c); });
+
             m_RenderGraph.AddPass("ApplyReflection",
                 [&](RGBuilder& b) { VulkanApplyReflectionPass::DeclareResources(b, vpW, vpH); },
                 [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_ApplyReflectionPass) m_ApplyReflectionPass->Execute(ctx, c); });
@@ -1155,6 +1183,7 @@ namespace Ayaya {
         m_PipelineBuilder->RegisterPassInstance("SSAOPass",        m_SSAOPass);
         m_PipelineBuilder->RegisterPassInstance("SSRPass",         m_SSRPass);
         m_PipelineBuilder->RegisterPassInstance("SSRBlurPass",     m_SSRBlurPass);
+        m_PipelineBuilder->RegisterPassInstance("SSRTemporalPass", m_SSRTemporalPass);
         m_PipelineBuilder->RegisterPassInstance("ApplyReflection", m_ApplyReflectionPass);
         m_PipelineBuilder->RegisterPassInstance("LightingPass",    m_LightingPass);
         m_PipelineBuilder->RegisterPassInstance("ForwardBlend",    m_ForwardBlendPass);
@@ -1231,6 +1260,7 @@ namespace Ayaya {
             // FXAA uses push-constant toggle (passthrough when disabled) — never cull.
             if (type == "SSRPass")            pass->IsCulled = !enableSSR;
             if (type == "SSRBlurPass")        pass->IsCulled = !enableSSR;
+            if (type == "SSRTemporalPass")    pass->IsCulled = !enableSSR;
             // ApplyReflection is NEVER culled — it provides IBL specular fallback
             // even when SSR is disabled (ssr.a=0 → pure cubemap specular).
             if (type == "WBOIT_Gather")       pass->IsCulled = !hasTranslucent;

@@ -18,9 +18,10 @@ namespace Ayaya {
     static_assert(sizeof(GeometryRange) == 16, "GeometryRange must be 16 bytes (matches GLSL std430)");
 
     // GPU-side instance data (per-frame SSBO)
-    // GLSL std430: mat4(64) + vec4(16) + 3×uint(12) = 92 → padded to 96 (align 16)
+    // GLSL std430: mat4(64) + mat4(64) + vec4(16) + 3×uint(12) = 156 → padded to 160 (align 16)
     struct alignas(16) GPUInstance {
-        glm::mat4 transform;         // 64 bytes
+        glm::mat4 transform;         // 64 bytes — current world transform
+        glm::mat4 prevTransform;     // 64 bytes — previous frame world transform (motion vector)
         glm::vec4 boundingSphere;    // 16 bytes — xyz=center, w=radius
         uint32_t geometryRangeIdx;   // index into geometryRanges[] SSBO
         uint32_t materialIdx;        // index into materials[] SSBO
@@ -29,7 +30,7 @@ namespace Ayaya {
         static constexpr uint32_t kFlag_CastShadows    = 1u << 0;
         static constexpr uint32_t kFlag_ReceiveShadows = 1u << 1;
     };
-    static_assert(sizeof(GPUInstance) == 96, "GPUInstance must be 96 bytes (matches GLSL std430)");
+    static_assert(sizeof(GPUInstance) == 160, "GPUInstance must be 160 bytes (matches GLSL std430)");
 
     // GPU-side material data (uploaded once, updated on material change)
     // GLSL std430: vec4(16) + 14×scalar(56) + _pad[2](8) = 104 → padded to 112 (align 16)

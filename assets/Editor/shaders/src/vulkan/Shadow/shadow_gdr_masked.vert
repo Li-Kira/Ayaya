@@ -7,6 +7,7 @@
 // set=2, binding=0: shared GPUInstance[] SSBO
 struct GPUInstance {
     mat4 transform;
+    mat4 prevTransform;
     vec4 boundingSphere;
     uint geometryRangeIdx;
     uint materialIdx;
