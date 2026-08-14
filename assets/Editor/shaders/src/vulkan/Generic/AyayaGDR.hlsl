@@ -10,14 +10,15 @@
 // TA 永远不需要自己声明 cbuffer 或 push constant。
 // ==========================================
 
-// ── Camera UBO (Set 0 Binding 0, 176 bytes, matches C++ struct_CameraData) ──
+// ── Camera UBO (Set 0 Binding 0, 240 bytes, matches C++ struct_CameraData) ──
 [[vk::binding(0, 0)]] cbuffer CameraUBO {
-    float4x4 viewProj;       // offset 0
-    float4x4 view;           // offset 64  — world→view
-    float3   cameraPos;      // offset 128
-    float    _pad0;          // offset 140
-    float4   _ScreenParams;  // offset 144 — x=w, y=h, z=1+1/w, w=1+1/h
-    float4   _Time;          // offset 160 — x=t/20, y=t, z=t*2, w=t*3
+    float4x4 viewProj;           // offset 0
+    float4x4 view;               // offset 64  — world→view
+    float3   cameraPos;          // offset 128
+    float    _pad0;              // offset 140
+    float4   _ScreenParams;      // offset 144 — x=w, y=h, z=1+1/w, w=1+1/h
+    float4   _Time;              // offset 160 — x=t/20, y=t, z=t*2, w=t*3
+    float4x4 prevViewProjection; // offset 176 — previous frame VP (motion vector)
 };
 
 // ── Frame constant access macros ──

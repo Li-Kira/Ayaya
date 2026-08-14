@@ -7,6 +7,7 @@ struct VSOutput {
     float3 worldNormal   : TEXCOORD1;
     float2 uv            : TEXCOORD2;
     nointerpolation uint matIdx : TEXCOORD3;
+    float2 velocity      : TEXCOORD4;  // per-object motion vector (UE5-style)
 };
 
 #ifdef VERTEX_SHADER
@@ -19,6 +20,19 @@ VSOutput main(uint vID : SV_VertexID, uint iID : SV_InstanceID) {
     o.worldNormal = normalize(mul((float3x3)v.worldMatrix, v.normal));
     o.uv          = v.uv;
     o.matIdx      = v.materialIdx;
+
+    // Per-object motion vector (camera + object motion). Matches gbuffer_gdr.vert's
+    // UV convention (negative-viewport Y-flip): motion = currentUV - prevUV.
+    uint finalID = (pc.overrideInstanceID != 0xFFFFFFFFu) ? pc.overrideInstanceID : iID;
+    float4 prevPos  = mul(u_Instances[finalID].prevTransform, float4(v.position, 1.0));
+    float4 curClip  = mul(viewProj, wPos);
+    float4 prevClip = mul(prevViewProjection, prevPos);
+    float2 curNDC   = curClip.xy / curClip.w;
+    float2 prevNDC  = prevClip.xy / prevClip.w;
+    float2 curUV    = float2(curNDC.x * 0.5 + 0.5, 1.0 - (curNDC.y * 0.5 + 0.5));
+    float2 prevUV   = float2(prevNDC.x * 0.5 + 0.5, 1.0 - (prevNDC.y * 0.5 + 0.5));
+    o.velocity      = curUV - prevUV;
+
     return o;
 }
 #else
@@ -27,6 +41,7 @@ VSOutput main(uint vID : SV_VertexID, uint iID : SV_InstanceID) {
 //   SV_TARGET1: RGBA8  — albedo.rgb + roughness
 //   SV_TARGET2: RGBA8  — metallic + ao + flags
 //   SV_TARGET3: RGBA8  — shadow/selection/clipZ
+//   SV_TARGET4: RG16F  — per-object velocity (motion vector)
 
 float2 OctEncode(float3 n) {
     n /= (abs(n.x) + abs(n.y) + abs(n.z));
@@ -39,6 +54,7 @@ struct PSOutput {
     float4 albedo   : SV_TARGET1;
     float4 pbr      : SV_TARGET2;
     float4 custom   : SV_TARGET3;
+    float2 velocity : SV_TARGET4;
 };
 
 PSOutput main(VSOutput i) {
@@ -51,6 +67,7 @@ PSOutput main(VSOutput i) {
     o.albedo = float4(col, 0.5);       // RGB=albedo, A=roughness
     o.pbr    = float4(0.0, 1.0, 0.0, 1.0); // metallic=0, ao=1, flags=0
     o.custom = float4(1.0, 0.0, 0.0, 1.0); // receiveShadows=1
+    o.velocity = i.velocity;
 
     return o;
 }

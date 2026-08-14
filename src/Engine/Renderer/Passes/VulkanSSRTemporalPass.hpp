@@ -26,6 +26,10 @@ private:
     // Internal history buffers — NOT RenderGraph managed (temporal accumulation
     // needs to read previous frame data, which triple-buffered RGTextures don't provide)
     std::shared_ptr<Framebuffer> m_HistoryFBO[3];  // RGBA16F, ½res, per frame-in-flight
+    // Previous-frame depth history — for true disocclusion detection. Stores the
+    // RenderGraph triple-buffered SceneDepth FBO pointer (its slot survives untouched
+    // until overwritten 3 frames later, so frame N reads frame N-1's depth).
+    std::shared_ptr<Framebuffer> m_DepthHistoryFBO[3];
     uint64_t m_FrameCount = 0;  // detects first frame (history invalid)
     uint32_t m_LastW = 0, m_LastH = 0;
 };

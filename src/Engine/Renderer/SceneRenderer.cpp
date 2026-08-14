@@ -43,6 +43,7 @@
 #include "Renderer/Passes/VulkanSSRBlurPass.hpp"
 #include "Renderer/Passes/VulkanSSRTemporalPass.hpp"
 #include "Renderer/Passes/VulkanApplyReflectionPass.hpp"
+#include "Renderer/Passes/VulkanTAAPass.hpp"
 #include "Renderer/Passes/VulkanWBOITPass.hpp"
 #include "Renderer/GDRContext.hpp"
 #include "Renderer/PassRegistry.hpp"
@@ -65,6 +66,19 @@
 #include <glm/gtx/quaternion.hpp>
 
 namespace Ayaya {
+    // Halton low-discrepancy sequence (base 2/3) — 8-sample TAA jitter (UE4 default).
+    static float HaltonSequence(uint32_t index, uint32_t base) {
+        float result = 0.0f;
+        float f = 1.0f;
+        uint32_t i = index;
+        while (i > 0) {
+            f /= (float)base;
+            result += f * (float)(i % base);
+            i /= base;
+        }
+        return result;
+    }
+
     struct struct_CameraData {
         glm::mat4 ViewProjection;      // 64   (offset 0)
         glm::mat4 View;                // 64   (offset 64)
@@ -233,6 +247,7 @@ namespace Ayaya {
             m_ForwardBlendPass = std::make_shared<VulkanForwardBlendPass>();
             m_OutlinePass     = std::make_shared<VulkanOutlinePass>();
             m_BloomPass       = std::make_shared<VulkanBloomPass>();
+            m_TAAPass         = std::make_shared<VulkanTAAPass>();
             m_PostProcessPass = std::make_shared<VulkanPostProcessPass>();
             m_FXAAPass        = std::make_shared<VulkanFXAAPass>();
             m_SSAOPass        = std::make_shared<VulkanSSAOPass>();
@@ -306,6 +321,7 @@ namespace Ayaya {
             m_ForwardBlendPass->OnAttach();
             m_OutlinePass->OnAttach();
             m_BloomPass->OnAttach();
+            m_TAAPass->OnAttach();
             m_PostProcessPass->OnAttach();
             m_FXAAPass->OnAttach();
             m_UIPass->OnAttach();
@@ -315,7 +331,7 @@ namespace Ayaya {
             PassRegistry::Init(m_GDRContext,
                                m_ShadowPass, m_GBufferPass, m_DepthPass,
                                m_LightingPass, m_ForwardBlendPass,
-                               m_SSAOPass, m_SSRPass, m_SSRBlurPass, m_SSRTemporalPass, m_ApplyReflectionPass, m_OutlinePass, m_BloomPass,
+                               m_SSAOPass, m_SSRPass, m_SSRBlurPass, m_SSRTemporalPass, m_ApplyReflectionPass, m_OutlinePass, m_BloomPass, m_TAAPass,
                                m_PostProcessPass, m_FXAAPass, m_UIPass,
                                m_WBOITPass);
         }
@@ -382,6 +398,23 @@ namespace Ayaya {
                 0.0f, 0.0f,-1.0f, 1.0f    // col 3: w' = w - z  →  NDC' = 2*NDC - 1
             );
             m_RenderContext.ProjectionMatrix = openGLDepthCorrection * projectionMatrix;
+        }
+
+        // ── TAA sub-pixel jitter (Vulkan only) — baked into per-object velocity ──
+        // Offset the projection's oblique-frustum terms so geometry samples a different
+        // sub-pixel position each frame. gbuffer_gdr.vert computes motion vectors from
+        // the jittered VP + prev VP, so the jitter is absorbed into the velocity and TAA
+        // reprojection (historyUV = currentUV - motion) stays correct with no extra
+        // compensation. Depth/GBuffer/Lighting share the same jittered VP → consistent.
+        if (RendererAPI::GetAPI() == RendererAPI::API::Vulkan) {
+            uint32_t jitterIdx = m_FrameIndex % 8 + 1;
+            float jx = (HaltonSequence(jitterIdx, 2) - 0.5f) * 2.0f / (float)m_Data->ViewportWidth;
+            float jy = (HaltonSequence(jitterIdx, 3) - 0.5f) * 2.0f / (float)m_Data->ViewportHeight;
+            m_RenderContext.ProjectionMatrix[2][0] += jx;
+            m_RenderContext.ProjectionMatrix[2][1] += jy;
+            m_Data->ProjectionMatrix = m_RenderContext.ProjectionMatrix;  // jittered → prev cache
+            m_RenderContext.Set("TAA_Jitter", glm::vec2(jx * 0.5f, jy * 0.5f));  // UV-space
+            m_FrameIndex++;
         }
 
         m_RenderContext.ViewMatrix = viewMatrix;
@@ -708,6 +741,7 @@ namespace Ayaya {
         bool  enableBloom = false;
         float bThreshold = 1.0f, bKnee = 0.1f, bRadius = 0.005f, bIntensity = 1.0f;
         bool  enableFXAA = false;
+        bool  enableTAA = false;
         bool  enableSSAO = false;
         float ssaoRadius = 0.5f, ssaoBias = 0.025f;
 
@@ -724,6 +758,7 @@ namespace Ayaya {
                 bRadius = volume.BloomRadius;
                 bIntensity = volume.BloomIntensity;
                 enableFXAA = volume.EnableFXAA;
+                enableTAA = volume.EnableTAA;
                 enableSSAO = volume.EnableSSAO;
                 ssaoRadius = volume.SSAORadius;
                 ssaoBias   = volume.SSAOBias;
@@ -739,6 +774,7 @@ namespace Ayaya {
         m_RenderContext.Set("BloomRadius", bRadius);
         m_RenderContext.Set("BloomIntensity", bIntensity);
         m_RenderContext.Set("EnableFXAA", enableFXAA);
+        m_RenderContext.Set("EnableTAA", enableTAA);
         m_RenderContext.Set("EnableSSAO", enableSSAO);
         m_RenderContext.Set("SSAORadius", ssaoRadius);
         m_RenderContext.Set("SSAOBias", ssaoBias);
@@ -1101,6 +1137,10 @@ namespace Ayaya {
             m_RenderGraph.AddPass("WBOIT_Resolve",
                 [&](RGBuilder& b) { VulkanWBOITPass::DeclareResolveResources(b, vpW, vpH); },
                 [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_WBOITPass) m_WBOITPass->ExecuteResolve(ctx, c); });
+
+            m_RenderGraph.AddPass("TAAPass",
+                [&](RGBuilder& b) { VulkanTAAPass::DeclareResources(b, vpW, vpH); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_TAAPass) m_TAAPass->Execute(ctx, c); });
 
             m_RenderGraph.AddPass("OutlinePass",
                 [&](RGBuilder& b) { VulkanOutlinePass::DeclareResources(b, vpW, vpH); },

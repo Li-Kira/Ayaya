@@ -18,7 +18,7 @@ namespace Ayaya {
     }
 
     void VulkanPostProcessPass::DeclareResources(RGBuilder& builder, uint32_t width, uint32_t height) {
-        builder.ReadTexture("Lighting");
+        builder.ReadTexture("TAA_Output");
         builder.ReadTexture("Selection");
         builder.ReadTexture("Bloom");
         FramebufferSpecification s;
@@ -36,7 +36,8 @@ namespace Ayaya {
 
         cmd.BeginRenderPass(fbo, true, glm::vec4(0.0f));
         cmd.BindPipeline(m_Pipeline);
-        auto src = context.GetFramebuffer("Lighting");
+        auto src = context.GetFramebuffer("TAA_Output");
+        if (!src) src = context.GetFramebuffer("Lighting");  // SRP path (no TAA pass)
         auto wt = context.GetTexture("WhiteTexture");
         if (src) cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, src, 0);
         else cmd.BindTexture2D(m_Pipeline, "u_ScreenTexture", 0, wt);

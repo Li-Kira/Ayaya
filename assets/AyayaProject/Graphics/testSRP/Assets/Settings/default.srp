@@ -6,7 +6,7 @@ local vpH = Pipeline:GetViewportHeight()
 Pipeline:DeclareTexture("ShadowMap", {"Depth"}, 4096, 4096, 1, true)
 Pipeline:DeclareTexture("SceneDepth", {"R8", "Depth"}, vpW, vpH)
 Pipeline:DeclareTexture("GBuffer",
-    {"RG16F", "RGBA8", "RGBA8", "RGBA8"}, vpW, vpH)
+    {"RG16F", "RGBA8", "RGBA8", "RGBA8", "RG16F"}, vpW, vpH)
 Pipeline:DeclareTexture("SSAO_Final", {"R8"}, vpW / 2, vpH / 2)
 Pipeline:DeclareTexture("Lighting", {"RGBA16F", "Depth"}, vpW, vpH)
 Pipeline:DeclareTexture("Selection", {"RGBA8"}, vpW, vpH)

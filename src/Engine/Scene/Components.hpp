@@ -235,6 +235,9 @@ namespace Ayaya {
         // --- FXAA ---
         bool EnableFXAA = false;
 
+        // --- TAA (Temporal Anti-Aliasing) ---
+        bool EnableTAA = false;
+
         // --- SSAO ---
         bool  EnableSSAO = false;
         float SSAORadius = 0.5f;

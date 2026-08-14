@@ -9,7 +9,7 @@ namespace Ayaya {
     }
 
     void VulkanBloomPass::DeclareResources(RGBuilder& builder, uint32_t width, uint32_t height) {
-        builder.ReadTexture("Lighting");
+        builder.ReadTexture("TAA_Output");
         // Bloom starts at half resolution (matching OpenGL mip[0]).
         // The pass internally downsamples further to w/4, w/8, w/16, w/32.
         FramebufferSpecification spec;
@@ -48,7 +48,8 @@ namespace Ayaya {
     }
 
     void VulkanBloomPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
-        auto inputFBO = context.GetFramebuffer("Lighting");
+        auto inputFBO = context.GetFramebuffer("TAA_Output");
+        if (!inputFBO) inputFBO = context.GetFramebuffer("Lighting");  // SRP path (no TAA pass)
         auto bloomFBO = context.GetFramebuffer("Bloom");
         if (!inputFBO || !bloomFBO) return;
 

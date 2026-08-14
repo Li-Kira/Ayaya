@@ -130,6 +130,7 @@ namespace Ayaya {
         std::shared_ptr<RenderPass> m_ApplyReflectionPass;
         std::shared_ptr<RenderPass> m_OutlinePass;
         std::shared_ptr<RenderPass> m_BloomPass;
+        std::shared_ptr<RenderPass> m_TAAPass;
         std::shared_ptr<RenderPass> m_PostProcessPass;
         std::shared_ptr<RenderPass> m_FXAAPass;
         std::shared_ptr<RenderPass> m_UIPass;
@@ -140,6 +141,7 @@ namespace Ayaya {
         RenderContext m_RenderContext;
         RenderQueue  m_RenderQueue;
         float m_Exposure = 1.0f;
+        uint32_t m_FrameIndex = 0;  // monotonic frame counter for TAA Halton jitter
 
         // ── SRP (Scriptable Render Pipeline) ──
         UUID m_SRPScriptHandle = 0;               // 0 = use hardcoded default

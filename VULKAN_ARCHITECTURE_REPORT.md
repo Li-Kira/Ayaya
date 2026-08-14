@@ -230,10 +230,10 @@ class IPassFactory {
 | `m_SRPScriptHandle` | `UUID` | 0 = hardcoded pipeline; non-zero = Lua SRP script |
 | `m_SRPDirty` | `bool` | Triggers Lua re-execution on next graph build |
 
-### 14 Shared Pass Instances
+### 15 Shared Pass Instances
 
 All `shared_ptr<RenderPass>`:
-`m_ShadowPass`, `m_GBufferPass`, `m_DepthPass`, `m_SSAOPass`, `m_SSRPass`, `m_SSRBlurPass`, `m_ApplyReflectionPass`, `m_LightingPass`, `m_ForwardBlendPass`, `m_WBOITPass`, `m_OutlinePass`, `m_BloomPass`, `m_PostProcessPass`, `m_FXAAPass`, `m_UIPass`
+`m_ShadowPass`, `m_GBufferPass`, `m_DepthPass`, `m_SSAOPass`, `m_SSRPass`, `m_SSRBlurPass`, `m_SSRTemporalPass`, `m_ApplyReflectionPass`, `m_LightingPass`, `m_ForwardBlendPass`, `m_WBOITPass`, `m_OutlinePass`, `m_BloomPass`, `m_PostProcessPass`, `m_FXAAPass`, `m_UIPass`
 
 ### SSBOs for Lighting
 
@@ -331,16 +331,19 @@ Central data hub owned by `SceneRenderer`, shared across Shadow, GBuffer, DepthP
 
 The VkBuffer handles are pre-bound at `Init()` time — buffers are persistent-mapped, so handles never change. `BindSet2()` is a convenience method for `vkCmdBindDescriptorSets(cmd, ..., 2, 1, &Set2Descriptors[frameIndex], ...)`.
 
-#### GPUInstance (96 bytes, alignas(16))
+#### GPUInstance (160 bytes, alignas(16))
 
 ```
-mat4 transform          // 64B — World transform matrix
-vec4 boundingSphere     // 16B — xyz=world-space center, w=world-space radius (max-axis-scaled)
-uint geometryRangeIdx   // 4B  — Index into GeometryRangeSSBO[]
-uint materialIdx        // 4B  — Index into MaterialSSBO[]
-uint entityId           // 4B  — Raw entt::entity ID (truncated to 16 bits)
-uint flags              // 4B  — Bit 0=CastShadows, Bit 1=ReceiveShadows
+mat4 transform          // 64B  — Current world transform matrix
+mat4 prevTransform      // 64B  — Previous frame world transform (per-object motion vector)
+vec4 boundingSphere     // 16B  — xyz=world-space center, w=world-space radius (max-axis-scaled)
+uint geometryRangeIdx   // 4B   — Index into GeometryRangeSSBO[]
+uint materialIdx        // 4B   — Index into MaterialSSBO[]
+uint entityId           // 4B   — Raw entt::entity ID (truncated to 16 bits)
+uint flags              // 4B   — Bit 0=CastShadows, Bit 1=ReceiveShadows
 ```
+
+`prevTransform` is populated by `GDRContext` from a double-buffered per-entity cache (`m_PrevWorldTransforms`, keyed by full 32-bit entity ID). First appearance uses `prevTransform = transform` (no motion). Dropped entities are auto-evicted when the map is swapped.
 
 #### GeometryRange (16 bytes, each maps to one sub-mesh)
 
@@ -467,9 +470,9 @@ Same triple-buffered persistent-mapped pattern. `SetData()` writes current frame
 ### Default Pass Order
 
 ```
-Shadow → DepthPrePass → GBuffer → (SSAO) → (SSR) → Lighting →
-  SSR → SSRBlur → ApplyReflection → ForwardBlend → (WBOIT_Gather → WBOIT_Resolve) →
-  Outline → Bloom → PostProcess → FXAA → UI
+Shadow → DepthPrePass → GBuffer → (SSAO) → Lighting →
+  SSR → SSRBlur → SSRTemporal → ApplyReflection → ForwardBlend →
+  (WBOIT_Gather → WBOIT_Resolve) → Outline → Bloom → PostProcess → FXAA → UI
 ```
 
 ### 5.1 Shadow Pass (`VulkanShadowPass`)
@@ -503,7 +506,7 @@ Shadow → DepthPrePass → GBuffer → (SSAO) → (SSR) → Lighting →
 
 ### 5.3 GBuffer Pass (`VulkanGBufferPass`)
 
-- **Writes:** `"GBuffer"` — 4 MRTs + Depth:
+- **Writes:** `"GBuffer"` — 5 MRTs + Depth:
 
 | Attachment | Format | Content |
 |-----------|--------|---------|
@@ -511,10 +514,11 @@ Shadow → DepthPrePass → GBuffer → (SSAO) → (SSR) → Lighting →
 | 1 | RGBA8 | Albedo RGB + 1.0 |
 | 2 | RGBA8 | Metallic (R), Roughness (G), AO (B), unused |
 | 3 | RGBA8 | CustomData (ReceiveShadows flag, etc.) |
+| 4 | RG16F | Per-object velocity (UE5-style motion vector) |
 | Depth | D24S8 | Scene depth — LOAD from DepthPrePass (clear=false), not CLEAR |
 
-- **Vertex shader:** `gbuffer_gdr.vert` — SSBO vertex pulling via `GetAyayaVertex()`, outputs `v_FragPos`, `v_Normal`, `v_TexCoord`, `v_MaterialIdx` (flat), `v_Flags` (flat)
-- **Fragment shader:** `gbuffer_gdr_bindless.frag` — bindless texture array for PBR maps, Material SSBO reading, full TexturePacking support (UE4_ORM, glTF_MetalRough, Separate)
+- **Vertex shader:** `gbuffer_gdr.vert` — SSBO vertex pulling via `GetAyayaVertex()`, outputs `v_FragPos`, `v_Normal`, `v_TexCoord`, `v_MaterialIdx` (flat), `v_Flags` (flat), `v_Velocity`. Motion computed as `currentUV - prevUV` using `transform`/`prevTransform` and `ViewProjection`/`PrevViewProjection` (with negative-viewport Y-flip).
+- **Fragment shader:** `gbuffer_gdr_bindless.frag` — bindless texture array for PBR maps, Material SSBO reading, full TexturePacking support (UE4_ORM, glTF_MetalRough, Separate), velocity passthrough
 - **Compute culling:** `cull.comp` with frustum planes + LightMode mask. Empty scene → `vkCmdFillBuffer` on all 3 indirect draw slots.
 - **Hi-Z build:** Depth pyramid constructed after GBuffer (always built, culling disabled)
 
@@ -837,7 +841,7 @@ struct PassBakedParams {
 
 Global factory registry mapping pass type names to `IPassFactory` instances. Lazy-instantiation: first `Get(name)` creates the factory via stored lambda.
 
-**18 registered in `Init()`:** ShadowPass, GBufferPass, DepthPrePass, SSAOPass, SSRPass, SSRBlurPass, ApplyReflection, LightingPass, ForwardBlend, WBOIT_Gather, WBOIT_Resolve, OutlinePass, BloomPass, PostProcessPass, FXAAPass, UIPass + GenericDrawPass, GenericComputePass, GenericFullScreenPass.
+**19 registered in `Init()`:** ShadowPass, GBufferPass, DepthPrePass, SSAOPass, SSRPass, SSRBlurPass, SSRTemporalPass, ApplyReflection, LightingPass, ForwardBlend, WBOIT_Gather, WBOIT_Resolve, OutlinePass, BloomPass, PostProcessPass, FXAAPass, UIPass + GenericDrawPass, GenericComputePass, GenericFullScreenPass.
 
 ### Generic Pass System — Zero-CPP Pipeline Extension
 
@@ -1085,139 +1089,126 @@ Static headless renderer for 3D model/material/prefab thumbnails:
 
 ## 14. Screen-Space Reflections (SSR)
 
-> **Status:** Fully implemented (Aug 2026). UE-style hierarchical SSR with Hi-Z acceleration, Blue Noise jitter, roughness-driven bilateral blur, and premultiplied alpha compositing.
+> **Status:** Fully implemented (Aug 2026). Four-pass SSR with view-space ray march, per-object motion vectors (UE5-aligned), temporal reprojection, roughness-driven bilateral blur, and premultiplied alpha compositing. Hi-Z acceleration was prototyped but reverted (depth-convention bug, see §14.7).
 
 ### 14.1 Architecture Overview
 
-Three-pass SSR pipeline inserted between Lighting and ForwardBlend:
+Four-pass SSR pipeline inserted between Lighting and ForwardBlend:
 
 ```
-Lighting_NoSpecIBL → SSR (½-res ray march) → SSRBlur (½-res bilateral) → ApplyReflection (full-res composite) → ForwardBlend
+Lighting_NoSpecIBL
+  → SSR        (½-res view-space ray march)   → SSR_Result
+  → SSRBlur    (½-res bilateral blur)         → SSR_Blurred
+  → SSRTemporal (½-res temporal reprojection) → SSR_Temporal
+  → ApplyReflection (full-res composite)      → Lighting (additive)
+  → ForwardBlend
 ```
 
-**Key design:** IBL specular is *removed* from the Lighting pass (`deferred_lighting.frag`, line 160: `+spI` deleted). The ApplyReflection pass is the sole provider of specular IBL — computing it from the PrefilteredMap cubemap, and replacing it with SSR where the ray-march finds a screen-space hit.
+**Key design:** IBL specular is *removed* from the Lighting pass. The ApplyReflection pass is the sole provider of specular — computing IBL from the PrefilteredMap cubemap and replacing it with the temporally-accumulated SSR where the ray-march found a hit.
 
-### 14.2 File Inventory (20 files)
+**Per-object motion vectors (UE5-aligned):** the GBuffer outputs a velocity MRT (attachment 4, RG16F) computed in the vertex shader as `currentUV - prevUV` using `GPUInstance.prevTransform` + `CameraData.PrevViewProjection`. The SSR Temporal pass consumes this velocity to reproject history.
 
-**Shader source (6):**
-| File | Size | Purpose |
-|------|------|---------|
-| `SSR/ssr_march.vert` | 394B | Fullscreen triangle, half-res |
-| `SSR/ssr_march.frag` | ~7.9KB | **Core** — Hi-Z accelerated ray-march, outputs `SSR_Result` (RGBA16F) |
-| `SSR/ssr_blur.vert` | 299B | Fullscreen triangle, half-res |
-| `SSR/ssr_blur.frag` | ~2.0KB | Roughness-driven bilateral blur, outputs `SSR_Blurred` |
-| `SSR/apply_reflection.vert` | 299B | Fullscreen triangle, full-res |
-| `SSR/apply_reflection.frag` | ~3.8KB | UE-style hierarchical replacement composite |
+### 14.2 File Inventory
 
-**C++ Pass classes (6):**
+**Shader source (8):**
 | File | Purpose |
 |------|---------|
-| `VulkanSSRPass.hpp/.cpp` | SSR ray-march pass: Hi-Z descriptor set, Blue Noise, push constants |
-| `VulkanSSRBlurPass.hpp/.cpp` | 2-pass separable bilateral blur (Horiz + Vert), internal FBO |
-| `VulkanApplyReflectionPass.hpp/.cpp` | Full-res composite: PrefilteredMap + BRDF LUT + SSR_Blurred → additive blend onto Lighting |
+| `SSR/ssr_march.{vert,frag}` | **Core** — view-space ray march, Blue Noise jitter, outputs `SSR_Result` (RGBA16F) |
+| `SSR/ssr_blur.{vert,frag}` | Roughness-driven separable bilateral blur, outputs `SSR_Blurred` |
+| `SSR/ssr_temporal.{vert,frag}` | Temporal reprojection + roughness-adaptive blend, outputs `SSR_Temporal` |
+| `SSR/apply_reflection.{vert,frag}` | UE-style hierarchical replacement composite |
 
-**Pipeline integration (8 modified):**
+**C++ Pass classes (8):**
+| File | Purpose |
+|------|---------|
+| `VulkanSSRPass.hpp/.cpp` | Ray march: Blue Noise, push constants, frame counter |
+| `VulkanSSRBlurPass.hpp/.cpp` | 2-pass separable bilateral blur, internal FBO |
+| `VulkanSSRTemporalPass.hpp/.cpp` | Temporal reprojection + blend (history via RenderGraph triple-buffer) |
+| `VulkanApplyReflectionPass.hpp/.cpp` | Full-res composite: PrefilteredMap + BRDF LUT + SSR_Temporal → additive onto Lighting |
+
+**Motion vector integration:**
 | File | Change |
 |------|--------|
-| `deferred_lighting.frag` (+ 2× SPIR-V) | Removed `+spI` from ambient term |
-| `SceneRenderer.hpp/.cpp` | 3 new pass members, construction, OnAttach, RenderGraph, SRP, culling |
-| `PassRegistry.hpp/.cpp` | 3 new factories (`SSRPass`, `SSRBlurPass`, `ApplyReflection`), Init signature extended |
-| `RenderGraph.hpp/.cpp` | `WriteLoadOps` support, single-pass producer mapping DAG fix |
-| `VulkanGBufferPass.hpp` | Public Hi-Z getters (`GetHiZImageView`, `GetHiZSampler`, `GetHiZMipCount`) |
-| `default.srp` | `SSR_Result`, `SSR_Blurred` textures + 3 pass declarations |
-| `Components.hpp` + `SceneSerializer.cpp` | 7 SSR ECS parameters |
-| `PropertiesPanel.cpp` + `FrameDebuggerPanel.cpp` | SSR UI controls + debug entries |
+| `VulkanGeometryPool.hpp` + `AyayaGDR.hlsl` + GLSL | `GPUInstance.prevTransform` (96 → 160 bytes) |
+| `GDRContext.hpp/.cpp` | double-buffered per-entity previous transform cache |
+| `SceneRenderer.cpp` | `CameraData.PrevViewProjection` (176 → 240 bytes) |
+| `gbuffer_gdr.vert` + `gbuffer_gdr_bindless.frag` | velocity output (MRT attachment 4) |
+| `VulkanGbufferPass.cpp` | 5th GBuffer MRT (RG16F velocity) |
 
-### 14.3 SSR Pass — Hi-Z Accelerated Ray March (`ssr_march.frag`)
+### 14.3 SSR Pass — View-Space Ray March (`ssr_march.frag`)
 
 **Inputs (Set 1):** `u_DepthMap(0)`, `g_Albedo(1)`, `g_PBR(2)`, `g_Normal(4)`, `u_Lighting(6)`, `u_BlueNoise(7)`
-**Inputs (Set 2):** `u_HiZ(0)` — Hi-Z depth pyramid from GBufferPass
-**Output:** `SSR_Result` — half-res RGBA16F, premultiplied alpha (`hitColor * alpha, alpha`)
+**Output:** `SSR_Result` — half-res RGBA16F, premultiplied alpha
 
 **Algorithm steps:**
 
-1. **Surface reconstruction:** `ViewPosFromDepth` (NDC Y-flip compensated) → viewPos. OctDecode GBuffer normal → `mat3(View)*N` to view space. Roughness from `g_PBR.g`.
+1. **Surface reconstruction:** `ViewPosFromDepth` → viewPos. OctDecode GBuffer normal → view space. Roughness from `g_PBR.g`.
 
-2. **Filtering:** `roughness > RoughnessCutoff` → discard. No metallic cull — Fresnel controls reflection strength for all surfaces.
+2. **Filtering:** `roughness > RoughnessCutoff` (default 0.6) → discard.
 
-3. **Reflection direction:** Blue Noise jitter on normal: `N_jittered = N + jitter * roughness * 0.3`. `R = reflect(-V, N_jittered)`.
+3. **Reflection direction:** Blue Noise tangent-space jitter (`.rg` only, avoiding the old z=-1 bias): `coneAngle = roughness * 0.15`. **Temporal jitter**: the Blue Noise sampling UV is offset by a per-frame hash (`u_FrameIndex`), so the jitter pattern changes every frame and temporal accumulation can average it out.
 
-4. **Hi-Z traversal:** Ray projected to screen UV start→end. DDA cell crossing algorithm traverses the depth pyramid:
-   - Start at coarsest mip (e.g., mip 10)
-   - Sample Hi-Z cell: `minDepth = textureLod(u_HiZ, cellCenter, mip).r` (MAX-reduced, conservative)
-   - `rayZ > minDepth` → ray behind everything in cell → DDA-skip to cell boundary, upgrade mip
-   - `rayZ <= minDepth` → potential intersection → descend one mip (`prevUV` reset)
-   - At mip 0: linear NDC Z comparison (`mix(zStart, zEnd, t)`) with thickness test against `u_DepthMap`
+4. **Ray march (view-space):** parameterize the ray in view space (`viewPos + R * stepVS * i`), project each step exactly to screen UV (negative-viewport Y-flip). Fixed step size (default 0.125 world units × 128 steps = 16 units max distance).
 
-5. **Hit detection (mip 0):** Crossing test (`prevRayZ <= prevSceneZ + Thickness && rayZ > sceneZ`) prevents false hits at depth discontinuities. Binary refinement in NDC Z space (perspective-correct midpoint via `mix(fPos, bPos, t)` where `t` from NDC Z midpoint). Samples `u_Lighting` at refined UV.
+5. **Hit detection:** crossing test with **view-space (linear) thickness** (`thicknessVS = Thickness * 0.1`). The surface's view-space depth is reconstructed from NDC Z via `sceneDepth = -(Proj[3][2] / (-sceneZ - Proj[2][2]))`. Binary refinement uses the view-space midpoint (the old NDC-Z `frac` was always 0.5, so it was already effectively view-space).
 
-6. **Output:** `alpha = clamp(edgeFade * max(fresnel * 3.0, 0.1) * hitFound, 0.0, 1.0)`. Premultiplied: `FragColor = vec4(hitColor.rgb * alpha, alpha)`.
+6. **Output:** `alpha = clamp(edgeFade * max(fresnel * 3.0, 0.1) * hitFound, 0.0, 1.0)`. Premultiplied alpha.
 
-**Push constants (232 bytes):** `InvProj(64)`, `Proj(64)`, `View(64)`, `MaxSteps(4)`, `StepSize(4)`, `Thickness(4)`, `EdgeFade(4)`, `MaxBinarySteps(4)`, `RoughnessCutoff(4)`, `Enabled(4)`, `HiZMipCount(4)`, `_pad2(4)`.
+**Push constants (228 bytes):** `InvProj(64)`, `Proj(64)`, `View(64)`, `MaxSteps(4)`, `StepSize(4)`, `Thickness(4)`, `EdgeFade(4)`, `MaxBinarySteps(4)`, `RoughnessCutoff(4)`, `Enabled(4)`, `HiZMipCount(4)`, `FrameIndex(4)`.
 
-### 14.4 SSRBlur Pass — Roughness-Driven Bilateral Blur (`ssr_blur.frag`)
+### 14.4 SSRBlur Pass — Roughness-Driven Bilateral Blur
 
-**Algorithm:** 2-pass separable bilateral blur (C++ dispatches Horz + Vert with `BlurDir` push constant). Continuous radius with edge fading prevents integer-truncation banding.
+2-pass separable bilateral blur (Horiz + Vert). Continuous radius (`fRadius = roughness * 8.0`) with edge fading prevents integer-truncation banding. Depth-aware (cross-bilateral) to prevent bleeding across object boundaries. Premultiplied-alpha aware.
 
-**Key features:**
-- `fRadius = roughness * 8.0` (continuous float, not truncated to int)
-- `maxRadius = ceil(fRadius)` — loop range
-- `edgeFade = clamp(fRadius - dist + 1.0, 0.0, 1.0)` — smooth transition when radius crosses integer boundaries
-- Dynamic Gaussian sigma: `sigma = max(fRadius * 0.5, 0.5)`
-- Depth weight: `exp(-abs(centerDepth - sampleDepth) * DepthThreshold)` — edge-preserving bilateral
-- **Premultiplied alpha aware:** Weights do NOT multiply `sampleSSR.a` (color already premultiplied)
+### 14.5 SSRTemporal Pass — Temporal Reprojection (new)
 
-**Internal FBO:** Half-res RGBA16F (`m_BlurXFBO`), manually transitioned (not RenderGraph-managed). Final output writes to RenderGraph-managed `SSR_Blurred`.
+Reprojects the previous frame's temporally-accumulated result using per-object velocity, then blends with the current frame:
 
-### 14.5 ApplyReflection Pass — UE-Style Hierarchical Replacement (`apply_reflection.frag`)
-
-**Inputs (Set 1):** `u_SSRResult(0)` — SSR_Blurred, `g_Albedo(1)`, `g_Normal(2)`, `g_PBR(3)`, `u_DepthMap(4)`, `u_SSAO(5)`, `u_PrefilteredMap(6)` (cube), `u_BRDFLUT(7)`
-
-**Composite formula (premultiplied alpha):**
 ```
-specularBRDF = F_SchlickR(NdotV, F0, roughness) * brdf.x + brdf.y
-iblColor = PrefilteredMap(R, roughness*4.0) * EnvIntensity
-ssrWeight = ssr.a * (1.0 - smoothstep(0.2, 0.6, roughness))
-reflectionLight = ssr.rgb * roughnessFactor + iblColor * (1.0 - ssrWeight)
+motion = u_Velocity[v_TexCoord].rg          // per-object velocity (GBuffer MRT 4)
+historyUV = v_TexCoord - motion             // velocity = currentUV - prevUV
+historyColor = clamp(u_SSRHistory[historyUV], neighborhood)
+blendFactor = roughness-adaptive (mirror 0.30, rough 0.05) + motion-magnitude boost
+output = mix(historyColor, currentSSR, blendFactor)
+```
+
+- **Disocclusion:** depth + normal divergence (depthDiff > 0.05, normalAgree < 0.8).
+- **Neighborhood clamp:** 3×3 with 10% variance boost (anti-ghosting).
+- **History persistence:** reuses the RenderGraph's triple-buffered `SSR_Temporal` FBO — `m_HistoryFBO[currIdx] = temporalFBO`, read back from `m_HistoryFBO[(fi+2)%3]` next frame. No copy pass needed.
+
+### 14.6 ApplyReflection Pass — UE-Style Hierarchical Replacement
+
+**Inputs (Set 1):** `u_SSRResult(0)` — SSR_Temporal, `g_Albedo(1)`, `g_Normal(2)`, `g_PBR(3)`, `u_DepthMap(4)`, `u_SSAO(5)`, `u_PrefilteredMap(6)` (cube), `u_BRDFLUT(7)`
+
+**Composite (premultiplied alpha):**
+```
+reflectionLight = ssr.rgb * (roughnessFactor * ssrIntensity)
+                + iblColor * (1.0 - ssrWeight * ssrIntensity)
 finalSpecular = reflectionLight * specularBRDF * ao * ssao
 → additive blend (One/One, LoadOp::Load) onto Lighting
 ```
 
-**Key properties:**
-- **Never culled:** Provides IBL specular fallback even when SSR is disabled (ssrFBO null → BlackTexture → ssrWeight=0 → pure IBL cubemap)
-- **Premultiplied alpha:** `ssr.rgb` already has alpha baked in — hardware bilinear upsampling from half-res preserves energy at reflection edges, eliminating dark halos
-- **Roughness-controlled transition:** `smoothstep(0.2, 0.6, roughness)` — mirror surfaces get full SSR, rough surfaces fall back to IBL cubemap
+- **Never culled** (provides IBL specular fallback), but **checks `EnableSSR`**: when SSR is off it forces `ssrFBO = nullptr` → BlackTexture → pure IBL. (Fixed a bug where the RenderGraph still injected a stale `SSR_Temporal` FBO for the culled pass's read.)
+- **`SSRIntensity`** push constant scales the SSR contribution (0 = pure IBL, 1 = normal, >1 = boosted).
 
-### 14.6 Lighting Pass Modification
+### 14.7 Hi-Z Investigation (prototyped, then reverted)
 
-`deferred_lighting.frag` line 160: `vec3 amb = (kDi * irr * Albedo) * AO * ssao;` — IBL specular (`spI`) removed from the ambient term. The Lighting buffer now contains only IBL diffuse + direct lighting. Specular IBL is computed independently by ApplyReflection.
-
-### 14.7 Hi-Z Integration
-
-The existing Hi-Z depth pyramid (built in `VulkanGBufferPass::BuildHiZ`, R32_SFLOAT, MAX-reduced mip chain) is exposed via public getters:
-- `GetHiZImageView(frameIdx)` — full mip chain view
-- `GetHiZSampler()` — NEAREST, CLAMP_TO_EDGE
-- `GetHiZMipCount()` — `floor(log2(max(w,h))) + 1`
-- `GetCurrentHiZIndex()` — ring buffer index of most recently built Hi-Z
-
-SSRPass injects a Hi-Z descriptor set layout (Set 2, Binding 0) via `VulkanPipeline::s_ExtraSetLayouts` during `OnAttach`. At runtime, descriptor sets are written with the current frame's Hi-Z image+sampler and bound via `vkCmdBindDescriptorSets` at set=2.
+A MIN-reduced Hi-Z screen-space DDA was prototyped to fix grazing-angle tunneling/moiré. It was reverted after a debug pass revealed the **Hi-Z depth is inverted** relative to the depth buffer (objects read 1.0, ground 0.0 — contradicting the engine's [0,1] near=0/far=1 convention). Root cause not yet resolved; the likely culprit is the `texelFetch(u_DepthMap).r` sampling of the depth attachment in `hiz_build.comp` vs the shadow-sampler path used by the SSR. Infrastructure retained: the Hi-Z viewport-rebuild check in `VulkanGBufferPass::BuildHiZ` (recreates Hi-Z when the FBO size changes).
 
 ### 14.8 Key Bug Fixes Applied
 
 | Bug | Symptom | Fix |
 |-----|---------|-----|
-| NDC Y-flip missing in ray march UV | Vertically mirrored reflections | `1.0 - uv.y*2.0` in both UV→NDC and NDC→UV conversion |
-| Roughness read from `g_Albedo.a` (always 1.0) | All reflections maximally blurred | Read from `g_PBR.g` (GBuffer attachment 2) |
-| Alpha extrapolation > 1.0 at grazing angles | Red-black artifacts | `clamp(alpha, 0.0, 1.0)` |
-| ApplyReflection culled with SSR | IBL disappears when SSR off | ApplyReflection never culled — always provides IBL fallback |
-| "Hit within thickness" shortcut without binary refinement | Stair-step banding | All hits go through binary refinement |
-| Missing crossing test | Vertical smearing | `prevRayZ <= prevSceneZ + Thickness` check |
-| View-space binary search midpoint (no perspective correction) | Wobbly edges | NDC Z space midpoint via `mix(fPos, bPos, t)` |
-| Metallic factor in alpha formula | Dielectrics get zero SSR | Removed — Fresnel alone controls reflection strength |
-| `textureLod(u_Lighting, ..., roughness*4.0)` on non-mipmapped FBO | Undefined behavior | Changed to `textureLod(..., 0.0)` |
-| Thickness `* 0.01` over-scaling | Missed hits at grazing angles | Direct NDC Z comparison: `rayZ < sceneZ + Thickness` |
-| Non-premultiplied alpha + hardware bilinear | Dark halos at reflection edges | Full premultiplied alpha pipeline: `FragColor = vec4(color*alpha, alpha)` |
-| `int(roughness*8.0)` truncation | Blur radius banding | Continuous `fRadius` + `edgeFade` + dynamic sigma |
+| Velocity Y-flip (`(ΔNDC)*0.5`) | Temporal reprojection upside-down | Full UV projection with negative-viewport Y-flip |
+| Temporal reprojection `+ motion` | History sampled wrong direction | `currentUV - motion` |
+| Temporal fullscreen vertex Y mapping | Temporal output inverted | Match negative-viewport convention |
+| Blue Noise `.rgb` z=-1 bias | Systematic normal tilt | Tangent-space `.rg` jitter |
+| SSR Temporal `* 2.0` sampling | Wrong screen position | Normalized UV (resolution-independent) |
+| NDC Z thickness (non-linear) | Noise (tight) + smearing (loose) | View-space linear thickness |
+| `> ` vs `>=` in Hi-Z DDA | SSR disappeared (ray skip at surface) | `>=` (reverted with Hi-Z) |
+| Static Blue Noise jitter | Temporal can't smooth noise | Per-frame hash offset (`FrameIndex`) |
+| Stale `SSR_Temporal` when SSR off | Toggle no effect | ApplyReflection checks `EnableSSR` → BlackTexture |
+| Disocclusion sampled current-frame depth | Ghosting under fast camera motion | `u_DepthHistory` (prev-frame `SceneDepth` via triple-buffered FBO pointer) |
 
 ---
 
@@ -1226,12 +1217,14 @@ SSRPass injects a Hi-Z descriptor set layout (Set 2, Binding 0) via `VulkanPipel
 ### Known Issues
 
 1. **Hi-Z occlusion culling fully built but disabled** via hardcoded `if (false && ...)`. Depth pyramid still constructed every frame (wasted GPU work).
-2. **`VulkanClearPass` is an empty stub** — not wired into the RenderGraph DAG.
+2. **Hi-Z depth is inverted** when sampled via `texelFetch` in `hiz_build.comp` (objects read 1.0, ground 0.0 — contradicting the engine's [0,1] near=0/far=1 convention). Blocked a MIN-reduced Hi-Z SSR implementation; SSR currently uses view-space marching instead. Root cause suspected to be the `sampler2D` depth-attachment sampling path vs the shadow-sampler path.
+3. **`VulkanClearPass` is an empty stub** — not wired into the RenderGraph DAG.
 4. **Duplicate `#include "VulkanOutlinePass.hpp"`** in `SceneRenderer.cpp` (lines 36-37).
 5. **`ChangeComponentCommand<T>` duplicated** in `Core/EditorCommands.hpp` and `Commands/ChangeComponentCommand.hpp`.
 6. **No CI/CD, no tests, no linting** — no automated build pipeline, no unit/integration tests, no `.clang-format` or `.clang-tidy` configuration.
 7. **UI Pass only renders `UIImageComponent`** — `UITextComponent` and `UIButtonComponent` rendering not yet implemented.
-8. **`ssr_composite.frag` stub** outputs UV gradient instead of actual SSR composite.
+
+> **FIXED (Aug 2026):** SSR temporal disocclusion previously sampled the current-frame depth at the reprojected UV. Now samples a true previous-frame depth (`u_DepthHistory`, stored via the RenderGraph triple-buffered `SceneDepth` FBO pointer) — see §14.8.
 
 ### Limitation Awareness
 

@@ -69,8 +69,10 @@ namespace Ayaya {
             FramebufferSpecification s;
             s.Width = hw; s.Height = hh; s.Samples = 1;
             s.Attachments = { FramebufferTextureFormat::RGBA16F };
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < 3; i++) {
                 m_HistoryFBO[i] = Framebuffer::Create(s);
+                m_DepthHistoryFBO[i] = nullptr;  // stale size — invalidate
+            }
             m_FrameCount = 0;
         }
 
@@ -94,6 +96,14 @@ namespace Ayaya {
             cmd.BindTexture2D(m_Pipeline, "u_SSRHistory", 5, m_HistoryFBO[prevIdx], 0);
         else
             cmd.BindTexture2D(m_Pipeline, "u_SSRHistory", 5, ssrBlurredFBO, 0);
+
+        // Previous-frame depth for true disocclusion. On first frame (no depth
+        // history) fall back to the current depth buffer so the test degenerates
+        // gracefully (zero depthDiff → never falsely disoccluded by this factor).
+        if (hasHistory)
+            cmd.BindTexture2D(m_Pipeline, "u_DepthHistory", 6, m_DepthHistoryFBO[prevIdx], 0, true);
+        else
+            cmd.BindTexture2D(m_Pipeline, "u_DepthHistory", 6, depthFBO, 0, true);
 
         struct alignas(16) TemporalPC {
             float DepthThreshold;
@@ -121,6 +131,9 @@ namespace Ayaya {
         // gives us cross-frame persistence for free. Frame N reads history from
         // slot (N-1)%3, which still holds frame N-1's data (written 1 frame ago).
         m_HistoryFBO[currIdx] = temporalFBO;
+        // Same trick for depth: SceneDepth is triple-buffered and its slot survives
+        // untouched until DepthPrePass overwrites it 3 frames later.
+        m_DepthHistoryFBO[currIdx] = depthFBO;
         m_FrameCount++;
 
         context.Framebuffers["SSR_Temporal"] = temporalFBO;

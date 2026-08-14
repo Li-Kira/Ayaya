@@ -14,6 +14,7 @@
 #include "Renderer/Passes/VulkanApplyReflectionPass.hpp"
 #include "Renderer/Passes/VulkanOutlinePass.hpp"
 #include "Renderer/Passes/VulkanBloomPass.hpp"
+#include "Renderer/Passes/VulkanTAAPass.hpp"
 #include "Renderer/Passes/VulkanPostProcessPass.hpp"
 #include "Renderer/Passes/VulkanFXAAPass.hpp"
 #include "Renderer/Passes/UIPass.hpp"
@@ -154,6 +155,7 @@ namespace Ayaya {
                             std::shared_ptr<RenderPass> applyReflectionPass,
                             std::shared_ptr<RenderPass> outlinePass,
                             std::shared_ptr<RenderPass> bloomPass,
+                            std::shared_ptr<RenderPass> taaPass,
                             std::shared_ptr<RenderPass> postProcessPass,
                             std::shared_ptr<RenderPass> fxaaPass,
                             std::shared_ptr<RenderPass> uiPass,
@@ -261,6 +263,13 @@ namespace Ayaya {
             using Fn = void(*)(RGBuilder&, uint32_t, uint32_t);
             return std::make_unique<StandardPassFactory<RenderPass, Fn>>(
                 VulkanBloomPass::DeclareResources, bloomPass);
+        });
+
+        // TAAPass — temporal anti-aliasing (HDR, pre-tone-map)
+        Register("TAAPass", [taaPass]() -> std::unique_ptr<IPassFactory> {
+            using Fn = void(*)(RGBuilder&, uint32_t, uint32_t);
+            return std::make_unique<StandardPassFactory<RenderPass, Fn>>(
+                VulkanTAAPass::DeclareResources, taaPass);
         });
 
         // PostProcessPass

@@ -6,6 +6,7 @@ layout(set = 1, binding = 2) uniform sampler2D u_DepthMap;
 layout(set = 1, binding = 3) uniform sampler2D g_Normal;   // RGB = world normal (oct-encoded)
 layout(set = 1, binding = 4) uniform sampler2D g_PBR;       // G = roughness
 layout(set = 1, binding = 5) uniform sampler2D u_SSRHistory; // previous frame temporal result
+layout(set = 1, binding = 6) uniform sampler2D u_DepthHistory; // previous frame depth (true disocclusion)
 
 layout(push_constant) uniform PC {
     float u_DepthThreshold;
@@ -42,8 +43,11 @@ void main() {
     vec2 historyUV = v_TexCoord - motion;
 
     // 4. 遮挡检测 — 双因素 (深度 + 法线)
+    // currentDepth 采样当前帧深度，historyDepth 必须采样【上一帧】深度：
+    // disocclusion 的本质是「上一帧 historyUV 处是另一个更近的表面（遮挡物）」，
+    // 若用当前帧深度，遮挡物已经移开、差异被抹平，快速相机运动下会 ghosting。
     float currentDepth = texture(u_DepthMap, v_TexCoord).r;
-    float historyDepth = texture(u_DepthMap, historyUV).r;
+    float historyDepth = texture(u_DepthHistory, historyUV).r;
 
     float depthDiff = abs(currentDepth - historyDepth);
 
