@@ -285,7 +285,7 @@ namespace Ayaya {
             ImGui::Separator();
             ImGui::Spacing();
             
-            ImGui::TextDisabled("Note: Post-Processing effects (Bloom, Tone Mapping, FXAA) have been moved to the ECS.");
+            ImGui::TextDisabled("Note: Post-Processing effects (Bloom, Tone Mapping, FXAA, TAA) have been moved to the ECS.");
             ImGui::TextDisabled("Please use a 'Post Process Volume' component in your scene.");
             
             ImGui::Spacing();

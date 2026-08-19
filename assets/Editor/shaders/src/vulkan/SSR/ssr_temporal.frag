@@ -12,7 +12,7 @@ layout(push_constant) uniform PC {
     float u_DepthThreshold;
     float u_NormalThreshold;
     float u_TemporalBlend;
-    float _pad;
+    float u_HasHistory;     // 1.0 = valid history; 0.0 = first frame (passthrough)
     vec2  u_TexelSize;      // 1/w, 1/h for SSR_Blurred (½res)
     vec2  _pad2;
 } pc;
@@ -32,6 +32,15 @@ vec3 OctDecode(vec2 f) {
 void main() {
     // 1. 当前帧 SSR
     vec4 currentSSR = texture(u_SSRBlurred, v_TexCoord);
+
+    // First frame (no valid history): output the current SSR directly. The C++ pass
+    // still binds the current frame's SSR_Blurred as u_SSRHistory, but reprojecting
+    // that fallback by the velocity would sample it at the WRONG position and smear
+    // the reflection across the first ~20 frames (the temporal blend is slow).
+    if (pc.u_HasHistory < 0.5) {
+        FragColor = currentSSR;
+        return;
+    }
 
     // 2. Motion vector — normalized UV is resolution-independent:
     //    full-res velocity is sampled at the SAME v_TexCoord (NOT *2.0).
@@ -60,16 +69,25 @@ void main() {
                     || normalAgree < pc.u_NormalThreshold;
 
     // 5. Neighborhood Clamp (防 Ghosting)
-    vec3 neighMin = currentSSR.rgb;
-    vec3 neighMax = currentSSR.rgb;
+    // SSR is premultiplied alpha (rgb = hitColor * alpha). Clamping rgb alone while
+    // leaving alpha free creates "black + opaque" pixels (rgb=0, alpha>0) at silhouettes
+    // where the current neighborhood is all-miss — these dim the IBL in ApplyReflection
+    // and appear as black rectangles. Clamp alpha with the same neighborhood so a miss
+    // neighborhood forces the pixel back to transparent instead of black+opaque.
+    vec3  neighMin  = currentSSR.rgb;
+    vec3  neighMax  = currentSSR.rgb;
+    float neighMinA = currentSSR.a;
+    float neighMaxA = currentSSR.a;
     vec2 ts = pc.u_TexelSize;
     for (int dy = -1; dy <= 1; dy++) {
         for (int dx = -1; dx <= 1; dx++) {
             if (dx == 0 && dy == 0) continue;
             vec2 neighUV = v_TexCoord + vec2(float(dx), float(dy)) * ts;
-            vec3 c = texture(u_SSRBlurred, neighUV).rgb;
-            neighMin = min(neighMin, c);
-            neighMax = max(neighMax, c);
+            vec4 c = texture(u_SSRBlurred, neighUV);
+            neighMin  = min(neighMin,  c.rgb);
+            neighMax  = max(neighMax,  c.rgb);
+            neighMinA = min(neighMinA, c.a);
+            neighMaxA = max(neighMaxA, c.a);
         }
     }
     // variance boost — 10% expansion for tolerance (tighter = less ghosting)
@@ -80,6 +98,7 @@ void main() {
 
     vec4 historyColor = texture(u_SSRHistory, historyUV);
     historyColor.rgb = clamp(historyColor.rgb, neighMin, neighMax);
+    historyColor.a   = clamp(historyColor.a,   neighMinA,  neighMaxA);
 
     // 6. 混合权重 (Roughness 自适应 + velocity 因子)
     float roughness = texture(g_PBR, v_TexCoord).g;

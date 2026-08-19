@@ -125,6 +125,9 @@ void main() {
                 vec3 mNDC  = mClip.xyz / mClip.w;
                 vec2 mUV   = vec2(mNDC.x * 0.5 + 0.5, 1.0 - (mNDC.y * 0.5 + 0.5));
                 float mSceneZ = textureLod(u_DepthMap, mUV, 0).r;
+                // Sky (mSceneZ >= 1.0) counts as "behind": it keeps fPos pinned on the
+                // surface side of a silhouette edge, so the final hitColor samples the
+                // surface instead of the (not-yet-drawn) black sky.
                 if (mSceneZ >= 1.0 || mNDC.z > mSceneZ) {
                     bPos = mPos;
                 } else {
@@ -134,6 +137,14 @@ void main() {
             vec4 fClip = pc.u_Proj * vec4(fPos, 1.0);
             vec3 fNDC  = fClip.xyz / fClip.w;
             vec2 fUV   = vec2(fNDC.x * 0.5 + 0.5, 1.0 - (fNDC.y * 0.5 + 0.5));
+            // If the refined hit point still lands on the sky (no geometry), the ray
+            // reflects the sky — which isn't in the Lighting buffer yet (ForwardBlend
+            // draws it later). Treat as a miss so ApplyReflection falls back to the IBL
+            // cubemap instead of sampling black.
+            if (textureLod(u_DepthMap, fUV, 0).r >= 1.0) {
+                hitFound = 0.0;
+                break;
+            }
             hitColor = textureLod(u_Lighting, fUV, 0.0);  // 0.0 — Lighting FBO has no mip chain
             hitFound = 1.0;
             break;

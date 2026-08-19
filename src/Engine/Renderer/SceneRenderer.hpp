@@ -27,7 +27,6 @@ namespace Ayaya {
         bool EnableOutline = false;   // 实体选中描边
         bool EnableSkybox  = true;    // 天空盒
         bool EnableBloom   = true;    // 泛光
-        bool EnableFXAA    = true;    // 抗锯齿
         bool EnableSSAO    = false;   // 屏幕空间环境光遮蔽 (需 PostProcessVolume)
         bool EnableSprites = true;    // 2D 精灵
         std::vector<Entity> SelectedEntities{};  // 多选实体 (Outline)

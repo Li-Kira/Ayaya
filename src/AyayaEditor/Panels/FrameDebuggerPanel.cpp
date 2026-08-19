@@ -13,12 +13,13 @@ namespace Ayaya {
     // Formats are queried dynamically from the live FBO spec.
     // ==========================================
     static const char* AttachmentName(const std::string& pass, int idx) {
-        // GBuffer (Vulkan: 4-color; OpenGL: 5-color — handled dynamically)
+        // GBuffer (5 MRT: normal / albedo / PBR / customData / velocity)
         if (pass == "GBufferPass") {
-            static const char* n[] = {"Normal", "Albedo", "PBR", "CustomData", "???"};
+            static const char* n[] = {"Normal", "Albedo", "PBR", "CustomData", "Velocity"};
             return (idx < 5) ? n[idx] : "???";
         }
         if (pass == "ShadowPass")  return "Depth";
+        if (pass == "DepthPrePass") return "Dummy Color";
         if (pass == "SSAOPass")    return "AO";
         if (pass == "LightingPass") {
             return (idx == 0) ? "HDR Color" : "???";
@@ -32,6 +33,7 @@ namespace Ayaya {
         if (pass == "SSRBlurPass")       return "Blurred";
         if (pass == "SSRTemporalPass")   return "Temporal";
         if (pass == "ApplyReflection")   return "Lighting";
+        if (pass == "TAAPass")        return "Resolved";
         if (pass == "PostProcessPass") return "ToneMapped";
         if (pass == "FXAAPass")    return "Anti-Aliased";
         return "???";
@@ -87,6 +89,7 @@ namespace Ayaya {
     void FrameDebuggerPanel::BuildPassTextureMap() {
         m_PassTextures.clear();
         m_PassTextures.push_back({"ShadowPass",      "ShadowMap"});
+        m_PassTextures.push_back({"DepthPrePass",    "SceneDepth"});
         m_PassTextures.push_back({"GBufferPass",     "GBuffer"});
         m_PassTextures.push_back({"SSAOPass",        "SSAO_Final"});
         m_PassTextures.push_back({"SSRPass",            "SSR_Result"});
@@ -97,6 +100,7 @@ namespace Ayaya {
         m_PassTextures.push_back({"LightingPass",    "Lighting"});
         m_PassTextures.push_back({"OutlinePass",     "Selection"});
         m_PassTextures.push_back({"BloomPass",       "Bloom"});
+        m_PassTextures.push_back({"TAAPass",         "TAA_Output"});
         m_PassTextures.push_back({"PostProcessPass", "FinalOutput"});
         m_PassTextures.push_back({"FXAAPass",        "FXAA"});
     }
@@ -213,6 +217,8 @@ namespace Ayaya {
                     runtimeActive = ctx.Get<bool>("EnableSSAO", false);
                 if (info.PassName == "SSRPass" || info.PassName == "SSRBlurPass" || info.PassName == "SSRTemporalPass")
                     runtimeActive = ctx.Get<bool>("EnableSSR", false);
+                if (info.PassName == "TAAPass")
+                    runtimeActive = ctx.Get<bool>("EnableTAA", false);
 
                 if (!exists || !runtimeActive) continue;
                 visibleOrder++;
@@ -295,6 +301,7 @@ namespace Ayaya {
             // Runtime check: skip disabled passes (e.g. SSAO when EnableSSAO=false)
             if (info.PassName == "SSAOPass" && !ctx.Get<bool>("EnableSSAO", false)) continue;
             if ((info.PassName == "SSRPass" || info.PassName == "SSRBlurPass") && !ctx.Get<bool>("EnableSSR", false)) continue;
+            if (info.PassName == "TAAPass" && !ctx.Get<bool>("EnableTAA", false)) continue;
             visiblePasses.push_back(p);
         }
 

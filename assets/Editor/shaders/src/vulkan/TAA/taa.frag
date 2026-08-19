@@ -49,10 +49,11 @@ vec3 RGBToYCoCg(vec3 c) {
     return vec3(y, co, cg);
 }
 vec3 YCoCgToRGB(vec3 ycocg) {
-    float tmp = ycocg.x - ycocg.y * 0.5;
-    float g   = ycocg.y + tmp;
-    float b   = tmp - ycocg.z * 0.5;
-    float r   = b + ycocg.z;
+    // ycocg = (Y, Co, Cg). Inverse: t = Y - Cg/2; G = Cg + t; B = t - Co/2; R = B + Co.
+    float t = ycocg.x - ycocg.z * 0.5;
+    float g = ycocg.z + t;
+    float b = t - ycocg.y * 0.5;
+    float r = b + ycocg.y;
     return vec3(r, g, b);
 }
 
@@ -69,6 +70,38 @@ vec2 ComputeCameraMotion(vec2 uv, float depth) {
     return uv - prevUV;
 }
 
+// Catmull-Rom cubic weight (a = -0.5).
+float CatmullRomW(float x) {
+    float ax = abs(x);
+    if (ax < 1.0) return (1.5 * ax - 2.5) * ax * ax + 1.0;
+    if (ax < 2.0) return ((-0.5 * ax + 2.5) * ax - 4.0) * ax + 2.0;
+    return 0.0;
+}
+
+// 4x4 bicubic Catmull-Rom history sampling. Replaces the single bilinear tap,
+// which is the main source of sub-pixel shimmer in TAA (a poor reconstruction
+// filter for the reprojected history sample).
+vec4 SampleHistoryCatmullRom(vec2 uv) {
+    vec2 ts  = pc.u_TexelSize;
+    vec2 res = vec2(1.0 / ts.x, 1.0 / ts.y);
+    vec2 pos = uv * res - 0.5;       // texel-space position (texel 0 center at 0)
+    vec2 base = floor(pos);
+    vec2 f = pos - base;              // [0,1)
+
+    vec4 sum = vec4(0.0);
+    float wsum = 0.0;
+    for (int dy = -1; dy <= 2; dy++) {
+        for (int dx = -1; dx <= 2; dx++) {
+            vec2 tap = base + vec2(float(dx), float(dy));
+            vec2 off = tap - pos;     // texel offset in [-2, 2]
+            float w = CatmullRomW(off.x) * CatmullRomW(off.y);
+            sum  += texture(u_History, (tap + 0.5) * ts) * w;
+            wsum += w;
+        }
+    }
+    return sum / max(wsum, 1e-5);
+}
+
 void main() {
     vec4 current = texture(u_SceneColor, v_TexCoord);
 
@@ -79,10 +112,15 @@ void main() {
 
     // ── 1. Motion vector: object velocity, fall back to camera-only for pixels
     //    without object velocity (skybox / grid / sprites have velocity == 0).
-    float currentDepth = texture(u_DepthMap, v_TexCoord).r;
+    //    Depth is point-sampled (texelFetch) to avoid bilinear bleeding across
+    //    silhouettes, which causes false disocclusion and edge shimmer.
+    vec2 res = vec2(1.0 / pc.u_TexelSize.x, 1.0 / pc.u_TexelSize.y);
+    float currentDepth = texelFetch(u_DepthMap, ivec2(floor(v_TexCoord * res)), 0).r;
     vec2  objMotion    = texture(u_Velocity, v_TexCoord).rg;
     vec2  camMotion    = ComputeCameraMotion(v_TexCoord, currentDepth);
     vec2  motion       = (length(objMotion) < 1e-3) ? camMotion : objMotion;
+    // Guard against NaN motion (degenerate camera-only reconstruction / velocity).
+    if (motion.x != motion.x || motion.y != motion.y) motion = vec2(0.0);
     vec2  historyUV    = v_TexCoord - motion;
 
     // ── 2. History sample + neighborhood clamp (anti-ghosting).
@@ -98,22 +136,25 @@ void main() {
             neighMax = max(neighMax, c);
         }
     }
-    // 10% variance boost — tolerate more history variance (less ghosting).
+    // Variance boost — tolerate more history variance (less ghosting) and
+    // reduce clamp-box oscillation at edges in static scenes.
     vec3 mean  = (neighMin + neighMax) * 0.5;
     vec3 delta = (neighMax - neighMin) * 0.5;
-    neighMin   = mean - delta * 1.1;
-    neighMax   = mean + delta * 1.1;
+    neighMin   = mean - delta * 1.25;
+    neighMax   = mean + delta * 1.25;
 
-    vec4 history = texture(u_History, historyUV);
+    vec4 history = SampleHistoryCatmullRom(historyUV);
     vec3 historyYC = clamp(RGBToYCoCg(history.rgb), neighMin, neighMax);
     history.rgb = YCoCgToRGB(historyYC);
 
     // ── 3. Disocclusion rejection — previous-frame depth + normal divergence.
-    float historyDepth = texture(u_DepthHistory, historyUV).r;
+    //    Point-sampled (texelFetch) so depth/normal don't bleed across silhouettes
+    //    and falsely flag disocclusion (a common cause of static edge shimmer).
+    float historyDepth = texelFetch(u_DepthHistory, ivec2(floor(historyUV * res)), 0).r;
     float depthDiff    = abs(currentDepth - historyDepth);
 
-    vec3 currentNormal = OctDecode(texture(g_Normal, v_TexCoord).rg);
-    vec3 historyNormal = OctDecode(texture(g_Normal, historyUV).rg);
+    vec3 currentNormal = OctDecode(texelFetch(g_Normal, ivec2(floor(v_TexCoord * res)), 0).rg);
+    vec3 historyNormal = OctDecode(texelFetch(g_Normal, ivec2(floor(historyUV * res)), 0).rg);
     float normalAgree  = dot(currentNormal, historyNormal);
 
     bool disoccluded = (currentDepth >= 1.0 || historyDepth >= 1.0)  // sky vs. geometry
@@ -130,16 +171,23 @@ void main() {
     vec3 resolved = mix(history.rgb, current.rgb, blendFactor);
 
     // ── 5. Adaptive sharpen (unsharp mask on the clamped history, already in
-    //    history space — counteracts temporal blur).
+    //    history space — counteracts temporal blur). Neighbors use the same
+    //    Catmull-Rom reconstruction so the "blur" reference is filter-consistent
+    //    with the resolved sample above.
     if (pc.u_SharpenAmount > 0.0) {
         vec2 ts = pc.u_TexelSize;
-        vec3 hL = YCoCgToRGB(clamp(RGBToYCoCg(texture(u_History, historyUV + vec2(-ts.x, 0.0)).rgb), neighMin, neighMax));
-        vec3 hR = YCoCgToRGB(clamp(RGBToYCoCg(texture(u_History, historyUV + vec2( ts.x, 0.0)).rgb), neighMin, neighMax));
-        vec3 hU = YCoCgToRGB(clamp(RGBToYCoCg(texture(u_History, historyUV + vec2(0.0, -ts.y)).rgb), neighMin, neighMax));
-        vec3 hD = YCoCgToRGB(clamp(RGBToYCoCg(texture(u_History, historyUV + vec2(0.0,  ts.y)).rgb), neighMin, neighMax));
+        vec3 hL = YCoCgToRGB(clamp(RGBToYCoCg(SampleHistoryCatmullRom(historyUV + vec2(-ts.x, 0.0)).rgb), neighMin, neighMax));
+        vec3 hR = YCoCgToRGB(clamp(RGBToYCoCg(SampleHistoryCatmullRom(historyUV + vec2( ts.x, 0.0)).rgb), neighMin, neighMax));
+        vec3 hU = YCoCgToRGB(clamp(RGBToYCoCg(SampleHistoryCatmullRom(historyUV + vec2(0.0, -ts.y)).rgb), neighMin, neighMax));
+        vec3 hD = YCoCgToRGB(clamp(RGBToYCoCg(SampleHistoryCatmullRom(historyUV + vec2(0.0,  ts.y)).rgb), neighMin, neighMax));
         vec3 blur = (hL + hR + hU + hD) * 0.25;
         resolved += (resolved - blur) * pc.u_SharpenAmount;
     }
+
+    // Guard against NaN in the resolve — prevents green garbage propagating to
+    // Bloom / PostProcess when history or motion was degenerate.
+    if (resolved.x != resolved.x || resolved.y != resolved.y || resolved.z != resolved.z)
+        resolved = current.rgb;
 
     FragColor = vec4(resolved, mix(history.a, current.a, blendFactor));
 }

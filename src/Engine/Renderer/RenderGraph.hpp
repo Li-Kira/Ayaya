@@ -199,7 +199,8 @@ namespace Ayaya {
         // barrier 确保 TBDR on-chip tile 数据刷新到 system memory
         void InsertTileResolveBarrier(RGTexture& tex, uint32_t frameIndex);
 
-        std::vector<std::shared_ptr<RGPass>> m_Passes;
+        std::vector<std::shared_ptr<RGPass>> m_Passes;          // 声明顺序（AddPass 顺序），永不重排
+        std::vector<std::shared_ptr<RGPass>> m_ExecutionOrder;  // 拓扑执行顺序（Compile 里算）
         std::unordered_map<std::string, RGTexture> m_Textures;
         bool m_Compiled = false;
     };

@@ -15,6 +15,11 @@ public:
     void OnAttach() override;
     void Execute(RenderContext& context, RenderCommandBuffer& cmd) override;
 
+    // Clear temporal history (frame count + FBO references). Called when SSR is
+    // disabled so a re-enable starts from a clean first frame instead of reusing
+    // a frozen black history from a previous SSR session.
+    void ResetHistory();
+
     static void DeclareResources(class RGBuilder& builder,
                                   uint32_t width, uint32_t height);
 

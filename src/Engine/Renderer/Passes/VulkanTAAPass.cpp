@@ -101,10 +101,10 @@ namespace Ayaya {
         pc.Jitter             = context.Get<glm::vec2>("TAA_Jitter", glm::vec2(0.0f));
         pc.TexelSize          = glm::vec2(1.0f / (float)w, 1.0f / (float)h);
         pc.BlendFactor        = context.Get<float>("TAA_BlendFactor", 0.05f);
-        pc.DepthThreshold     = context.Get<float>("TAA_DepthThreshold", 0.05f);
-        pc.NormalThreshold    = context.Get<float>("TAA_NormalThreshold", 0.8f);
+        pc.DepthThreshold     = context.Get<float>("TAA_DepthThreshold", 0.1f);
+        pc.NormalThreshold    = context.Get<float>("TAA_NormalThreshold", 0.5f);
         pc.MotionThreshold    = context.Get<float>("TAA_MotionThreshold", 0.1f);
-        pc.SharpenAmount      = context.Get<float>("TAA_SharpenAmount", 0.15f);
+        pc.SharpenAmount      = context.Get<float>("TAA_SharpenAmount", 0.0f);
         pc.Enable             = context.Get<bool>("EnableTAA", false) ? 1.0f : 0.0f;
         cmd.PushConstantData(m_Pipeline, &pc, sizeof pc);
 

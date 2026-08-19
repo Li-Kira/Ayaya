@@ -229,6 +229,7 @@ namespace Ayaya {
             out << YAML::Key << "BloomRadius" << YAML::Value << ppv.BloomRadius;
             out << YAML::Key << "BloomIntensity" << YAML::Value << ppv.BloomIntensity;
             out << YAML::Key << "EnableFXAA" << YAML::Value << ppv.EnableFXAA;
+            out << YAML::Key << "EnableTAA" << YAML::Value << ppv.EnableTAA;
             out << YAML::Key << "EnableSSAO" << YAML::Value << ppv.EnableSSAO;
             out << YAML::Key << "SSAORadius" << YAML::Value << ppv.SSAORadius;
             out << YAML::Key << "SSAOBias" << YAML::Value << ppv.SSAOBias;
@@ -599,6 +600,7 @@ namespace Ayaya {
                 ppv.BloomRadius = ppvComponent["BloomRadius"].as<float>();
                 ppv.BloomIntensity = ppvComponent["BloomIntensity"].as<float>();
                 ppv.EnableFXAA = ppvComponent["EnableFXAA"].as<bool>();
+                if (ppvComponent["EnableTAA"]) ppv.EnableTAA = ppvComponent["EnableTAA"].as<bool>();
                 if (ppvComponent["EnableSSAO"]) ppv.EnableSSAO = ppvComponent["EnableSSAO"].as<bool>();
                 if (ppvComponent["SSAORadius"]) ppv.SSAORadius = ppvComponent["SSAORadius"].as<float>();
                 if (ppvComponent["SSAOBias"])   ppv.SSAOBias   = ppvComponent["SSAOBias"].as<float>();

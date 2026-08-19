@@ -246,12 +246,12 @@ namespace Ayaya {
         // --- SSR ---
         bool  EnableSSR = false;
         float SSRIntensity = 1.0f;          // global SSR contribution strength
-        float SSRMaxSteps = 128.0f;
-        float SSRStepSize = 0.125f;         // view-space world units per step (finer = less noise)
-        float SSRThickness = 0.3f;          // view-space hit tolerance (world units)
+        float SSRMaxSteps = 256.0f;
+        float SSRStepSize = 0.05f;          // view-space world units per step (finer = less noise)
+        float SSRThickness = 0.01f;         // view-space hit tolerance (world units)
         float SSREdgeFade = 0.2f;
         float SSRRoughnessCutoff = 0.6f;    // skip SSR above this roughness
-        int   SSRMaxBinarySteps = 8;
+        int   SSRMaxBinarySteps = 15;
         float SSRTemporalBlend = 0.05f;     // min temporal blend (current-frame weight)
 
         PostProcessVolumeComponent() = default;

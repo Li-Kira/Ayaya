@@ -60,6 +60,7 @@ namespace Ayaya {
     // ==========================================
     void RenderGraph::Clear() {
         m_Passes.clear();
+        m_ExecutionOrder.clear();
         m_Textures.clear();
         m_Compiled = false;
     }
@@ -271,16 +272,14 @@ namespace Ayaya {
             }
         }
 
-        // Preserve culled passes for future ApplyPerFrameCulling uncull.
-        // Execute() already skips IsCulled passes (line 400).
-        // Without this, toggling SSAO/Bloom runtime would permanently lose the pass.
-        {
-            std::vector<std::shared_ptr<RGPass>> allPasses = std::move(sorted);
-            for (auto& p : m_Passes) {
-                if (p->IsCulled) allPasses.push_back(p);
-            }
-            m_Passes = std::move(allPasses);
-        }
+        // Store the topological execution order separately. m_Passes MUST stay in
+        // declaration order (AddPass order), because the next Compile()'s producer
+        // mapping relies on "consumer is declared after its producer". Overwriting
+        // m_Passes with the topological order would corrupt that invariant: an
+        // un-culled pass would then be treated as if declared at the end, producing
+        // wrong read/implicit edges (e.g. SSRTemporal→ApplyReflection lost,
+        // ApplyReflection→SSRPass wrongly added) and a wrong execution order.
+        m_ExecutionOrder = std::move(sorted);
 
         // Step 5: 为每个纹理创建 3 帧缓冲物理 FBO
         //   Only create FBOs for textures that are actually written (IsWritten=true).
@@ -419,6 +418,7 @@ namespace Ayaya {
         snap.Textures = std::move(m_Textures);
         snap.Compiled = m_Compiled;
         m_Passes.clear();
+        m_ExecutionOrder.clear();
         m_Textures.clear();
         m_Compiled = false;
         return snap;
@@ -427,7 +427,10 @@ namespace Ayaya {
     void RenderGraph::RestoreState(StateSnapshot state) {
         m_Passes   = std::move(state.Passes);
         m_Textures = std::move(state.Textures);
-        m_Compiled = state.Compiled;
+        // m_ExecutionOrder is NOT restored (it was not snapshotted); mark the graph as
+        // not-compiled so the next Execute() re-runs Compile() and rebuilds it.
+        m_ExecutionOrder.clear();
+        m_Compiled = false;
     }
 
     // ==========================================
@@ -441,7 +444,7 @@ namespace Ayaya {
         uint32_t idx = frameIndex % kRenderGraphFramesInFlight;
 
         int passOrder = 0;
-        for (auto& pass : m_Passes) {
+        for (auto& pass : m_ExecutionOrder) {
             if (pass->IsCulled) continue;
 
             // Step a: 確保 Read 纹理处于可采样布局（必须在 EnsureWritable 之前执行，

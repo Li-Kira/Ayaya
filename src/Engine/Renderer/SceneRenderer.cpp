@@ -413,6 +413,13 @@ namespace Ayaya {
             m_RenderContext.ProjectionMatrix[2][0] += jx;
             m_RenderContext.ProjectionMatrix[2][1] += jy;
             m_Data->ProjectionMatrix = m_RenderContext.ProjectionMatrix;  // jittered → prev cache
+            // First frame: no previous frame exists yet — seed prev matrices with the
+            // current (jittered) frame so motion vectors / camera-only motion are zero
+            // instead of the default-constructed identity garbage.
+            if (m_FrameIndex == 0) {
+                m_Data->PrevViewMatrix = m_Data->ViewMatrix;
+                m_Data->PrevProjectionMatrix = m_Data->ProjectionMatrix;
+            }
             m_RenderContext.Set("TAA_Jitter", glm::vec2(jx * 0.5f, jy * 0.5f));  // UV-space
             m_FrameIndex++;
         }
@@ -782,9 +789,9 @@ namespace Ayaya {
         // ── SSR settings ──
         bool enableSSR = false;
         float ssrIntensity = 1.0f;
-        float ssrMaxSteps = 128.0f, ssrStepSize = 0.25f, ssrThickness = 0.3f;
+        float ssrMaxSteps = 256.0f, ssrStepSize = 0.05f, ssrThickness = 0.01f;
         float ssrEdgeFade = 0.2f, ssrRoughnessCutoff = 0.6f;
-        int   ssrMaxBinarySteps = 8;
+        int   ssrMaxBinarySteps = 15;
         float ssrTemporalBlend = 0.05f;
         for (auto entityID : volumeView) {
             auto& volume = volumeView.get<PostProcessVolumeComponent>(entityID);
@@ -1281,7 +1288,16 @@ namespace Ayaya {
         bool enableSSR     = m_RenderContext.Get<bool>("EnableSSR", false);
         bool enableBloom   = m_RenderContext.Get<bool>("EnableBloom", true);
         bool enableOutline = m_RenderContext.Get<bool>("EnableOutline", false);
-        bool enableFXAA    = m_RenderContext.Get<bool>("EnableFXAA", false);
+
+        // When SSR is disabled, reset the temporal history every frame. This is the
+        // ONLY reliable place to do it: while disabled the SSRTemporalPass is culled,
+        // so its Execute() never runs (a reset there would be dead code). Without
+        // this, re-enabling SSR reuses a frozen black history from a previous SSR
+        // session and produces a black blob until it is slowly blended away.
+        if (!enableSSR) {
+            auto* tp = dynamic_cast<VulkanSSRTemporalPass*>(m_SSRTemporalPass.get());
+            if (tp) tp->ResetHistory();
+        }
 
         bool hasTranslucent = false;
         if (m_RenderContext.RenderQueue) {
@@ -1297,12 +1313,13 @@ namespace Ayaya {
             if (type == "SSAOPass")        pass->IsCulled = !enableSSAO;
             if (type == "BloomPass")       pass->IsCulled = !enableBloom;
             if (type == "OutlinePass")     pass->IsCulled = !enableOutline;
-            // FXAA uses push-constant toggle (passthrough when disabled) — never cull.
             if (type == "SSRPass")            pass->IsCulled = !enableSSR;
             if (type == "SSRBlurPass")        pass->IsCulled = !enableSSR;
             if (type == "SSRTemporalPass")    pass->IsCulled = !enableSSR;
             // ApplyReflection is NEVER culled — it provides IBL specular fallback
-            // even when SSR is disabled (ssr.a=0 → pure cubemap specular).
+            // even when SSR is disabled (ssr.a=0 → pure cubemap specular). The SRP
+            // script may bake Enabled=false into this pass, so force it on every frame.
+            if (type == "ApplyReflection")    pass->IsCulled = false;
             if (type == "WBOIT_Gather")       pass->IsCulled = !hasTranslucent;
             if (type == "WBOIT_Resolve")      pass->IsCulled = !hasTranslucent;
         }

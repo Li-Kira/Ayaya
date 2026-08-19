@@ -115,7 +115,7 @@ A builder object passed to the setup lambda during `AddPass`:
 ### DAG Construction (Compile)
 
 **Step 1 — Culling:**
-Culled passes (`IsCulled == true`) are excluded from the DAG but preserved at the back of `m_Passes` for re-enabling. If all passes are culled, the graph clears completely.
+Culled passes (`IsCulled == true`) are excluded from the DAG. `m_Passes` **stays in declaration order (never reordered)** — culled passes are simply skipped by `Execute()`. The topological execution order is stored separately in `m_ExecutionOrder`. If all passes are culled, the graph clears completely.
 
 **Step 2 — Producer Mapping (single-pass, version-aware):**
 Passes are iterated in **declaration order** (not topological order). For each pass:
@@ -126,13 +126,15 @@ Passes are iterated in **declaration order** (not topological order). For each p
 This single-pass approach correctly handles "version tracking" — a pass reading `"Lighting"` at position N sees `LightingPass` (not a later `WBOIT_Resolve` at position N+3). The producer map reflects the pipeline state at that exact point in declaration order.
 
 **Step 3 — Kahn Topological Sort:**
-Standard BFS-based: enqueue zero-in-degree passes, dequeue, decrement neighbor in-degrees. If `sorted.size() != active.size()`, logs an error with circular dependency detection and appends unreachable passes to the end (best-effort).
+Standard BFS-based: enqueue zero-in-degree passes, dequeue, decrement neighbor in-degrees. If `sorted.size() != active.size()`, logs an error with circular dependency detection and appends unreachable passes to the end (best-effort). The result is written to `m_ExecutionOrder` — **NOT** back into `m_Passes`.
 
 **Step 4 — FBO Creation:**
 For each texture with `IsWritten == true`, creates 3 `VulkanFramebuffer` instances (one per frame-in-flight). Layout tracking initialized once:
 - **Depth-only textures:** `DepthStencilAttachmentOptimal`
 - **Other textures:** `ShaderReadOnlyOptimal` (for ImGui compatibility)
 - **Mixed color+depth:** color = `ShaderReadOnlyOptimal`, depth = `DepthStencilAttachmentOptimal`
+
+> **⚠️ Critical invariant (fixed 2026-08): `m_Passes` vs `m_ExecutionOrder`.** The producer mapping (Step 2) relies on "a consumer is declared AFTER its producer". The old code overwrote `m_Passes` with `sorted + culled` after the topological sort — this destroyed the declaration order. The next frame, an un-culled pass (e.g. SSR enabled at runtime) was then treated as if declared at the END, so its read/implicit edges were computed against the wrong producers (`SSRTemporal → ApplyReflection` edge lost, `ApplyReflection → SSRPass` wrongly added), and `ApplyReflection` ran before the whole SSR chain, sampling an undefined `SSR_Temporal` → a black ring at object silhouettes. Fix: `m_Passes` is now immutable declaration order; `Execute()` iterates `m_ExecutionOrder`.
 
 ### Triple-Buffered FBOs
 
@@ -171,7 +173,7 @@ struct StateSnapshot {
 };
 ```
 
-`ExtractState()` move-steals passes and textures into a snapshot, leaving the graph cleared. This is called BEFORE SRP Lua compilation. If Lua fails, `RestoreState()` reinstates the previous valid graph — no black frame on script errors. FBOs survive in the snapshot because `RGTexture` holds `shared_ptr<Framebuffer>` arrays.
+`ExtractState()` move-steals passes and textures into a snapshot, leaving the graph cleared. This is called BEFORE SRP Lua compilation. If Lua fails, `RestoreState()` reinstates the previous valid graph — no black frame on script errors. FBOs survive in the snapshot because `RGTexture` holds `shared_ptr<Framebuffer>` arrays. Note: `m_ExecutionOrder` is **not** snapshotted — `RestoreState()` clears it and sets `m_Compiled = false` so the next `Execute()` re-runs `Compile()` and rebuilds the execution order.
 
 ### Pass Culling
 
@@ -1209,6 +1211,11 @@ A MIN-reduced Hi-Z screen-space DDA was prototyped to fix grazing-angle tunnelin
 | Static Blue Noise jitter | Temporal can't smooth noise | Per-frame hash offset (`FrameIndex`) |
 | Stale `SSR_Temporal` when SSR off | Toggle no effect | ApplyReflection checks `EnableSSR` → BlackTexture |
 | Disocclusion sampled current-frame depth | Ghosting under fast camera motion | `u_DepthHistory` (prev-frame `SceneDepth` via triple-buffered FBO pointer) |
+| Stale temporal history on re-enable | Black blob until roughness-cutoff toggle | `ResetHistory()` clears `m_FrameCount`/`m_HistoryFBO`/`m_DepthHistoryFBO` while SSR is culled (called from `ApplyPerFrameCulling`) |
+| First frame reprojects the current-frame fallback by velocity | Smeared reflection for first ~20 frames | `HasHistory` push constant → first frame outputs `currentSSR` directly (no reprojection) |
+| Neighborhood clamp clamps premultiplied rgb but not alpha | "black + opaque" pixels dim IBL at silhouettes | Clamp `alpha` to the same 3×3 neighborhood min/max |
+| Binary refinement hit lands on sky (not-yet-drawn) | Black reflection of the sky | Treat as miss (`hitFound=0`) → IBL cubemap fallback |
+| **RenderGraph overwrote `m_Passes` with topological order** | **Black ring at silhouettes when SSR enabled at runtime** | **Keep `m_Passes` in declaration order; store `m_ExecutionOrder` separately (see §2 Critical invariant)** |
 
 ---
 
@@ -1223,8 +1230,13 @@ A MIN-reduced Hi-Z screen-space DDA was prototyped to fix grazing-angle tunnelin
 5. **`ChangeComponentCommand<T>` duplicated** in `Core/EditorCommands.hpp` and `Commands/ChangeComponentCommand.hpp`.
 6. **No CI/CD, no tests, no linting** — no automated build pipeline, no unit/integration tests, no `.clang-format` or `.clang-tidy` configuration.
 7. **UI Pass only renders `UIImageComponent`** — `UITextComponent` and `UIButtonComponent` rendering not yet implemented.
+8. **`RGPass::WriteLoadOps` is dead code** — written in `RGBuilder::WriteTexture` (`RenderGraph.cpp`) but never read anywhere. Load/Clear semantics are instead hardcoded in each pass's `Execute` via `cmd.BeginRenderPass(fbo, /*clear=*/true/false)`, so the declared `AttachmentLoadOp` can silently drift from real behavior.
+9. **`DepthReadTextures` are marked `IsWritten=true` in `Compile()` Step 0** — a texture used only as an external depth attachment (no writer) still gets a lazily-created physical FBO with undefined content, and runs `InsertTileResolveBarrier`. Distinguishing "written" from "needs an FBO for a depth read" is pending. (SSR/SSAO/Lighting use plain `ReadTexture`, so this doesn't affect them.)
+10. **`Compile()` clears `m_Passes` when `active.empty()`** — if every pass is culled in a frame, the declaration order is lost. Not hit in practice (there are always active passes), but a latent hazard for future minimal pipelines.
 
 > **FIXED (Aug 2026):** SSR temporal disocclusion previously sampled the current-frame depth at the reprojected UV. Now samples a true previous-frame depth (`u_DepthHistory`, stored via the RenderGraph triple-buffered `SceneDepth` FBO pointer) — see §14.8.
+>
+> **FIXED (Aug 2026):** RenderGraph no longer overwrites `m_Passes` with the topological order. It keeps `m_Passes` in declaration order and stores the execution order in `m_ExecutionOrder`. This fixed a bug where enabling SSR at runtime (culled → active) corrupted the producer mapping, placing `ApplyReflection` before the whole SSR chain and causing a black ring at object silhouettes (sampling undefined `SSR_Temporal`). See §2 "Critical invariant".
 
 ### Limitation Awareness
 

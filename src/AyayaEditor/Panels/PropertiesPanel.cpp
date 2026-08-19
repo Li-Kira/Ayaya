@@ -1680,6 +1680,13 @@ namespace Ayaya {
                     for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().EnableFXAA = enableFXAA;
                     commitInstantCommand("Toggle Enable FXAA", oldComps);
                 }
+                UI::DrawPropertyLabel("Enable TAA");
+                bool enableTAA = refPPV.EnableTAA;
+                if (ImGui::Checkbox("##EnableTAA", &enableTAA)) {
+                    std::vector<PostProcessVolumeComponent> oldComps = pureOldPPVs;
+                    for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().EnableTAA = enableTAA;
+                    commitInstantCommand("Toggle Enable TAA", oldComps);
+                }
                 ImGui::EndTable();
 
                 ImGui::Spacing();

@@ -2,6 +2,7 @@ MaterialName: Sphere_M16_R83_Mat
 ShaderName: PBR
 BlendMode: 0
 AlphaCutoff: 0.5
+Packing: 0
 Properties:
   - UniformName: u_Albedo
     DisplayName: Albedo Color

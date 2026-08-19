@@ -19,7 +19,9 @@ local vpH = Pipeline:GetViewportHeight()
 Pipeline:DeclareTexture("ShadowMap", {"Depth"}, 4096, 4096, 1, true)
 
 Pipeline:DeclareTexture("GBuffer",
-    {"RG16F", "RGBA8", "RGBA8", "RGBA8", "RG16F", "Depth"}, vpW, vpH)
+    {"RG16F", "RGBA8", "RGBA8", "RGBA8", "RG16F"}, vpW, vpH)
+
+Pipeline:DeclareTexture("SceneDepth", {"R8", "Depth"}, vpW, vpH)
 
 Pipeline:DeclareTexture("SSAO_Final", {"R8"}, vpW / 2, vpH / 2)
 
@@ -58,9 +60,17 @@ Pipeline:DeclareTexture("FXAA", {"RGBA8"}, vpW, vpH)
 Pipeline:AddPass("Shadow", "ShadowPass", {}, {"ShadowMap"}, {},
     { LightMode = "ShadowCaster" })
 
--- GBuffer Pass: writes albedo, normal, PBR params, depth
-Pipeline:AddPass("GBuffer", "GBufferPass", {}, {"GBuffer"}, {},
+-- Depth Pre-pass: standalone SceneDepth (Early-Z for GBuffer + depth reconstruction
+-- source for Lighting / SSR / SSAO). GBuffer loads this depth instead of owning its own.
+Pipeline:AddPass("DepthPrePass", "DepthPrePass", {}, {"SceneDepth"}, {},
     { LightMode = "GBuffer", Queue = "Opaque" })
+
+-- GBuffer Pass: writes albedo, normal, PBR params; SceneDepth as shared depth attachment
+Pipeline:AddPass("GBuffer", "GBufferPass",
+    {"SceneDepth"}, {"GBuffer"}, {"SceneDepth"},
+    { LightMode = "GBuffer", Queue = "Opaque",
+      ClearColor = true, ClearDepth = false,
+      DepthTest = true, DepthWrite = true, DepthFunc = 1 })
 
 -- SSAO: Screen-Space Ambient Occlusion (disabled by default)
 Pipeline:AddPass("SSAO", "SSAOPass", {"GBuffer"}, {"SSAO_Final"}, {},
@@ -68,7 +78,7 @@ Pipeline:AddPass("SSAO", "SSAOPass", {"GBuffer"}, {"SSAO_Final"}, {},
 
 -- Lighting Pass: deferred PBR lighting into HDR target
 Pipeline:AddPass("Lighting", "LightingPass",
-    {"GBuffer", "ShadowMap", "SSAO_Final"}, {"Lighting"}, {})
+    {"GBuffer", "ShadowMap", "SSAO_Final", "SceneDepth"}, {"Lighting"}, {})
 
 -- SSR: screen-space reflections (ray march in view space, half-res)
 Pipeline:AddPass("SSR", "SSRPass",
@@ -89,10 +99,11 @@ Pipeline:AddPass("SSRTemporal", "SSRTemporalPass",
 -- Apply Reflection: UE-style hierarchical SSR/IBL specular replacement.
 -- Reads SSR_Temporal (temporally stable) instead of raw SSR_Blurred.
 -- Computes specular: SSR on hit, IBL cubemap on miss, roughness-controlled transition.
--- LoadOps={Lighting="LOAD"} preserves existing Lighting (diffuse + direct specular + IBL diffuse).
+-- Always enabled (never culled): provides IBL specular fallback even when SSR is off.
+-- The pass's C++ Execute renders with LOAD (additive) onto Lighting, so no LoadOps needed.
 Pipeline:AddPass("ApplyReflection", "ApplyReflection",
     {"SSR_Temporal", "GBuffer", "SceneDepth", "SSAO_Final"}, {"Lighting"}, {},
-    { Enabled = false, LoadOps = { Lighting = "LOAD" } })
+    {})
 
 -- Forward Blend: skybox + grid + sprites overlaid onto Lighting HDR (LOAD overlay)
 Pipeline:AddPass("ForwardBlend", "ForwardBlend", {}, {"Lighting"}, {},

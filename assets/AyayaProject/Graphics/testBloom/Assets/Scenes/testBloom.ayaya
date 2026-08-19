@@ -871,8 +871,18 @@ Entities:
       BloomRadius: 0.005
       BloomIntensity: 1
       EnableFXAA: false
+      EnableTAA: true
       EnableSSAO: false
       SSAORadius: 0.5
       SSAOBias: 0.025
+      EnableSSR: false
+      SSRIntensity: 1
+      SSRMaxSteps: 256
+      SSRStepSize: 0.05
+      SSRThickness: 0.01
+      SSREdgeFade: 0.2
+      SSRRoughnessCutoff: 0.6
+      SSRMaxBinarySteps: 15
+      SSRTemporalBlend: 0.05
     RelationshipComponent:
       Parent: 0

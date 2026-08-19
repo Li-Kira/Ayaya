@@ -43,6 +43,14 @@ namespace Ayaya {
             AYAYA_CORE_ERROR("[SSRTemporal] Failed to create pipeline!");
     }
 
+    void VulkanSSRTemporalPass::ResetHistory() {
+        m_FrameCount = 0;
+        for (int i = 0; i < 3; i++) {
+            m_HistoryFBO[i] = nullptr;
+            m_DepthHistoryFBO[i] = nullptr;
+        }
+    }
+
     void VulkanSSRTemporalPass::Execute(RenderContext& context,
                                          RenderCommandBuffer& cmd) {
         if (!context.Get<bool>("EnableSSR", false)) return;
@@ -109,7 +117,7 @@ namespace Ayaya {
             float DepthThreshold;
             float NormalThreshold;
             float TemporalBlend;
-            float _pad;
+            float HasHistory;     // 1.0 = valid history; 0.0 = first frame (passthrough)
             float TexelSizeW;
             float TexelSizeH;
             float _pad2a;
@@ -118,6 +126,7 @@ namespace Ayaya {
         pc.DepthThreshold  = 0.05f;
         pc.NormalThreshold = 0.8f;
         pc.TemporalBlend   = context.Get<float>("SSR_TemporalBlend", 0.05f);  // min blend: current-frame weight
+        pc.HasHistory      = hasHistory ? 1.0f : 0.0f;
         pc.TexelSizeW = 1.0f / float(hw);
         pc.TexelSizeH = 1.0f / float(hh);
         cmd.PushConstantData(m_Pipeline, &pc, sizeof pc);
