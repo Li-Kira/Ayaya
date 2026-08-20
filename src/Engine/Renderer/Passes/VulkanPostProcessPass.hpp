@@ -15,6 +15,13 @@ namespace Ayaya {
         glm::vec2 TexelSize;
         int EnableBloom;
         float BloomIntensity;
+        // Tint stored as 3 scalars: a glm::vec3/vec4 in a push constant would be
+        // 4-byte aligned on the C++ side but 16-byte aligned in GLSL std430, shifting
+        // the read by 8 bytes and tinting bloom (e.g. white -> yellow). Scalars avoid
+        // the alignment mismatch entirely.
+        float BloomTintR;
+        float BloomTintG;
+        float BloomTintB;
     };
 
     class VulkanPostProcessPass : public RenderPass {

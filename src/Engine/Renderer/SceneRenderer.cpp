@@ -711,6 +711,13 @@ namespace Ayaya {
         // ==========================================
         // 布置 Render Graph 数据黑板并轰鸣管线！
         // ==========================================
+        // 场景切换检测：重置时序历史（TAA/SSR），对标商业引擎的 camera-cut。
+        if (m_LastScene && scene.get() != m_LastScene.get()) {
+            if (auto* taa = dynamic_cast<VulkanTAAPass*>(m_TAAPass.get())) taa->ResetHistory();
+            if (auto* srt = dynamic_cast<VulkanSSRTemporalPass*>(m_SSRTemporalPass.get())) srt->ResetHistory();
+        }
+        m_LastScene = scene;
+
         m_RenderContext.ActiveScene = scene;
         m_RenderContext.Set("ViewportWidth", m_Data->ViewportWidth);
         m_RenderContext.Set("ViewportHeight", m_Data->ViewportHeight);
@@ -747,6 +754,8 @@ namespace Ayaya {
         float exposure = 1.0f;
         bool  enableBloom = false;
         float bThreshold = 1.0f, bKnee = 0.1f, bRadius = 0.005f, bIntensity = 1.0f;
+        glm::vec3 bTint = glm::vec3(1.0f);
+        float bSize = 1.0f;
         bool  enableFXAA = false;
         bool  enableTAA = false;
         bool  enableSSAO = false;
@@ -764,6 +773,8 @@ namespace Ayaya {
                 bKnee = volume.BloomKnee;
                 bRadius = volume.BloomRadius;
                 bIntensity = volume.BloomIntensity;
+                bTint = volume.BloomTint;
+                bSize = volume.BloomSize;
                 enableFXAA = volume.EnableFXAA;
                 enableTAA = volume.EnableTAA;
                 enableSSAO = volume.EnableSSAO;
@@ -780,6 +791,8 @@ namespace Ayaya {
         m_RenderContext.Set("BloomKnee", bKnee);
         m_RenderContext.Set("BloomRadius", bRadius);
         m_RenderContext.Set("BloomIntensity", bIntensity);
+        m_RenderContext.Set("BloomTint", bTint);
+        m_RenderContext.Set("BloomSize", bSize);
         m_RenderContext.Set("EnableFXAA", enableFXAA);
         m_RenderContext.Set("EnableTAA", enableTAA);
         m_RenderContext.Set("EnableSSAO", enableSSAO);

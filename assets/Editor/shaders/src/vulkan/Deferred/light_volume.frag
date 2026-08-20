@@ -74,7 +74,12 @@ void main() {
     vec2 octNormal  = texelFetch(g_Normal,     fc, 0).rg;
 
     vec3 albedo   = albedoData.rgb;
-    float roughness = max(pbrData.g, 0.04);
+    // Specular AA: widen the roughness so the GGX highlight of a punctual light isn't a
+    // sub-pixel firefly (a sharp point-light specular on a low-roughness surface flickers
+    // with/without TAA). 0.1 was too aggressive (highlight blown up 2.5x); 0.06 keeps the
+    // highlight ~1.5x wider than the old 0.04 floor — enough to stop sub-pixel shimmer
+    // without visibly enlarging the highlight. Tune this if flicker returns / highlight is too big.
+    float roughness = max(pbrData.g, 0.06);
     float metallic  = pbrData.r;
     float ao        = pbrData.b;
     vec3 N = OctDecode(octNormal);

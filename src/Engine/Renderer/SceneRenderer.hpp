@@ -115,6 +115,7 @@ namespace Ayaya {
         RenderGraph    m_RenderGraph;        // Vulkan DAG
         bool m_ViewportDirty = true;
         std::string m_FinalExportTexture;    // 当前帧最终输出纹理名
+        std::shared_ptr<Scene> m_LastScene;  // 检测场景切换 → 重置时序历史 (TAA/SSR)
 
         // Deferred Pass 实例池
         std::shared_ptr<RenderPass> m_ShadowPass;

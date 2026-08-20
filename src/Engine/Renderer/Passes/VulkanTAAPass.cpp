@@ -106,6 +106,7 @@ namespace Ayaya {
         pc.MotionThreshold    = context.Get<float>("TAA_MotionThreshold", 0.1f);
         pc.SharpenAmount      = context.Get<float>("TAA_SharpenAmount", 0.0f);
         pc.Enable             = context.Get<bool>("EnableTAA", false) ? 1.0f : 0.0f;
+        pc.HistoryValid       = hasHistory ? 1.0f : 0.0f;
         cmd.PushConstantData(m_Pipeline, &pc, sizeof pc);
 
         context.RecordAndCheckDrawCall("TAA", "TAA_Output", "taa", 1);
@@ -118,6 +119,14 @@ namespace Ayaya {
         m_FrameCount++;
 
         context.Framebuffers["TAA_Output"] = outputFBO;
+    }
+
+    void VulkanTAAPass::ResetHistory() {
+        m_FrameCount = 0;
+        for (int i = 0; i < 3; i++) {
+            m_HistoryFBO[i] = nullptr;
+            m_DepthHistoryFBO[i] = nullptr;
+        }
     }
 
 } // namespace Ayaya

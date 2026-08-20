@@ -25,6 +25,7 @@ layout(push_constant) uniform PC {
     float u_MotionThreshold;     // large-motion history rejection gate
     float u_SharpenAmount;       // adaptive sharpen strength (0 = off)
     float u_Enable;              // passthrough when 0
+    float u_HistoryValid;        // 1 = valid history, 0 = passthrough (first frame / camera cut)
 } pc;
 
 layout(location = 0) in vec2 v_TexCoord;
@@ -70,18 +71,27 @@ vec2 ComputeCameraMotion(vec2 uv, float depth) {
     return uv - prevUV;
 }
 
-// Catmull-Rom cubic weight (a = -0.5).
-float CatmullRomW(float x) {
+// B-spline cubic weight (a = 1.0). All weights are non-negative, so the history
+// reconstruction never under-shoots/over-shoots bright HDR highlights. Catmull-Rom
+// (a = -0.5) has negative lobes that dim sharp point-light specular highlights and
+// make them flicker with the sub-pixel jitter.
+float BSplineW(float x) {
     float ax = abs(x);
-    if (ax < 1.0) return (1.5 * ax - 2.5) * ax * ax + 1.0;
-    if (ax < 2.0) return ((-0.5 * ax + 2.5) * ax - 4.0) * ax + 2.0;
+    if (ax < 1.0) {
+        float x2 = ax * ax;
+        return 0.5 * ax * x2 - x2 + (2.0 / 3.0);
+    }
+    if (ax < 2.0) {
+        float t = 2.0 - ax;
+        return (t * t * t) / 6.0;
+    }
     return 0.0;
 }
 
-// 4x4 bicubic Catmull-Rom history sampling. Replaces the single bilinear tap,
+// 4x4 bicubic B-spline history sampling. Replaces the single bilinear tap,
 // which is the main source of sub-pixel shimmer in TAA (a poor reconstruction
 // filter for the reprojected history sample).
-vec4 SampleHistoryCatmullRom(vec2 uv) {
+vec4 SampleHistoryBSpline(vec2 uv) {
     vec2 ts  = pc.u_TexelSize;
     vec2 res = vec2(1.0 / ts.x, 1.0 / ts.y);
     vec2 pos = uv * res - 0.5;       // texel-space position (texel 0 center at 0)
@@ -94,7 +104,7 @@ vec4 SampleHistoryCatmullRom(vec2 uv) {
         for (int dx = -1; dx <= 2; dx++) {
             vec2 tap = base + vec2(float(dx), float(dy));
             vec2 off = tap - pos;     // texel offset in [-2, 2]
-            float w = CatmullRomW(off.x) * CatmullRomW(off.y);
+            float w = BSplineW(off.x) * BSplineW(off.y);
             sum  += texture(u_History, (tap + 0.5) * ts) * w;
             wsum += w;
         }
@@ -106,6 +116,13 @@ void main() {
     vec4 current = texture(u_SceneColor, v_TexCoord);
 
     if (pc.u_Enable < 0.5) {
+        FragColor = current;
+        return;
+    }
+    // Camera-cut / first frame: no valid history yet — output current directly and
+    // skip sampling the (possibly stale/NaN) history. blend=1.0 would NOT be enough:
+    // mix(NaN, current, 1.0) is still NaN (NaN*0 == NaN).
+    if (pc.u_HistoryValid < 0.5) {
         FragColor = current;
         return;
     }
@@ -143,7 +160,7 @@ void main() {
     neighMin   = mean - delta * 1.25;
     neighMax   = mean + delta * 1.25;
 
-    vec4 history = SampleHistoryCatmullRom(historyUV);
+    vec4 history = SampleHistoryBSpline(historyUV);
     vec3 historyYC = clamp(RGBToYCoCg(history.rgb), neighMin, neighMax);
     history.rgb = YCoCgToRGB(historyYC);
 
@@ -176,10 +193,10 @@ void main() {
     //    with the resolved sample above.
     if (pc.u_SharpenAmount > 0.0) {
         vec2 ts = pc.u_TexelSize;
-        vec3 hL = YCoCgToRGB(clamp(RGBToYCoCg(SampleHistoryCatmullRom(historyUV + vec2(-ts.x, 0.0)).rgb), neighMin, neighMax));
-        vec3 hR = YCoCgToRGB(clamp(RGBToYCoCg(SampleHistoryCatmullRom(historyUV + vec2( ts.x, 0.0)).rgb), neighMin, neighMax));
-        vec3 hU = YCoCgToRGB(clamp(RGBToYCoCg(SampleHistoryCatmullRom(historyUV + vec2(0.0, -ts.y)).rgb), neighMin, neighMax));
-        vec3 hD = YCoCgToRGB(clamp(RGBToYCoCg(SampleHistoryCatmullRom(historyUV + vec2(0.0,  ts.y)).rgb), neighMin, neighMax));
+        vec3 hL = YCoCgToRGB(clamp(RGBToYCoCg(SampleHistoryBSpline(historyUV + vec2(-ts.x, 0.0)).rgb), neighMin, neighMax));
+        vec3 hR = YCoCgToRGB(clamp(RGBToYCoCg(SampleHistoryBSpline(historyUV + vec2( ts.x, 0.0)).rgb), neighMin, neighMax));
+        vec3 hU = YCoCgToRGB(clamp(RGBToYCoCg(SampleHistoryBSpline(historyUV + vec2(0.0, -ts.y)).rgb), neighMin, neighMax));
+        vec3 hD = YCoCgToRGB(clamp(RGBToYCoCg(SampleHistoryBSpline(historyUV + vec2(0.0,  ts.y)).rgb), neighMin, neighMax));
         vec3 blur = (hL + hR + hU + hD) * 0.25;
         resolved += (resolved - blur) * pc.u_SharpenAmount;
     }

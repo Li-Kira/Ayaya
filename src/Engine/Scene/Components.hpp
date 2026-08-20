@@ -231,6 +231,8 @@ namespace Ayaya {
         float BloomKnee = 0.1f;
         float BloomRadius = 0.005f;
         float BloomIntensity = 1.0f;
+        glm::vec3 BloomTint = glm::vec3(1.0f); // bloom color tint (multiplied before composite)
+        float BloomSize = 1.0f;                // bloom width scale (scales per-level upsample radius)
 
         // --- FXAA ---
         bool EnableFXAA = false;

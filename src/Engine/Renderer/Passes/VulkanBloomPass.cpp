@@ -53,10 +53,10 @@ namespace Ayaya {
         auto bloomFBO = context.GetFramebuffer("Bloom");
         if (!inputFBO || !bloomFBO) return;
 
-        bool enableBloom = context.Get<bool>("EnableBloom", true);
+        bool enableBloom = context.Get<bool>("EnableBloom", false);
         float threshold = context.Get<float>("BloomThreshold", 1.0f);
         float knee      = context.Get<float>("BloomKnee", 0.1f);
-        float radius    = context.Get<float>("BloomRadius", 0.005f);
+        float bloomSize = context.Get<float>("BloomSize", 1.0f);
 
         if (!enableBloom) {
             // Clear bloom output to black so PostProcess blend is a no-op
@@ -137,11 +137,14 @@ namespace Ayaya {
         cmd.BindPipeline(m_UpsamplePipeline);
 
         BloomUpsamplePushConstants upPC{};
-        upPC.FilterRadius = radius;
-        cmd.PushConstantData(m_UpsamplePipeline, &upPC, sizeof upPC);
-
         for (int i = 3; i >= 0; i--) {
             auto src = chain[i+1].FBO;
+            // Tent radius in SOURCE-texel units (fixed across levels), per-axis so the
+            // tent is isotropic on non-square targets. The 3×3 tent weights assume taps
+            // are ~1 source texel apart; keeping each axis at `bloomSize` source texels
+            // keeps it smooth and ghost-free at every mip.
+            upPC.FilterRadius = glm::vec2(bloomSize) / chain[i+1].Size;
+            cmd.PushConstantData(m_UpsamplePipeline, &upPC, sizeof upPC);
             // Target was left in SHADER_READ_ONLY by downsample (or previous upsample step);
             // transition back to COLOR_ATTACHMENT.
             cmd.TransitionImageLayout(chain[i].FBO, 0,

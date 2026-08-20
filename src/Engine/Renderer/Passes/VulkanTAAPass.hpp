@@ -18,6 +18,7 @@ namespace Ayaya {
         float MotionThreshold;         // large-motion history rejection gate
         float SharpenAmount;           // adaptive sharpen strength
         float Enable;                  // passthrough when 0
+        float HistoryValid;            // 1 = valid history, 0 = passthrough (first frame / camera cut)
     };
 
     class VulkanTAAPass : public RenderPass {
@@ -29,6 +30,10 @@ namespace Ayaya {
         virtual void Execute(RenderContext& context, RenderCommandBuffer& cmd) override;
 
         static void DeclareResources(class RGBuilder& builder, uint32_t width, uint32_t height);
+
+        // Invalidates the temporal history so the next frame passes the current color
+        // straight through (camera-cut model). Call on scene change / camera teleport.
+        void ResetHistory();
 
     private:
         std::shared_ptr<Shader>      m_Shader;

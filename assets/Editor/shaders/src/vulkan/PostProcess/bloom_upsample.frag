@@ -7,7 +7,7 @@ layout(set = 1, binding = 0) uniform sampler2D u_Image;
 
 // 【核心改造】：提取到 Push Constant
 layout(push_constant) uniform Constants {
-    float u_FilterRadius;
+    vec2 u_FilterRadius;   // per-axis tent radius (source texels in UV units)
 } pc;
 
 vec3 SafeSample(vec2 uv) {
@@ -17,8 +17,8 @@ vec3 SafeSample(vec2 uv) {
 }
 
 void main() {
-    float x = pc.u_FilterRadius;
-    float y = pc.u_FilterRadius;
+    float x = pc.u_FilterRadius.x;
+    float y = pc.u_FilterRadius.y;
 
     vec3 a = SafeSample(vec2(v_TexCoord.x - x, v_TexCoord.y + y));
     vec3 b = SafeSample(vec2(v_TexCoord.x,     v_TexCoord.y + y));

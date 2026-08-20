@@ -12,6 +12,9 @@ layout(push_constant) uniform Constants {
     vec2 TexelSize;
     int EnableBloom;
     float BloomIntensity;
+    float BloomTintR;
+    float BloomTintG;
+    float BloomTintB;
 } pc;
 
 vec3 ACESFilm(vec3 x) {
@@ -25,7 +28,8 @@ void main() {
 
     if (pc.EnableBloom == 1) {
         vec3 bloomColor = texture(u_BloomTexture, v_TexCoord).rgb;
-        hdrColor += bloomColor * pc.BloomIntensity;
+        vec3 tint = vec3(pc.BloomTintR, pc.BloomTintG, pc.BloomTintB);
+        hdrColor += bloomColor * tint * pc.BloomIntensity;
     }
 
     hdrColor *= pc.Exposure;

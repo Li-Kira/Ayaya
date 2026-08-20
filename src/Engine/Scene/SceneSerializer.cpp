@@ -228,6 +228,8 @@ namespace Ayaya {
             out << YAML::Key << "BloomKnee" << YAML::Value << ppv.BloomKnee;
             out << YAML::Key << "BloomRadius" << YAML::Value << ppv.BloomRadius;
             out << YAML::Key << "BloomIntensity" << YAML::Value << ppv.BloomIntensity;
+            out << YAML::Key << "BloomTint" << YAML::Value << ppv.BloomTint;
+            out << YAML::Key << "BloomSize" << YAML::Value << ppv.BloomSize;
             out << YAML::Key << "EnableFXAA" << YAML::Value << ppv.EnableFXAA;
             out << YAML::Key << "EnableTAA" << YAML::Value << ppv.EnableTAA;
             out << YAML::Key << "EnableSSAO" << YAML::Value << ppv.EnableSSAO;
@@ -599,6 +601,8 @@ namespace Ayaya {
                 ppv.BloomKnee = ppvComponent["BloomKnee"].as<float>();
                 ppv.BloomRadius = ppvComponent["BloomRadius"].as<float>();
                 ppv.BloomIntensity = ppvComponent["BloomIntensity"].as<float>();
+                if (ppvComponent["BloomTint"]) ppv.BloomTint = ppvComponent["BloomTint"].as<glm::vec3>();
+                if (ppvComponent["BloomSize"]) ppv.BloomSize = ppvComponent["BloomSize"].as<float>();
                 ppv.EnableFXAA = ppvComponent["EnableFXAA"].as<bool>();
                 if (ppvComponent["EnableTAA"]) ppv.EnableTAA = ppvComponent["EnableTAA"].as<bool>();
                 if (ppvComponent["EnableSSAO"]) ppv.EnableSSAO = ppvComponent["EnableSSAO"].as<bool>();

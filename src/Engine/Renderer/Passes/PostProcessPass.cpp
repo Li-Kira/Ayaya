@@ -111,7 +111,7 @@ namespace Ayaya {
             bloomFBO = context.Framebuffers["Bloom"];
         }
 
-        bool isBloomEnabled = (bloomFBO != nullptr) && context.Get<bool>("EnableBloom", true);
+        bool isBloomEnabled = (bloomFBO != nullptr) && context.Get<bool>("EnableBloom", false);
         
         cmd.PushConstant(m_Pipeline, "u_EnableBloom", isBloomEnabled ? 1 : 0);
         if (isBloomEnabled) {

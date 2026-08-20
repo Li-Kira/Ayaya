@@ -21,7 +21,7 @@ namespace Ayaya {
     };
 
     struct alignas(16) BloomUpsamplePushConstants {
-        float FilterRadius;
+        glm::vec2 FilterRadius;   // per-axis tent radius (source texels in UV units)
     };
 
     class VulkanBloomPass : public RenderPass {

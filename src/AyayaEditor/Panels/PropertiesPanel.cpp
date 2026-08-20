@@ -1642,7 +1642,7 @@ namespace Ayaya {
                     for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().EnableBloom = enableBloom;
                     commitInstantCommand("Toggle Enable Bloom", oldComps);
                 }
-                if (refPPV.EnableBloom) {
+                if (enableBloom) {
                     UI::DrawPropertyLabel("  Threshold");
                     float threshold = refPPV.BloomThreshold;
                     if (ImGui::DragFloat("##BloomThresh", &threshold, 0.05f, 0.0f, 10.0f, "%.2f"))
@@ -1655,17 +1655,23 @@ namespace Ayaya {
                         for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().BloomKnee = knee;
                     handleDragState("Change Bloom Knee");
 
-                    UI::DrawPropertyLabel("  Filter Radius");
-                    float radius = refPPV.BloomRadius;
-                    if (ImGui::DragFloat("##BloomRadius", &radius, 0.0005f, 0.001f, 0.02f, "%.4f"))
-                        for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().BloomRadius = radius;
-                    handleDragState("Change Bloom Radius");
+                    UI::DrawPropertyLabel("  Radius");
+                    float size = refPPV.BloomSize;
+                    if (ImGui::DragFloat("##BloomSize", &size, 0.05f, 0.25f, 2.0f, "%.2f"))
+                        for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().BloomSize = size;
+                    handleDragState("Change Bloom Size");
 
                     UI::DrawPropertyLabel("  Intensity");
                     float intensity = refPPV.BloomIntensity;
                     if (ImGui::DragFloat("##BloomIntensity", &intensity, 0.05f, 0.0f, 5.0f, "%.2f"))
                         for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().BloomIntensity = intensity;
                     handleDragState("Change Bloom Intensity");
+
+                    UI::DrawPropertyLabel("  Tint");
+                    glm::vec3 tint = refPPV.BloomTint;
+                    if (ImGui::ColorEdit3("##BloomTint", glm::value_ptr(tint)))
+                        for (auto e : m_SelectedEntities) e.GetComponent<PostProcessVolumeComponent>().BloomTint = tint;
+                    handleDragState("Change Bloom Tint");
                 }
                 ImGui::EndTable();
 
