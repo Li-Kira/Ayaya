@@ -74,6 +74,17 @@ struct GPUMaterial {
     float4 customData[4];             // TA-extensible: 64 bytes
 };
 
+// ── Set 1: bindless textures (separate image + sampler arrays, DXC-friendly) ──
+// GenericDrawPass now uses UseBindlessTextures=true, so Set 1 = the global bindless arrays.
+// Sample a material texture with: SampleGlobalTexture(mat.albedoBindless, uv)
+[[vk::binding(0, 1)]] Texture2D u_GlobalTextures[] : register(t0, space1);
+[[vk::binding(1, 1)]] SamplerState u_GlobalSamplers[] : register(s0, space1);
+
+float4 SampleGlobalTexture(uint index, float2 uv) {
+    uint idx = NonUniformResourceIndex(index);
+    return u_GlobalTextures[idx].Sample(u_GlobalSamplers[idx], uv);
+}
+
 // ── Set 2 bindings (shared GDR data) ──
 
 [[vk::binding(0, 2)]] StructuredBuffer<GPUInstance>   u_Instances;
@@ -91,6 +102,7 @@ struct AyayaVertex {
     float3 position;
     float3 normal;
     float2 uv;
+    float3 tangent;
     float4x4 worldMatrix;
     uint materialIdx;
 };
@@ -109,11 +121,13 @@ AyayaVertex GetAyayaVertex(uint vertexID, uint instanceID) {
     // Vertex layout: pos[3] | normal[3] | uv[2] | tangent[3] = 11 uints
     uint4 d0 = uint4(g_Data[base+0], g_Data[base+1], g_Data[base+2], g_Data[base+3]); // {pos.x, pos.y, pos.z, normal.x}
     uint4 d1 = uint4(g_Data[base+4], g_Data[base+5], g_Data[base+6], g_Data[base+7]); // {normal.y, normal.z, uv.x, uv.y}
+    uint4 d2 = uint4(g_Data[base+8], g_Data[base+9], g_Data[base+10], 0);            // {tangent.x, tangent.y, tangent.z, _}
 
     AyayaVertex v;
     v.position    = float3(asfloat(d0.x), asfloat(d0.y), asfloat(d0.z));
     v.normal      = float3(asfloat(d0.w), asfloat(d1.x), asfloat(d1.y));
     v.uv          = float2(asfloat(d1.z), asfloat(d1.w));
+    v.tangent     = float3(asfloat(d2.x), asfloat(d2.y), asfloat(d2.z));
     v.worldMatrix = inst.transform;
     v.materialIdx = inst.materialIdx;
     return v;

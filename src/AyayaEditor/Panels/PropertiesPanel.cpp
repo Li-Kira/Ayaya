@@ -1230,6 +1230,11 @@ namespace Ayaya {
                             for (auto e : m_SelectedEntities) e.GetComponent<MeshRendererComponent>().ModelHandle = AssetManager::GetBuiltInPlane();
                             commitInstantCommand("Assign Plane", oldComps);
                         }
+                        if (ImGui::MenuItem("Grid")) {
+                            std::vector<MeshRendererComponent> oldComps = pureOldMrcs;
+                            for (auto e : m_SelectedEntities) e.GetComponent<MeshRendererComponent>().ModelHandle = AssetManager::GetBuiltInGrid();
+                            commitInstantCommand("Assign Grid", oldComps);
+                        }
                         ImGui::EndPopup();
                     }
                     ImGui::TreePop();
@@ -3239,8 +3244,11 @@ namespace Ayaya {
                     material->Name = matName;
                     material->FromAyaShader = true;  // skip default PBR injection on load
 
-                    // Parse Tags
-                    if (doc["Tags"] && doc["Tags"]["LightModeMask"]) {
+                    // Parse Tags — prefer named LightMode tag (registry assigns a unique bit),
+                    // fall back to the raw LightModeMask int for backward compatibility.
+                    if (doc["Tags"] && doc["Tags"]["LightMode"]) {
+                        material->SetLightModeStr(doc["Tags"]["LightMode"].as<std::string>());
+                    } else if (doc["Tags"] && doc["Tags"]["LightModeMask"]) {
                         uint32_t mask = doc["Tags"]["LightModeMask"].as<uint32_t>();
                         material->SetLightModeMask(mask);
                     }

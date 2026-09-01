@@ -2,7 +2,7 @@
 Name: "Hologram"
 PassType: "GenericDrawPass"
 Tags:
-  LightModeMask: 32
+  LightMode: "Hologram"
   Queue: "Transparent"
 RenderState:
   DepthTest: false

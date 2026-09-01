@@ -11,7 +11,8 @@ layout(location = 1) in vec3 v_Normal;
 layout(location = 2) in vec2 v_TexCoord;
 
 // Bindless texture array — all material 2D textures indexed via push constants
-layout(set = 1, binding = 0) uniform sampler2D u_GlobalTextures[];
+layout(set = 1, binding = 0) uniform texture2D u_GlobalTextures[];
+layout(set = 1, binding = 1) uniform sampler u_GlobalSamplers[];
 
 layout(push_constant) uniform PushConstants {
     mat4   u_Transform;                        // offset 0   (64B)
@@ -23,7 +24,7 @@ layout(push_constant) uniform PushConstants {
 } pc;
 
 vec3 GetNormalFromMap(uint normalIdx) {
-    vec3 tN = texture(u_GlobalTextures[nonuniformEXT(normalIdx)], v_TexCoord).xyz * 2.0 - 1.0;
+    vec3 tN = texture(sampler2D(u_GlobalTextures[nonuniformEXT(normalIdx)], u_GlobalSamplers[nonuniformEXT(normalIdx)]), v_TexCoord).xyz * 2.0 - 1.0;
     tN.g = -tN.g; // Vulkan negative-viewport compensation
     vec3 Q1 = dFdx(v_FragPos), Q2 = dFdy(v_FragPos);
     vec2 st1 = dFdx(v_TexCoord), st2 = dFdy(v_TexCoord);
@@ -42,7 +43,7 @@ vec2 OctEncode(vec3 n) {
 
 void main() {
     // Albedo sampling — index always valid (defaults to white 1×1)
-    vec4 albedoSample = texture(u_GlobalTextures[nonuniformEXT(pc.u_Indices0.x)], v_TexCoord);
+    vec4 albedoSample = texture(sampler2D(u_GlobalTextures[nonuniformEXT(pc.u_Indices0.x)], u_GlobalSamplers[nonuniformEXT(pc.u_Indices0.x)]), v_TexCoord);
     float a = pc.u_Metallic_Roughness_AO_Alpha.w * albedoSample.a;
 
     if (int(pc.u_AlphaCutoff_BlendMode_UseORMMap.y) == 1 && a < pc.u_AlphaCutoff_BlendMode_UseORMMap.x)
@@ -58,13 +59,13 @@ void main() {
     float metallic, roughness, ao;
     if (pc.u_AlphaCutoff_BlendMode_UseORMMap.z != 0u) {
         // ORM packed: R=AO, G=Roughness, B=Metallic
-        vec3 o = texture(u_GlobalTextures[nonuniformEXT(pc.u_Indices0.z)], v_TexCoord).rgb;
+        vec3 o = texture(sampler2D(u_GlobalTextures[nonuniformEXT(pc.u_Indices0.z)], u_GlobalSamplers[nonuniformEXT(pc.u_Indices0.z)]), v_TexCoord).rgb;
         ao = o.r; roughness = o.g; metallic = o.b;
     } else {
         // Individual maps: scalar * map (default index 1 = white, so unused maps give scalar * 1 = scalar)
-        metallic  = pc.u_Metallic_Roughness_AO_Alpha.x * texture(u_GlobalTextures[nonuniformEXT(pc.u_Indices0.w)], v_TexCoord).r;
-        roughness = pc.u_Metallic_Roughness_AO_Alpha.y * texture(u_GlobalTextures[nonuniformEXT(pc.u_Indices1.x)], v_TexCoord).r;
-        ao        = pc.u_Metallic_Roughness_AO_Alpha.z * texture(u_GlobalTextures[nonuniformEXT(pc.u_Indices1.y)], v_TexCoord).r;
+        metallic  = pc.u_Metallic_Roughness_AO_Alpha.x * texture(sampler2D(u_GlobalTextures[nonuniformEXT(pc.u_Indices0.w)], u_GlobalSamplers[nonuniformEXT(pc.u_Indices0.w)]), v_TexCoord).r;
+        roughness = pc.u_Metallic_Roughness_AO_Alpha.y * texture(sampler2D(u_GlobalTextures[nonuniformEXT(pc.u_Indices1.x)], u_GlobalSamplers[nonuniformEXT(pc.u_Indices1.x)]), v_TexCoord).r;
+        ao        = pc.u_Metallic_Roughness_AO_Alpha.z * texture(sampler2D(u_GlobalTextures[nonuniformEXT(pc.u_Indices1.y)], u_GlobalSamplers[nonuniformEXT(pc.u_Indices1.y)]), v_TexCoord).r;
     }
     g_PBR = vec4(metallic, roughness, ao, 1.0);
     g_CustomData = vec4(pc.u_Albedo_ReceiveShadows.w, pc.u_Indices1.w, 0.0, 1.0);

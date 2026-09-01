@@ -116,8 +116,8 @@ namespace Ayaya {
         auto view = m_Registry.view<MeshRendererComponent>();
         for (auto entityID : view) {
             auto& comp = view.get<MeshRendererComponent>(entityID);
-            if (comp.MaterialHandle == assetHandle) comp.CachedMaterial = nullptr;
-            if (comp.ModelHandle == assetHandle)    comp.CachedModel    = nullptr;
+            if (comp.MaterialHandle == assetHandle) { comp.CachedMaterial = nullptr; comp.CachedMaterialHandle = 0; }
+            if (comp.ModelHandle == assetHandle)    { comp.CachedModel    = nullptr; comp.CachedModelHandle    = 0; }
         }
     }
 

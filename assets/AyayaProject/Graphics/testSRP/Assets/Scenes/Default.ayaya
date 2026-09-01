@@ -136,3 +136,18 @@ Entities:
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 0
+  - Entity: 177777770000000001
+    TagComponent:
+      Tag: Water
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [12, 1, 12]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000007
+      MaterialHandle: 722090966365288412
+      CastShadows: false
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0

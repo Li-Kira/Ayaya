@@ -10,38 +10,47 @@ namespace Ayaya {
         VkDescriptorBindingFlags bindlessFlags =
             VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
             VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+        VkDescriptorBindingFlags bindingFlags[2] = { bindlessFlags, bindlessFlags };
 
         VkDescriptorSetLayoutBindingFlagsCreateInfo flagInfo{};
         flagInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
-        flagInfo.bindingCount = 1;
-        flagInfo.pBindingFlags = &bindlessFlags;
+        flagInfo.bindingCount = 2;
+        flagInfo.pBindingFlags = bindingFlags;
 
-        VkDescriptorSetLayoutBinding binding{};
-        binding.binding = 0;
-        binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        binding.descriptorCount = m_Capacity;
-        binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-        binding.pImmutableSamplers = nullptr;
+        // Separate sampled-image + sampler arrays (DXC/HLSL-friendly). GLSL combines
+        // them at sample time: sampler2D(tex[idx], samp[idx]).
+        VkDescriptorSetLayoutBinding bindings[2]{};
+        bindings[0].binding = 0;
+        bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        bindings[0].descriptorCount = m_Capacity;
+        bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        bindings[0].pImmutableSamplers = nullptr;
+        bindings[1].binding = 1;
+        bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+        bindings[1].descriptorCount = m_Capacity;
+        bindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        bindings[1].pImmutableSamplers = nullptr;
 
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         layoutInfo.pNext = &flagInfo;
         layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-        layoutInfo.bindingCount = 1;
-        layoutInfo.pBindings = &binding;
+        layoutInfo.bindingCount = 2;
+        layoutInfo.pBindings = bindings;
 
         VkResult result = vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_Layout);
         AYAYA_CORE_ASSERT(result == VK_SUCCESS, "Failed to create bindless descriptor set layout!");
 
-        VkDescriptorPoolSize poolSize{};
-        poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSize.descriptorCount = m_Capacity;
+        VkDescriptorPoolSize poolSizes[2]{
+            { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, m_Capacity },
+            { VK_DESCRIPTOR_TYPE_SAMPLER, m_Capacity },
+        };
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
+        poolInfo.poolSizeCount = 2;
+        poolInfo.pPoolSizes = poolSizes;
         poolInfo.maxSets = 1;
 
         result = vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_Pool);
@@ -53,7 +62,7 @@ namespace Ayaya {
         allocInfo.descriptorSetCount = 1;
         allocInfo.pSetLayouts = &m_Layout;
 
-        uint32_t variableCounts[] = { m_Capacity };
+        uint32_t variableCounts[] = { m_Capacity, m_Capacity };
         VkDescriptorSetVariableDescriptorCountAllocateInfo varInfo{};
         varInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
         varInfo.descriptorSetCount = 1;
@@ -105,18 +114,28 @@ namespace Ayaya {
         VkDescriptorImageInfo imageInfo{};
         imageInfo.imageView = view;
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.sampler = sampler;
 
-        VkWriteDescriptorSet write{};
-        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet = m_Set;
-        write.dstBinding = 0;
-        write.dstArrayElement = index;
-        write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        write.descriptorCount = 1;
-        write.pImageInfo = &imageInfo;
+        VkDescriptorImageInfo samplerInfo{};
+        samplerInfo.sampler = sampler;
 
-        vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+        VkWriteDescriptorSet writes[2]{};
+        writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[0].dstSet = m_Set;
+        writes[0].dstBinding = 0;  // sampled image
+        writes[0].dstArrayElement = index;
+        writes[0].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        writes[0].descriptorCount = 1;
+        writes[0].pImageInfo = &imageInfo;
+
+        writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[1].dstSet = m_Set;
+        writes[1].dstBinding = 1;  // sampler
+        writes[1].dstArrayElement = index;
+        writes[1].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+        writes[1].descriptorCount = 1;
+        writes[1].pImageInfo = &samplerInfo;
+
+        vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);
     }
 
 }

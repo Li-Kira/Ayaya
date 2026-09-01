@@ -2,7 +2,7 @@ MaterialName: Hologram
 ShaderName: Default
 BlendMode: 3
 AlphaCutoff: 0.5
-LightModes: 32
+LightModes: "Hologram"
 Properties:
   - UniformName: _Color
     DisplayName: Hologram Color

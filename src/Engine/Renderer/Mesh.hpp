@@ -58,6 +58,7 @@ namespace Ayaya {
         static std::shared_ptr<Mesh> CreateCube(float size = 1.0f);
         static std::shared_ptr<Mesh> CreatePlane(float width = 1.0f, float height = 1.0f);
         static std::shared_ptr<Mesh> CreateSphere(float radius = 1.0f, uint32_t xSegments = 32, uint32_t ySegments = 32);
+        static std::shared_ptr<Mesh> CreateGrid(float width = 1.0f, float depth = 1.0f, uint32_t xSegments = 32, uint32_t zSegments = 32);
         static std::shared_ptr<Mesh> Merge(const std::vector<std::shared_ptr<Mesh>>& meshes);
 
     private:

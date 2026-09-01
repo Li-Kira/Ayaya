@@ -23,7 +23,8 @@ layout(set = 0, binding = 1) uniform LightData {
 };
 
 // set=1: bindless material texture array (2D only)
-layout(set = 1, binding = 0) uniform sampler2D u_GlobalTextures[];
+layout(set = 1, binding = 0) uniform texture2D u_GlobalTextures[];
+layout(set = 1, binding = 1) uniform sampler u_GlobalSamplers[];
 
 // set=3: IBL textures (bound once per frame, not per-material)
 layout(set = 3, binding = 0) uniform samplerCube u_IrradianceMap;
@@ -78,27 +79,27 @@ void main() {
     float Roughness = max(pc.u_Roughness, 0.04);
 
     // Always sample albedo — default index guarantees valid texture
-    vec4 tex = texture(u_GlobalTextures[nonuniformEXT(pc.u_AlbedoMapIndex)], v_TexCoord);
+    vec4 tex = texture(sampler2D(u_GlobalTextures[nonuniformEXT(pc.u_AlbedoMapIndex)], u_GlobalSamplers[nonuniformEXT(pc.u_AlbedoMapIndex)]), v_TexCoord);
     Albedo *= tex.rgb;
     alpha  *= tex.a;
 
     if (pc.u_UseORMMap != 0u) {
-        vec3 orm = texture(u_GlobalTextures[nonuniformEXT(pc.u_ORMMapIndex)], v_TexCoord).rgb;
+        vec3 orm = texture(sampler2D(u_GlobalTextures[nonuniformEXT(pc.u_ORMMapIndex)], u_GlobalSamplers[nonuniformEXT(pc.u_ORMMapIndex)]), v_TexCoord).rgb;
         Roughness = max(orm.g * pc.u_Roughness, 0.04);
         Metallic  = orm.b * pc.u_Metallic;
         if (pc.u_Packing == 1u) {
             // glTF_MetalRough: R channel is undefined; AO from separate occlusionTexture or scalar
             AO = (pc.u_AOMapIndex != 1u)
-                ? texture(u_GlobalTextures[nonuniformEXT(pc.u_AOMapIndex)], v_TexCoord).r * pc.u_AO
+                ? texture(sampler2D(u_GlobalTextures[nonuniformEXT(pc.u_AOMapIndex)], u_GlobalSamplers[nonuniformEXT(pc.u_AOMapIndex)]), v_TexCoord).r * pc.u_AO
                 : pc.u_AO;
         } else {
             // UE4_ORM (default): R=AO
             AO = orm.r * pc.u_AO;
         }
     } else {
-        Metallic  *= texture(u_GlobalTextures[nonuniformEXT(pc.u_MetallicMapIndex)],  v_TexCoord).r;
-        Roughness *= texture(u_GlobalTextures[nonuniformEXT(pc.u_RoughnessMapIndex)], v_TexCoord).r;
-        AO        *= texture(u_GlobalTextures[nonuniformEXT(pc.u_AOMapIndex)],        v_TexCoord).r;
+        Metallic  *= texture(sampler2D(u_GlobalTextures[nonuniformEXT(pc.u_MetallicMapIndex)], u_GlobalSamplers[nonuniformEXT(pc.u_MetallicMapIndex)]),  v_TexCoord).r;
+        Roughness *= texture(sampler2D(u_GlobalTextures[nonuniformEXT(pc.u_RoughnessMapIndex)], u_GlobalSamplers[nonuniformEXT(pc.u_RoughnessMapIndex)]), v_TexCoord).r;
+        AO        *= texture(sampler2D(u_GlobalTextures[nonuniformEXT(pc.u_AOMapIndex)], u_GlobalSamplers[nonuniformEXT(pc.u_AOMapIndex)]),        v_TexCoord).r;
         Roughness = max(Roughness, 0.04);
     }
 

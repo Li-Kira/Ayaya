@@ -1,4 +1,5 @@
 #include "ayapch.h"
+#include <cstring>
 #include "Material.hpp"
 #include "Renderer/RenderCommandBuffer.hpp"
 #include "Renderer/Pipeline.hpp"
@@ -112,6 +113,8 @@ namespace Ayaya {
         m_BakedPC = BakedPC{};  // reset to defaults (indices point to default 1×1 textures)
         m_BakedPC.Packing = savedPacking;
         bool hasPending = false;
+        bool usedCustomDataVec = false;  // _CustomData0..3 (vec4) present
+        bool usedCustomTex = false;      // _CustomTexN (texture bindless) present
         for (auto& prop : Properties) {
             if (prop.UniformName == "u_Albedo" && prop.Type == MaterialPropertyType::Vec3) {
                 m_BakedPC.Albedo = glm::vec4(prop.Vec3Value, 1.0f);
@@ -123,6 +126,18 @@ namespace Ayaya {
                 m_BakedPC.AO = prop.FloatValue;
             } else if (prop.UniformName == "u_Alpha" && prop.Type == MaterialPropertyType::Float) {
                 m_BakedPC.Alpha = prop.FloatValue;
+            } else if (prop.UniformName == "_CustomData0" && prop.Type == MaterialPropertyType::Vec4) {
+                m_BakedPC.CustomData[0] = prop.Vec4Value;
+                usedCustomDataVec = true;
+            } else if (prop.UniformName == "_CustomData1" && prop.Type == MaterialPropertyType::Vec4) {
+                m_BakedPC.CustomData[1] = prop.Vec4Value;
+                usedCustomDataVec = true;
+            } else if (prop.UniformName == "_CustomData2" && prop.Type == MaterialPropertyType::Vec4) {
+                m_BakedPC.CustomData[2] = prop.Vec4Value;
+                usedCustomDataVec = true;
+            } else if (prop.UniformName == "_CustomData3" && prop.Type == MaterialPropertyType::Vec4) {
+                m_BakedPC.CustomData[3] = prop.Vec4Value;
+                usedCustomDataVec = true;
             } else if (prop.Type == MaterialPropertyType::Texture2D) {
                 // Resolve texture and get its bindless index
                 std::shared_ptr<Texture2D> tex = prop.RuntimeTexture;
@@ -146,6 +161,19 @@ namespace Ayaya {
                         m_BakedPC.AOMapIndex = idx;
                     } else if (prop.UniformName == "u_AlphaMap") {
                         m_BakedPC.AlphaMapIndex = idx;
+                    } else if (prop.UniformName.rfind("_CustomTex", 0) == 0) {
+                        // _CustomTexN (Texture2D) → pack bindless index into customData slot N (as float)
+                        try {
+                            int slot = std::stoi(prop.UniformName.substr(10));  // "_CustomTex" is 10 chars
+                            if (slot >= 0 && slot < 16) {
+                                float f;
+                                std::memcpy(&f, &idx, sizeof(f));
+                                (&m_BakedPC.CustomData[0].x)[slot] = f;
+                                usedCustomTex = true;
+                            }
+                        } catch (const std::exception&) {
+                            // Non-numeric suffix (e.g. "_CustomTex" or "_CustomText") — ignore, don't crash
+                        }
                     }
                 } else if (prop.TextureHandle != 0) {
                     // Texture UUID is registered but not yet GPU-loaded (async load in flight).
@@ -153,6 +181,9 @@ namespace Ayaya {
                     hasPending = true;
                 }
             }
+        }
+        if (usedCustomDataVec && usedCustomTex) {
+            AYAYA_CORE_WARN("Material '{}' mixes _CustomData* (vec4) and _CustomTex* (texture) — they share the 64-byte customData buffer and may overwrite each other", Name);
         }
         m_BakedPC.Dirty = false;
         m_HasPendingTextures = hasPending;  // true until all texture bindless indices available

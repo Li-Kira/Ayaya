@@ -167,6 +167,7 @@ namespace Ayaya {
                 gm.alphaCutoff  = pkt.MaterialAsset->GetAlphaCutoff();
                 gm.blendMode      = (int)pkt.MaterialAsset->GetBlendMode();
                 gm.lightModeMask  = pkt.MaterialAsset->GetLightModeMask();
+                for (int i = 0; i < 16; i++) gm.customData[i] = (&b.CustomData[0].x)[i];
                 gdrMaterials.push_back(gm);
             }
 
@@ -267,8 +268,10 @@ namespace Ayaya {
             if (!entity.IsActiveInHierarchy()) continue;
 
             auto& meshComp = entity.GetComponent<MeshRendererComponent>();
-            if (!meshComp.CachedModel)
+            if (!meshComp.CachedModel || meshComp.CachedModelHandle != meshComp.ModelHandle) {
                 meshComp.CachedModel = AssetManager::GetAsset<Model>(meshComp.ModelHandle);
+                meshComp.CachedModelHandle = meshComp.ModelHandle;
+            }
             auto model = meshComp.CachedModel;
             if (!model) {
                 entitiesSkipped++;
@@ -278,8 +281,10 @@ namespace Ayaya {
                 continue;
             }
             entitiesFound++;
-            if (!meshComp.CachedMaterial)
+            if (!meshComp.CachedMaterial || meshComp.CachedMaterialHandle != meshComp.MaterialHandle) {
                 meshComp.CachedMaterial = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
+                meshComp.CachedMaterialHandle = meshComp.MaterialHandle;
+            }
             auto material = meshComp.CachedMaterial;
 
             // All blend modes (Opaque, Masked, Translucent) are uploaded to SSBO.
@@ -339,6 +344,7 @@ namespace Ayaya {
                         gm.blendMode     = (int)material->GetBlendMode();
                         gm.lightModeMask = material->GetLightModeMask();
                         gm.packing       = (uint32_t)b.Packing;
+                        for (int i = 0; i < 16; i++) gm.customData[i] = (&b.CustomData[0].x)[i];
                     }
                     gdrMaterials.push_back(gm);
                 }

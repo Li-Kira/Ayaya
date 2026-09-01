@@ -1,0 +1,78 @@
+Scene: Untitled
+EditorState:
+  ShowGrid: true
+  ShowSkybox: true
+  CameraPosition: [-0.30791366, 1.5069213, 3.6418338]
+  CameraDistance: 1.5204636
+  CameraPitch: -0.23042423
+  CameraYaw: -0.10180781
+  CameraFocalPoint: [-0.15747008, 1.1596618, 2.1692214]
+Entities:
+  - Entity: 9839862325864212364
+    TagComponent:
+      Tag: Main Camera
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 1.6, 5]
+      Rotation: [-0.2604768, 0.03665209, -3.0374274e-08]
+      Scale: [1, 1, 1]
+    CameraComponent:
+      Primary: true
+      FixedAspectRatio: false
+      EV100: 14.5
+      ClearFlag: 0
+      BackgroundColor: [0.016, 0.016, 0.02, 1]
+      Camera:
+        ProjectionType: 0
+        PerspectiveFOV: 0.7853982
+        PerspectiveNear: 0.01
+        PerspectiveFar: 1000
+        OrthographicSize: 5
+        OrthographicNear: -1
+        OrthographicFar: 1000
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 10193097185579127527
+    TagComponent:
+      Tag: Directional Light
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0.7853982, -0.7853982, 0]
+      Scale: [1, 1, 1]
+    DirectionalLightComponent:
+      Color: [1, 1, 1]
+      Illuminance: 100000
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 13101991209741520165
+    TagComponent:
+      Tag: Skybox
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    EnvironmentComponent:
+      Type: 1
+      Intensity: 30000
+      AmbientColor: [0, 0, 0]
+      EquirectangularHandle: 16140901000000000005
+      CubemapHandle: 0
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 213377343330571368
+    TagComponent:
+      Tag: Grid
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [12, 1, 12]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000007
+      MaterialHandle: 722090966365288412
+      CastShadows: true
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0

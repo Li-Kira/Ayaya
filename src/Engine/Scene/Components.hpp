@@ -143,6 +143,8 @@ namespace Ayaya {
         UUID MaterialHandle = 0;
         mutable std::shared_ptr<class Model>    CachedModel    = nullptr;
         mutable std::shared_ptr<class Material> CachedMaterial = nullptr;
+        mutable UUID CachedModelHandle    = 0;  // handle the cache was populated for
+        mutable UUID CachedMaterialHandle = 0;
         bool CastShadows = true;
         bool ReceiveShadows = true;
 

@@ -124,8 +124,8 @@ namespace Ayaya {
             AYAYA_CORE_WARN("[GenericFullScreen:'{}'] Pipeline FAILED", prefix);
             return;
         }
-        AYAYA_CORE_INFO("[GenericFullScreen:'{}'] target={} fmt={} depth={} blend={} clear={}",
-            prefix, targetName, (int)fmt, hasDepth, blendMode, clearColor);
+        //AYAYA_CORE_INFO("[GenericFullScreen:'{}'] target={} fmt={} depth={} blend={} clear={}",
+        //    prefix, targetName, (int)fmt, hasDepth, blendMode, clearColor);
 
         cmd.BeginRenderPass(fbo, clearColor);
 

@@ -46,6 +46,12 @@ namespace Ayaya {
         std::vector<VkDescriptorSet> m_CullSet3Descriptors;
         std::unique_ptr<VulkanStorageBuffer> m_DrawIndirectBuffer;
 
+        // Scene input descriptor set (Set 3, graphics stage):
+        //   binding 0 = SceneColor, 1 = SceneDepth, 2 = PrefilterMap (IBL), 3 = BRDFLUT
+        VkDescriptorSetLayout m_SceneInputLayout = VK_NULL_HANDLE;
+        VkDescriptorPool      m_SceneInputPool = VK_NULL_HANDLE;
+        std::vector<VkDescriptorSet> m_SceneInputDescriptors;
+
         // Graphics pipeline cache: keyed by (shader, depth, cull, blend, format, depthFunc, colorWrite)
         struct PipelineKey {
             std::string shader;
@@ -86,6 +92,8 @@ namespace Ayaya {
 
         std::shared_ptr<Shader> LoadShader(const std::string& vertPath, const std::string& fragPath);
         std::shared_ptr<Pipeline> GetOrCreatePipeline(const PipelineKey& key, const FramebufferSpecification& fboSpec);
+        void BindSceneInputs(RenderContext& context, VkCommandBuffer vkCmd, uint32_t frameIdx,
+                             VkPipelineLayout layout, bool color, bool depth, bool ibl);
     };
 
 } // namespace Ayaya

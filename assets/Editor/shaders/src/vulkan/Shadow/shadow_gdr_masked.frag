@@ -6,7 +6,8 @@
 // Depth is written automatically; no color attachment output
 
 // set=1: bindless texture array
-layout(set = 1, binding = 0) uniform sampler2D u_GlobalTextures[];
+layout(set = 1, binding = 0) uniform texture2D u_GlobalTextures[];
+layout(set = 1, binding = 1) uniform sampler u_GlobalSamplers[];
 
 // set=2, binding=2: Material SSBO (shared with vertex shader)
 struct GPUMaterial {
@@ -34,9 +35,9 @@ layout(location = 1) flat in uint v_MaterialIdx;
 void main() {
     GPUMaterial mat = Materials[v_MaterialIdx];
 
-    float alpha = mat.alpha * texture(u_GlobalTextures[nonuniformEXT(mat.albedoBindless)], v_TexCoord).a;
+    float alpha = mat.alpha * texture(sampler2D(u_GlobalTextures[nonuniformEXT(mat.albedoBindless)], u_GlobalSamplers[nonuniformEXT(mat.albedoBindless)]), v_TexCoord).a;
     if (mat.useAlphaMap != 0)
-        alpha *= texture(u_GlobalTextures[nonuniformEXT(mat.alphaBindless)], v_TexCoord).r;
+        alpha *= texture(sampler2D(u_GlobalTextures[nonuniformEXT(mat.alphaBindless)], u_GlobalSamplers[nonuniformEXT(mat.alphaBindless)]), v_TexCoord).r;
 
     if (alpha < mat.alphaCutoff) {
         discard;

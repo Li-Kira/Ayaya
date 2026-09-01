@@ -1,8 +1,8 @@
 MaterialName: TestOpaque
 ShaderName: Default
-BlendMode: 64
+BlendMode: 0
 AlphaCutoff: 0.5
-LightModes: 64
+LightModes: "TestOpaque"
 Properties:
   - UniformName: _Color
     DisplayName: Albedo Tint

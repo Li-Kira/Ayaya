@@ -141,6 +141,7 @@ namespace Ayaya {
         static UUID GetBuiltInCube();
         static UUID GetBuiltInSphere();
         static UUID GetBuiltInPlane();
+        static UUID GetBuiltInGrid();
         static UUID GetBuiltInMaterial();
         // Clone the built-in material into a per-object instance with a fresh UUID.
         // Each entity gets its own copy so edits don't leak across objects.

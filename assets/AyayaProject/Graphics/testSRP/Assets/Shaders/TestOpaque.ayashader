@@ -3,7 +3,7 @@
 Name: "TestOpaque"
 PassType: "GenericDrawPass"
 Tags:
-  LightModeMask: 64
+  LightMode: "TestOpaque"
   Queue: "Opaque"
 RenderState:
   DepthTest: true

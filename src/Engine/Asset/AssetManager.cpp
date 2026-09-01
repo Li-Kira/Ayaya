@@ -409,6 +409,7 @@ namespace Ayaya {
             16140901000000000004ull, // DefaultPBR.mat
             16140901000000000005ull, // HDR skybox
             16140901000000000006ull, // Sky cubemap
+            16140901000000000007ull, // Grid (water plane)
         };
 
         std::vector<UUID> toErase;
@@ -1179,6 +1180,9 @@ namespace Ayaya {
             else if (metadata.VirtualPath == "Primitive::Plane") {
                 asset = std::make_shared<Model>(Mesh::CreatePlane(1.0f, 1.0f));
             }
+            else if (metadata.VirtualPath == "Primitive::Grid") {
+                asset = std::make_shared<Model>(Mesh::CreateGrid(1.0f, 1.0f, 64, 64));
+            }
             else {
                 // glTF: use cgltf parser (matches SubMeshIndex from import).
                 // Other formats (obj, fbx): use Assimp.
@@ -1365,6 +1369,16 @@ namespace Ayaya {
         if (s_Assets.find(handle) == s_Assets.end()) {
             auto plane = std::make_shared<Model>(Mesh::CreatePlane(1.0f, 1.0f));
             AddAsset(handle, plane);
+        }
+        return handle;
+    }
+
+    UUID AssetManager::GetBuiltInGrid() {
+        static constexpr uint64_t GRID_UUID = 16140901000000000007ull;
+        UUID handle = GRID_UUID;
+        if (s_Assets.find(handle) == s_Assets.end()) {
+            auto grid = std::make_shared<Model>(Mesh::CreateGrid(1.0f, 1.0f, 64, 64));
+            AddAsset(handle, grid);
         }
         return handle;
     }

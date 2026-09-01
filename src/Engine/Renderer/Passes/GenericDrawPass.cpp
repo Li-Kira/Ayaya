@@ -8,6 +8,9 @@
 #include "Platform/Vulkan/VulkanContext.hpp"
 #include "Platform/Vulkan/VulkanPipeline.hpp"
 #include "Platform/Vulkan/VulkanShader.hpp"
+#include "Platform/Vulkan/VulkanFramebuffer.hpp"
+#include "Platform/Vulkan/VulkanTexture2D.hpp"
+#include "Platform/Vulkan/VulkanTextureCube.hpp"
 #include "Core/Application.hpp"
 #include "Core/VFS.hpp"
 #include "Renderer/RenderQueue.hpp"
@@ -45,6 +48,8 @@ namespace Ayaya {
         if (m_CullSet3Pool)  vkDestroyDescriptorPool(device, m_CullSet3Pool, nullptr);
         if (m_CullSet3Layout) vkDestroyDescriptorSetLayout(device, m_CullSet3Layout, nullptr);
         if (m_CullDummyLayout) vkDestroyDescriptorSetLayout(device, m_CullDummyLayout, nullptr);
+        if (m_SceneInputPool) vkDestroyDescriptorPool(device, m_SceneInputPool, nullptr);
+        if (m_SceneInputLayout) vkDestroyDescriptorSetLayout(device, m_SceneInputLayout, nullptr);
     }
 
     void GenericDrawPass::OnAttach() {
@@ -132,6 +137,36 @@ namespace Ayaya {
         cpInfo.stage.pName = "main";
         cpInfo.layout = m_CullLayout;
         vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpInfo, nullptr, &m_CullPipeline);
+
+        // ── Scene input descriptor set (Set 3, graphics stage) ──
+        // 4 combined image samplers: SceneColor, SceneDepth, PrefilterMap(IBL), BRDFLUT.
+        VkDescriptorSetLayoutBinding sceneBinds[4]{};
+        for (uint32_t i = 0; i < 4; i++) {
+            sceneBinds[i].binding = i;
+            sceneBinds[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            sceneBinds[i].descriptorCount = 1;
+            sceneBinds[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+            sceneBinds[i].pImmutableSamplers = nullptr;
+        }
+        VkDescriptorSetLayoutCreateInfo sceneLayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+        sceneLayoutInfo.bindingCount = 4;
+        sceneLayoutInfo.pBindings = sceneBinds;
+        vkCreateDescriptorSetLayout(device, &sceneLayoutInfo, nullptr, &m_SceneInputLayout);
+
+        VkDescriptorPoolSize scenePoolSize{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 * fiCount };
+        VkDescriptorPoolCreateInfo scenePoolInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+        scenePoolInfo.maxSets = fiCount;
+        scenePoolInfo.poolSizeCount = 1;
+        scenePoolInfo.pPoolSizes = &scenePoolSize;
+        vkCreateDescriptorPool(device, &scenePoolInfo, nullptr, &m_SceneInputPool);
+
+        m_SceneInputDescriptors.resize(fiCount);
+        std::vector<VkDescriptorSetLayout> sceneLayouts(fiCount, m_SceneInputLayout);
+        VkDescriptorSetAllocateInfo sceneAI{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+        sceneAI.descriptorPool = m_SceneInputPool;
+        sceneAI.descriptorSetCount = fiCount;
+        sceneAI.pSetLayouts = sceneLayouts.data();
+        vkAllocateDescriptorSets(device, &sceneAI, m_SceneInputDescriptors.data());
     }
 
     void GenericDrawPass::DeclareResources(RGBuilder& builder, uint32_t w, uint32_t h,
@@ -174,6 +209,7 @@ namespace Ayaya {
                          (key.blendMode == 2) ? BlendModeType::Alpha :
                          BlendModeType::None;
         spec.NoTextureDescriptors = false;
+        spec.UseBindlessTextures = true;   // Set 1 = global bindless array — enables VS/PS sampling by index
         spec.ColorWrite = key.colorWrite;
         switch (key.depthFunc) {
             case 1: spec.DepthOperator = DepthCompareOperator::LEqual;  break;
@@ -195,6 +231,8 @@ namespace Ayaya {
         if (m_GDRCtx && m_GDRCtx->Set2Layout != VK_NULL_HANDLE) {
             VulkanPipeline::s_ExtraSetLayouts.push_back(m_GDRCtx->Set2Layout);
         }
+        // Scene input set (Set 3) — always appended; shaders that don't declare it leave it unused.
+        VulkanPipeline::s_ExtraSetLayouts.push_back(m_SceneInputLayout);
 
         std::shared_ptr<Pipeline> pipeline;
         try {
@@ -211,7 +249,11 @@ namespace Ayaya {
 
     void GenericDrawPass::Execute(RenderContext& context, RenderCommandBuffer& cmd) {
         std::string prefix = m_NodeName.empty() ? m_PassName : m_NodeName;
-        uint32_t lightModeMask = (uint32_t)context.Get<int>(prefix + ".LightModeMask", 1);
+        // Prefer the named LightMode tag (resolved to a unique bit by LightModeTagRegistry);
+        // fall back to the raw LightModeMask int for backward compatibility.
+        uint32_t lightModeMask = (uint32_t)context.Get<int>(prefix + ".LightMode", 0);
+        if (lightModeMask == 0)
+            lightModeMask = (uint32_t)context.Get<int>(prefix + ".LightModeMask", 1);
         std::string queueType = context.Get<std::string>(prefix + ".Queue", "Opaque");
 
         if (queueType == "Transparent") {
@@ -365,6 +407,18 @@ namespace Ayaya {
             }
         }
 
+        // Scene inputs (Set 3) — optional SceneColor/SceneDepth/IBL for forward effects (water refraction)
+        bool readColor = context.Get<int>(prefix + ".ReadSceneColor", 0) != 0;
+        bool readDepth = context.Get<int>(prefix + ".ReadSceneDepth", 0) != 0;
+        bool readIBL   = context.Get<int>(prefix + ".ReadIBL", 0) != 0;
+        if (readColor || readDepth || readIBL) {
+            auto gdrPipe = std::dynamic_pointer_cast<VulkanPipeline>(pipeline);
+            if (gdrPipe) {
+                BindSceneInputs(context, vkCmd, frameIdx, gdrPipe->GetVulkanPipelineLayout(),
+                                readColor, readDepth, readIBL);
+            }
+        }
+
         uint32_t instanceCount = std::min(m_GDRCtx->InstanceCount, kMaxInstances);
         // Issue indirect draw using the global geometry pool
         auto& pool = vkCtx->GetGeometryPool();
@@ -381,20 +435,37 @@ namespace Ayaya {
     void GenericDrawPass::ExecuteTransparent(RenderContext& context, RenderCommandBuffer& cmd,
                                               const std::string& prefix, uint32_t mask) {
         auto* queue = context.RenderQueue;
-        if (!queue) { /*AYAYA_CORE_INFO("[Transparent:'{}'] No RenderQueue", prefix);*/ return; }
-        if (queue->Packets.empty()) { /*AYAYA_CORE_INFO("[Transparent:'{}'] RenderQueue empty", prefix);*/ return; }
+
+        // Resolve the target + clear flags first — needed to clear stale output even when
+        // the RenderQueue is empty (e.g. scene switch to a scene without the water entity).
+        bool clearColor = context.Get<int>(prefix + ".ClearColor", 1) != 0;
+        bool clearDepth = context.Get<int>(prefix + ".ClearDepth", 1) != 0;
+        std::string targetName = context.Get<std::string>(prefix + ".Target", "");
+        auto fbo = context.GetFramebuffer(targetName);
+        if (!fbo) return;
 
         // CPU filter: LightModeMask + RenderBucket::Translucent
         std::vector<const DrawPacket*> packets;
-        for (auto& p : queue->Packets) {
-            SortKey k; k.Value = p.SortKey;
-            if (k.Bits.BucketID != (uint64_t)RenderBucket::Translucent) continue;
-            if (!p.MaterialAsset) continue;
-            uint32_t lm = p.MaterialAsset->GetLightModeMask();
-            if ((lm & mask) == 0) { /*AYAYA_CORE_INFO("[Transparent:'{}'] skip packet mask={}, passMask={}", prefix, lm, mask);*/ continue; }
-            packets.push_back(&p);
+        if (queue) {
+            for (auto& p : queue->Packets) {
+                SortKey k; k.Value = p.SortKey;
+                if (k.Bits.BucketID != (uint64_t)RenderBucket::Translucent) continue;
+                if (!p.MaterialAsset) continue;
+                uint32_t lm = p.MaterialAsset->GetLightModeMask();
+                if ((lm & mask) == 0) { /*AYAYA_CORE_INFO("[Transparent:'{}'] skip packet mask={}, passMask={}", prefix, lm, mask);*/ continue; }
+                packets.push_back(&p);
+            }
         }
-        if (packets.empty()) { /*AYAYA_CORE_INFO("[Transparent:'{}'] No matching packets", prefix);*/ return; }
+
+        if (packets.empty()) {
+            // No matching packets (or empty queue) — clear the target so stale content
+            // doesn't linger (e.g. hidden water / scene switch without the water entity).
+            if (clearColor) {
+                cmd.BeginRenderPass(fbo, clearColor, clearDepth);
+                cmd.EndRenderPass();
+            }
+            return;
+        }
         //AYAYA_CORE_INFO("[Transparent:'{}'] Found {} packets", prefix, (int)packets.size());
 
         bool depthTest  = context.Get<int>(prefix + ".DepthTest", 1) != 0;
@@ -403,14 +474,9 @@ namespace Ayaya {
         int blendMode   = context.Get<int>(prefix + ".BlendMode", 0);
         int depthFunc   = context.Get<int>(prefix + ".DepthFunc", 0);
         bool colorWrite = context.Get<int>(prefix + ".ColorWrite", 1) != 0;
-        bool clearColor = context.Get<int>(prefix + ".ClearColor", 1) != 0;
-        bool clearDepth = context.Get<int>(prefix + ".ClearDepth", 1) != 0;
         std::string shaderPath = context.Get<std::string>(prefix + ".Shader", "");
-        std::string targetName = context.Get<std::string>(prefix + ".Target", "");
         std::string depthTargetName = context.Get<std::string>(prefix + ".DepthTarget", "");
 
-        auto fbo = context.GetFramebuffer(targetName);
-        if (!fbo) return;
         auto depthFBO = depthTargetName.empty() ? nullptr : context.GetFramebuffer(depthTargetName);
 
         FramebufferTextureFormat fmt = FramebufferTextureFormat::RGBA16F;
@@ -466,6 +532,17 @@ namespace Ayaya {
                     2, 1, &m_GDRCtx->Set2Descriptors[frameIdx], 0, nullptr);
         }
 
+        // Scene inputs (Set 3) — optional SceneColor/SceneDepth/IBL
+        bool readColor = context.Get<int>(prefix + ".ReadSceneColor", 0) != 0;
+        bool readDepth = context.Get<int>(prefix + ".ReadSceneDepth", 0) != 0;
+        bool readIBL   = context.Get<int>(prefix + ".ReadIBL", 0) != 0;
+        if (readColor || readDepth || readIBL) {
+            auto gdrPipe = std::dynamic_pointer_cast<VulkanPipeline>(pipeline);
+            if (gdrPipe)
+                BindSceneInputs(context, vkCmd, frameIdx, gdrPipe->GetVulkanPipelineLayout(),
+                                readColor, readDepth, readIBL);
+        }
+
         // Bind global geometry pool once
         auto& pool = vkCtx->GetGeometryPool();
         vkCmdBindIndexBuffer(vkCmd, pool.GetBuffer(), 0, VK_INDEX_TYPE_UINT32);
@@ -502,6 +579,61 @@ namespace Ayaya {
         //    prefix, drawCount, targetName, (int)fmt, hasDepth, blendMode);
 
         cmd.EndRenderPass();
+    }
+
+    void GenericDrawPass::BindSceneInputs(RenderContext& context, VkCommandBuffer vkCmd, uint32_t frameIdx,
+                                          VkPipelineLayout layout, bool color, bool depth, bool ibl) {
+        VkDescriptorImageInfo infos[4]{};
+        if (color) {
+            auto fbo = context.GetFramebuffer("Lighting");
+            if (auto vkFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(fbo)) {
+                infos[0].imageView = vkFBO->GetColorAttachmentImageView(0);
+                infos[0].sampler = vkFBO->GetSampler();
+                infos[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            }
+        }
+        if (depth) {
+            auto fbo = context.GetFramebuffer("SceneDepth");
+            if (auto vkFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(fbo)) {
+                infos[1].imageView = vkFBO->GetDepthAttachmentImageView();
+                infos[1].sampler = vkFBO->GetShadowSampler() ? vkFBO->GetShadowSampler() : vkFBO->GetSampler();
+                infos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+            }
+        }
+        if (ibl) {
+            auto prefilter = context.Get<std::shared_ptr<TextureCube>>("PrefilterMap");
+            if (auto vkCube = std::dynamic_pointer_cast<VulkanTextureCube>(prefilter)) {
+                infos[2].imageView = vkCube->GetImageView();
+                infos[2].sampler = vkCube->GetSampler();
+                infos[2].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            }
+            auto brdfLUT = context.GetTexture("BRDFLUT");
+            if (auto vkTex = std::dynamic_pointer_cast<VulkanTexture2D>(brdfLUT)) {
+                infos[3].imageView = vkTex->GetImageView();
+                infos[3].sampler = vkTex->GetSampler();
+                infos[3].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            }
+        }
+
+        VkWriteDescriptorSet writes[4]{};
+        uint32_t writeCount = 0;
+        for (uint32_t i = 0; i < 4; i++) {
+            if (infos[i].imageView == VK_NULL_HANDLE || infos[i].sampler == VK_NULL_HANDLE) continue;
+            writes[writeCount].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[writeCount].dstSet = m_SceneInputDescriptors[frameIdx];
+            writes[writeCount].dstBinding = i;
+            writes[writeCount].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            writes[writeCount].descriptorCount = 1;
+            writes[writeCount].pImageInfo = &infos[i];
+            writeCount++;
+        }
+        if (writeCount == 0) return;
+
+        auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
+        if (!vkCtx) return;
+        vkUpdateDescriptorSets(vkCtx->GetDevice(), writeCount, writes, 0, nullptr);
+        vkCmdBindDescriptorSets(vkCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout,
+            3, 1, &m_SceneInputDescriptors[frameIdx], 0, nullptr);
     }
 
 } // namespace Ayaya

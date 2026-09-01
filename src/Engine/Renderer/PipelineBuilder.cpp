@@ -174,6 +174,27 @@ namespace Ayaya {
         PassBakedParams baked = BakeParams(params);
         m_BakedParams[nodeName] = baked;
 
+        // ── LightMode conflict detection (safety net) ──
+        // Custom tags live at bits 4+ (mask >= 16). Warn if a custom mask is reused by
+        // two different passes — the same entities would be drawn twice with different shaders.
+        {
+            auto maskOf = [](const PassBakedParams& b) -> uint32_t {
+                if (!b.LightMode.empty())
+                    return LightModeTagRegistry::Instance().ParseMask(b.LightMode);
+                auto it = b.IntParams.find("LightModeMask");
+                return (it != b.IntParams.end()) ? (uint32_t)it->second : 0u;
+            };
+            uint32_t myMask = maskOf(baked);
+            if (myMask >= 16u) {
+                for (auto& [other, ob] : m_BakedParams) {
+                    if (other == nodeName) continue;
+                    uint32_t om = maskOf(ob);
+                    if (om >= 16u && (om & myMask) != 0u)
+                        AYAYA_CORE_WARN("[SRP] custom LightMode mask {} reused by '{}' and '{}'", myMask, other, nodeName);
+                }
+            }
+        }
+
         // 🔥 BAKE: extract string vectors from Lua tables (ONCE)
         auto readVec  = LuaTableToStringVector(reads);
         auto writeVec = LuaTableToStringVector(writes);

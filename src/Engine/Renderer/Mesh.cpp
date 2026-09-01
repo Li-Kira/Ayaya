@@ -149,6 +149,44 @@ namespace Ayaya {
         return std::make_shared<Mesh>(vertices, indices);
     }
 
+    std::shared_ptr<Mesh> Mesh::CreateGrid(float width, float depth, uint32_t xSegments, uint32_t zSegments) {
+        // Flat grid plane on the XZ plane (Y-up), with subdivisions for vertex displacement
+        // (e.g. Gerstner water waves). Each vertex: position, normal(0,1,0), uv, tangent(+X).
+        float halfW = width / 2.0f;
+        float halfD = depth / 2.0f;
+        float stepX = width / (float)xSegments;
+        float stepZ = depth / (float)zSegments;
+
+        std::vector<Vertex> vertices;
+        vertices.reserve((xSegments + 1) * (zSegments + 1));
+        for (uint32_t z = 0; z <= zSegments; ++z) {
+            for (uint32_t x = 0; x <= xSegments; ++x) {
+                Vertex v;
+                v.Position = glm::vec3(-halfW + x * stepX, 0.0f, -halfD + z * stepZ);
+                v.Normal   = glm::vec3(0.0f, 1.0f, 0.0f);
+                v.TexCoord = glm::vec2((float)x / xSegments, (float)z / zSegments);
+                v.Tangent  = glm::vec3(1.0f, 0.0f, 0.0f);
+                vertices.push_back(v);
+            }
+        }
+
+        std::vector<uint32_t> indices;
+        indices.reserve(xSegments * zSegments * 6);
+        for (uint32_t z = 0; z < zSegments; ++z) {
+            for (uint32_t x = 0; x < xSegments; ++x) {
+                uint32_t v00 = x + z * (xSegments + 1);
+                uint32_t v10 = v00 + 1;
+                uint32_t v01 = v00 + (xSegments + 1);
+                uint32_t v11 = v01 + 1;
+                // CCW winding from +Y (matches CreatePlane)
+                indices.push_back(v00); indices.push_back(v01); indices.push_back(v11);
+                indices.push_back(v11); indices.push_back(v10); indices.push_back(v00);
+            }
+        }
+
+        return std::make_shared<Mesh>(vertices, indices);
+    }
+
     std::shared_ptr<Mesh> Mesh::CreateSphere(float radius, uint32_t xSegments, uint32_t ySegments) {
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;

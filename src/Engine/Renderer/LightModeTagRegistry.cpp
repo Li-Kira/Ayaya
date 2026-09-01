@@ -60,7 +60,14 @@ uint32_t LightModeTagRegistry::ParseMask(const std::string& str) {
     }
     if (allDigits) {
         uint32_t parsed = static_cast<uint32_t>(std::stoul(str));
-        if (parsed != 0) return parsed;
+        if (parsed != 0) {
+            // Conflict detection: warn if this raw bit overlaps a named tag's bit.
+            for (auto& [name, mask] : m_TagToMask) {
+                if ((parsed & mask) != 0)
+                    AYAYA_CORE_WARN("LightMode raw bit '{}' overlaps named tag '{}' (bit {})", str, name, mask);
+            }
+            return parsed;
+        }
         return 0;
     }
 

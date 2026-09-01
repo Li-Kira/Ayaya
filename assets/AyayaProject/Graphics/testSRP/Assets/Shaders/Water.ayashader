@@ -1,0 +1,38 @@
+# Water.ayashader — GDR transparent water (Gerstner + fresnel + refraction + IBL + depth)
+Name: "Water"
+PassType: "GenericDrawPass"
+Tags:
+  LightMode: "Water"
+  Queue: "Transparent"
+RenderState:
+  DepthTest: true
+  DepthWrite: false
+  CullMode: "None"
+  BlendMode: "Alpha"
+Properties:
+  - Name: "u_Albedo"
+    DisplayName: "Shallow Color"
+    Type: Vec3
+    Default: [0.1, 0.45, 0.65]
+  - Name: "u_Roughness"
+    DisplayName: "Reflection Roughness"
+    Type: Float
+    Range: [0.0, 1.0]
+    Default: 0.08
+  - Name: "_CustomData0"
+    DisplayName: "Wave0 (amp, length, steepness, speed)"
+    Type: Color
+    Default: [0.4, 8.0, 0.3, 1.5]
+  - Name: "_CustomData1"
+    DisplayName: "Wave0 dir + Wave1 (dir.x, dir.y, amp1, len1)"
+    Type: Color
+    Default: [1.0, 0.3, 0.25, 4.0]
+  - Name: "_CustomData2"
+    DisplayName: "Wave1 (steep1, speed1, dir.x, dir.y)"
+    Type: Color
+    Default: [0.4, 2.0, 0.5, 0.8]
+  - Name: "_CustomData3"
+    DisplayName: "(deepMix, foamDepth, fresnelF0, depthScale)"
+    Type: Color
+    Default: [0.35, 0.06, 0.04, 1.5]
+HLSL: "water.hlsl"

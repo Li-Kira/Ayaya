@@ -173,6 +173,7 @@ namespace Ayaya {
             uint32_t RoughnessMapIndex = 1;   // white
             uint32_t AOMapIndex = 1;          // white
             uint32_t AlphaMapIndex = 1;       // white (multiplicative identity)
+            glm::vec4 CustomData[4]{};        // TA-extensible 64B: raw floats (_CustomData0..3) + texture bindless indices (_CustomTex0..15, as asfloat)
             bool Dirty = true;
 
             // Get final scalar values for GPU rendering.

@@ -15,6 +15,9 @@ EngineAssets:
   - uuid: 16140901000000000003
     type: 4
     virtual_path: "Primitive::Plane"
+  - uuid: 16140901000000000007
+    type: 4
+    virtual_path: "Primitive::Grid"
 
   # 物理内置资产（有物理文件在 assets/Editor/ 下）
   - uuid: 16140901000000000004

@@ -664,8 +664,10 @@ namespace Ayaya {
                 Entity entity{ entityID, scene.get() };
                 if (!entity.IsActiveInHierarchy()) continue;  // must check BEFORE gpuIdx — BuildFromScene does too
                 auto& meshComp = view.get<MeshRendererComponent>(entityID);
-                if (!meshComp.CachedMaterial)
+                if (!meshComp.CachedMaterial || meshComp.CachedMaterialHandle != meshComp.MaterialHandle) {
                     meshComp.CachedMaterial = AssetManager::GetAsset<Material>(meshComp.MaterialHandle);
+                    meshComp.CachedMaterialHandle = meshComp.MaterialHandle;
+                }
                 auto material = meshComp.CachedMaterial;
                 uint8_t bucket = material ? material->GetRenderBucket() : 0;
                 if (bucket <= 1) {

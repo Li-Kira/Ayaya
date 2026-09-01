@@ -126,6 +126,13 @@ namespace Ayaya {
                         mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
                         SetSelectedEntity(entity);
                     }
+                    if (UI::DrawNativeMenuItem("Grid",   ICON_FA_TH)) {
+                        Entity entity = m_Context->CreateEntity("Grid");
+                        auto& mrc = entity.AddComponent<MeshRendererComponent>();
+                        mrc.ModelHandle = AssetManager::GetBuiltInGrid();
+                        mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
+                        SetSelectedEntity(entity);
+                    }
                     UI::EndNativeMenu();
                 }
 
