@@ -87,7 +87,8 @@ namespace Ayaya {
         glm::vec4 ScreenParams;        // 16   (offset 144) — x=w, y=h, z=1+1/w, w=1+1/h
         glm::vec4 Time;                // 16   (offset 160) — x=t/20, y=t, z=t*2, w=t*3
         glm::mat4 PrevViewProjection;  // 64   (offset 176) — previous frame VP (motion vector)
-    }; // 240 bytes (16-aligned)
+        glm::mat4 Projection;          // 64   (offset 240) — for linear depth reconstruction (water)
+    }; // 304 bytes (16-aligned)
 
     // Directional light only (small UBO, Set 0 Binding 2)
     struct struct_DirLight {
@@ -439,6 +440,7 @@ namespace Ayaya {
         m_Data->CameraData.ViewProjection = m_Data->ViewProjectionMatrix;
         m_Data->CameraData.View = viewMatrix;
         m_Data->CameraData.CameraPosition = m_Data->CameraPosition;
+        m_Data->CameraData.Projection = m_Data->ProjectionMatrix;
 
         // ── Frame constants (Unity convention) ──
         float vpW = (float)m_Data->ViewportWidth;
@@ -1251,6 +1253,7 @@ namespace Ayaya {
         m_PipelineBuilder->RegisterPassInstance("ForwardBlend",    m_ForwardBlendPass);
         m_PipelineBuilder->RegisterPassInstance("WBOIT_Gather",   nullptr, m_WBOITPass);
         m_PipelineBuilder->RegisterPassInstance("WBOIT_Resolve",  nullptr, m_WBOITPass);
+        m_PipelineBuilder->RegisterPassInstance("TAAPass",         m_TAAPass);
         m_PipelineBuilder->RegisterPassInstance("OutlinePass",     m_OutlinePass);
         m_PipelineBuilder->RegisterPassInstance("BloomPass",       m_BloomPass);
         m_PipelineBuilder->RegisterPassInstance("PostProcessPass", m_PostProcessPass);

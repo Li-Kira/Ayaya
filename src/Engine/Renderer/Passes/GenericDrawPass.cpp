@@ -29,6 +29,7 @@ namespace Ayaya {
         uint32_t  _pad;               // 4
         glm::vec4 texelSize;          // 16 — x=1/tw, y=1/th, z=tw, w=th
         float     exposureInverse;    //  4 — 1.0/PhysicalExposure (matches ForwardBlend pass)
+        float     environmentIntensity; // 4 — scene environment intensity (water IBL reflection)
     };
 
     GenericDrawPass::~GenericDrawPass() {
@@ -139,9 +140,9 @@ namespace Ayaya {
         vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cpInfo, nullptr, &m_CullPipeline);
 
         // ── Scene input descriptor set (Set 3, graphics stage) ──
-        // 4 combined image samplers: SceneColor, SceneDepth, PrefilterMap(IBL), BRDFLUT.
-        VkDescriptorSetLayoutBinding sceneBinds[4]{};
-        for (uint32_t i = 0; i < 4; i++) {
+        // 6 combined image samplers: SceneColor, SceneDepth, PrefilterMap(IBL), BRDFLUT, IrradianceMap, SSR_Temporal.
+        VkDescriptorSetLayoutBinding sceneBinds[6]{};
+        for (uint32_t i = 0; i < 6; i++) {
             sceneBinds[i].binding = i;
             sceneBinds[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             sceneBinds[i].descriptorCount = 1;
@@ -149,11 +150,11 @@ namespace Ayaya {
             sceneBinds[i].pImmutableSamplers = nullptr;
         }
         VkDescriptorSetLayoutCreateInfo sceneLayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-        sceneLayoutInfo.bindingCount = 4;
+        sceneLayoutInfo.bindingCount = 6;
         sceneLayoutInfo.pBindings = sceneBinds;
         vkCreateDescriptorSetLayout(device, &sceneLayoutInfo, nullptr, &m_SceneInputLayout);
 
-        VkDescriptorPoolSize scenePoolSize{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 * fiCount };
+        VkDescriptorPoolSize scenePoolSize{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6 * fiCount };
         VkDescriptorPoolCreateInfo scenePoolInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
         scenePoolInfo.maxSets = fiCount;
         scenePoolInfo.poolSizeCount = 1;
@@ -365,6 +366,7 @@ namespace Ayaya {
         float th = (float)fbo->GetSpecification().Height;
         fpc.texelSize = glm::vec4(1.0f / tw, 1.0f / th, tw, th);
         fpc.exposureInverse = 1.0f / context.Get<float>("PhysicalExposure", 1.0f);
+        fpc.environmentIntensity = context.Get<float>("EnvironmentIntensity", 1.0f);
         vkCmdPushConstants(vkCmd, m_CullLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(fpc), &fpc);
 
         uint32_t groupCount = (m_GDRCtx->InstanceCount + 63) / 64;
@@ -415,7 +417,7 @@ namespace Ayaya {
             auto gdrPipe = std::dynamic_pointer_cast<VulkanPipeline>(pipeline);
             if (gdrPipe) {
                 BindSceneInputs(context, vkCmd, frameIdx, gdrPipe->GetVulkanPipelineLayout(),
-                                readColor, readDepth, readIBL);
+                                readColor, readDepth, readIBL, prefix);
             }
         }
 
@@ -518,7 +520,7 @@ namespace Ayaya {
             1, &hostBarrier, 0, nullptr, 0, nullptr);
 
         if (depthFBO)
-            cmd.BeginRenderPass(fbo, depthFBO, clearColor, clearDepth);
+            cmd.BeginRenderPass(fbo, depthFBO, clearColor, clearDepth, glm::vec4(0.0f), !depthWrite);
         else
             cmd.BeginRenderPass(fbo, clearColor, clearDepth);
         cmd.BindPipeline(pipeline);
@@ -540,7 +542,7 @@ namespace Ayaya {
             auto gdrPipe = std::dynamic_pointer_cast<VulkanPipeline>(pipeline);
             if (gdrPipe)
                 BindSceneInputs(context, vkCmd, frameIdx, gdrPipe->GetVulkanPipelineLayout(),
-                                readColor, readDepth, readIBL);
+                                readColor, readDepth, readIBL, prefix);
         }
 
         // Bind global geometry pool once
@@ -555,6 +557,7 @@ namespace Ayaya {
         fpc.lightModeMask = mask;
         fpc.texelSize = glm::vec4(1.0f / tw, 1.0f / th, tw, th);
         fpc.exposureInverse = 1.0f / context.Get<float>("PhysicalExposure", 1.0f);
+        fpc.environmentIntensity = context.Get<float>("EnvironmentIntensity", 1.0f);
         auto plLayout = std::dynamic_pointer_cast<VulkanPipeline>(pipeline)->GetVulkanPipelineLayout();
 
         int drawCount = 0;
@@ -582,10 +585,14 @@ namespace Ayaya {
     }
 
     void GenericDrawPass::BindSceneInputs(RenderContext& context, VkCommandBuffer vkCmd, uint32_t frameIdx,
-                                          VkPipelineLayout layout, bool color, bool depth, bool ibl) {
-        VkDescriptorImageInfo infos[4]{};
+                                          VkPipelineLayout layout, bool color, bool depth, bool ibl,
+                                          const std::string& prefix) {
+        VkDescriptorImageInfo infos[6]{};
         if (color) {
-            auto fbo = context.GetFramebuffer("Lighting");
+            // Scene color source is configurable via SRP (SceneColorSource param) — the
+            // water reads TAA_Output (post-TAA opaque scene), other effects read Lighting.
+            std::string colorSrc = context.Get<std::string>(prefix + ".SceneColorSource", "Lighting");
+            auto fbo = context.GetFramebuffer(colorSrc);
             if (auto vkFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(fbo)) {
                 infos[0].imageView = vkFBO->GetColorAttachmentImageView(0);
                 infos[0].sampler = vkFBO->GetSampler();
@@ -613,11 +620,23 @@ namespace Ayaya {
                 infos[3].sampler = vkTex->GetSampler();
                 infos[3].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             }
+            auto irradiance = context.Get<std::shared_ptr<TextureCube>>("IrradianceMap");
+            if (auto vkIrr = std::dynamic_pointer_cast<VulkanTextureCube>(irradiance)) {
+                infos[4].imageView = vkIrr->GetImageView();
+                infos[4].sampler = vkIrr->GetSampler();
+                infos[4].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            }
+            auto ssrFBO = context.GetFramebuffer("SSR_Temporal");
+            if (auto vkSSR = std::dynamic_pointer_cast<VulkanFramebuffer>(ssrFBO)) {
+                infos[5].imageView = vkSSR->GetColorAttachmentImageView(0);
+                infos[5].sampler = vkSSR->GetSampler();
+                infos[5].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            }
         }
 
-        VkWriteDescriptorSet writes[4]{};
+        VkWriteDescriptorSet writes[6]{};
         uint32_t writeCount = 0;
-        for (uint32_t i = 0; i < 4; i++) {
+        for (uint32_t i = 0; i < 6; i++) {
             if (infos[i].imageView == VK_NULL_HANDLE || infos[i].sampler == VK_NULL_HANDLE) continue;
             writes[writeCount].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             writes[writeCount].dstSet = m_SceneInputDescriptors[frameIdx];

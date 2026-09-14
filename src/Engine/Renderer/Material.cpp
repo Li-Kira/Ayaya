@@ -126,6 +126,8 @@ namespace Ayaya {
                 m_BakedPC.AO = prop.FloatValue;
             } else if (prop.UniformName == "u_Alpha" && prop.Type == MaterialPropertyType::Float) {
                 m_BakedPC.Alpha = prop.FloatValue;
+            } else if (prop.UniformName == "u_ShadingModel" && prop.Type == MaterialPropertyType::Int) {
+                m_BakedPC.ShadingModel = prop.IntValue;
             } else if (prop.UniformName == "_CustomData0" && prop.Type == MaterialPropertyType::Vec4) {
                 m_BakedPC.CustomData[0] = prop.Vec4Value;
                 usedCustomDataVec = true;

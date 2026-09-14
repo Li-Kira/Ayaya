@@ -64,8 +64,8 @@ PSOutput main(VSOutput i) {
     float3 col = 0.5 + 0.5 * cos(_Time.y + i.uv.xyx + float3(0.0, 2.0, 4.0));
 
     o.normal = OctEncode(normalize(i.worldNormal));
-    o.albedo = float4(col, 0.5);       // RGB=albedo, A=roughness
-    o.pbr    = float4(0.0, 1.0, 0.0, 1.0); // metallic=0, ao=1, flags=0
+    o.albedo = float4(col, 1.0);       // RGB=albedo, A=1.0
+    o.pbr    = float4(0.0, 0.5, 1.0, 1.0); // metallic=0, roughness=0.5, ao=1.0
     o.custom = float4(1.0, 0.0, 0.0, 1.0); // receiveShadows=1
     o.velocity = i.velocity;
 

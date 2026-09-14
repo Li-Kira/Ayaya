@@ -1,0 +1,9 @@
+uuid: 17475393010669093639
+type: 2
+virtual_path: project://Textures/kenney_prototype-textures_dark-wall.png
+import_settings:
+  filter: 0
+  wrap: 0
+  srgb: true
+  mipmaps: true
+  flip_y: true

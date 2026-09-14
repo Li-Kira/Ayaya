@@ -1,0 +1,9 @@
+uuid: 13254117763444112690
+type: 2
+virtual_path: project://Textures/kenney_prototype-textures_light-wall.png
+import_settings:
+  filter: 0
+  wrap: 0
+  srgb: true
+  mipmaps: true
+  flip_y: true

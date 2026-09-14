@@ -162,6 +162,7 @@ namespace Ayaya {
                 gm.aoBindless        = (int)b.AOMapIndex;
                 gm.useORMMap    = (int)b.UseORMMap;
                 gm.packing       = (uint32_t)b.Packing;
+                gm.shadingModel  = b.ShadingModel;
                 gm.alphaBindless = (int)b.AlphaMapIndex;
                 gm.useAlphaMap   = (b.AlphaMapIndex != 1) ? 1 : 0;
                 gm.alphaCutoff  = pkt.MaterialAsset->GetAlphaCutoff();
@@ -344,6 +345,7 @@ namespace Ayaya {
                         gm.blendMode     = (int)material->GetBlendMode();
                         gm.lightModeMask = material->GetLightModeMask();
                         gm.packing       = (uint32_t)b.Packing;
+                        gm.shadingModel  = b.ShadingModel;
                         for (int i = 0; i < 16; i++) gm.customData[i] = (&b.CustomData[0].x)[i];
                     }
                     gdrMaterials.push_back(gm);

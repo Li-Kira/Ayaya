@@ -1,0 +1,18 @@
+# Whitebox.ayashader — world-space tri-planar whitebox prototype shader definition
+# Drop this file in ContentBrowser to generate a .mat via PropertiesPanel.
+Name: "Whitebox"
+PassType: "GenericDrawPass"
+Tags:
+  LightMode: "Whitebox,ShadowCaster,GBuffer"
+  Queue: "Opaque"
+RenderState:
+  DepthTest: true
+  DepthWrite: true
+  CullMode: "Back"
+  BlendMode: "Opaque"
+Properties:
+  - Name: "u_Albedo"
+    DisplayName: "Base Color"
+    Type: Vec3
+    Default: [1.0, 1.0, 1.0]
+HLSL: "whitebox.hlsl"

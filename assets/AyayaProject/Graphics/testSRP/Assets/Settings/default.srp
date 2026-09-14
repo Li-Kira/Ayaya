@@ -15,6 +15,10 @@ Pipeline:DeclareTexture("Bloom", {"RGBA16F"}, vpW / 2, vpH / 2)
 Pipeline:DeclareTexture("FinalOutput", {"RGBA8"}, vpW, vpH)
 Pipeline:DeclareTexture("FXAA", {"RGBA8"}, vpW, vpH)
 Pipeline:DeclareTexture("WaterSurface", {"RGBA16F"}, vpW, vpH)
+Pipeline:DeclareTexture("SSR_Result", {"RGBA16F"}, vpW / 2, vpH / 2)
+Pipeline:DeclareTexture("SSR_Blurred", {"RGBA16F"}, vpW / 2, vpH / 2)
+Pipeline:DeclareTexture("SSR_Temporal", {"RGBA16F"}, vpW / 2, vpH / 2)
+Pipeline:DeclareTexture("TAA_Output", {"RGBA16F"}, vpW, vpH)
 
 -- Depth Pre-pass (SceneDepth for hardcoded pipeline Early-Z; SRP GBuffer is self-contained)
 Pipeline:AddPass("DepthPrePass", "DepthPrePass", {}, {"SceneDepth"}, {},
@@ -37,33 +41,58 @@ Pipeline:AddPass("TestOpaque", "GenericDrawPass", {}, {}, {"GBuffer"},
       Target = "GBuffer", DepthTarget = "SceneDepth",
       ClearColor = false, ClearDepth = false,
       DepthTest = true, DepthWrite = true, DepthFunc = 0,
-      BlendMode = 0, CullMode = 0 })
+      BlendMode = 0, CullMode = 2 })
+
+-- Whitebox: world-space tri-planar prototype material (1m = 1 texture tile)
+Pipeline:AddPass("Whitebox", "GenericDrawPass", {}, {}, {"GBuffer"},
+    { Shader = "whitebox", LightMode = "Whitebox", Queue = "Opaque",
+      Target = "GBuffer", DepthTarget = "SceneDepth",
+      ClearColor = false, ClearDepth = false,
+      DepthTest = true, DepthWrite = true, DepthFunc = 0,
+      BlendMode = 0, CullMode = 2 })
 
 -- SSAO
 Pipeline:AddPass("SSAO", "SSAOPass",
-    {"GBuffer", "SceneDepth"}, {"SSAO_Final"}, {},
-    { Enabled = false })
+    {"GBuffer", "SceneDepth"}, {"SSAO_Final"}, {})
 
 -- Deferred Lighting — reads SceneDepth for depth reconstruction
 Pipeline:AddPass("Lighting", "LightingPass",
     {"GBuffer", "ShadowMap", "SSAO_Final", "SceneDepth"}, {"Lighting"}, {})
+
+-- SSR (screen-space reflections) — between Lighting and ForwardBlend
+Pipeline:AddPass("SSR", "SSRPass",
+    {"SceneDepth", "GBuffer", "Lighting"}, {"SSR_Result"}, {})
+Pipeline:AddPass("SSRBlur", "SSRBlurPass",
+    {"SSR_Result", "GBuffer", "SceneDepth"}, {"SSR_Blurred"}, {})
+Pipeline:AddPass("SSRTemporal", "SSRTemporalPass",
+    {"SSR_Blurred", "SceneDepth", "GBuffer"}, {"SSR_Temporal"}, {})
+Pipeline:AddPass("ApplyReflection", "ApplyReflection",
+    {"SSR_Temporal", "GBuffer", "SceneDepth", "SSAO_Final"}, {"Lighting"}, {},
+    { ClearColor = false })
 
 -- Forward Blend — readWrite (LOAD + overlay skybox/grid onto Lighting)
 Pipeline:AddPass("ForwardBlend", "ForwardBlend",
     {}, {}, {"Lighting"},
     { LightMode = "Forward" })
 
--- Water: Gerstner surface → WaterSurface (reads scene color + depth + IBL)
-Pipeline:AddPass("Water", "GenericDrawPass", {"SceneDepth", "Lighting"}, {"WaterSurface"}, {},
-    { Shader = "water", LightMode = "Water", Queue = "Transparent",
-      Target = "WaterSurface",
-      ClearColor = true, DepthTest = false, DepthWrite = false, BlendMode = 0, CullMode = 0,
-      ReadSceneColor = true, ReadSceneDepth = true, ReadIBL = true })
+-- TAA (temporal anti-aliasing) — HDR, pre-tone-map; passthrough when EnableTAA=false.
+-- Runs BEFORE the transparent water so the water is composited AFTER TAA and never
+-- gets temporally reprojected with the wrong (opaque) motion vectors.
+Pipeline:AddPass("TAA", "TAAPass",
+    {"Lighting", "SceneDepth", "GBuffer"}, {"TAA_Output"}, {})
 
--- Water composite → Lighting (alpha blend).
+-- Water: Gerstner surface → WaterSurface (reads TAA'd scene color + depth + IBL)
+Pipeline:AddPass("Water", "GenericDrawPass", {"SceneDepth", "TAA_Output"}, {"WaterSurface"}, {},
+    { Shader = "water", LightMode = "Water", Queue = "Transparent",
+      Target = "WaterSurface", DepthTarget = "SceneDepth",
+      ClearColor = true, DepthTest = true, DepthWrite = false, BlendMode = 0, CullMode = 2,
+      ReadSceneColor = true, ReadSceneDepth = true, ReadIBL = true,
+      SceneColorSource = "TAA_Output" })
+
+-- Water composite → TAA_Output (alpha blend).
 -- Uses the default GLSL generic_fullscreen.vert (Y-up) + a no-flip PS.
-Pipeline:AddPass("WaterComposite", "GenericFullScreenPass", {"WaterSurface"}, {}, {"Lighting"},
-    { Shader = "water_composite.frag", Target = "Lighting", ClearColor = false, BlendMode = 2, Texture0 = "WaterSurface" })
+Pipeline:AddPass("WaterComposite", "GenericFullScreenPass", {"WaterSurface"}, {}, {"TAA_Output"},
+    { Shader = "water_composite.frag", Target = "TAA_Output", ClearColor = false, BlendMode = 2, Texture0 = "WaterSurface" })
 
 -- WBOIT
 Pipeline:AddPass("WBOIT_Gather", "WBOIT_Gather",
@@ -77,12 +106,12 @@ Pipeline:AddPass("Outline", "OutlinePass", {"GBuffer"}, {"Selection"}, {},
     { Enabled = false })
 
 -- Bloom
-Pipeline:AddPass("Bloom", "BloomPass", {"Lighting"}, {"Bloom"}, {},
+Pipeline:AddPass("Bloom", "BloomPass", {"TAA_Output"}, {"Bloom"}, {},
     { Enabled = false })
 
 -- PostProcess
 Pipeline:AddPass("PostProcess", "PostProcessPass",
-    {"Lighting", "Selection", "Bloom"}, {"FinalOutput"}, {})
+    {"TAA_Output", "Selection", "Bloom"}, {"FinalOutput"}, {})
 
 -- Hologram: transparent overlay
 Pipeline:AddPass("Hologram", "GenericDrawPass", {}, {}, {"FinalOutput"},

@@ -19,6 +19,13 @@
     float4   _ScreenParams;      // offset 144 — x=w, y=h, z=1+1/w, w=1+1/h
     float4   _Time;              // offset 160 — x=t/20, y=t, z=t*2, w=t*3
     float4x4 prevViewProjection; // offset 176 — previous frame VP (motion vector)
+    float4x4 projection;         // offset 240 — for linear depth reconstruction (water)
+};
+
+// ── Directional light UBO (Set 0 Binding 1, matches C++ struct_DirLight) ──
+[[vk::binding(1, 0)]] cbuffer DirLight {
+    float4 DirLightDir;   // xyz = light direction, w = unused
+    float4 DirLightColor; // rgb = color * illuminance, w = unused
 };
 
 // ── Frame constant access macros ──
@@ -36,6 +43,7 @@ struct FrustumPC {
     uint   _pad;               // offset 108, size 4
     float4 _TexelSize;         // offset 112, size 16 — x=1/tw, y=1/th, z=tw, w=th
     float  _ExposureInverse;   // offset 128, size 4 — 1.0/PhysicalExposure (matches ForwardBlend)
+    float  _EnvironmentIntensity; // offset 132, size 4 — scene environment intensity (water IBL reflection)
 };
 [[vk::push_constant]] FrustumPC pc;
 
@@ -70,7 +78,7 @@ struct GPUMaterial {
     int    useAlphaMap;
     int    alphaBindless;
     uint   lightModeMask;
-    uint   packing; uint _pad1, _pad2; // TexturePacking enum + alignas(16)
+    uint   packing; int shadingModel; uint _pad2; // TexturePacking + ShadingModel (0=Lit,1=Unlit) + alignas(16)
     float4 customData[4];             // TA-extensible: 64 bytes
 };
 

@@ -1217,6 +1217,71 @@ A MIN-reduced Hi-Z screen-space DDA was prototyped to fix grazing-angle tunnelin
 | Binary refinement hit lands on sky (not-yet-drawn) | Black reflection of the sky | Treat as miss (`hitFound=0`) → IBL cubemap fallback |
 | **RenderGraph overwrote `m_Passes` with topological order** | **Black ring at silhouettes when SSR enabled at runtime** | **Keep `m_Passes` in declaration order; store `m_ExecutionOrder` separately (see §2 Critical invariant)** |
 
+### 14.9 SSR Black Ring — Debugging Record
+
+> Merged from `SSR_DEBUGGING_RECORD.md`. A focused post-mortem for the "black ring at object silhouettes when SSR is enabled at runtime" bug (last row of §14.8). The lessons generalize to any "runtime un-cull of a pass", not just SSR.
+
+**Symptom:** Toggling `EnableSSR` from `false` → `true` at runtime (SSR / SSRBlur / SSRTemporal go culled → active) puts a black ring/block around object silhouettes. Enabling SSR from the start does not reproduce it. The ring disappears (temporarily or permanently) after moving the camera/object, or after a full graph rebuild.
+
+**Debugging timeline** (hypothesis → verification → conclusion):
+
+| # | Hypothesis | Verification | Result |
+| --- | ----------- | ------------- | -------- |
+| 1 | ApplyReflection culled / SRP missing SceneDepth | Check culling + default.srp | ❌ Unrelated (repros in hardcoded testSSR path too) |
+| 2 | SSR temporal history not reset | `ResetHistory()` + `HasHistory` passthrough + alpha clamp | ❌ Didn't fix root (separate minor bug) |
+| 3 | Environment/IBL black | testSSR has env + lowering intensity | ❌ Ruled out |
+| 4 | Dirty FBO content/layout | `InvalidateTexture` on SSR+Lighting / SceneDepth / GBuffer | ❌ All ineffective |
+| 5 | **Full graph rebuild fixes it** → dirty state is RGPass declaration order, not FBOs | `m_ViewportDirty=true` (Clear + re-AddPass) | ✅ Ring disappears (1-frame flash) |
+| 6 | Root cause: `Compile()` overwrites `m_Passes` with topological order | Read `RenderGraph::Compile()` | ✅ Located |
+
+The turning point was **#5**: "rebuild FBOs only" didn't help, but "full Clear+AddPass" did — meaning the dirty state lives in the RGPass objects (order/declaration/flags), not the FBOs.
+
+**Root cause:** `RenderGraph::Compile()`'s "preserve culled passes" step overwrote `m_Passes` with "topological order + culled appended at the end":
+
+```cpp
+// old (buggy)
+{
+    std::vector<std::shared_ptr<RGPass>> allPasses = std::move(sorted);
+    for (auto& p : m_Passes)
+        if (p->IsCulled) allPasses.push_back(p);
+    m_Passes = std::move(allPasses);   // ← clobbers declaration order
+}
+```
+
+But `Compile()`'s producer mapping requires "a consumer is declared AFTER its producer" and fills `producers` incrementally in `m_Passes` order. When SSR is off, the first `Compile()` moves the three SSR passes to the end; later `ApplyPerFrameCulling` only flips `IsCulled`. When SSR is re-enabled, `Compile()` builds edges from the wrong order, so the SSR chain is treated as declared after `ApplyReflection`: the `SSRTemporal → ApplyReflection` read edge is lost and an `ApplyReflection → SSRPass` edge is wrongly added, so `ApplyReflection` runs before the whole SSR chain and samples unwritten `SSR_Temporal` → black ring.
+
+**Fix:** separate declaration order from execution order (`RenderGraph.hpp`):
+
+```cpp
+std::vector<std::shared_ptr<RGPass>> m_Passes;          // declaration (AddPass) order — never reordered
+std::vector<std::shared_ptr<RGPass>> m_ExecutionOrder;  // topological order (computed in Compile)
+```
+
+`Compile()` writes `m_ExecutionOrder = std::move(sorted)` (not back into `m_Passes`); `Execute()` iterates `m_ExecutionOrder`. Companion changes: `Clear()`/`ExtractState()` clear `m_ExecutionOrder`; `RestoreState()` clears it and sets `m_Compiled = false` (execution order isn't snapshotted).
+
+**General lessons** (required reading when adding passes):
+
+1. RenderGraph's producer mapping depends on declaration order — never reorder `m_Passes` after `Compile()`; store execution order separately.
+2. Runtime un-culling a pass ≠ re-AddPass — `ApplyPerFrameCulling` only flips `IsCulled`; the pass's `TextureReads/TextureWrites/WriteLoadOps/DepthReadTextures` are fixed at `AddPass`.
+3. When adding a pass, place its `AddPass` AFTER the producers it depends on (declaration order ≈ coarse topological order).
+4. "Full Clear+AddPass fixes it" is a strong signal — the dirty state is in the RGPass/RGTexture objects, not FBO content/layout.
+
+**Quick self-check checklist** (when "runtime pass enable" misbehaves):
+
+1. Does "enabled from the start" work? → yes ⇒ likely a runtime-un-cull state issue.
+2. Does "move camera/object" temporarily fix it? → yes ⇒ dependency-edge/ordering issue.
+3. Use the Frame Debugger to find the FIRST pass whose output is black/dirty.
+4. Bisect: force the new pass's inputs/outputs to valid values to find which dependency edge broke.
+5. Check whether `m_Passes` is reordered outside `Compile()` (the root cause, and the most common trap).
+
+**Related fixes** (unrelated to the black ring, but landed during the investigation; also in §14.8):
+
+- Temporal history reset: `VulkanSSRTemporalPass::ResetHistory()` (called in `ApplyPerFrameCulling` when `!enableSSR`).
+- First-frame mis-reprojection: `HasHistory` push constant → first frame outputs current SSR directly.
+- Premultiplied-alpha clamp: neighborhood clamp now clamps `rgb` and `alpha`.
+- Black sky reflection: `ssr_march.frag` treats a sky hit after binary refinement as a miss → IBL fallback.
+- SRP missing SceneDepth: `assets/Editor/srp/default.srp` gained `SceneDepth` + `DepthPrePass`.
+
 ---
 
 ## 15. Known Issues & Future Directions

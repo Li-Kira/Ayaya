@@ -166,6 +166,7 @@ namespace Ayaya {
             float Metallic = 0.0f, Roughness = 0.5f, AO = 1.0f, Alpha = 0.5f;
             uint32_t UseORMMap = 0;
             TexturePacking Packing = TexturePacking::UE4_ORM;
+            int ShadingModel = 0;             // 0=Lit, 1=Unlit (forward GenericDrawPass only)
             uint32_t AlbedoMapIndex = 1;      // white (multiplicative identity)
             uint32_t NormalMapIndex = 3;      // default flat normal (Z-up)
             uint32_t ORMMapIndex = 2;         // black (unused when UseORMMap=0)

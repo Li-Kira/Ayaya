@@ -47,7 +47,8 @@ namespace Ayaya {
         int   alphaBindless;                 // 4
         uint32_t lightModeMask;              // 4  ← SRP LightMode bitmask
         uint32_t packing;                    // 4  ← TexturePacking enum (UE4_ORM=0, glTF=1, Separate=2)
-        uint32_t _pad[2];                    // 8  ← fill remaining padding gap before customData
+        int      shadingModel;               // 4  ← ShadingModel (0=Lit, 1=Unlit)
+        uint32_t _pad;                       // 4  ← fill remaining padding gap before customData
         // TA-extensible shader params: 4×vec4=64 bytes for custom material data
         alignas(16) float customData[16];   // offset 112, size 64 → total 176
     };

@@ -63,10 +63,13 @@ namespace Ayaya {
                                      bool clearColor, bool clearDepth,
                                      const glm::vec4& clearColorValue = glm::vec4(0.0f)) = 0;
         // Separate depth attachment: color from colorFBO, depth from depthFBO.
+        // depthReadOnly: bind depth as DEPTH_STENCIL_READ_ONLY_OPTIMAL + STORE_OP_NONE
+        // (transparent passes that only test depth, never write it).
         virtual void BeginRenderPass(const std::shared_ptr<Framebuffer>& colorFBO,
                                      const std::shared_ptr<Framebuffer>& depthFBO,
                                      bool clearColor, bool clearDepth,
-                                     const glm::vec4& clearColorValue = glm::vec4(0.0f)) = 0;
+                                     const glm::vec4& clearColorValue = glm::vec4(0.0f),
+                                     bool depthReadOnly = false) = 0;
         virtual void EndRenderPass() = 0;
         virtual void SetPerAttachmentClearColors(const std::vector<glm::vec4>& colors) = 0;
         virtual void BindPipeline(const std::shared_ptr<Pipeline>& pipeline) = 0;

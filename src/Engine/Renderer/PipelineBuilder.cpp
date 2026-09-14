@@ -246,10 +246,12 @@ namespace Ayaya {
                     builder.ReadTexture(r);
 
                 // 🔥 DepthTarget: read as depth attachment (keep ATTACHMENT layout).
+                // readOnly = !DepthWrite → transparent passes (DepthWrite=false) only test
+                // depth without writing, so the depth stays in READ_ONLY layout.
                 // Depth barrier is handled in RenderGraph::Execute after the pass runs.
                 std::string depthTarget = baked.GetStr("DepthTarget");
                 if (!depthTarget.empty())
-                    builder.ReadTextureAsDepth(depthTarget);
+                    builder.ReadTextureAsDepth(depthTarget, !(baked.GetInt("DepthWrite", 1) != 0));
 
                 // Declare explicit writes (LoadOp already baked into spec)
                 for (auto& [name, spec] : writeSpecs)

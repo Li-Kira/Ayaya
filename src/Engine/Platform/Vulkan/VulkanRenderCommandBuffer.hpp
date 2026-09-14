@@ -42,7 +42,8 @@ namespace Ayaya {
         virtual void BeginRenderPass(const std::shared_ptr<Framebuffer>& colorFBO,
                                      const std::shared_ptr<Framebuffer>& depthFBO,
                                      bool clearColor, bool clearDepth,
-                                     const glm::vec4& clearColorValue) override;
+                                     const glm::vec4& clearColorValue,
+                                     bool depthReadOnly = false) override;
         virtual void EndRenderPass() override;
 
         virtual void BindPipeline(const std::shared_ptr<Pipeline>& pipeline) override;

@@ -74,7 +74,7 @@ namespace Ayaya {
         RGBuilder(RenderGraph& graph, RGPass& pass);
 
         void ReadTexture(const std::string& name);
-        void ReadTextureAsDepth(const std::string& name);  // depth attachment usage — keep ATTACHMENT layout, not SHADER_READ_ONLY
+        void ReadTextureAsDepth(const std::string& name, bool readOnly = false);  // depth attachment usage — keep ATTACHMENT layout, not SHADER_READ_ONLY
         void WriteTexture(const std::string& name, const FramebufferSpecification& spec,
                           AttachmentLoadOp loadOp = AttachmentLoadOp::Clear);
         void ReadWriteTexture(const std::string& name, const FramebufferSpecification& spec,
@@ -111,6 +111,7 @@ namespace Ayaya {
         std::vector<std::string> TextureWrites;
         std::unordered_map<std::string, AttachmentLoadOp> WriteLoadOps;
         std::unordered_set<std::string> DepthReadTextures; // reads used as depth attachment (keep ATTACHMENT layout)
+        std::unordered_map<std::string, bool> DepthReadOnly; // per depth-read: true = READ_ONLY (test only, no write)
 
         bool HasSideEffect = false;
         bool IsCulled      = false;
@@ -192,7 +193,7 @@ namespace Ayaya {
         void EnsureReadable(RGTexture& tex, uint32_t frameIndex, RenderCommandBuffer& cmd);
 
         // 确保纹理处于 attachment 布局（vkCmdBeginRendering 的前置条件）
-        void EnsureWritable(RGTexture& tex, uint32_t frameIndex, RenderCommandBuffer& cmd);
+        void EnsureWritable(RGTexture& tex, uint32_t frameIndex, RenderCommandBuffer& cmd, bool depthReadOnly = false);
 
         // Attachment→ReadOnly 布局转换 + TBDR tile-resolve:
         // 将图像从 attachment 布局转为 shader 可采样布局，并插入 execution+memory

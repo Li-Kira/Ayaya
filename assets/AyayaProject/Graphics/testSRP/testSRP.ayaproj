@@ -1,5 +1,5 @@
 Project:
   Name: testSRP
-  StartScene: Scenes/Default.ayaya
+  StartScene: Scenes/Water.ayaya
   AssetDirectory: Assets
   DefaultSRPScript: 12076663172084456695

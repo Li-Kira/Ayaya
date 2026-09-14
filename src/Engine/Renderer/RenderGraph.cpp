@@ -34,9 +34,10 @@ namespace Ayaya {
         if (tex) tex->IsRead = true;
     }
 
-    void RGBuilder::ReadTextureAsDepth(const std::string& name) {
+    void RGBuilder::ReadTextureAsDepth(const std::string& name, bool readOnly) {
         m_Pass.TextureReads.push_back(name);
         m_Pass.DepthReadTextures.insert(name);
+        m_Pass.DepthReadOnly[name] = readOnly;
         auto* tex = m_Graph.GetTexture(name);
         if (tex) tex->IsRead = true;
     }
@@ -335,7 +336,7 @@ namespace Ayaya {
     //   - 已在 attachment 布局 → 跳过（零开销）
     //   - 在只读布局 → 转为 attachment（保留内容，支持 LOAD 操作）
     //   - 在 UNDEFINED → 转为 attachment（首帧，无需保留内容）
-    void RenderGraph::EnsureWritable(RGTexture& tex, uint32_t frameIndex, RenderCommandBuffer& cmd) {
+    void RenderGraph::EnsureWritable(RGTexture& tex, uint32_t frameIndex, RenderCommandBuffer& cmd, bool depthReadOnly) {
         uint32_t idx = frameIndex % kRenderGraphFramesInFlight;
         if (!tex.PhysicalFBOs[idx]) return;
 
@@ -345,8 +346,9 @@ namespace Ayaya {
             : ImageLayout::ColorAttachmentOptimal;
         ImageLayout current = tex.CurrentLayout[idx];
 
-        // Transition color attachments (or depth for depth-only textures)
-        if (current != colorTarget) {
+        // Transition color attachments (or depth for depth-only textures).
+        // Skip for read-only depth: the pass only tests/samples depth, never writes color.
+        if (!depthReadOnly && current != colorTarget) {
             auto vkFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(tex.PhysicalFBOs[idx]);
             uint32_t count = depthOnly ? 1 : (vkFBO ? vkFBO->GetColorAttachmentCount() : 1);
             for (uint32_t i = 0; i < count; i++)
@@ -361,8 +363,12 @@ namespace Ayaya {
             auto vkFBO = std::dynamic_pointer_cast<VulkanFramebuffer>(tex.PhysicalFBOs[idx]);
             if (!vkFBO || !vkFBO->HasDepthAttachment()) return;
 
+            ImageLayout depthTarget = depthReadOnly
+                ? ImageLayout::DepthStencilReadOnlyOptimal
+                : ImageLayout::DepthStencilAttachmentOptimal;
+
             ImageLayout depthCur = tex.DepthLayout[idx];
-            if (depthCur == ImageLayout::DepthStencilAttachmentOptimal) return;
+            if (depthCur == depthTarget) return;
 
             auto vkCtx = std::dynamic_pointer_cast<VulkanContext>(
                 Application::Get().GetWindow().GetContext());
@@ -376,9 +382,13 @@ namespace Ayaya {
             VkImageMemoryBarrier b{};
             b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
             b.oldLayout = vkOld;
-            b.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            b.newLayout = depthReadOnly
+                ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+                : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
             b.srcAccessMask = (depthCur == ImageLayout::Undefined) ? 0 : VK_ACCESS_SHADER_READ_BIT;
-            b.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            b.dstAccessMask = depthReadOnly
+                ? (VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_SHADER_READ_BIT)
+                : VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
             b.image = vkFBO->GetDepthAttachmentImage();
             b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
             b.subresourceRange.levelCount = 1;
@@ -389,7 +399,7 @@ namespace Ayaya {
                 VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
                 0, 0, nullptr, 0, nullptr, 1, &b);
 
-            tex.DepthLayout[idx] = ImageLayout::DepthStencilAttachmentOptimal;
+            tex.DepthLayout[idx] = depthTarget;
         }
     }
 
@@ -463,11 +473,15 @@ namespace Ayaya {
                 if (it != m_Textures.end() && it->second.PhysicalFBOs[idx])
                     EnsureWritable(it->second, frameIndex, cmd);
             }
-            // DepthReadTextures also need ATTACHMENT layout (external depth attachment)
+            // DepthReadTextures also need attachment layout (external depth attachment).
+            // A depth-read marked readOnly (DepthWrite=false) stays in READ_ONLY so it can
+            // be both depth-tested and sampled (transparent passes like water).
             for (auto& d : pass->DepthReadTextures) {
                 auto it = m_Textures.find(d);
-                if (it != m_Textures.end() && it->second.PhysicalFBOs[idx])
-                    EnsureWritable(it->second, frameIndex, cmd);
+                if (it != m_Textures.end() && it->second.PhysicalFBOs[idx]) {
+                    bool readOnly = pass->DepthReadOnly.count(d) ? pass->DepthReadOnly[d] : false;
+                    EnsureWritable(it->second, frameIndex, cmd, readOnly);
+                }
             }
 
             // Step c: 注入当前帧 FBO 到 context 黑板
@@ -585,7 +599,9 @@ namespace Ayaya {
             // They were transitioned to ATTACHMENT_OPTIMAL by EnsureWritable, then consumed
             // as depth attachments during the render pass. Now transition back to READ_ONLY
             // so downstream shader reads get the correct layout.
+            // Read-only depth (DepthWrite=false) was never written — skip tile-resolve.
             for (auto& d : pass->DepthReadTextures) {
+                if (pass->DepthReadOnly.count(d) && pass->DepthReadOnly[d]) continue;
                 auto it = m_Textures.find(d);
                 if (it != m_Textures.end() && it->second.PhysicalFBOs[idx]) {
                     InsertTileResolveBarrier(it->second, frameIndex);

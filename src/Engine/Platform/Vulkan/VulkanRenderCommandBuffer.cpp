@@ -100,7 +100,8 @@ namespace Ayaya {
         const std::shared_ptr<Framebuffer>& colorFBO,
         const std::shared_ptr<Framebuffer>& depthFBO,
         bool clearColor, bool clearDepth,
-        const glm::vec4& clearColorValue)
+        const glm::vec4& clearColorValue,
+        bool depthReadOnly)
     {
         auto context = std::dynamic_pointer_cast<VulkanContext>(Application::Get().GetWindow().GetContext());
         VkCommandBuffer cmdBuffer = context->GetCurrentCommandBuffer();
@@ -140,9 +141,11 @@ namespace Ayaya {
         if (vkDepthFBO->HasDepthAttachment()) {
             depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
             depthAttachment.imageView = vkDepthFBO->GetDepthAttachmentImageView();
-            depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            depthAttachment.loadOp = depthLoadOp;
-            depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            depthAttachment.imageLayout = depthReadOnly
+                ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+                : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            depthAttachment.loadOp = depthReadOnly ? VK_ATTACHMENT_LOAD_OP_LOAD : depthLoadOp;
+            depthAttachment.storeOp = depthReadOnly ? VK_ATTACHMENT_STORE_OP_NONE : VK_ATTACHMENT_STORE_OP_STORE;
             depthAttachment.clearValue.depthStencil = { 1.0f, 0 };
         }
 

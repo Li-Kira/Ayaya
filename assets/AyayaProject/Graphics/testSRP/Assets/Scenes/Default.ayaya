@@ -2,11 +2,11 @@ Scene: Untitled
 EditorState:
   ShowGrid: true
   ShowSkybox: true
-  CameraPosition: [-0.3857279, 1.6865351, 4.403516]
-  CameraDistance: 2.306896
-  CameraPitch: -0.23042423
-  CameraYaw: -0.10180781
-  CameraFocalPoint: [-0.15747009, 1.1596618, 2.1692214]
+  CameraPosition: [-3.525, -3.5013657, 17.442242]
+  CameraDistance: 13.480714
+  CameraPitch: -0.07331117
+  CameraYaw: -0.2601288
+  CameraFocalPoint: [-0.06700659, -4.4887676, 4.450053]
 Entities:
   - Entity: 12257148072277889535
     TagComponent:
@@ -66,7 +66,7 @@ Entities:
       Tag: HologramCube
       IsActive: true
     TransformComponent:
-      Translation: [0.2, 0.3, 0]
+      Translation: [0.2, 0.88229465, 0]
       Rotation: [0, 0.6335549, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
@@ -79,7 +79,7 @@ Entities:
   - Entity: 11561986092693821065
     TagComponent:
       Tag: Floor
-      IsActive: true
+      IsActive: false
     TransformComponent:
       Translation: [0, -0.7880537, 0]
       Rotation: [0, -0, 0]
@@ -96,7 +96,7 @@ Entities:
       Tag: "TestOpaqueCube "
       IsActive: true
     TransformComponent:
-      Translation: [-1.4, 0.6, 0.2664557]
+      Translation: [-1.4, 0.9876452, 0.2664557]
       Rotation: [0, -0, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
@@ -126,7 +126,7 @@ Entities:
       Tag: Cube
       IsActive: true
     TransformComponent:
-      Translation: [1.6274976, 0.22948152, 0]
+      Translation: [1.6274976, 0.98060155, 0]
       Rotation: [0, -0, 0]
       Scale: [1, 1, 1]
     MeshRendererComponent:
@@ -141,13 +141,28 @@ Entities:
       Tag: Water
       IsActive: true
     TransformComponent:
-      Translation: [0, 0, 0]
-      Rotation: [0, 0, 0]
+      Translation: [0, -5.5710073, 0]
+      Rotation: [0, -0, 0]
       Scale: [12, 1, 12]
     MeshRendererComponent:
       ModelHandle: 16140901000000000007
       MaterialHandle: 722090966365288412
       CastShadows: false
+      ReceiveShadows: true
+    RelationshipComponent:
+      Parent: 0
+  - Entity: 177777770000000002
+    TagComponent:
+      Tag: WhiteboxCube
+      IsActive: true
+    TransformComponent:
+      Translation: [0.043818682, 0.0002644658, 2]
+      Rotation: [0, -0, 0]
+      Scale: [8.7416, 0.93006223, 14.172639]
+    MeshRendererComponent:
+      ModelHandle: 16140901000000000001
+      MaterialHandle: 822090966365288413
+      CastShadows: true
       ReceiveShadows: true
     RelationshipComponent:
       Parent: 0

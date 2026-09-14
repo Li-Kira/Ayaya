@@ -8,27 +8,27 @@ Properties:
   - UniformName: u_Albedo
     DisplayName: Shallow Color
     Type: 4
-    Vec3Value: [0.1, 0.45, 0.65]
+    Vec3Value: [0.1, 0.55, 0.75]
   - UniformName: u_Roughness
     DisplayName: Reflection Roughness
     Type: 0
-    FloatValue: 0.08
+    FloatValue: 0.15
   - UniformName: _CustomData0
     DisplayName: Wave0 (amp, length, steepness, speed)
     Type: 5
-    Vec4Value: [0.4, 8, 0.3, 1.5]
+    Vec4Value: [0.06, 5, 0.12, 1]
   - UniformName: _CustomData1
     DisplayName: Wave0 dir + Wave1 (dir.x, dir.y, amp1, len1)
     Type: 5
-    Vec4Value: [1, 0.3, 0.25, 4]
+    Vec4Value: [1, 0.3, 0.04, 3]
   - UniformName: _CustomData2
     DisplayName: Wave1 (steep1, speed1, dir.x, dir.y)
     Type: 5
-    Vec4Value: [0.4, 2, 0.5, 0.8]
+    Vec4Value: [0.12, 1.2, 0.5, 0.8]
   - UniformName: _CustomData3
     DisplayName: (deepMix, foamDepth, fresnelF0, depthScale)
     Type: 5
-    Vec4Value: [0.35, 0.06, 0.04, 1.5]
+    Vec4Value: [0.85, 0.15, 0.02, 0.08]
   - UniformName: u_Alpha
     DisplayName: Alpha Multiplier
     Type: 0
