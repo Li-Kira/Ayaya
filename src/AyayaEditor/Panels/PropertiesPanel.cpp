@@ -139,6 +139,8 @@ namespace Ayaya {
             DrawEnvironmentComponent(referenceEntity);
             DrawMeshRendererComponent(referenceEntity, uiScale);
             DrawPostProcessVolumeComponent(referenceEntity, uiScale);
+            DrawVolumetricFogComponent(referenceEntity, uiScale);
+            DrawLocalFogVolumeComponent(referenceEntity, uiScale);
             DrawLuaScriptComponent(referenceEntity);
             DrawRigidbody2DComponent(referenceEntity);
             DrawBoxCollider2DComponent(referenceEntity);
@@ -1798,6 +1800,208 @@ namespace Ayaya {
         }
     }
 
+    void PropertiesPanel::DrawVolumetricFogComponent(Entity referenceEntity, float uiScale) {
+        // ==========================================
+        // --- 体积雾组件（独立组件，参考 UE ExponentialHeightFog / Unity HDRP Fog Volume）---
+        // ==========================================
+        bool allHaveFog = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<VolumetricFogComponent>()) { allHaveFog = false; break; }
+
+        if (allHaveFog) {
+            bool removeComponent = false;
+            if (UI::DrawComponentHeader("Volumetric Fog", ICON_FA_CLOUD " ",
+                                         ImVec4(0.55f, 0.75f, 0.95f, 1.0f),
+                                         (void*)"VolumetricFogComponent", true, &removeComponent)) {
+                auto& refFog = referenceEntity.GetComponent<VolumetricFogComponent>();
+
+                auto getTargetName = [&]() -> std::string {
+                    if (m_SelectedEntities.size() == 1) return "'" + m_SelectedEntities[0].GetComponent<TagComponent>().Tag + "'";
+                    return std::to_string(m_SelectedEntities.size()) + " Entities";
+                };
+
+                std::vector<VolumetricFogComponent> pureOldFogs;
+                for (auto e : m_SelectedEntities) pureOldFogs.push_back(e.GetComponent<VolumetricFogComponent>());
+
+                auto commitInstantCommand = [&](const std::string& actionName, const std::vector<VolumetricFogComponent>& oldComps) {
+                    auto macroCmd = std::make_shared<MacroCommand>(actionName + " of " + getTargetName());
+                    for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                        macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<VolumetricFogComponent>>(
+                            m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<VolumetricFogComponent>()));
+                    }
+                    EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
+                };
+
+                static std::vector<VolumetricFogComponent> s_OldFogs;
+                auto handleDragState = [&](const std::string& actionName) {
+                    if (ImGui::IsItemActivated()) s_OldFogs = pureOldFogs;
+                    if (ImGui::IsItemDeactivatedAfterEdit()) {
+                        auto macroCmd = std::make_shared<MacroCommand>(actionName + " of " + getTargetName());
+                        for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                            macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<VolumetricFogComponent>>(
+                                m_SelectedEntities[i], s_OldFogs[i], m_SelectedEntities[i].GetComponent<VolumetricFogComponent>()));
+                        }
+                        EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
+                    }
+                };
+
+                UI::BeginPropertyTable("VolFog", 100.0f, 0.8f);
+                UI::DrawPropertyLabel("Enable");
+                bool enable = refFog.Enable;
+                if (ImGui::Checkbox("##FogEnable", &enable)) {
+                    std::vector<VolumetricFogComponent> oldComps = pureOldFogs;
+                    for (auto e : m_SelectedEntities) e.GetComponent<VolumetricFogComponent>().Enable = enable;
+                    commitInstantCommand("Toggle Volumetric Fog", oldComps);
+                }
+
+                UI::DrawPropertyLabel("Density");
+                float density = refFog.Density;
+                if (ImGui::DragFloat("##FogDensity", &density, 0.001f, 0.0f, 0.5f, "%.4f"))
+                    for (auto e : m_SelectedEntities) e.GetComponent<VolumetricFogComponent>().Density = density;
+                handleDragState("Change Fog Density");
+
+                UI::DrawPropertyLabel("Height Falloff");
+                float falloff = refFog.HeightFalloff;
+                if (ImGui::DragFloat("##FogFalloff", &falloff, 0.01f, 0.0f, 5.0f, "%.3f"))
+                    for (auto e : m_SelectedEntities) e.GetComponent<VolumetricFogComponent>().HeightFalloff = falloff;
+                handleDragState("Change Fog Height Falloff");
+
+                UI::DrawPropertyLabel("Anisotropy");
+                float anisotropy = refFog.Anisotropy;
+                if (ImGui::DragFloat("##FogAniso", &anisotropy, 0.01f, -1.0f, 1.0f, "%.2f"))
+                    for (auto e : m_SelectedEntities) e.GetComponent<VolumetricFogComponent>().Anisotropy = anisotropy;
+                handleDragState("Change Fog Anisotropy");
+
+                UI::DrawPropertyLabel("Max Distance");
+                float maxDist = refFog.MaxDistance;
+                if (ImGui::DragFloat("##FogMaxDist", &maxDist, 1.0f, 1.0f, 1000.0f, "%.1f"))
+                    for (auto e : m_SelectedEntities) e.GetComponent<VolumetricFogComponent>().MaxDistance = maxDist;
+                handleDragState("Change Fog Max Distance");
+
+                UI::DrawPropertyLabel("Scatter Color");
+                glm::vec3 scatter = refFog.ScatteringColor;
+                if (ImGui::ColorEdit3("##FogColor", glm::value_ptr(scatter), ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float)) {
+                    std::vector<VolumetricFogComponent> oldComps = pureOldFogs;
+                    for (auto e : m_SelectedEntities) e.GetComponent<VolumetricFogComponent>().ScatteringColor = scatter;
+                    commitInstantCommand("Change Fog Scatter Color", oldComps);
+                }
+                ImGui::EndTable();
+
+                ImGui::TreePop();
+            }
+
+            if (removeComponent) {
+                for (auto e : m_SelectedEntities) e.RemoveComponent<VolumetricFogComponent>();
+            }
+        }
+    }
+
+    void PropertiesPanel::DrawLocalFogVolumeComponent(Entity referenceEntity, float uiScale) {
+        // ==========================================
+        // --- 局部雾体积（有界球形介质，参考 UE Local Fog Volume）---
+        // ==========================================
+        bool allHaveLfv = true;
+        for (auto e : m_SelectedEntities) if (!e.HasComponent<LocalFogVolumeComponent>()) { allHaveLfv = false; break; }
+
+        if (allHaveLfv) {
+            bool removeComponent = false;
+            if (UI::DrawComponentHeader("Local Fog Volume", ICON_FA_CLOUD_MEATBALL " ",
+                                         ImVec4(0.4f, 0.85f, 0.7f, 1.0f),
+                                         (void*)"LocalFogVolumeComponent", true, &removeComponent)) {
+                auto& refLfv = referenceEntity.GetComponent<LocalFogVolumeComponent>();
+
+                auto getTargetName = [&]() -> std::string {
+                    if (m_SelectedEntities.size() == 1) return "'" + m_SelectedEntities[0].GetComponent<TagComponent>().Tag + "'";
+                    return std::to_string(m_SelectedEntities.size()) + " Entities";
+                };
+
+                std::vector<LocalFogVolumeComponent> pureOldLfvs;
+                for (auto e : m_SelectedEntities) pureOldLfvs.push_back(e.GetComponent<LocalFogVolumeComponent>());
+
+                auto commitInstantCommand = [&](const std::string& actionName, const std::vector<LocalFogVolumeComponent>& oldComps) {
+                    auto macroCmd = std::make_shared<MacroCommand>(actionName + " of " + getTargetName());
+                    for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                        macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<LocalFogVolumeComponent>>(
+                            m_SelectedEntities[i], oldComps[i], m_SelectedEntities[i].GetComponent<LocalFogVolumeComponent>()));
+                    }
+                    EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
+                };
+
+                static std::vector<LocalFogVolumeComponent> s_OldLfvs;
+                auto handleDragState = [&](const std::string& actionName) {
+                    if (ImGui::IsItemActivated()) s_OldLfvs = pureOldLfvs;
+                    if (ImGui::IsItemDeactivatedAfterEdit()) {
+                        auto macroCmd = std::make_shared<MacroCommand>(actionName + " of " + getTargetName());
+                        for (size_t i = 0; i < m_SelectedEntities.size(); ++i) {
+                            macroCmd->AddCommand(std::make_shared<ChangeComponentCommand<LocalFogVolumeComponent>>(
+                                m_SelectedEntities[i], s_OldLfvs[i], m_SelectedEntities[i].GetComponent<LocalFogVolumeComponent>()));
+                        }
+                        EditorLayer::Get().GetCommandHistory().AddCommand(macroCmd);
+                    }
+                };
+
+                UI::BeginPropertyTable("LocalFogVol", 100.0f, 0.8f);
+                UI::DrawPropertyLabel("Enable");
+                bool enable = refLfv.Enable;
+                if (ImGui::Checkbox("##LfvEnable", &enable)) {
+                    std::vector<LocalFogVolumeComponent> oldComps = pureOldLfvs;
+                    for (auto e : m_SelectedEntities) e.GetComponent<LocalFogVolumeComponent>().Enable = enable;
+                    commitInstantCommand("Toggle Local Fog Volume", oldComps);
+                }
+
+                UI::DrawPropertyLabel("Radius");
+                float radius = refLfv.Radius;
+                if (ImGui::DragFloat("##LfvRadius", &radius, 0.1f, 0.1f, 100.0f, "%.1f"))
+                    for (auto e : m_SelectedEntities) e.GetComponent<LocalFogVolumeComponent>().Radius = radius;
+                handleDragState("Change Local Fog Radius");
+
+                UI::DrawPropertyLabel("Radial Density");
+                float radialDensity = refLfv.RadialDensity;
+                if (ImGui::DragFloat("##LfvRadial", &radialDensity, 0.01f, 0.0f, 5.0f, "%.3f"))
+                    for (auto e : m_SelectedEntities) e.GetComponent<LocalFogVolumeComponent>().RadialDensity = radialDensity;
+                handleDragState("Change Radial Density");
+
+                UI::DrawPropertyLabel("Height Density");
+                float heightDensity = refLfv.HeightDensity;
+                if (ImGui::DragFloat("##LfvHeightDensity", &heightDensity, 0.01f, 0.0f, 5.0f, "%.3f"))
+                    for (auto e : m_SelectedEntities) e.GetComponent<LocalFogVolumeComponent>().HeightDensity = heightDensity;
+                handleDragState("Change Height Density");
+
+                UI::DrawPropertyLabel("Height Falloff");
+                float heightFalloff = refLfv.HeightFalloff;
+                if (ImGui::DragFloat("##LfvHeightFalloff", &heightFalloff, 0.01f, 0.0f, 5.0f, "%.3f"))
+                    for (auto e : m_SelectedEntities) e.GetComponent<LocalFogVolumeComponent>().HeightFalloff = heightFalloff;
+                handleDragState("Change Height Falloff");
+
+                UI::DrawPropertyLabel("Height Offset");
+                float heightOffset = refLfv.HeightOffset;
+                if (ImGui::DragFloat("##LfvHeightOffset", &heightOffset, 0.1f, -50.0f, 50.0f, "%.1f"))
+                    for (auto e : m_SelectedEntities) e.GetComponent<LocalFogVolumeComponent>().HeightOffset = heightOffset;
+                handleDragState("Change Height Offset");
+
+                UI::DrawPropertyLabel("Albedo");
+                glm::vec3 albedo = refLfv.Albedo;
+                if (ImGui::ColorEdit3("##LfvAlbedo", glm::value_ptr(albedo), ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float)) {
+                    std::vector<LocalFogVolumeComponent> oldComps = pureOldLfvs;
+                    for (auto e : m_SelectedEntities) e.GetComponent<LocalFogVolumeComponent>().Albedo = albedo;
+                    commitInstantCommand("Change Local Fog Albedo", oldComps);
+                }
+
+                UI::DrawPropertyLabel("Anisotropy");
+                float anisotropy = refLfv.Anisotropy;
+                if (ImGui::DragFloat("##LfvAniso", &anisotropy, 0.01f, -1.0f, 1.0f, "%.2f"))
+                    for (auto e : m_SelectedEntities) e.GetComponent<LocalFogVolumeComponent>().Anisotropy = anisotropy;
+                handleDragState("Change Local Fog Anisotropy");
+                ImGui::EndTable();
+
+                ImGui::TreePop();
+            }
+
+            if (removeComponent) {
+                for (auto e : m_SelectedEntities) e.RemoveComponent<LocalFogVolumeComponent>();
+            }
+        }
+    }
+
     void PropertiesPanel::DrawLuaScriptComponent(Entity referenceEntity) {
         // ==========================================
         // --- 绘制 Lua Script 组件 ---
@@ -2547,6 +2751,14 @@ namespace Ayaya {
             if (!referenceEntity.HasComponent<PostProcessVolumeComponent>()) {
                 if (UI::DrawNativeMenuItem("Post Process Volume", ICON_FA_MAGIC)) {
                     for (auto e : m_SelectedEntities) if (!e.HasComponent<PostProcessVolumeComponent>()) e.AddComponent<PostProcessVolumeComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+                if (UI::DrawNativeMenuItem("Volumetric Fog", ICON_FA_CLOUD)) {
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<VolumetricFogComponent>()) e.AddComponent<VolumetricFogComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+                if (UI::DrawNativeMenuItem("Local Fog Volume", ICON_FA_CLOUD_MEATBALL)) {
+                    for (auto e : m_SelectedEntities) if (!e.HasComponent<LocalFogVolumeComponent>()) e.AddComponent<LocalFogVolumeComponent>();
                     ImGui::CloseCurrentPopup();
                 }
             }

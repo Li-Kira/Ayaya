@@ -381,3 +381,20 @@ Entities:
       SSRTemporalBlend: 0.05
     RelationshipComponent:
       Parent: 0
+  - Entity: 200000000000000030
+    TagComponent:
+      Tag: Volumetric Fog
+      IsActive: true
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    VolumetricFogComponent:
+      Enable: true
+      Density: 0.012
+      HeightFalloff: 0.5
+      Anisotropy: 0.3
+      MaxDistance: 200
+      ScatteringColor: [0.6, 0.7, 0.8]
+    RelationshipComponent:
+      Parent: 0

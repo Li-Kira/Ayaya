@@ -53,6 +53,8 @@ namespace Ayaya {
         void DrawEnvironmentComponent(Entity referenceEntity);
         void DrawMeshRendererComponent(Entity referenceEntity, float uiScale);
         void DrawPostProcessVolumeComponent(Entity referenceEntity, float uiScale);
+        void DrawVolumetricFogComponent(Entity referenceEntity, float uiScale);
+        void DrawLocalFogVolumeComponent(Entity referenceEntity, float uiScale);
         void DrawLuaScriptComponent(Entity referenceEntity);
         void DrawRigidbody2DComponent(Entity referenceEntity);
         void DrawBoxCollider2DComponent(Entity referenceEntity);

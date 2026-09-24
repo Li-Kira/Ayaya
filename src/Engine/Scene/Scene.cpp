@@ -271,6 +271,8 @@ namespace Ayaya {
         CopyComponentIfExists<BoxCollider2DComponent>(newEntity, entity);
         CopyComponentIfExists<LuaScriptComponent>(newEntity, entity);
         CopyComponentIfExists<PostProcessVolumeComponent>(newEntity, entity);
+        CopyComponentIfExists<VolumetricFogComponent>(newEntity, entity);
+        CopyComponentIfExists<LocalFogVolumeComponent>(newEntity, entity);
         CopyComponentIfExists<EnvironmentComponent>(newEntity, entity);
         CopyComponentIfExists<AnimationControllerComponent>(newEntity, entity);
 
@@ -322,6 +324,8 @@ namespace Ayaya {
             CopyComponentIfExists<BoxCollider2DComponent>(dst, src);
             CopyComponentIfExists<LuaScriptComponent>(dst, src);
             CopyComponentIfExists<PostProcessVolumeComponent>(dst, src);
+            CopyComponentIfExists<VolumetricFogComponent>(dst, src);
+            CopyComponentIfExists<LocalFogVolumeComponent>(dst, src);
             CopyComponentIfExists<EnvironmentComponent>(dst, src);
             CopyComponentIfExists<AnimationControllerComponent>(dst, src);
 

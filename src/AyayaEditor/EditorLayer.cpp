@@ -645,6 +645,10 @@ namespace Ayaya {
         mrc.ModelHandle = AssetManager::GetBuiltInCube();
         mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
 
+        // 创造体积雾
+        Entity fogEntity = m_ActiveScene->CreateEntity("Volumetric Fog");
+        fogEntity.AddComponent<VolumetricFogComponent>();
+
         m_SceneHierarchyPanel.SetContext(m_ActiveScene); m_TimelinePanel.SetContext(m_ActiveScene);
     }
 

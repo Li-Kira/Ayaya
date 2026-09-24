@@ -263,6 +263,42 @@ namespace Ayaya {
     };
 
     // ==========================================
+    // 体积雾（froxel volumetric fog）
+    // 独立组件 —— 参考 UE ExponentialHeightFog / Unity HDRP Fog Volume，
+    // 不并入 PostProcessVolume。全局生效（指数高度雾无限延展）。
+    // ==========================================
+    struct VolumetricFogComponent {
+        bool  Enable = true;                        // 关闭时雾 pass 退化为直通
+        float Density = 0.012f;                     // 消光系数 σ（每米）
+        float HeightFalloff = 0.5f;                 // 指数高度衰减
+        float Anisotropy = 0.3f;                    // Henyey-Greenstein 相函数 g
+        float MaxDistance = 200.0f;                 // 天空/空射线的雾距离
+        glm::vec3 ScatteringColor = glm::vec3(0.6f, 0.7f, 0.8f); // 雾散射色（albedo）
+
+        VolumetricFogComponent() = default;
+        VolumetricFogComponent(const VolumetricFogComponent&) = default;
+    };
+
+    // ==========================================
+    // 局部雾体积（Local Fog Volume）
+    // 有界球形参与介质，随实体 transform 放置/移动 —— 参考 UE5.3 Local Fog Volume。
+    // 与全局 VolumetricFogComponent 并存，一起注入 froxel 网格。
+    // ==========================================
+    struct LocalFogVolumeComponent {
+        bool  Enable = true;
+        float Radius = 5.0f;                          // 世界空间球半径
+        float RadialDensity = 0.5f;                   // 径向衰减雾强度 σ
+        float HeightDensity = 0.3f;                   // 内嵌高度雾强度 σ
+        float HeightFalloff = 0.5f;                   // 高度雾衰减
+        float HeightOffset = 0.0f;                    // 高度锚点（相对球心 Y 的偏移）
+        glm::vec3 Albedo = glm::vec3(0.7f, 0.8f, 0.9f); // 雾散射色
+        float Anisotropy = 0.0f;                      // Henyey-Greenstein g（v1 用全局 g，保留字段）
+
+        LocalFogVolumeComponent() = default;
+        LocalFogVolumeComponent(const LocalFogVolumeComponent&) = default;
+    };
+
+    // ==========================================
     // Box2D 物理组件
     // ==========================================
     struct Rigidbody2DComponent {

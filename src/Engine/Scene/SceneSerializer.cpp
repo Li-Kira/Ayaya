@@ -247,6 +247,34 @@ namespace Ayaya {
             out << YAML::EndMap;
         }
 
+        if (entity.HasComponent<VolumetricFogComponent>()) {
+            out << YAML::Key << "VolumetricFogComponent";
+            out << YAML::BeginMap;
+            auto& fog = entity.GetComponent<VolumetricFogComponent>();
+            out << YAML::Key << "Enable" << YAML::Value << fog.Enable;
+            out << YAML::Key << "Density" << YAML::Value << fog.Density;
+            out << YAML::Key << "HeightFalloff" << YAML::Value << fog.HeightFalloff;
+            out << YAML::Key << "Anisotropy" << YAML::Value << fog.Anisotropy;
+            out << YAML::Key << "MaxDistance" << YAML::Value << fog.MaxDistance;
+            out << YAML::Key << "ScatteringColor" << YAML::Value << fog.ScatteringColor;
+            out << YAML::EndMap;
+        }
+
+        if (entity.HasComponent<LocalFogVolumeComponent>()) {
+            out << YAML::Key << "LocalFogVolumeComponent";
+            out << YAML::BeginMap;
+            auto& lfv = entity.GetComponent<LocalFogVolumeComponent>();
+            out << YAML::Key << "Enable" << YAML::Value << lfv.Enable;
+            out << YAML::Key << "Radius" << YAML::Value << lfv.Radius;
+            out << YAML::Key << "RadialDensity" << YAML::Value << lfv.RadialDensity;
+            out << YAML::Key << "HeightDensity" << YAML::Value << lfv.HeightDensity;
+            out << YAML::Key << "HeightFalloff" << YAML::Value << lfv.HeightFalloff;
+            out << YAML::Key << "HeightOffset" << YAML::Value << lfv.HeightOffset;
+            out << YAML::Key << "Albedo" << YAML::Value << lfv.Albedo;
+            out << YAML::Key << "Anisotropy" << YAML::Value << lfv.Anisotropy;
+            out << YAML::EndMap;
+        }
+
         if (entity.HasComponent<AnimationControllerComponent>()) {
             auto& ac = entity.GetComponent<AnimationControllerComponent>();
             out << YAML::Key << "AnimationControllerComponent";
@@ -617,6 +645,30 @@ namespace Ayaya {
                 if (ppvComponent["SSRRoughnessCutoff"]) ppv.SSRRoughnessCutoff = ppvComponent["SSRRoughnessCutoff"].as<float>();
                 if (ppvComponent["SSRMaxBinarySteps"]) ppv.SSRMaxBinarySteps = ppvComponent["SSRMaxBinarySteps"].as<int>();
                 if (ppvComponent["SSRTemporalBlend"]) ppv.SSRTemporalBlend = ppvComponent["SSRTemporalBlend"].as<float>();
+            }
+
+            auto fogComponent = entity["VolumetricFogComponent"];
+            if (fogComponent) {
+                auto& fog = deserializedEntity.AddComponent<VolumetricFogComponent>();
+                if (fogComponent["Enable"])         fog.Enable = fogComponent["Enable"].as<bool>();
+                if (fogComponent["Density"])        fog.Density = fogComponent["Density"].as<float>();
+                if (fogComponent["HeightFalloff"])  fog.HeightFalloff = fogComponent["HeightFalloff"].as<float>();
+                if (fogComponent["Anisotropy"])     fog.Anisotropy = fogComponent["Anisotropy"].as<float>();
+                if (fogComponent["MaxDistance"])    fog.MaxDistance = fogComponent["MaxDistance"].as<float>();
+                if (fogComponent["ScatteringColor"]) fog.ScatteringColor = fogComponent["ScatteringColor"].as<glm::vec3>();
+            }
+
+            auto lfvComponent = entity["LocalFogVolumeComponent"];
+            if (lfvComponent) {
+                auto& lfv = deserializedEntity.AddComponent<LocalFogVolumeComponent>();
+                if (lfvComponent["Enable"])        lfv.Enable = lfvComponent["Enable"].as<bool>();
+                if (lfvComponent["Radius"])        lfv.Radius = lfvComponent["Radius"].as<float>();
+                if (lfvComponent["RadialDensity"]) lfv.RadialDensity = lfvComponent["RadialDensity"].as<float>();
+                if (lfvComponent["HeightDensity"]) lfv.HeightDensity = lfvComponent["HeightDensity"].as<float>();
+                if (lfvComponent["HeightFalloff"]) lfv.HeightFalloff = lfvComponent["HeightFalloff"].as<float>();
+                if (lfvComponent["HeightOffset"])  lfv.HeightOffset = lfvComponent["HeightOffset"].as<float>();
+                if (lfvComponent["Albedo"])        lfv.Albedo = lfvComponent["Albedo"].as<glm::vec3>();
+                if (lfvComponent["Anisotropy"])    lfv.Anisotropy = lfvComponent["Anisotropy"].as<float>();
             }
 
             auto animController = entity["AnimationControllerComponent"];

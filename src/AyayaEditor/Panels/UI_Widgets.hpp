@@ -46,6 +46,10 @@ namespace Ayaya {
                 return { ICON_FA_CLOUD_SUN,     ImVec4(0.4f, 0.8f, 0.9f, 1.0f) };  // Teal — Environment header
             if (entity.HasComponent<PostProcessVolumeComponent>())
                 return { ICON_FA_MAGIC,         ImVec4(0.7f, 0.4f, 0.9f, 1.0f) };  // Violet — Post Process Volume header
+            if (entity.HasComponent<VolumetricFogComponent>())
+                return { ICON_FA_CLOUD,         ImVec4(0.55f, 0.75f, 0.95f, 1.0f) }; // Light blue — Volumetric Fog header
+            if (entity.HasComponent<LocalFogVolumeComponent>())
+                return { ICON_FA_CLOUD_MEATBALL, ImVec4(0.4f, 0.85f, 0.7f, 1.0f) }; // Teal — Local Fog Volume header
 
             // 4. Animation
             if (entity.HasComponent<AnimationControllerComponent>())

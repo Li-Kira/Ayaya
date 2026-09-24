@@ -11,7 +11,7 @@ namespace Ayaya {
 
     void VulkanTAAPass::DeclareResources(RGBuilder& builder,
                                           uint32_t width, uint32_t height) {
-        builder.ReadTexture("Lighting");
+        builder.ReadTexture("Fog");   // fog-composited HDR color (volumetric fog runs before TAA)
         builder.ReadTexture("SceneDepth");
         builder.ReadTexture("GBuffer");
 
@@ -45,7 +45,8 @@ namespace Ayaya {
 
     void VulkanTAAPass::Execute(RenderContext& context,
                                  RenderCommandBuffer& cmd) {
-        auto lightingFBO = context.GetFramebuffer("Lighting");
+        auto lightingFBO = context.GetFramebuffer("Fog");   // fog-composited HDR input
+        if (!lightingFBO) lightingFBO = context.GetFramebuffer("Lighting");   // fallback if no fog pass
         auto outputFBO   = context.GetFramebuffer("TAA_Output");
         auto gbufferFBO  = context.GetFramebuffer("GBuffer");
         auto depthFBO    = context.GetFramebuffer("SceneDepth");

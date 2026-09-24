@@ -44,6 +44,7 @@
 #include "Renderer/Passes/VulkanSSRTemporalPass.hpp"
 #include "Renderer/Passes/VulkanApplyReflectionPass.hpp"
 #include "Renderer/Passes/VulkanTAAPass.hpp"
+#include "Renderer/Passes/VulkanVolumetricFogPass.hpp"
 #include "Renderer/Passes/VulkanWBOITPass.hpp"
 #include "Renderer/GDRContext.hpp"
 #include "Renderer/PassRegistry.hpp"
@@ -108,6 +109,14 @@ namespace Ayaya {
         glm::vec4 colorAndFalloff;        // rgb=candelas, w=falloff
         glm::vec4 directionAndConeAngles; // xyz=cone dir, w=innerConeCos
         glm::vec4 outerConeAndPad;        // x=outerConeCos, yzw=unused (vec4 required for MoltenVK)
+    };
+
+    // Local fog volumes — bounded spherical participating media (UE Local Fog Volume)
+    static constexpr uint32_t kMaxLocalFogVolumes = 64;
+    struct GPULocalFogVolume {
+        glm::vec4 centerRadius;   // xyz=world center, w=radius
+        glm::vec4 radialHeight;   // x=radialDensity, y=heightDensity, z=heightFalloff, w=heightOffset
+        glm::vec4 albedoAniso;    // rgb=albedo, w=anisotropy
     };
 
     // static std::shared_ptr<UniformBuffer> s_CameraUniformBuffer;
@@ -249,6 +258,7 @@ namespace Ayaya {
             m_OutlinePass     = std::make_shared<VulkanOutlinePass>();
             m_BloomPass       = std::make_shared<VulkanBloomPass>();
             m_TAAPass         = std::make_shared<VulkanTAAPass>();
+            m_FogPass         = std::make_shared<VulkanVolumetricFogPass>();
             m_PostProcessPass = std::make_shared<VulkanPostProcessPass>();
             m_FXAAPass        = std::make_shared<VulkanFXAAPass>();
             m_SSAOPass        = std::make_shared<VulkanSSAOPass>();
@@ -297,6 +307,10 @@ namespace Ayaya {
             m_SpotLightInstanceSSBO = std::make_unique<VulkanStorageBuffer>(
                 256 * sizeof(glm::mat4),
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+            // Local fog volume SSBO (max 64 volumes, 48 bytes each + 16-byte header)
+            m_LocalFogVolumeSSBO = std::make_unique<VulkanStorageBuffer>(
+                16 + kMaxLocalFogVolumes * sizeof(GPULocalFogVolume),
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
             auto camUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_CameraUniformBuffer);
             auto dirLightUBO = std::dynamic_pointer_cast<VulkanUniformBuffer>(m_DirLightUniformBuffer);
@@ -323,6 +337,7 @@ namespace Ayaya {
             m_OutlinePass->OnAttach();
             m_BloomPass->OnAttach();
             m_TAAPass->OnAttach();
+            m_FogPass->OnAttach();
             m_PostProcessPass->OnAttach();
             m_FXAAPass->OnAttach();
             m_UIPass->OnAttach();
@@ -574,6 +589,49 @@ namespace Ayaya {
             }
         }
 
+        // Local fog volumes — bounded spherical participating media (UE Local Fog Volume)
+        {
+            std::vector<GPULocalFogVolume> gpuVolumes;
+            glm::mat4 vp = m_RenderContext.ProjectionMatrix * m_RenderContext.ViewMatrix;
+            Frustum frustum(vp);
+            auto fogVolGroup = scene->Reg().view<TransformComponent, LocalFogVolumeComponent>();
+            for (auto entityID : fogVolGroup) {
+                Entity entity{entityID, scene.get()};
+                if (!entity.IsActiveInHierarchy()) continue;
+                auto& lfv = fogVolGroup.get<LocalFogVolumeComponent>(entityID);
+                if (!lfv.Enable) continue;
+                glm::vec3 center = glm::vec3(entity.GetWorldTransform()[3]);
+                // CPU frustum culling — skip volumes entirely outside the view
+                AABB fogAABB;
+                fogAABB.Min = center - glm::vec3(lfv.Radius);
+                fogAABB.Max = center + glm::vec3(lfv.Radius);
+                if (!frustum.IsBoxVisible(fogAABB, glm::mat4(1.0f))) continue;
+                gpuVolumes.push_back({
+                    glm::vec4(center, lfv.Radius),
+                    glm::vec4(lfv.RadialDensity, lfv.HeightDensity, lfv.HeightFalloff, lfv.HeightOffset),
+                    glm::vec4(lfv.Albedo, lfv.Anisotropy)
+                });
+                if (gpuVolumes.size() >= kMaxLocalFogVolumes) break;
+            }
+            uint32_t volumeCount = (uint32_t)gpuVolumes.size();
+            if (m_LocalFogVolumeSSBO) {
+                struct { uint32_t count; uint32_t _pad[3]; } header = { volumeCount, {} };
+                std::vector<uint8_t> buffer(sizeof(header) + volumeCount * sizeof(GPULocalFogVolume));
+                memcpy(buffer.data(), &header, sizeof(header));
+                if (volumeCount > 0)
+                    memcpy(buffer.data() + sizeof(header), gpuVolumes.data(),
+                           volumeCount * sizeof(GPULocalFogVolume));
+                m_LocalFogVolumeSSBO->SetData(buffer.data(), buffer.size());
+            }
+            m_RenderContext.Set("LocalFogVolumeCount", (int)volumeCount);
+            auto lfvCtx = std::dynamic_pointer_cast<VulkanContext>(
+                Application::Get().GetWindow().GetContext());
+            if (lfvCtx && m_LocalFogVolumeSSBO) {
+                uint32_t fi = lfvCtx->GetCurrentFrameIndex() % lfvCtx->GetFramesInFlight();
+                m_RenderContext.Set("LocalFogVolumeSSBO", (uint64_t)m_LocalFogVolumeSSBO->GetBuffer(fi));
+            }
+        }
+
         // Spot lights — separate SSBO (max 256, cone-direction + cone-angle aware)
         {
             std::vector<GPUSpotLight> gpuSpotLights;
@@ -727,6 +785,7 @@ namespace Ayaya {
         m_RenderContext.Set("ViewportHeight", m_Data->ViewportHeight);
         m_RenderContext.Set("HasDirLight", hasDirLight);
         m_RenderContext.Set("DirLightDir", glm::vec3(m_Data->DirLight.DirLightDir));
+        m_RenderContext.Set("DirLightColor", glm::vec3(m_Data->DirLight.DirLightColor));
 
         m_RenderContext.SetTexture("WhiteTexture", m_Data->WhiteTexture);
         m_RenderContext.SetTexture("BlackTexture", m_Data->BlackTexture);
@@ -834,6 +893,29 @@ namespace Ayaya {
         m_RenderContext.Set("SSR_RoughnessCutoff", ssrRoughnessCutoff);
         m_RenderContext.Set("SSR_MaxBinarySteps", ssrMaxBinarySteps);
         m_RenderContext.Set("SSR_TemporalBlend", ssrTemporalBlend);
+
+        // ── Volumetric fog settings (dedicated component, not PostProcessVolume) ──
+        // No fog component → density 0 → the froxel pass degenerates to pass-through.
+        float fogDensity = 0.0f, fogHeightFalloff = 0.5f, fogAnisotropy = 0.3f, fogMaxDistance = 200.0f;
+        float fogHeight = 0.0f;  // fog layer world-Y anchor (entity transform, UE ExponentialHeightFog style)
+        glm::vec3 fogScatterColor = glm::vec3(0.6f, 0.7f, 0.8f);
+        auto fogView = scene->Reg().view<VolumetricFogComponent>();
+        for (auto entityID : fogView) {
+            auto& fog = fogView.get<VolumetricFogComponent>(entityID);
+            fogDensity = fog.Enable ? fog.Density : 0.0f;
+            fogHeightFalloff = fog.HeightFalloff;
+            fogAnisotropy = fog.Anisotropy;
+            fogMaxDistance = fog.MaxDistance;
+            fogScatterColor = fog.ScatteringColor;
+            fogHeight = Entity{ entityID, scene.get() }.GetWorldTransform()[3].y;
+            break;
+        }
+        m_RenderContext.Set("FogDensity", fogDensity);
+        m_RenderContext.Set("FogHeightFalloff", fogHeightFalloff);
+        m_RenderContext.Set("FogPhaseG", fogAnisotropy);
+        m_RenderContext.Set("FogMaxDistance", fogMaxDistance);
+        m_RenderContext.Set("FogScatterColor", fogScatterColor);
+        m_RenderContext.Set("FogHeight", fogHeight);
 
         // ── Inject SRP global shader params ──
         if (m_PipelineBuilder) {
@@ -1162,6 +1244,10 @@ namespace Ayaya {
                 [&](RGBuilder& b) { VulkanWBOITPass::DeclareResolveResources(b, vpW, vpH); },
                 [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_WBOITPass) m_WBOITPass->ExecuteResolve(ctx, c); });
 
+            m_RenderGraph.AddPass("VolumetricFog",
+                [&](RGBuilder& b) { VulkanVolumetricFogPass::DeclareResources(b, vpW, vpH); },
+                [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_FogPass) m_FogPass->Execute(ctx, c); });
+
             m_RenderGraph.AddPass("TAAPass",
                 [&](RGBuilder& b) { VulkanTAAPass::DeclareResources(b, vpW, vpH); },
                 [&](RenderContext& ctx, RenderCommandBuffer& c) { if (m_TAAPass) m_TAAPass->Execute(ctx, c); });
@@ -1253,6 +1339,7 @@ namespace Ayaya {
         m_PipelineBuilder->RegisterPassInstance("ForwardBlend",    m_ForwardBlendPass);
         m_PipelineBuilder->RegisterPassInstance("WBOIT_Gather",   nullptr, m_WBOITPass);
         m_PipelineBuilder->RegisterPassInstance("WBOIT_Resolve",  nullptr, m_WBOITPass);
+        m_PipelineBuilder->RegisterPassInstance("VolumetricFog",   m_FogPass);
         m_PipelineBuilder->RegisterPassInstance("TAAPass",         m_TAAPass);
         m_PipelineBuilder->RegisterPassInstance("OutlinePass",     m_OutlinePass);
         m_PipelineBuilder->RegisterPassInstance("BloomPass",       m_BloomPass);

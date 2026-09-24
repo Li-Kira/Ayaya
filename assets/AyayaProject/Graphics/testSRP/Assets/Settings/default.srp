@@ -19,6 +19,7 @@ Pipeline:DeclareTexture("SSR_Result", {"RGBA16F"}, vpW / 2, vpH / 2)
 Pipeline:DeclareTexture("SSR_Blurred", {"RGBA16F"}, vpW / 2, vpH / 2)
 Pipeline:DeclareTexture("SSR_Temporal", {"RGBA16F"}, vpW / 2, vpH / 2)
 Pipeline:DeclareTexture("TAA_Output", {"RGBA16F"}, vpW, vpH)
+Pipeline:DeclareTexture("Fog", {"RGBA16F"}, vpW, vpH)
 
 -- Depth Pre-pass (SceneDepth for hardcoded pipeline Early-Z; SRP GBuffer is self-contained)
 Pipeline:AddPass("DepthPrePass", "DepthPrePass", {}, {"SceneDepth"}, {},
@@ -75,11 +76,15 @@ Pipeline:AddPass("ForwardBlend", "ForwardBlend",
     {}, {}, {"Lighting"},
     { LightMode = "Forward" })
 
+-- Volumetric fog (froxel) — reads the composited HDR Lighting + depth, writes a
+-- fogged HDR buffer that TAA consumes (so water, composited post-TAA, also sees fog).
+Pipeline:AddPass("Fog", "VolumetricFog", {"Lighting", "SceneDepth"}, {"Fog"}, {})
+
 -- TAA (temporal anti-aliasing) — HDR, pre-tone-map; passthrough when EnableTAA=false.
 -- Runs BEFORE the transparent water so the water is composited AFTER TAA and never
 -- gets temporally reprojected with the wrong (opaque) motion vectors.
 Pipeline:AddPass("TAA", "TAAPass",
-    {"Lighting", "SceneDepth", "GBuffer"}, {"TAA_Output"}, {})
+    {"Fog", "SceneDepth", "GBuffer"}, {"TAA_Output"}, {})
 
 -- Water: Gerstner surface → WaterSurface (reads TAA'd scene color + depth + IBL)
 Pipeline:AddPass("Water", "GenericDrawPass", {"SceneDepth", "TAA_Output"}, {"WaterSurface"}, {},

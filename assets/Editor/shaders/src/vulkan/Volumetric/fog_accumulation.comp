@@ -1,0 +1,46 @@
+#version 450
+// fog_accumulation.comp — integrate transmittance + in-scattering along depth.
+// Each (x,y) thread loops over all z slices, accumulating Beer-Lambert
+// transmittance and in-scattered radiance into volume B (rgb = integrated
+// in-scattering, a = transmittance). Keep FROXEL_* in sync with the pass.
+
+#define FROXEL_X 160
+#define FROXEL_Y 90
+#define FROXEL_Z 64
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer FogParams {
+    mat4 InvViewProj;
+    vec4 CameraPosNear;
+    vec4 ScreenFar;
+    vec4 DirLightDir;
+    vec4 DirLightColor;
+    vec4 Fog;
+    vec4 ScatterColor;
+    vec4 PointCount;
+    vec4 FogHeight;
+    vec4 LocalFogCount;
+} u_FogParams;
+
+layout(set = 0, binding = 1) uniform sampler3D u_ScatteringVolume;
+layout(set = 0, binding = 2, rgba16f) uniform image3D u_IntegratedVolume;
+
+void main() {
+    ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+    if (gid.x >= FROXEL_X || gid.y >= FROXEL_Y) return;
+
+    float u = (float(gid.x) + 0.5) / float(FROXEL_X);
+    float v = (float(gid.y) + 0.5) / float(FROXEL_Y);
+
+    float transmittance = 1.0;
+    vec3 inScattering = vec3(0.0);
+
+    for (int z = 0; z < FROXEL_Z; z++) {
+        vec4 s = textureLod(u_ScatteringVolume,
+                            vec3(u, v, (float(z) + 0.5) / float(FROXEL_Z)), 0.0);
+        inScattering += s.rgb * transmittance;
+        transmittance *= exp(-s.a);
+        imageStore(u_IntegratedVolume, ivec3(gid.x, gid.y, z), vec4(inScattering, transmittance));
+    }
+}

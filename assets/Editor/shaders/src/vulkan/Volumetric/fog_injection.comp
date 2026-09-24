@@ -1,0 +1,139 @@
+#version 450
+// fog_injection.comp — froxel light injection for volumetric fog.
+// For each froxel, computes the world position + height-fog density, then injects
+// directional (Henyey-Greenstein) + point-light scattering into the 3D volume.
+// Output volume A: rgb = in-scattered radiance, a = extinction (sigma * ds).
+// Keep FROXEL_* in sync with VulkanVolumetricFogPass.hpp.
+
+#define FROXEL_X 160
+#define FROXEL_Y 90
+#define FROXEL_Z 64
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer FogParams {
+    mat4 InvViewProj;
+    vec4 CameraPosNear;   // xyz = camera pos, w = near
+    vec4 ScreenFar;       // x = width, y = height, z = far
+    vec4 DirLightDir;     // xyz = light forward direction
+    vec4 DirLightColor;   // rgb = color * intensity
+    vec4 Fog;             // x = density, y = heightFalloff, z = phaseG, w = maxDist
+    vec4 ScatterColor;    // rgb = scattering albedo
+    vec4 PointCount;      // x = point light count
+    vec4 FogHeight;       // x = fog layer world-Y anchor (entity transform)
+    vec4 LocalFogCount;   // x = local fog volume count
+} u_FogParams;
+
+struct PointLight { vec4 positionAndRadius; vec4 colorAndFalloff; };
+layout(std430, set = 0, binding = 2) readonly buffer PointLights {
+    uint count;
+    uint pad0; uint pad1; uint pad2;
+    PointLight lights[];
+} u_PointLights;
+
+struct LocalFogVolume { vec4 centerRadius; vec4 radialHeight; vec4 albedoAniso; };
+layout(std430, set = 0, binding = 3) readonly buffer LocalFogVolumes {
+    uint count;
+    uint pad0; uint pad1; uint pad2;
+    LocalFogVolume volumes[];
+} u_LocalFogVolumes;
+
+layout(set = 0, binding = 1, rgba16f) uniform image3D u_ScatteringVolume;
+
+const float PI = 3.14159265359;
+
+float HenyeyGreenstein(float cosTheta, float g) {
+    float g2 = g * g;
+    return (1.0 - g2) / (4.0 * PI * pow(1.0 + g2 - 2.0 * g * cosTheta, 1.5));
+}
+
+void main() {
+    ivec3 gid = ivec3(gl_GlobalInvocationID.xyz);
+    if (gid.x >= FROXEL_X || gid.y >= FROXEL_Y || gid.z >= FROXEL_Z) return;
+
+    float u = (float(gid.x) + 0.5) / float(FROXEL_X);
+    float v = (float(gid.y) + 0.5) / float(FROXEL_Y);
+
+    float nearP = u_FogParams.CameraPosNear.w;
+    float farP  = u_FogParams.ScreenFar.z;
+
+    // Exponential slice distribution (dense near, sparse far).
+    float z0 = float(gid.z) / float(FROXEL_Z - 1);
+    float d0 = nearP * pow(farP / nearP, z0);
+    float z1 = float(gid.z + 1) / float(FROXEL_Z - 1);
+    float d1 = nearP * pow(farP / nearP, z1);
+    float dCenter = (d0 + d1) * 0.5;
+    float ds = max(d1 - d0, 1e-5);
+
+    // World-space ray through this pixel's center.
+    float ndcX = u * 2.0 - 1.0;
+    float ndcY = 1.0 - v * 2.0;   // v = 0 at top → ndcY = +1
+    vec4 farPoint = u_FogParams.InvViewProj * vec4(ndcX, ndcY, 1.0, 1.0);
+    vec3 worldFar = farPoint.xyz / farPoint.w;
+    vec3 cameraPos = u_FogParams.CameraPosNear.xyz;
+
+    // Slice depth (d0/d1/dCenter/ds) is VIEW-SPACE Z, but the ray marches in
+    // EUCLIDEAN space. Reconstruct the world position at view-space depth dCenter by
+    // walking fraction dCenter/farP along the camera→far segment, and scale the slice's
+    // actual path length by 1/cos(θ) so off-center rays get the correct extinction.
+    vec3 toFar = worldFar - cameraPos;         // unnormalized (length = dist to far plane)
+    float invCosTheta = length(toFar) / farP;  // 1/cos(θ) = L / far
+    vec3 worldDir = normalize(toFar);          // normalized, for Henyey-Greenstein phase
+    vec3 worldPos = cameraPos + toFar * (dCenter / farP);
+
+    float pathLength = ds * invCosTheta;   // actual Euclidean thickness of this slice
+
+    // Exponential height fog density — anchored at the fog entity's world Y (UE
+    // ExponentialHeightFog style: density = σ · exp(-k · max(h - fogHeight, 0))).
+    float density = u_FogParams.Fog.x * exp(-u_FogParams.Fog.y * max(worldPos.y - u_FogParams.FogHeight.x, 0.0));
+
+    // Shared light term (ambient + directional + point lights), computed once with the
+    // global phase so local volumes don't multiply the light loop (avoids O(volumes×lights)).
+    vec3 lightTerm = vec3(0.02);   // ambient — keeps fog visible with no explicit light
+    vec3 toLight = normalize(-u_FogParams.DirLightDir.xyz);
+    float dirPhase = HenyeyGreenstein(dot(worldDir, toLight), u_FogParams.Fog.z);
+    lightTerm += u_FogParams.DirLightColor.rgb * dirPhase;
+
+    uint n = uint(u_FogParams.PointCount.x);
+    for (uint i = 0u; i < n; i++) {
+        PointLight L = u_PointLights.lights[i];
+        vec3 lp = L.positionAndRadius.xyz;
+        float radius = L.positionAndRadius.w;
+        vec3 toL = lp - worldPos;
+        float dist = length(toL);
+        vec3 dirL = toL / max(dist, 1e-4);
+        float atten = 1.0 / (dist * dist + 1.0);
+        float radiusAtt = clamp(1.0 - dist / max(radius, 1e-4), 0.0, 1.0);
+        float pointPhase = HenyeyGreenstein(dot(worldDir, dirL), u_FogParams.Fog.z);
+        lightTerm += (L.colorAndFalloff.rgb * atten * radiusAtt) * pointPhase;
+    }
+
+    // Accumulate global fog + local fog volumes.
+    vec3 scattering = vec3(0.0);
+    float ext = 0.0;
+
+    // Global height fog.
+    if (density > 0.0) {
+        ext += density * pathLength;
+        scattering += u_FogParams.ScatterColor.rgb * lightTerm * density * pathLength;
+    }
+
+    // Local fog volumes — bounded spherical media (UE Local Fog Volume).
+    uint volCount = uint(u_FogParams.LocalFogCount.x);
+    for (uint i = 0u; i < volCount; i++) {
+        LocalFogVolume vol = u_LocalFogVolumes.volumes[i];
+        vec3 c = vol.centerRadius.xyz;
+        float r = vol.centerRadius.w;
+        float dist = length(worldPos - c);
+        if (dist >= r) continue;
+        float radial = vol.radialHeight.x * (1.0 - dist / r);
+        float hAnchor = c.y + vol.radialHeight.w;
+        float height = vol.radialHeight.y * exp(-vol.radialHeight.z * max(worldPos.y - hAnchor, 0.0));
+        float volDensity = radial + height;
+        if (volDensity <= 0.0) continue;
+        ext += volDensity * pathLength;
+        scattering += vol.albedoAniso.rgb * lightTerm * volDensity * pathLength;
+    }
+
+    imageStore(u_ScatteringVolume, gid, vec4(scattering, ext));
+}

@@ -183,6 +183,18 @@ namespace Ayaya {
                     SetSelectedEntity(ppvEntity);
                 }
 
+                if (UI::DrawNativeMenuItem("Volumetric Fog", ICON_FA_CLOUD)) {
+                    Entity fogEntity = m_Context->CreateEntity("Volumetric Fog");
+                    fogEntity.AddComponent<VolumetricFogComponent>();
+                    SetSelectedEntity(fogEntity);
+                }
+
+                if (UI::DrawNativeMenuItem("Local Fog Volume", ICON_FA_CLOUD_MEATBALL)) {
+                    Entity lfvEntity = m_Context->CreateEntity("Local Fog Volume");
+                    lfvEntity.AddComponent<LocalFogVolumeComponent>();
+                    SetSelectedEntity(lfvEntity);
+                }
+
                 if (UI::BeginNativeMenu("UI", ICON_FA_OBJECT_GROUP)) {
                     auto getOrCreateCanvas = [&]() -> Entity {
                         auto view = m_Context->Reg().view<CanvasComponent>();

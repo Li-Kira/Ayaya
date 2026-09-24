@@ -110,6 +110,7 @@ namespace Ayaya {
         std::unique_ptr<class VulkanStorageBuffer> m_LightInstanceSSBO;
         std::unique_ptr<class VulkanStorageBuffer> m_SpotLightSSBO;
         std::unique_ptr<class VulkanStorageBuffer> m_SpotLightInstanceSSBO;
+        std::unique_ptr<class VulkanStorageBuffer> m_LocalFogVolumeSSBO;
 
         RenderPipeline m_Pipeline;           // OpenGL
         RenderGraph    m_RenderGraph;        // Vulkan DAG
@@ -131,6 +132,7 @@ namespace Ayaya {
         std::shared_ptr<RenderPass> m_OutlinePass;
         std::shared_ptr<RenderPass> m_BloomPass;
         std::shared_ptr<RenderPass> m_TAAPass;
+        std::shared_ptr<RenderPass> m_FogPass;
         std::shared_ptr<RenderPass> m_PostProcessPass;
         std::shared_ptr<RenderPass> m_FXAAPass;
         std::shared_ptr<RenderPass> m_UIPass;
