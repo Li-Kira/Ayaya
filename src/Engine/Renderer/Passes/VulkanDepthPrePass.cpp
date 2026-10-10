@@ -49,8 +49,7 @@ namespace Ayaya {
         uint32_t fiCount = vkCtx->GetFramesInFlight();
 
         // ── Load cull.comp SPIR-V ──
-        auto exePath = std::filesystem::current_path();
-        std::string spvPath = (exePath / "assets/Editor/shaders/cache/vulkan/Deferred/cull.comp.spv").string();
+        std::string spvPath = VFS::ResolveEnginePath("assets/Editor/shaders/cache/vulkan/Deferred/cull.comp.spv");
         std::ifstream file(spvPath, std::ios::ate | std::ios::binary);
         if (!file.is_open()) {
             AYAYA_CORE_ERROR("[DepthPrePass] Failed to open cull.comp.spv");

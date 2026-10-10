@@ -62,8 +62,7 @@ namespace Ayaya {
 
         // ── Load cull.comp SPIR-V (shared compute shader) ──
         // Priority: project-local override → engine default
-        auto exePath = std::filesystem::current_path();
-        std::string spvPath = (exePath / "assets/Editor/shaders/cache/vulkan/Deferred/cull.comp.spv").string();
+        std::string spvPath = VFS::ResolveEnginePath("assets/Editor/shaders/cache/vulkan/Deferred/cull.comp.spv");
         std::string projLocal = VFS::ResolveString("project://Shaders/Cache/Deferred/cull.comp.spv");
         if (std::filesystem::exists(projLocal)) spvPath = projLocal;
         std::ifstream file(spvPath, std::ios::ate | std::ios::binary);

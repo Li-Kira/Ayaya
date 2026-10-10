@@ -130,6 +130,14 @@ set(AYAYA_SOURCES
 # 5. 定义引擎静态库 (Engine Core)
 add_library(Ayaya STATIC ${AYAYA_SOURCES})
 target_compile_definitions(Ayaya PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
+# 引擎源码根目录，供导出打包器同平台直接构建使用 (ExportPackager)
+target_compile_definitions(Ayaya PRIVATE AYAYA_ENGINE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+# cmake 可执行文件绝对路径 (Finder 双击启动的 .app 的 PATH 里没有 cmake，需烘焙进来)
+target_compile_definitions(Ayaya PRIVATE AYAYA_CMAKE_PATH="${CMAKE_COMMAND}")
+# 编辑器构建时所用的 macOS SDK，供导出直接构建复用 (避免环境自动探测到不兼容 SDK)
+if(APPLE AND CMAKE_OSX_SYSROOT)
+    target_compile_definitions(Ayaya PRIVATE AYAYA_OSX_SYSROOT="${CMAKE_OSX_SYSROOT}")
+endif()
 set_source_files_properties(${GLAD_SOURCE} PROPERTIES LANGUAGE C)
 
 # 编译lua
@@ -202,6 +210,21 @@ file(GLOB EDITOR_SOURCES
 add_executable(AyayaEditor ${EDITOR_SOURCES})
 target_link_libraries(AyayaEditor PRIVATE Ayaya)
 
+# 是否把编辑器打包成自包含 .app bundle。
+# OFF(默认) = 裸可执行文件 + 软链 assets，日常调试快；
+# ON       = .app bundle + 全量拷贝 + dylib 打包，导出用。
+option(AYAYA_BUILD_BUNDLE "Build AyayaEditor as a self-contained macOS .app bundle" OFF)
+
+if(APPLE AND AYAYA_BUILD_BUNDLE)
+    set_target_properties(AyayaEditor PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME "AyayaEditor"
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/src/AyayaEditor/Info.plist"
+        MACOSX_RPATH TRUE
+        BUILD_RPATH "@executable_path/../Frameworks"
+        INSTALL_RPATH "@executable_path/../Frameworks")
+endif()
+
 
 # =========================================================================
 # 9. 定义 Sandbox (游戏运行端程序 - 面向玩家)
@@ -218,13 +241,35 @@ set(COPY_COMMAND create_symlink)
 set(COPY_COMMENT "Creating symlink to assets for")
 
 
-# 为 Editor 复制/链接资源
-add_custom_command(TARGET AyayaEditor POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E ${COPY_COMMAND}
-    "${CMAKE_CURRENT_SOURCE_DIR}/assets"
-    "$<TARGET_FILE_DIR:AyayaEditor>/assets"
-    COMMENT "${COPY_COMMENT} AyayaEditor"
-)
+# 为 Editor 打包资源 (bundle 模式打进 Resources；否则软链，日常调试快)
+if(APPLE AND AYAYA_BUILD_BUNDLE)
+    add_custom_command(TARGET AyayaEditor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E remove_directory
+            "$<TARGET_BUNDLE_CONTENT_DIR:AyayaEditor>/Resources/assets"
+        COMMAND ${CMAKE_COMMAND} -E remove_directory
+            "$<TARGET_BUNDLE_CONTENT_DIR:AyayaEditor>/Resources/Templates"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/Editor"
+            "$<TARGET_BUNDLE_CONTENT_DIR:AyayaEditor>/Resources/assets/Editor"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/AyayaProject/initProject"
+            "$<TARGET_BUNDLE_CONTENT_DIR:AyayaEditor>/Resources/Templates/initProject"
+        COMMENT "Packaging editor engine assets + project template into bundle"
+    )
+    add_custom_command(TARGET AyayaEditor POST_BUILD
+        COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/tools/bundle_editor_dylibs.sh"
+            "$<TARGET_BUNDLE_CONTENT_DIR:AyayaEditor>"
+            "${VENDOR_LIB}"
+        COMMENT "Bundling editor dylibs into Frameworks"
+    )
+else()
+    add_custom_command(TARGET AyayaEditor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E ${COPY_COMMAND}
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+            "$<TARGET_FILE_DIR:AyayaEditor>/assets"
+        COMMENT "${COPY_COMMENT} AyayaEditor"
+    )
+endif()
 
 # 为 Sandbox 复制/链接资源
 add_custom_command(TARGET Sandbox POST_BUILD

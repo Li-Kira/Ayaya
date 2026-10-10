@@ -15,8 +15,15 @@ namespace Ayaya {
     RendererAPI::API RendererAPI::s_API = RendererAPI::API::OpenGL;
     
     std::unique_ptr<RendererAPI> Renderer::s_RendererAPI = nullptr;
+    bool Renderer::s_APIOverrideSet = false;
+
+    void Renderer::SetGraphicsAPIOverride(RendererAPI::API api) {
+        RendererAPI::SetAPI(api);
+        s_APIOverrideSet = true;
+    }
 
     void Renderer::LoadConfig() {
+        if (s_APIOverrideSet) return;  // game.json 已指定后端，跳过编辑器偏好
         std::string prefsPath = "assets/Editor/settings/EditorPreferences.yaml";
         if (std::filesystem::exists(prefsPath)) {
             try {

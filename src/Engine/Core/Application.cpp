@@ -115,6 +115,10 @@ Hi, welcome to Ayaya engine♪
 
         VFS::Init();
 
+        // 提前建立 engine 默认挂载点，使 ImGuiLayer 字体加载 (早于应用层 OnAttach) 能解析 engine://
+        if (!VFS::IsMounted("engine"))
+            VFS::Mount("engine", std::filesystem::current_path() / "assets");
+
         Renderer::LoadConfig();
 
         m_Window = std::make_unique<Window>(1280, 720, "Ayaya Engine v0.1"); // logical size; PreferencesPanel adjusts to physical

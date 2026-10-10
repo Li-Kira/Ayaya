@@ -29,11 +29,24 @@ namespace Ayaya {
 
     void VFS::Mount(const std::string& scheme, const std::filesystem::path& physicalPath) {
         s_MountPoints[scheme] = std::filesystem::absolute(physicalPath).lexically_normal();
-        AYAYA_CORE_INFO("VFS Mounted: {0}:// -> {1}", scheme, s_MountPoints[scheme].string());
+        // 日志可能发生在 Log::Init() 之前 (游戏 main 提前挂载 engine)，需空指针安全
+        if (Log::GetCoreLogger())
+            Log::GetCoreLogger()->info("VFS Mounted: {0}:// -> {1}", scheme, s_MountPoints[scheme].string());
     }
 
     void VFS::Unmount(const std::string& scheme) {
         s_MountPoints.erase(scheme);
+    }
+
+    bool VFS::IsMounted(const std::string& scheme) {
+        return s_MountPoints.count(scheme) > 0;
+    }
+
+    std::string VFS::ResolveEnginePath(const std::string& path) {
+        // 旧式 "assets/Editor/..." CWD 相对路径 → 映射到 engine 挂载点
+        if (path.rfind("assets/", 0) == 0)
+            return ResolveString("engine://" + path.substr(7));  // "assets/" 共 7 个字符
+        return ResolveString(path);
     }
 
     std::string VFS::GetScheme(const std::string& path) {

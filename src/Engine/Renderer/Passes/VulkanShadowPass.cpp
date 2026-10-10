@@ -8,6 +8,7 @@
 #include "Platform/Vulkan/VulkanContext.hpp"
 #include "Platform/Vulkan/VulkanPipeline.hpp"
 #include "Core/Application.hpp"
+#include "Core/VFS.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <fstream>
 
@@ -47,8 +48,6 @@ namespace Ayaya {
         if (vkCtx) {
             m_HasDrawIndirectCount = vkCtx->GetCapabilities().HasDrawIndirectCount;
         }
-
-        auto exePath = std::filesystem::current_path();
 
         // ═══════════════════════════════════════════════════════════════
         // Shared resources (needed by both paths)
@@ -135,7 +134,7 @@ namespace Ayaya {
             }
 
             // Load atomic-compacted compute shader
-            std::string spvPath = (exePath / "assets/Editor/shaders/cache/vulkan/Shadow/cull_shadow_atomic.comp.spv").string();
+            std::string spvPath = VFS::ResolveEnginePath("assets/Editor/shaders/cache/vulkan/Shadow/cull_shadow_atomic.comp.spv");
             std::ifstream file(spvPath, std::ios::ate | std::ios::binary);
             if (file.is_open()) {
                 size_t fileSize = (size_t)file.tellg();
@@ -216,7 +215,7 @@ namespace Ayaya {
             }
 
             // Load fixed-slot compute shader
-            std::string spvPath = (exePath / "assets/Editor/shaders/cache/vulkan/Shadow/cull_shadow_fixed.comp.spv").string();
+            std::string spvPath = VFS::ResolveEnginePath("assets/Editor/shaders/cache/vulkan/Shadow/cull_shadow_fixed.comp.spv");
             std::ifstream file(spvPath, std::ios::ate | std::ios::binary);
             if (file.is_open()) {
                 size_t fileSize = (size_t)file.tellg();

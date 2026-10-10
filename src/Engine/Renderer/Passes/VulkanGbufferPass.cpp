@@ -1,5 +1,6 @@
 #include "ayapch.h"
 #include "VulkanGbufferPass.hpp"
+#include "Core/VFS.hpp"
 #include <fstream>
 #include "Renderer/RenderGraph.hpp"
 #include "Renderer/RenderQueue.hpp"
@@ -206,8 +207,7 @@ namespace Ayaya {
 
             // Load build shaders
             auto loadSPV = [&](const char* relPath) -> VkShaderModule {
-                auto exePath = std::filesystem::current_path();
-                std::string spvPath = (exePath / relPath).string();
+                std::string spvPath = VFS::ResolveEnginePath(relPath);
                 std::ifstream file(spvPath, std::ios::ate | std::ios::binary);
                 if (!file.is_open()) return VK_NULL_HANDLE;
                 size_t sz = (size_t)file.tellg();
@@ -312,8 +312,7 @@ namespace Ayaya {
             }
 
             // Load cull_hiz SPIR-V
-            auto exePath = std::filesystem::current_path();
-            std::string spvPath = (exePath / "assets/Editor/shaders/cache/vulkan/Deferred/cull_hiz.comp.spv").string();
+            std::string spvPath = VFS::ResolveEnginePath("assets/Editor/shaders/cache/vulkan/Deferred/cull_hiz.comp.spv");
             std::ifstream file(spvPath, std::ios::ate | std::ios::binary);
             if (file.is_open()) {
                 size_t sz = (size_t)file.tellg();
@@ -447,8 +446,7 @@ namespace Ayaya {
             {
                 // Load SPIR-V binary directly (bypass Shader factory which expects vert+frag pair)
                 // The shader compiler outputs: cache/vulkan/Deferred/cull.comp.spv
-                auto exePath = std::filesystem::current_path();
-                std::string spvPath = (exePath / "assets/Editor/shaders/cache/vulkan/Deferred/cull.comp.spv").string();
+                std::string spvPath = VFS::ResolveEnginePath("assets/Editor/shaders/cache/vulkan/Deferred/cull.comp.spv");
                 std::ifstream file(spvPath, std::ios::ate | std::ios::binary);
                 if (file.is_open()) {
                     size_t fileSize = (size_t)file.tellg();
@@ -561,8 +559,7 @@ namespace Ayaya {
         // ── Phase 2 pipeline (depends on m_HiZCullSet4Layout from InitHiZResources) ──
         if (m_HiZCullSet4Layout != VK_NULL_HANDLE) {
             // Load Phase 2 SPIR-V
-            auto exePath = std::filesystem::current_path();
-            std::string p2Path = (exePath / "assets/Editor/shaders/cache/vulkan/Deferred/cull_hiz_phase2.comp.spv").string();
+            std::string p2Path = VFS::ResolveEnginePath("assets/Editor/shaders/cache/vulkan/Deferred/cull_hiz_phase2.comp.spv");
             std::ifstream p2File(p2Path, std::ios::ate | std::ios::binary);
             if (p2File.is_open()) {
                 size_t fileSize = (size_t)p2File.tellg();

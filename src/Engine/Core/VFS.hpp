@@ -14,6 +14,11 @@ namespace Ayaya {
         // 挂载目录 (例如 Mount("engine", "C:/Ayaya/assets/Editor"))
         static void Mount(const std::string& scheme, const std::filesystem::path& physicalPath);
         static void Unmount(const std::string& scheme);
+        static bool IsMounted(const std::string& scheme);
+
+        // 解析引擎资源路径：兼容旧式 "assets/Editor/..." (CWD 相对) 与 "engine://..." (虚拟路径)。
+        // 使打包后的 .app 也能通过 engine 挂载点找到着色器等资源。
+        static std::string ResolveEnginePath(const std::string& path);
 
         // 【核心解析】：将虚拟路径转换为物理绝对路径
         // 规则 1: "project://xxx" -> 项目挂载点

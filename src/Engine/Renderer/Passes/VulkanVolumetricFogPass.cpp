@@ -5,6 +5,7 @@
 #include "Platform/Vulkan/VulkanPipeline.hpp"
 #include "Platform/Vulkan/VulkanFramebuffer.hpp"
 #include "Core/Application.hpp"
+#include "Core/VFS.hpp"
 #include <fstream>
 #include <cmath>
 
@@ -20,8 +21,7 @@ namespace Ayaya {
     }
 
     VkShaderModule VulkanVolumetricFogPass::LoadComputeShader(VkDevice device, const char* relPath) {
-        auto exePath = std::filesystem::current_path();
-        std::string spvPath = (exePath / relPath).string();
+        std::string spvPath = VFS::ResolveEnginePath(relPath);
         std::ifstream file(spvPath, std::ios::ate | std::ios::binary);
         if (!file.is_open()) return VK_NULL_HANDLE;
         size_t sz = (size_t)file.tellg();

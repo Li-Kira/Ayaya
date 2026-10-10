@@ -9,6 +9,9 @@
 #include <backends/imgui_impl_vulkan.h> // 【新增】：引入 Vulkan 后端
 
 #include "Engine/Core/Application.hpp"
+#include "Engine/Core/VFS.hpp"
+#include <cstdlib>
+#include <filesystem>
 #include "Renderer/Renderer.hpp" // 【新增】：获取当前 API
 #include "Engine/Platform/Vulkan/VulkanContext.hpp" // 【新增】：获取 Vulkan 句柄
 #include <backends/IconsFontAwesome5.h>
@@ -101,6 +104,19 @@ namespace Ayaya {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;
+        // imgui.ini 写到用户目录，避免污染 .app bundle (签名后只读)
+        {
+            static std::string s_IniPath;
+            if (s_IniPath.empty()) {
+                if (const char* home = std::getenv("HOME")) {
+                    std::filesystem::path dir = std::filesystem::path(home) / "Library/Application Support/AyayaEditor";
+                    std::error_code ec;
+                    std::filesystem::create_directories(dir, ec);
+                    s_IniPath = (dir / "imgui.ini").string();
+                }
+            }
+            if (!s_IniPath.empty()) io.IniFilename = s_IniPath.c_str();
+        }
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // 允许键盘控制
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // 开启停靠功能
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // 开启多视口（可拖出主窗口）
@@ -109,19 +125,20 @@ namespace Ayaya {
 
         float fontSize = 18.0f; // 基础字体大小
         // 建议加载你下载的高清 TTF 字体，不要用 AddFontDefault()
-        io.Fonts->AddFontFromFileTTF("assets/Editor/fonts/Roboto-Regular.ttf", fontSize);
+        // 通过 VFS 解析，使打包后的 .app 也能找到 bundle 内的字体 (不再依赖 CWD)
+        io.Fonts->AddFontFromFileTTF(VFS::ResolveString("engine://Editor/fonts/Roboto-Regular.ttf").c_str(), fontSize);
 
         // 加载并合并 FontAwesome 图标
         ImFontConfig icons_config;
-        icons_config.MergeMode = true;  
-        icons_config.PixelSnapH = true; 
+        icons_config.MergeMode = true;
+        icons_config.PixelSnapH = true;
         static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_16_FA, 0 };
-        io.Fonts->AddFontFromFileTTF("assets/Editor/fonts/fa-solid-900.ttf", 14.0f, &icons_config, icons_ranges);
+        io.Fonts->AddFontFromFileTTF(VFS::ResolveString("engine://Editor/fonts/fa-solid-900.ttf").c_str(), 14.0f, &icons_config, icons_ranges);
 
         // 加载粗体作为辅助字体
         ImFontConfig boldConfig;
-        io.Fonts->AddFontFromFileTTF("assets/Editor/fonts/Roboto-Bold.ttf", 18.0f, &boldConfig);
-        io.Fonts->AddFontFromFileTTF("assets/Editor/fonts/fa-solid-900.ttf", 14.0f, &icons_config, icons_ranges);
+        io.Fonts->AddFontFromFileTTF(VFS::ResolveString("engine://Editor/fonts/Roboto-Bold.ttf").c_str(), 18.0f, &boldConfig);
+        io.Fonts->AddFontFromFileTTF(VFS::ResolveString("engine://Editor/fonts/fa-solid-900.ttf").c_str(), 14.0f, &icons_config, icons_ranges);
 
         // =========================================================
         // 2. 几何样式配置 (现代化圆角与间距)

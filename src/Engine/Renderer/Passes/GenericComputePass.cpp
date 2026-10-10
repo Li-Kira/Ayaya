@@ -59,8 +59,7 @@ namespace Ayaya {
             layout = m_LayoutCache[shaderPath];
         } else {
             // Load compute SPIR-V
-            auto exePath = std::filesystem::current_path();
-            std::string spvPath = (exePath / "assets/Editor/shaders/cache/vulkan" / (shaderPath + ".spv")).string();
+            std::string spvPath = VFS::ResolveEnginePath("assets/Editor/shaders/cache/vulkan/" + shaderPath + ".spv");
             // Also try project-local
             if (!std::filesystem::exists(spvPath)) {
                 std::string projLocal = VFS::ResolveString("project://Shaders/Cache/" + shaderPath + ".spv");

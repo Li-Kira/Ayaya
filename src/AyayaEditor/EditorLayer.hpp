@@ -12,6 +12,7 @@
 #include "Panels/ImportglTFPanel.hpp"
 #include "Panels/CurveEditorPanel.hpp"
 #include "Panels/TimelinePanel.hpp"
+#include "Panels/ExportPanel.hpp"
 #include "Engine/Animation/TweenManager.hpp"
 #ifdef __APPLE__
 #include <sys/sysctl.h>
@@ -139,6 +140,7 @@ namespace Ayaya {
         ImportglTFPanel m_ImportglTFPanel;
         CurveEditorPanel m_CurveEditorPanel;
         TimelinePanel m_TimelinePanel;
+        ExportPanel m_ExportPanel;
         AssetWatcher m_AssetWatcher;
         TweenManager m_TweenManager;
 

@@ -23,10 +23,12 @@ namespace Ayaya {
 int main(int argc, char** argv) {
     // ==========================================
     // 核心修复：自动重定向工作目录 (Working Directory)
+    // 打包成 .app 后资源在 Contents/Resources，CWD 指向那里 (所有 assets/ 相对路径都依赖此)
     // ==========================================
-    std::filesystem::path exePath = std::filesystem::absolute(argv[0]).parent_path();
-    std::filesystem::current_path(exePath);
-    
+    std::filesystem::path exeDir = std::filesystem::absolute(argv[0]).parent_path(); // .../Contents/MacOS
+    std::filesystem::path resources = exeDir / ".." / "Resources";
+    std::filesystem::current_path(std::filesystem::exists(resources / "assets") ? resources : exeDir);
+
     Ayaya::Application* app = Ayaya::CreateApplication();
     app->Run();
     delete app;

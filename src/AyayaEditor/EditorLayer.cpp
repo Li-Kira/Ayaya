@@ -483,6 +483,7 @@ namespace Ayaya {
         m_ImportModelPanel.Draw();
         m_ImportglTFPanel.Draw();
         m_CurveEditorPanel.OnImGuiRender();
+        m_ExportPanel.OnImGuiRender(m_ActiveScene);
 
         // ---- Drawer + Bottom bar ----
         float barH = 40.0f;
@@ -645,10 +646,6 @@ namespace Ayaya {
         mrc.ModelHandle = AssetManager::GetBuiltInCube();
         mrc.MaterialHandle = AssetManager::GetBuiltInMaterial();
 
-        // 创造体积雾
-        Entity fogEntity = m_ActiveScene->CreateEntity("Volumetric Fog");
-        fogEntity.AddComponent<VolumetricFogComponent>();
-
         m_SceneHierarchyPanel.SetContext(m_ActiveScene); m_TimelinePanel.SetContext(m_ActiveScene);
     }
 
@@ -656,14 +653,33 @@ namespace Ayaya {
     // initProject：引擎启动时的默认项目。不存在则创建，存在则加载
     // =====================================================================
     void EditorLayer::InitDefaultProject() {
-        std::filesystem::path initProjDir = std::filesystem::current_path() / "assets/AyayaProject/initProject";
+        // 默认项目放用户目录 (对齐 Unreal: 项目在 ~/Documents，模板作为引擎内容打包)
+        std::filesystem::path home = getenv("HOME") ? getenv("HOME") : ".";
+        std::filesystem::path initProjDir = std::filesystem::path(home) / "Documents/AyayaProjects/initProject";
         std::filesystem::path initProjFile = initProjDir / "initProject.ayaproj";
 
         if (std::filesystem::exists(initProjFile)) {
             // 已存在 → 作为项目打开
             OpenProject(initProjFile);
         } else {
-            // 首次启动 → 创建项目 + 默认场景
+            // 首次启动：优先从引擎模板拷贝到用户目录 (Unreal Templates/ 风格)，否则创建空项目
+            // bundle 里模板在 Templates/，开发路径在 assets/AyayaProject/
+            std::filesystem::path templateDir = std::filesystem::current_path() / "Templates/initProject";
+            if (!std::filesystem::exists(templateDir / "initProject.ayaproj"))
+                templateDir = std::filesystem::current_path() / "assets/AyayaProject/initProject";
+            if (std::filesystem::exists(templateDir / "initProject.ayaproj")) {
+                std::error_code ec;
+                std::filesystem::create_directories(initProjDir, ec);
+                std::filesystem::copy(templateDir, initProjDir,
+                    std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing, ec);
+                if (!ec) {
+                    OpenProject(initProjFile);
+                    return;
+                }
+                AYAYA_CORE_ERROR("[InitDefaultProject] Failed to copy template: {0}", ec.message());
+            }
+
+            // 兜底：模板缺失 → 创建空项目 + 默认场景
             std::filesystem::create_directories(initProjDir / "Assets" / "Scenes");
             std::filesystem::create_directories(initProjDir / "Assets" / "Materials");
             std::filesystem::create_directories(initProjDir / "Temp");
@@ -1520,6 +1536,7 @@ namespace Ayaya {
                         "3D Models (*.fbx *.obj *.gltf *.glb)|*.fbx;*.obj;*.gltf;*.glb");
                     if (!filepath.empty()) m_ImportModelPanel.RequestOpen(filepath);
                 }
+                if (UI::DrawNativeMenuItem("Export Game...",    nullptr, "Ctrl+E")) { m_ExportPanel.Open(); }
                 UI::MenuSeparator();
                 if (UI::DrawNativeMenuItem("Exit")) { Application::Get().Close(); }
                 ImGui::EndMenu();
