@@ -140,6 +140,22 @@ namespace Ayaya {
         io.Fonts->AddFontFromFileTTF(VFS::ResolveString("engine://Editor/fonts/Roboto-Bold.ttf").c_str(), 18.0f, &boldConfig);
         io.Fonts->AddFontFromFileTTF(VFS::ResolveString("engine://Editor/fonts/fa-solid-900.ttf").c_str(), 14.0f, &icons_config, icons_ranges);
 
+        // 等宽字体 (JetBrains Mono 18px)：供 Log 面板渲染，保证时间戳/消息列对齐 + ASCII 像素画对齐
+        io.Fonts->AddFontFromFileTTF(VFS::ResolveString("engine://Editor/fonts/JetBrainsMono-Regular.ttf").c_str(), 18.0f);
+
+        // 合并符号字体，覆盖 ♪(U+266A) 等音乐符号 —— JetBrains Mono 不含这些字形，否则会显示成问号
+        {
+            ImFontConfig symbolConfig;
+            symbolConfig.MergeMode = true;
+            symbolConfig.PixelSnapH = true;
+            static const ImWchar musical_ranges[] = { 0x2669, 0x266F, 0 };  // ♩ ♪ ♫ ♬ ♭ ♮ ♯
+#ifdef _WIN32
+            io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\seguisym.ttf", 18.0f, &symbolConfig, musical_ranges);
+#else
+            io.Fonts->AddFontFromFileTTF("/System/Library/Fonts/Apple Symbols.ttf", 18.0f, &symbolConfig, musical_ranges);
+#endif
+        }
+
         // =========================================================
         // 2. 几何样式配置 (现代化圆角与间距)
         // =========================================================

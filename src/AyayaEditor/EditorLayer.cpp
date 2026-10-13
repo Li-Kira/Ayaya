@@ -26,7 +26,9 @@ namespace Ayaya {
 
     EditorLayer* EditorLayer::s_Instance = nullptr;
 
-    EditorLayer::EditorLayer() : Layer("EditorLayer") {
+    EditorLayer::EditorLayer()
+        : Layer("EditorLayer"),
+          m_EditorBottomPanel(m_ContentBrowserPanel, m_TimelinePanel) {
         s_Instance = this;
         std::string docsDir = std::filesystem::path(
             getenv("HOME") ? getenv("HOME") : getenv("USERPROFILE") ? getenv("USERPROFILE") : "."
@@ -247,22 +249,19 @@ namespace Ayaya {
             m_ActiveScene->OnUpdateRuntime(ts * m_TimeStepScale);
         }
 
-        // Content drawer toggle: Ctrl+Space
+        // Content Browser toggle: Ctrl+Space (opens/focuses the Content Browser tab)
         { static bool wasDown = false;
           bool down = Input::IsKeyPressed(Key::LeftControl) && Input::IsKeyPressed(Key::Space);
-          if (down && !wasDown) m_ShowContentDrawer = !m_ShowContentDrawer;
+          if (down && !wasDown) m_EditorBottomPanel.ToggleTab(EditorBottomPanel::TabContentBrowser);
           wasDown = down; }
-        if (m_ShowContentDrawer)
-            m_DrawerAnimationProgress = glm::mix(m_DrawerAnimationProgress, 1.0f, 15.0f * ts.GetSeconds());
-        else
-            m_DrawerAnimationProgress = 0.0f;
-        if (m_DrawerAnimationProgress > 0.999f) m_DrawerAnimationProgress = 1.0f;
 
-        if (m_ShowTimelineDrawer)
-            m_TimelineDrawerProgress = glm::mix(m_TimelineDrawerProgress, 1.0f, 15.0f * ts.GetSeconds());
-        else
-            m_TimelineDrawerProgress = 0.0f;
-        if (m_TimelineDrawerProgress > 0.999f) m_TimelineDrawerProgress = 1.0f;
+        // 底部面板滑入/滑出动画 (Unreal Content Drawer 式)
+        {
+            float animTarget = m_EditorBottomPanel.IsOpen() ? 1.0f : 0.0f;
+            m_BottomPanelAnim = glm::mix(m_BottomPanelAnim, animTarget, 15.0f * ts.GetSeconds());
+            if (m_BottomPanelAnim < 0.002f) m_BottomPanelAnim = 0.0f;
+            if (m_BottomPanelAnim > 0.998f) m_BottomPanelAnim = 1.0f;
+        }
 
         // ==========================================
         // 4. 环境光与 IBL 动态更新系统
@@ -467,13 +466,11 @@ namespace Ayaya {
         UIRenderToolbar();
 
         m_SceneHierarchyPanel.OnImGuiRender();
-        // ContentBrowser in bottom drawer
-        // m_ContentBrowserPanel.OnImGuiRender();
+        // ContentBrowser / Log / Timeline live in the floating bottom panel (rendered in the bottom-bar section)
         m_PreferencesPanel.OnImGuiRender();
         m_ScreenshotPanel.OnImGuiRender();
         m_HistoryPanel.OnImGuiRender();
         m_FrameDebuggerPanel.OnImGuiRender();
-        m_TimelinePanel.OnImGuiRender();
         
         UIRenderViewport();
         UIRenderGameViewport();
@@ -485,48 +482,123 @@ namespace Ayaya {
         m_CurveEditorPanel.OnImGuiRender();
         m_ExportPanel.OnImGuiRender(m_ActiveScene);
 
-        // ---- Drawer + Bottom bar ----
+        // ---- 底部面板 (浮动覆盖，滑入/滑出) + 底部栏 (tab 条) ----
         float barH = 40.0f;
         float contentBottom = ImGui::GetCursorPosY() + ImGui::GetContentRegionAvail().y;
 
-        // Drawer (above bottom bar, animated)
-        if (m_DrawerAnimationProgress > 0.001f) {
+        // 浮动覆盖面板：覆盖在视口上方，不压缩 Viewport/Game
+        if (m_BottomPanelAnim > 0.001f) {
             ImVec2 dockWinPos = ImGui::GetWindowPos();
             float dockWinW = ImGui::GetWindowWidth();
-            float targetH = ImGui::GetWindowHeight() * 0.40f;
-            float curH = targetH * m_DrawerAnimationProgress;
+            float dockWinH = ImGui::GetWindowHeight();
+
+            // 目标高度：首次自动取 42% 视口高，之后可被顶部缩放条拖动调整
+            float minH = 120.0f;
+            float maxH = dockWinH * 0.85f;
+            if (m_BottomPanelHeight < 0.0f) m_BottomPanelHeight = dockWinH * 0.42f;
+            m_BottomPanelHeight = std::clamp(m_BottomPanelHeight, minH, maxH);
+
+            // 右边界 = 右侧 Properties 面板左缘：底部面板默认只占中央区，不盖住属性面板
+            ImGuiWindow* propsWin = ImGui::FindWindowByName("Properties");
+            float centralRight = (propsWin && propsWin->Active) ? propsWin->Pos.x
+                                                                : (dockWinPos.x + dockWinW);
+
+            // 左右缩放：左缘偏移 + 宽度 (宽度 < 0 = 自动跟随中央区)
+            const float minW = 200.0f;
+            float centralW = centralRight - dockWinPos.x;
+            float maxLeft  = std::max(0.0f, centralW - minW);
+            m_BottomPanelLeft = std::clamp(m_BottomPanelLeft, 0.0f, maxLeft);
+            float panelLeft  = dockWinPos.x + m_BottomPanelLeft;
+            float panelMaxW  = std::max(minW, centralRight - panelLeft);
+            float panelWidth = (m_BottomPanelWidth < 0.0f)
+                                   ? panelMaxW
+                                   : std::clamp(m_BottomPanelWidth, minW, panelMaxW);
+
+            float curH = m_BottomPanelHeight * m_BottomPanelAnim;
             float curY = dockWinPos.y + contentBottom - barH - curH + 1.0f;
-            float curW = dockWinW * 0.75f;
-            bool animating = (m_DrawerAnimationProgress < 0.995f);
-            if (animating) {
-                ImGui::SetNextWindowPos(ImVec2(dockWinPos.x, curY), ImGuiCond_Always);
-                ImGui::SetNextWindowSize(ImVec2(curW, curH), ImGuiCond_Always);
+
+            ImGui::SetNextWindowPos(ImVec2(panelLeft, curY), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2(panelWidth, curH), ImGuiCond_Always);
+
+            ImGuiWindowFlags panelFlags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar
+                                        | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
+                                        | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+
+            // 清零内边距，让本地坐标 (SetCursorPos) 与标题条屏幕坐标对齐，避免标题条与内容之间出现空白
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+            bool open = m_EditorBottomPanel.IsOpen();
+            if (ImGui::Begin("Bottom Panel", &open, panelFlags)) {
+                ImVec2 wp = ImGui::GetWindowPos();
+                ImVec2 ws = ImGui::GetWindowSize();
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                const float headerTop = 6.0f;
+                const float headerH = 22.0f;
+
+                const bool animDone = (m_BottomPanelAnim > 0.999f);
+
+                // 标题条：面板名 + 关闭 X
+                dl->AddRectFilled(ImVec2(wp.x, wp.y + headerTop),
+                                  ImVec2(wp.x + ws.x, wp.y + headerTop + headerH),
+                                  IM_COL32(40, 40, 46, 255));
+
+                // 粗体标题，垂直居中
+                ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);  // Roboto Bold
+                float titleY = wp.y + headerTop + (headerH - ImGui::GetFontSize()) * 0.5f;
+                dl->AddText(ImVec2(wp.x + 10.0f, titleY),
+                            IM_COL32(200, 200, 205, 255),
+                            m_EditorBottomPanel.ActiveTabTitle());
+                ImGui::PopFont();
+
+                // 关闭按钮 (右上角，屏幕坐标对齐标题条，垂直居中)
+                const float btnW = 22.0f, btnH = 20.0f;
+                ImGui::SetCursorScreenPos(ImVec2(wp.x + ws.x - btnW - 6.0f,
+                                                 wp.y + headerTop + (headerH - btnH) * 0.5f));
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+                if (ImGui::Button(ICON_FA_TIMES, ImVec2(btnW, btnH))) open = false;
+                ImGui::PopStyleColor();
+
+                // 内容 (标题条下方)
+                ImGui::SetCursorPos(ImVec2(0.0f, headerTop + headerH));
+                m_EditorBottomPanel.RenderContent();
+
+                // 缩放条 (渲染在内容之后、覆盖在最上层，保证悬停/拖拽优先于内容，否则内容会抢占缩放条的悬停)
+                // 顶部缩放条 (拖拽调整面板高度)
+                ImGui::SetCursorScreenPos(ImVec2(wp.x, wp.y));
+                ImGui::InvisibleButton("##BottomPanelResizeTop", ImVec2(ws.x, headerTop));
+                if (animDone && ImGui::IsItemHovered())
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+                if (animDone && ImGui::IsItemActive()) {
+                    m_BottomPanelHeight -= ImGui::GetIO().MouseDelta.y;
+                    m_BottomPanelHeight = std::clamp(m_BottomPanelHeight, minH, maxH);
+                }
+
+                // 左缘缩放条 (拖拽调整左边界)
+                ImGui::SetCursorScreenPos(ImVec2(wp.x, wp.y));
+                ImGui::InvisibleButton("##BottomPanelResizeLeft", ImVec2(6.0f, ws.y));
+                if (animDone && ImGui::IsItemHovered())
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                if (animDone && ImGui::IsItemActive()) {
+                    m_BottomPanelLeft = std::clamp(m_BottomPanelLeft + ImGui::GetIO().MouseDelta.x,
+                                                   0.0f, maxLeft);
+                    m_BottomPanelWidth = -1.0f;  // 左缘拖动后，右缘回到自动 (跟随中央区)
+                }
+
+                // 右缘缩放条 (拖拽调整右边界/宽度)
+                ImGui::SetCursorScreenPos(ImVec2(wp.x + ws.x - 6.0f, wp.y));
+                ImGui::InvisibleButton("##BottomPanelResizeRight", ImVec2(6.0f, ws.y));
+                if (animDone && ImGui::IsItemHovered())
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                if (animDone && ImGui::IsItemActive()) {
+                    float curW = (m_BottomPanelWidth < 0.0f) ? panelMaxW : m_BottomPanelWidth;
+                    m_BottomPanelWidth = std::clamp(curW + ImGui::GetIO().MouseDelta.x, minW, panelMaxW);
+                }
             }
-            if (ImGui::Begin("Content Browser##Drawer", &m_ShowContentDrawer, ImGuiWindowFlags_NoDocking))
-                m_ContentBrowserPanel.RenderContent();
             ImGui::End();
+            ImGui::PopStyleVar();
+            if (!open) m_EditorBottomPanel.Close();
         }
 
-        // ---- Timeline Drawer ----
-        if (m_TimelineDrawerProgress > 0.001f) {
-            ImVec2 winPos = ImGui::GetWindowPos();
-            float winW = ImGui::GetWindowWidth();
-            float targetH = ImGui::GetWindowHeight() * 0.40f;
-            float curH = targetH * m_TimelineDrawerProgress;
-            float curY = winPos.y + contentBottom - barH - curH + 1.0f;
-            float curW = winW * 0.75f;
-            bool animating = (m_TimelineDrawerProgress < 0.995f);
-            if (animating) {
-                ImGui::SetNextWindowPos(ImVec2(winPos.x, curY), ImGuiCond_Always);
-                ImGui::SetNextWindowSize(ImVec2(curW, curH), ImGuiCond_Always);
-            }
-            if (ImGui::Begin("Timeline##Drawer", &m_ShowTimelineDrawer,
-                    ImGuiWindowFlags_NoDocking))
-                m_TimelinePanel.RenderContent();
-            ImGui::End();
-        }
-
-        // Bottom bar (at contentBottom)
         {
             ImGui::SetCursorPosY(contentBottom - barH);
             ImGui::BeginChild("##BottomBar", ImVec2(0, barH), false,
@@ -540,15 +612,24 @@ namespace Ayaya {
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 0));
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.65f, 0.65f, 0.68f, 1.0f));
-            if (ImGui::Button(ICON_FA_FOLDER_OPEN " Content Browser", ImVec2(0, btnH)))
-                m_ShowContentDrawer = !m_ShowContentDrawer;
+
+            // 底部栏 Tab 按钮：点击打开并聚焦对应 Tab，再点一次收起
+            auto DrawBottomBarTab = [&](const char* label, int tab) {
+                bool active = m_EditorBottomPanel.IsTabActive(tab);
+                ImGui::PushStyleColor(ImGuiCol_Text, active
+                    ? ImVec4(0.35f, 0.65f, 1.00f, 1.0f)
+                    : ImVec4(0.65f, 0.65f, 0.68f, 1.0f));
+                if (ImGui::Button(label, ImVec2(0, btnH)))
+                    m_EditorBottomPanel.ToggleTab(tab);
+                ImGui::PopStyleColor();
+            };
+            DrawBottomBarTab(ICON_FA_FOLDER_OPEN " Content Browser", EditorBottomPanel::TabContentBrowser);
             ImGui::SameLine(0, 4.0f);
-            if (ImGui::Button(ICON_FA_LIST_ALT " Log", ImVec2(0, btnH))) {}
+            DrawBottomBarTab(ICON_FA_LIST_ALT " Log", EditorBottomPanel::TabLog);
             ImGui::SameLine(0, 4.0f);
-            if (ImGui::Button(ICON_FA_FILM " Timeline", ImVec2(0, btnH)))
-                m_ShowTimelineDrawer = !m_ShowTimelineDrawer;
-            ImGui::PopStyleColor(2);
+            DrawBottomBarTab(ICON_FA_FILM " Timeline", EditorBottomPanel::TabTimeline);
+
+            ImGui::PopStyleColor();
             ImGui::PopStyleVar(2);
             ImGui::PopFont();
 
@@ -1496,7 +1577,6 @@ namespace Ayaya {
 
                 ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.25f, nullptr, &dock_main_id);
                 ImGuiID dock_id_right_bottom = ImGui::DockBuilderSplitNode(dock_id_right, ImGuiDir_Down, 0.65f, nullptr, &dock_id_right);
-                ImGuiID dock_id_bottom = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.4f, NULL, &dock_main_id);
                 ImGuiID dock_id_game = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.5f, nullptr, &dock_main_id);
 
                 // ==========================================
@@ -1508,8 +1588,7 @@ namespace Ayaya {
                 ImGui::DockBuilderDockWindow("Game", dock_main_id);
                 ImGui::DockBuilderDockWindow("Scene Hierarchy", dock_id_right);
                 ImGui::DockBuilderDockWindow("Properties", dock_id_right_bottom);
-                ImGui::DockBuilderDockWindow("Content Browser", dock_id_bottom);
-                
+
                 ImGui::DockBuilderFinish(dockspace_id);
             }
             ImGui::DockSpace(dockspace_id, ImVec2(0.0f, -reserveBottom), dockspace_flags);

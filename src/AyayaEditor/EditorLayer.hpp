@@ -13,6 +13,7 @@
 #include "Panels/CurveEditorPanel.hpp"
 #include "Panels/TimelinePanel.hpp"
 #include "Panels/ExportPanel.hpp"
+#include "Panels/EditorBottomPanel.hpp"
 #include "Engine/Animation/TweenManager.hpp"
 #ifdef __APPLE__
 #include <sys/sysctl.h>
@@ -141,6 +142,7 @@ namespace Ayaya {
         CurveEditorPanel m_CurveEditorPanel;
         TimelinePanel m_TimelinePanel;
         ExportPanel m_ExportPanel;
+        EditorBottomPanel m_EditorBottomPanel;
         AssetWatcher m_AssetWatcher;
         TweenManager m_TweenManager;
 
@@ -152,10 +154,10 @@ namespace Ayaya {
         bool m_ShowViewportCameraSpeed = false;
 
         bool  m_ShowCurveEditor = false;
-        bool  m_ShowContentDrawer = false;
-        float m_DrawerAnimationProgress = 0.0f;
-        bool  m_ShowTimelineDrawer = false;
-        float m_TimelineDrawerProgress = 0.0f;
+        float m_BottomPanelAnim = 0.0f;     // 底部面板滑入/滑出动画进度 (0~1)
+        float m_BottomPanelHeight = -1.0f;  // 底部面板目标高度 (-1 = 自动 42% 视口高)
+        float m_BottomPanelLeft = 0.0f;     // 底部面板左缘相对 dockspace 的偏移 (0 = 贴左)
+        float m_BottomPanelWidth = -1.0f;   // 底部面板宽度 (-1 = 自动跟随中央区)
         int   m_ViewportResW = 0;  // 0 = fit window
         int   m_ViewportResH = 0;
 

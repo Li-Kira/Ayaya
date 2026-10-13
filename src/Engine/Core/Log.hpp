@@ -1,10 +1,22 @@
 #pragma once
 
 #include <memory>
+#include <cstdint>
+#include <string>
+#include <vector>
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h>
 
 namespace Ayaya {
+
+    // 供编辑器 Log 面板消费的日志条目 (level 为 spdlog::level::level_enum 数值)
+    struct LogEntry {
+        int         level = 2;     // trace=0 ... error=4 ...
+        std::string category;      // logger 名 ("AYAYA" / "APP")
+        std::string time;          // "HH:MM:SS"
+        std::string message;
+        uint64_t    sequence = 0;  // 单调递增序号，供面板跨帧稳定选中
+    };
 
     class Log {
     public:
@@ -12,6 +24,10 @@ namespace Ayaya {
 
         inline static std::shared_ptr<spdlog::logger>& GetCoreLogger() { return s_CoreLogger; }
         inline static std::shared_ptr<spdlog::logger>& GetClientLogger() { return s_ClientLogger; }
+
+        // 编辑器日志面板读取内存环形缓冲中的最近日志 (maxCount=0 返回全部)
+        static std::vector<LogEntry> GetRecentEntries(size_t maxCount = 0);
+        static void ClearEntries();
 
     private:
         static std::shared_ptr<spdlog::logger> s_CoreLogger;
